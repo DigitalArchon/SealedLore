@@ -942,7 +942,10 @@ the story back as it was, its job still running if one was.
 On the left is every character, with a search over what their card says of
 them (names, descriptions, personality, scenario, greetings and examples, its
 prompts, its lorebook, maker, notes and tags), a tag to list them by, and an order (by name, changed last, added last);
-**Everyone** shows all their portraits together.
+**Everyone** shows all their portraits together. Choose several in the list with
+Ctrl or Shift to do the same to them all, each with their versions: add them to
+the open story, export their cards into a folder (CHARX, PNG or JSON), add or
+take off a tag, or delete them (the Delete key too).
 
 ![Your characters: thirty characters from the five sample stories, each with their portrait and the story they came from, and down the left a search, tags and the list of them, with New character and Import](screenshots/your-characters.webp)
 

@@ -13,6 +13,7 @@ own session (gui/window_collection.py), the one writer of their folder.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from PySide6.QtCore import QTimer
@@ -162,9 +163,10 @@ class CardLinkWindow:
             return True
         return False
 
-    def add_from_collection(self) -> None:
+    def add_from_collection(self, ticked: Sequence[str] = ()) -> None:
         """Characters from Your characters into the open story (the Cast
-        page's From Your characters…)."""
+        page's From Your characters…; `ticked`, those chosen on Your
+        characters' page, ticked to begin with)."""
         if self._link_refused():
             return
         picker = CollectionPicker(
@@ -174,6 +176,7 @@ class CardLinkWindow:
             lead="Who joins this story? Each comes with their pictures, and what the story "
             "changes of them can go back to their card.",
             action="Add to the story",
+            ticked=ticked,
             parent=self._dialog_parent(),
         )
         accepted = picker.exec() == QDialog.Accepted

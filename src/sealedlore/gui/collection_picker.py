@@ -45,6 +45,7 @@ class CollectionPicker(QDialog):
         lead: str,
         action: str,
         placing: bool = True,
+        ticked: Sequence[str] = (),
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -76,7 +77,7 @@ class CollectionPicker(QDialog):
                 item = QListWidgetItem(words)
                 item.setData(Qt.UserRole, card.id)
                 item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-                item.setCheckState(Qt.Unchecked)
+                item.setCheckState(Qt.Checked if card.id in ticked else Qt.Unchecked)
                 first = card.reference_images[0] if card.reference_images else None
                 if first is not None:
                     item.setIcon(QIcon(self._thumbs.now(first.file, ICON.width(), ICON.height())))

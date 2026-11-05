@@ -65,6 +65,8 @@ TABS = (
     ("Files", "Every other file on their card: a background, a greeting's pictures, sounds"),
     ("About", "The card itself: who made it, its version, tags and sources, other apps' settings"),
 )
+# The page on the right while several are chosen in the list.
+CHOSEN_PAGE = 2
 # On a name in the list: their portrait's file, and whether it is shown yet.
 PORTRAIT_ROLE = Qt.UserRole + 10
 # The list's column at 100% text.
@@ -79,6 +81,9 @@ STORY_FROM_CARD = "story_from_card"
 ADD_TO_STORY = "add_to_story"
 CHAT, DRAFT = "chat", "draft"
 BACKUP, RESTORE = "backup", "restore"
+# On several chosen at once (`chosen_requested`), besides delete, export and
+# add to the story.
+TAG, UNTAG = "tag", "untag"
 CHAT_LABEL = "Chat with them…"
 DRAFT_LABEL = "Draft a story with them…"
 ADD_LABEL = "Add to the story"
@@ -157,6 +162,9 @@ class CollectionPage(QWidget):
     back_requested = Signal()
     # (what, the character shown's id, or "" for none): see the names above.
     action_requested = Signal(str, str)
+    # (what, the main cards chosen in the list, two or more): delete, export,
+    # tag, untag or add to the story, each with their versions.
+    chosen_requested = Signal(str, list)
     # (character id): its fields changed here; the window keeps them.
     changed = Signal(str)
     # (character id): its pictures changed here (added, removed, labelled).
@@ -204,6 +212,10 @@ class CollectionPage(QWidget):
         self.sort.currentIndexChanged.connect(lambda _index: self._fill())
         self.people = QListWidget()
         self.people.setObjectName("boardPeople")
+        # Ctrl or Shift: several at once, for what can be done to them all
+        # (the page on the right says what).
+        self.people.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.people.itemSelectionChanged.connect(self._on_chosen)
         self.people.setIconSize(PEOPLE_ICON)
         self.people.setSpacing(2)
         # A long line of tags is cut short, never a sideways scrollbar.
@@ -217,7 +229,7 @@ class CollectionPage(QWidget):
         self.people.currentItemChanged.connect(self._on_person)
         delete_key = QShortcut(QKeySequence(QKeySequence.Delete), self.people)
         delete_key.setContext(Qt.WidgetShortcut)
-        delete_key.activated.connect(lambda: self._act(DELETE))
+        delete_key.activated.connect(self._delete_key)
         self.new_button = QPushButton("New character")
         self.new_button.setObjectName("sendButton")
         self.new_button.setToolTip("A character of your own, from a blank card")
@@ -443,6 +455,7 @@ class CollectionPage(QWidget):
         self.pages = QStackedWidget()
         self.pages.addWidget(overview_page)
         self.pages.addWidget(self.tabs)
+        self.pages.addWidget(self._chosen_page())
 
         right = QVBoxLayout()
         right.setSpacing(8)
@@ -684,8 +697,98 @@ class CollectionPage(QWidget):
         self.people.blockSignals(False)
 
     def _on_person(self, item: QListWidgetItem | None, _previous=None) -> None:
-        if item is not None:
+        if item is not None and len(self.chosen_ids()) < 2:
             self.show_character(item.data(Qt.UserRole))
+
+    # --- several at once ---------------------------------------------------------------------
+
+    def _chosen_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.chosen_names = QLabel()
+        self.chosen_names.setWordWrap(True)
+        self.chosen_names.setTextFormat(Qt.PlainText)
+        hint = QLabel(
+            "Chosen with Ctrl or Shift in the list. What you do here is done to each of them, "
+            "and to every version of theirs."
+        )
+        hint.setObjectName("hintLabel")
+        hint.setWordWrap(True)
+        self.chosen_add = QPushButton("Add them to the story")
+        self.chosen_add.setToolTip("Into the open story, as From Your characters… brings them")
+        self.chosen_add.clicked.connect(lambda: self._chosen(ADD_TO_STORY))
+        self.chosen_export = QToolButton()
+        self.chosen_export.setText("Export")
+        self.chosen_export.setPopupMode(QToolButton.InstantPopup)
+        export_menu = QMenu(self.chosen_export)
+        for words, what in (
+            ("As CHARX cards, with every picture and file…", EXPORT_CHARX),
+            ("As PNG cards, with their portraits…", EXPORT_PNG),
+            ("As JSON cards…", EXPORT_JSON),
+        ):
+            export_menu.addAction(words).triggered.connect(lambda _on, w=what: self._chosen(w))
+        self.chosen_export.setMenu(export_menu)
+        self.chosen_export.setToolTip("Each card into a folder you choose")
+        tag = QPushButton("Add a tag…")
+        tag.clicked.connect(lambda: self._chosen(TAG))
+        untag = QPushButton("Take off a tag…")
+        untag.clicked.connect(lambda: self._chosen(UNTAG))
+        delete = QPushButton("Delete…")
+        delete.clicked.connect(lambda: self._chosen(DELETE))
+        buttons = WrapRow(spacing=6, group_spacing=12)
+        buttons.add_group([self.chosen_add, self.chosen_export])
+        buttons.add_group([tag, untag])
+        buttons.add_group([delete])
+        buttons_host = QWidget()
+        host_layout = QVBoxLayout(buttons_host)
+        host_layout.setContentsMargins(0, 0, 0, 0)
+        host_layout.addLayout(buttons)
+        layout.addWidget(self.chosen_names)
+        layout.addWidget(hint)
+        layout.addWidget(buttons_host)
+        layout.addStretch(1)
+        return page
+
+    def chosen_ids(self) -> list[str]:
+        """The main cards chosen in the list, in its order (Everyone left out)."""
+        rows = sorted(self.people.row(item) for item in self.people.selectedItems())
+        ids = [self.people.item(row).data(Qt.UserRole) for row in rows]
+        return [card_id for card_id in ids if card_id]
+
+    def _on_chosen(self) -> None:
+        ids = self.chosen_ids()
+        if len(ids) < 2:
+            if self.pages.currentIndex() == CHOSEN_PAGE:
+                self._show()
+            return
+        names = [card.name for card_id in ids if (card := self._card(card_id)) is not None]
+        self.title.setText(f"{len(ids)} characters")
+        self.chosen_names.setText(", ".join(names))
+        for widget in (
+            self.chat_button,
+            self.draft_button,
+            self.export_button,
+            self.more_button,
+            self.add_button,
+            self.version,
+            self.version_label,
+        ):
+            widget.hide()
+        self.chosen_add.setVisible(self._story_open)
+        self.pages.setCurrentIndex(CHOSEN_PAGE)
+
+    def _chosen(self, what: str) -> None:
+        ids = self.chosen_ids()
+        if len(ids) >= 2:
+            self.chosen_requested.emit(what, ids)
+
+    def _delete_key(self) -> None:
+        """Delete: those chosen, when several are; else the one shown."""
+        if len(self.chosen_ids()) >= 2:
+            self._chosen(DELETE)
+        else:
+            self._act(DELETE)
 
     def _tile_chosen(self, item: QListWidgetItem) -> None:
         self.show_character(item.data(Qt.UserRole))

@@ -45,6 +45,8 @@ from sealedlore.gui.collection_page import (
     RENAME_VERSION,
     RESTORE,
     STORY_FROM_CARD,
+    TAG,
+    UNTAG,
     VERSION,
     CollectionPage,
 )
@@ -55,7 +57,7 @@ from sealedlore.gui.ref_images import PICTURE_FILTER, clean_incoming, image_of, 
 from sealedlore.ids import new_id
 from sealedlore.models.character import Character
 from sealedlore.models.image import ImageRef
-from sealedlore.models.tavern import CardAsset
+from sealedlore.models.tavern import CardAsset, TavernFields
 from sealedlore.storage import collection
 from sealedlore.storage.collection_backup import (
     BACKUP_SUFFIX,
@@ -153,6 +155,7 @@ class CollectionWindow:
         page = self.collection_page
         page.back_requested.connect(lambda: self.show_collection(False))
         page.action_requested.connect(self._collection_action)
+        page.chosen_requested.connect(self._collection_chosen)
         page.cards_dropped.connect(self._import_to_collection)
         page.files_dropped.connect(
             lambda paths, card_id: self._add_card_files(self._kept_card(card_id), paths)
@@ -786,17 +789,7 @@ class CollectionWindow:
         if answer != QMessageBox.Yes:
             return
         store = self._collection_store()
-        folder = collection_dir(self.root) / "deleted"
-        path = folder / f"{_safe(card.name)}.charx"
-        trashed = False
-        try:
-            folder.mkdir(parents=True, exist_ok=True)
-            write_bytes_atomic(path, self._charx_of(card, shared=False))
-            trashed = move_to_trash(path)
-        except (OSError, CardError):
-            trashed = False
-        finally:
-            path.unlink(missing_ok=True)
+        trashed = self._to_trash(card)
         if not trashed:
             answer = QMessageBox.warning(
                 self._dialog_parent(),
@@ -822,6 +815,174 @@ class CollectionWindow:
         self.statusBar().showMessage(
             f"Deleted {what}" + (" (their card is in the Trash)" if trashed else ""), 8000
         )
+
+    def _to_trash(self, card: Character) -> bool:
+        """The card into the desktop's Trash as a CHARX file, every picture
+        and file with it; whether it went (no Trash, or a failed write: not)."""
+        folder = collection_dir(self.root) / "deleted"
+        path = folder / f"{_safe(card.name)}.charx"
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            write_bytes_atomic(path, self._charx_of(card, shared=False))
+            return bool(move_to_trash(path))
+        except (OSError, CardError):
+            return False
+        finally:
+            path.unlink(missing_ok=True)
+
+    # --- several at once (chosen in the list with Ctrl or Shift) ----------------------------
+
+    def _collection_chosen(self, what: str, ids: list[str]) -> None:
+        """An action on the characters chosen in the list: each with every
+        version of theirs, as the list shows one name for them all."""
+        kept = self._kept()
+        mains = [card for card_id in ids if (card := self._kept_card(card_id)) is not None]
+        if not mains:
+            return
+        if what == ADD_TO_STORY:
+            self.add_from_collection(ticked=[card.id for card in mains])
+            return
+        families = [collection.family_of(main, kept) for main in mains]
+        cards = [card for family in families for card in family]
+        if what == DELETE:
+            self._delete_chosen(mains, cards)
+        elif what in (EXPORT_CHARX, EXPORT_PNG, EXPORT_JSON):
+            kind = {EXPORT_CHARX: "charx", EXPORT_PNG: "png", EXPORT_JSON: "json"}[what]
+            self._export_chosen(cards, kind)
+        elif what == TAG:
+            self._tag_chosen(mains, cards)
+        elif what == UNTAG:
+            self._untag_chosen(mains, cards)
+
+    def _names(self, mains: list[Character]) -> str:
+        shown = ", ".join(card.name for card in mains[:6])
+        return shown + (f" and {len(mains) - 6} more" if len(mains) > 6 else "")
+
+    def _delete_chosen(self, mains: list[Character], cards: list[Character]) -> None:
+        versions = len(cards) - len(mains)
+        text = f"Delete {len(mains)} characters ({self._names(mains)})"
+        text += (
+            f" and their {versions} other version{'s' if versions != 1 else ''}" if versions else ""
+        )
+        text += "? Each card goes to the Trash as a CHARX file, which can be imported again."
+        linked = stories_linking({card.id for card in cards}, self.root)
+        if linked:
+            names = ", ".join(f"“{title}”" for title in linked[:5])
+            names += f" and {len(linked) - 5} more" if len(linked) > 5 else ""
+            text += f"\n\nLinked to them in {names}: each story keeps its characters, no "
+            text += "longer linked to a card."
+        answer = QMessageBox.question(
+            self._dialog_parent(),
+            "Delete characters",
+            text,
+            QMessageBox.Yes | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        with _waiting():
+            trashed = [self._to_trash(card) for card in cards]
+        if not all(trashed):
+            answer = QMessageBox.warning(
+                self._dialog_parent(),
+                "Delete characters",
+                f"{trashed.count(False)} of their cards couldn't go to the Trash.\n\nDelete "
+                "them all for good anyway? This can't be undone for those.",
+                QMessageBox.Yes | QMessageBox.Cancel,
+                QMessageBox.Cancel,
+            )
+            if answer != QMessageBox.Yes:
+                return
+        bundle = self._collection_session().bundle
+        # Versions before their main card, so no heir is made of one going too.
+        files = [
+            file
+            for card in sorted(cards, key=lambda c: collection.is_main(c, bundle.cast))
+            for file in collection.forget(bundle, card)
+        ]
+        if self._save_collection():
+            store = self._collection_store()
+            for file in files:
+                store.remove(file)
+        self.collection_page.show_character(None)
+        self._refresh_collection()
+        self.statusBar().showMessage(
+            f"Deleted {len(mains)} characters"
+            + (" (their cards are in the Trash)" if all(trashed) else ""),
+            8000,
+        )
+
+    def _export_chosen(self, cards: list[Character], kind: str) -> None:
+        """Each card, versions too, into a folder chosen, as Export writes one;
+        a name used twice gets a number. What couldn't go is said."""
+        chosen = QFileDialog.getExistingDirectory(
+            self._dialog_parent(), f"Export {len(cards)} cards into a folder", str(Path.home())
+        )
+        if not chosen:
+            return
+        folder, kept, taken = Path(chosen), self._kept(), set()
+        failed: list[str] = []
+        written = 0
+        with _waiting():
+            for card in cards:
+                version = collection.info(card).version
+                stem = _safe(f"{card.name} - {version}" if version else card.name)
+                name, number = f"{stem}.{kind}", 2
+                while name.casefold() in taken or (folder / name).exists():
+                    name, number = f"{stem} {number}.{kind}", number + 1
+                taken.add(name.casefold())
+                try:
+                    self._write_kept(card, kind, folder / name)
+                    written += 1
+                except (OSError, CardError) as exc:
+                    failed.append(f"{collection.version_name(card, kept)} {card.name}: {exc}")
+        lead = f"Exported {written} card{'s' if written != 1 else ''} to {folder}."
+        if failed:
+            self._say_left_out("Export characters", lead, failed)
+        else:
+            self.statusBar().showMessage(lead, 10000)
+
+    def _tag_chosen(self, mains: list[Character], cards: list[Character]) -> None:
+        tag, ok = QInputDialog.getText(
+            self._dialog_parent(),
+            "Add a tag",
+            f"A tag for {len(mains)} characters ({self._names(mains)}) and their versions:",
+        )
+        tag = " ".join(tag.split())
+        if not ok or not tag:
+            return
+        for card in cards:
+            if card.tavern is None:
+                card.tavern = TavernFields()
+            if not collection.has_tag(card, tag):
+                card.tavern.tags.append(tag)
+                collection.touch(card)
+        self._save_collection()
+        self._refresh_collection()
+        self.statusBar().showMessage(f"Tagged {len(mains)} characters “{tag}”.", 8000)
+
+    def _untag_chosen(self, mains: list[Character], cards: list[Character]) -> None:
+        tags = collection.tags_of(cards)
+        if not tags:
+            self.statusBar().showMessage("None of them has a tag to take off.", 6000)
+            return
+        tag, ok = QInputDialog.getItem(
+            self._dialog_parent(),
+            "Take off a tag",
+            f"The tag to take off {len(mains)} characters and their versions:",
+            tags,
+            0,
+            False,
+        )
+        if not ok or not tag:
+            return
+        for card in cards:
+            if card.tavern is not None and collection.has_tag(card, tag):
+                card.tavern.tags = [t for t in card.tavern.tags if t.casefold() != tag.casefold()]
+                collection.touch(card)
+        self._save_collection()
+        self._refresh_collection()
+        self.statusBar().showMessage(f"Took “{tag}” off {len(mains)} characters.", 8000)
 
     # --- cards out, and a story from one ------------------------------------------------------
 
@@ -872,18 +1033,23 @@ class CollectionWindow:
         if path.suffix.lower() != f".{kind}":
             path = path.with_name(path.name + f".{kind}")
         try:
-            if kind == "charx":
-                write_bytes_atomic(path, self._charx_of(card))
-            else:
-                png = self._kept_portrait_png(card) if kind == "png" else None
-                if kind == "png" and png is None:
-                    raise CardError("their portrait couldn't be read")
-                first, third = card_data(card, picture=png is not None, origin=MADE_HERE)
-                write_card(path, first, third, png)
+            self._write_kept(card, kind, path)
         except (OSError, CardError) as exc:
             self._warn_plain("Could not export the card", f"{path}: {exc}")
             return
         self.statusBar().showMessage(f"Saved {card.name}'s card to {path.name}.", 8000)
+
+    def _write_kept(self, card: Character, kind: str, path: Path) -> None:
+        """The card written at `path` as a CHARX, PNG or JSON card. Raises
+        OSError or CardError (a PNG card needs a portrait)."""
+        if kind == "charx":
+            write_bytes_atomic(path, self._charx_of(card))
+            return
+        png = self._kept_portrait_png(card) if kind == "png" else None
+        if kind == "png" and png is None:
+            raise CardError("their portrait couldn't be read")
+        first, third = card_data(card, picture=png is not None, origin=MADE_HERE)
+        write_card(path, first, third, png)
 
     def _story_from_kept(self, card_id: str) -> None:
         """A new story from the character's card, as a SillyTavern card makes

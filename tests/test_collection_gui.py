@@ -14,6 +14,7 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 
+from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtWidgets import QApplication, QInputDialog, QMessageBox  # noqa: E402
 
 import sealedlore.gui.window_collection as window_collection  # noqa: E402
@@ -598,3 +599,127 @@ def test_restoring_characters_you_have_asks_and_keeps_yours_by_default(
     window.restore_collection(backup)
     assert asked == [("Restore your characters", "Keep mine")]
     assert window._kept_card(elena.id).full_description == "Changed since the backup."
+
+
+# --- several at once -----------------------------------------------------------------------
+
+
+def three_kept(window, tmp_path: Path, monkeypatch):
+    """Elena (from her card), Ben, and Ben's version: the list shows two."""
+    from sealedlore.models.collection import CollectionInfo
+
+    elena = kept_elena(window, tmp_path, monkeypatch)
+    ben = collection.kept("Ben")
+    older = collection.kept("Ben")
+    older.collection = CollectionInfo(family=ben.id, version="Older")
+    window._collection_session().cast.extend([ben, older])
+    window._save_collection()
+    window._refresh_collection()
+    return elena, ben, older
+
+
+def choose(page, *ids: str) -> None:
+    page.people.clearSelection()
+    for row in range(page.people.count()):
+        item = page.people.item(row)
+        if item.data(Qt.UserRole) in ids:
+            item.setSelected(True)
+
+
+def test_two_chosen_in_the_list_show_what_can_be_done_to_both(
+    app, window, tmp_path: Path, monkeypatch
+):
+    elena, ben, _older = three_kept(window, tmp_path, monkeypatch)
+    page = window.collection_page
+    choose(page, elena.id, ben.id)
+    assert page.pages.currentIndex() == 2 and page.title.text() == "2 characters"
+    assert "Elena" in page.chosen_names.text() and "Ben" in page.chosen_names.text()
+    choose(page, ben.id)
+    page.show_character(ben.id)
+    assert page.pages.currentIndex() == 1, "one chosen: their card"
+
+
+def test_a_tag_goes_on_and_off_every_one_chosen_and_their_versions(
+    app, window, tmp_path: Path, monkeypatch
+):
+    elena, ben, older = three_kept(window, tmp_path, monkeypatch)
+    page = window.collection_page
+    choose(page, elena.id, ben.id)
+    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("  winter  road ", True))
+    page._chosen("tag")
+    for card in (elena, ben, older):
+        assert collection.has_tag(window._kept_card(card.id), "winter road")
+    saved = {c.id: c for c in collection.load_collection(window.root).cast}
+    assert collection.has_tag(saved[older.id], "winter road")
+    choose(page, elena.id, ben.id)
+    monkeypatch.setattr(QInputDialog, "getItem", lambda *a, **k: ("winter road", True))
+    page._chosen("untag")
+    assert not any(
+        collection.has_tag(window._kept_card(c.id), "winter road") for c in (elena, ben, older)
+    )
+
+
+def test_those_chosen_are_exported_into_a_folder_versions_too(
+    app, window, tmp_path: Path, monkeypatch
+):
+    from PySide6.QtWidgets import QFileDialog
+
+    elena, ben, _older = three_kept(window, tmp_path, monkeypatch)
+    folder = tmp_path / "out"
+    folder.mkdir()
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *a, **k: str(folder))
+    choose(window.collection_page, elena.id, ben.id)
+    window.collection_page._chosen("export_charx")
+    assert sorted(p.name for p in folder.iterdir()) == [
+        "Ben - Older.charx",
+        "Ben.charx",
+        "Elena.charx",
+    ]
+
+
+def test_those_chosen_are_deleted_once_asked_and_cancel_is_the_default(
+    app, window, tmp_path: Path, monkeypatch
+):
+    elena, ben, older = three_kept(window, tmp_path, monkeypatch)
+    portrait = window.root / "characters" / elena.reference_images[0].file
+    trashed: list = []
+    monkeypatch.setattr(
+        window_collection, "move_to_trash", lambda path: trashed.append(path.name) or True
+    )
+    asked: list = []
+
+    def question(_parent, title, _text, _buttons, default):
+        asked.append((title, default))
+        return QMessageBox.Yes
+
+    monkeypatch.setattr(QMessageBox, "question", question)
+    choose(window.collection_page, elena.id, ben.id)
+    window.collection_page._delete_key()  # the Delete key, with two chosen
+    assert asked == [("Delete characters", QMessageBox.Cancel)]
+    assert window._kept() == [] and len(trashed) == 3
+    assert not portrait.exists()
+    assert collection.load_collection(window.root).cast == []
+
+
+def test_those_chosen_join_the_story_ticked_in_the_picker(
+    app, window, tmp_path: Path, monkeypatch, story, cast
+):
+    from PySide6.QtWidgets import QDialog
+
+    from sealedlore.gui.collection_picker import CollectionPicker
+
+    save_story_bundle(StoryBundle(story=story, cast=list(cast)), root=window.root)
+    window.open_story(story.id)
+    elena, ben, _older = three_kept(window, tmp_path, monkeypatch)
+    window.show_collection(True)
+    ticked: list = []
+
+    def exec_(picker) -> int:
+        ticked.extend(picker.chosen())
+        return QDialog.Rejected
+
+    monkeypatch.setattr(CollectionPicker, "exec", exec_)
+    choose(window.collection_page, elena.id, ben.id)
+    assert window.collection_page.chosen_add.isVisibleTo(window.collection_page)
+    window.collection_page._chosen("add_to_story")
+    assert sorted(card.id for card in ticked) == sorted([elena.id, ben.id])
