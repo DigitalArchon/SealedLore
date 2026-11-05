@@ -434,10 +434,13 @@ class PromptEditorDialog(QDialog):
 
     def _reset_all(self) -> None:
         where = "this story" if self.scope_name == "story" else "every story"
+        # Enter on a box that throws away every edit here must not do it.
         answer = QMessageBox.question(
             self,
             "Reset all",
             f"Put back the default of all {len(self.here)} texts edited for {where}?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
         )
         if answer != QMessageBox.Yes:
             return

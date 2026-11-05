@@ -732,6 +732,8 @@ class PrivateWindow:
                     "Discard the private scene instead? Nothing from it goes back into the "
                     "story."
                 ),
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
             )
             if answer == QMessageBox.Yes:
                 session.discard_private()
@@ -823,6 +825,9 @@ class PrivateWindow:
                 if session.open_span.keep == "disk"
                 else " Its messages are gone."
             ),
+            QMessageBox.Yes | QMessageBox.No,
+            # Enter on a box that loses the scene must not do it.
+            QMessageBox.No,
         )
         if answer == QMessageBox.Yes:
             session.discard_private()

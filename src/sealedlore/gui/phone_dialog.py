@@ -335,10 +335,13 @@ class PhoneDevicesDialog(QDialog):
         window = self._window()
         if window is None:
             return
+        # Enter on a box that cuts a phone off must not do it.
         answer = QMessageBox.question(
             self,
             "Revoke a phone",
             f"Revoke “{name}”? It can't connect again until it is paired again.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
         )
         if answer == QMessageBox.Yes:
             window.phone_revoke(device_id)
@@ -366,6 +369,8 @@ class PhoneDevicesDialog(QDialog):
             "New address",
             "Give phone access a new onion address? Every paired phone is forgotten, its "
             "bookmark stops working, and it has to be paired again.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
         )
         if answer == QMessageBox.Yes:
             reason = window.phone_new_address()

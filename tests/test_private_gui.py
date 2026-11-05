@@ -376,6 +376,47 @@ def test_a_memory_chat_is_asked_about_once_as_something_new_opens(app, window, m
     assert window.session is not None and not window.session.memory_only
 
 
+def test_questions_that_lose_something_default_to_no(app, window, monkeypatch):
+    """Enter answered Yes on boxes that lose a scene, a chat, a phone's
+    pairing, every phone's address, the prompt edits, or share what is
+    private: each defaults to No (or Cancel) now."""
+    from sealedlore.gui.phone_dialog import PhoneDevicesDialog
+    from sealedlore.gui.prompt_editor import PromptEditorDialog
+
+    seen: dict[str, object] = {}
+
+    def question(_parent, title, _text, buttons=None, default=None):
+        seen[title] = default
+        return QMessageBox.No if buttons is None or buttons & QMessageBox.No else QMessageBox.Cancel
+
+    monkeypatch.setattr(QMessageBox, "question", question)
+    window.composer.private_toggle.click()
+    send(app, window, f"{MARKER} a")
+    window._confirm_discard_private()
+    window.session.private_provider = None
+    window.end_private()  # no private model: discard instead?
+    window.phone_confirm_share(window.session.story.id, True)
+    phones = PhoneDevicesDialog(window)
+    phones._revoke("p1", "Pixel")
+    phones._new_address()
+    phones.deleteLater()
+    editor = PromptEditorDialog(window.config, window.session.story, parent=window)
+    editor._reset_all()
+    editor.done(0)
+    monkeypatch.setattr(type(window), "memory_chat", property(lambda _self: True))
+    window._chat_allows_close()
+    assert seen == {
+        "Discard the private scene": QMessageBox.No,
+        "No private model": QMessageBox.No,
+        "Share something private?": QMessageBox.No,
+        "Revoke a phone": QMessageBox.No,
+        "New address": QMessageBox.No,
+        "Reset all": QMessageBox.No,
+        "Chat kept in memory only": QMessageBox.Cancel,
+    }
+    assert window.session.in_private, "nothing was discarded"
+
+
 def test_no_private_model_says_where_to_set_one(app, window: MainWindow, monkeypatch):
     window.config.private_provider = None
     shown = []

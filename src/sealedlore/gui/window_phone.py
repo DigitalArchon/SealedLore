@@ -274,8 +274,13 @@ class PhoneWindow:
             return True
         from sealedlore.gui.phone_dialog import PHONE_KEEPS
 
+        # Enter on it shares nothing.
         answer = QMessageBox.question(
-            self, "Share something private?", f"{PHONE_KEEPS}\n\nShare it with your phones?"
+            self,
+            "Share something private?",
+            f"{PHONE_KEEPS}\n\nShare it with your phones?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
         )
         return answer == QMessageBox.Yes
 

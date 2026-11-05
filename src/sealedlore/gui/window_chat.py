@@ -196,6 +196,8 @@ class ChatWindow:
             "Export → Story backup…); to keep only its pictures and videos, Media → Save all….\n\n"
             "Close it anyway?",
             QMessageBox.Yes | QMessageBox.Cancel,
+            # Enter on a box that loses the chat must not do it.
+            QMessageBox.Cancel,
         )
         return answer == QMessageBox.Yes
 
