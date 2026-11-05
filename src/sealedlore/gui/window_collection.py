@@ -58,7 +58,7 @@ from sealedlore.storage.image_meta import picture_kind, strip_metadata, stripped
 from sealedlore.storage.images import REFS_DIR, write_bytes_atomic
 from sealedlore.storage.paths import COLLECTION_ID, collection_dir
 from sealedlore.storage.picture_store import PictureStore
-from sealedlore.storage.repository import read_api_log
+from sealedlore.storage.repository import read_api_log, stories_linking
 from sealedlore.storage.tavern_cards import (
     MAX_FILE_BYTES,
     CardError,
@@ -602,6 +602,14 @@ class CollectionWindow:
         if main and len(family) > 1:
             text += f"\n\nTheir {len(family) - 1} other version(s) stay; the first becomes the "
             text += "main card."
+        linked = stories_linking({card.id}, self.root)
+        if linked:
+            # A story keeps its character, but no longer in step with a card:
+            # said, where it used to break without a word.
+            names = ", ".join(f"“{title}”" for title in linked[:5])
+            names += f" and {len(linked) - 5} more" if len(linked) > 5 else ""
+            text += f"\n\nLinked to this card in {names}: "
+            text += "the story keeps its character, no longer linked to a card."
         answer = QMessageBox.question(
             self._dialog_parent(),
             "Delete a character",

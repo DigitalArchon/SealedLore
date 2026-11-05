@@ -747,6 +747,38 @@ def entry_selective(raw: Mapping[str, Any], *, numbered: bool = False) -> bool:
     return bool(raw.get("selective", numbered))
 
 
+# How SillyTavern weighs an entry's second keywords (`selectiveLogic`), by its
+# own numbers, in the order its menu lists them.
+SELECTIVE_LOGIC = (
+    (0, "sent only if one of them is mentioned too"),  # AND ANY
+    (3, "sent only if all of them are mentioned too"),  # AND ALL
+    (2, "not sent if one of them is mentioned"),  # NOT ANY
+    (1, "not sent if all of them are mentioned"),  # NOT ALL
+)
+
+
+def entry_logic(raw: Mapping[str, Any], *, numbered: bool = False) -> int:
+    """SillyTavern's `selectiveLogic` for the entry: its own entry has it at
+    the top, a card's in its extensions (what `convertCharacterBook` reads);
+    0, "one of them too", where it says nothing SillyTavern knows."""
+    ext = raw.get("extensions")
+    value = (
+        raw.get("selectiveLogic")
+        if numbered
+        else (ext.get("selectiveLogic") if isinstance(ext, Mapping) else None)
+    )
+    return value if value in (0, 1, 2, 3) and not isinstance(value, bool) else 0
+
+
+def set_entry_logic(raw: dict[str, Any], logic: int, *, numbered: bool = False) -> None:
+    if numbered:
+        raw["selectiveLogic"] = logic
+        return
+    if not isinstance(raw.get("extensions"), dict):
+        raw["extensions"] = {}
+    raw["extensions"]["selectiveLogic"] = logic
+
+
 def book_entries(book: Mapping[str, Any]) -> list[dict[str, Any]]:
     """The book's own entry objects, in its order, to change in place."""
     return entries_of(book)  # type: ignore[return-value]

@@ -20,6 +20,7 @@ from PySide6.QtWidgets import QApplication, QDialog, QInputDialog, QMessageBox  
 from sealedlore.engine.authoring import build_generation_messages  # noqa: E402
 from sealedlore.engine.drafting import StoryDraft  # noqa: E402
 from sealedlore.gui import window_card_link, window_card_start  # noqa: E402
+from sealedlore.gui import window_collection as window_collection_module  # noqa: E402
 from sealedlore.gui.card_changes import KEEP, SAVE, TAKE, VERSION, CardChangesDialog  # noqa: E402
 from sealedlore.gui.card_chat_dialog import NO_GREETING, CardChatDialog  # noqa: E402
 from sealedlore.gui.collection_picker import CollectionPicker  # noqa: E402
@@ -407,6 +408,45 @@ def test_a_draft_names_their_cards_and_keeps_them_as_they_are(app, window, tmp_p
     saved = load_story_bundle(bundle.story.id, root=tmp_path / "drafts")
     portrait = next(c for c in saved.cast if c.name == "Elena").reference_images[0]
     assert (tmp_path / "drafts" / "stories" / bundle.story.id / portrait.file).is_file()
+
+
+def test_a_draft_brings_their_own_lorebook_as_add_to_the_story_does(app, window, tmp_path):
+    """Their lorebook was left out of a story drafted around them, though Add
+    to the story brings it; an entry the draft already has stays the draft's."""
+    elena = window._kept()[0]
+    reply = {**REPLY, "lore": [{"title": "The Harbour", "content": "Salt and tar."}]}
+
+    def drafted(lore: list) -> tuple:
+        draft = StoryDraft(
+            MockChatProvider(), "A heist.", "m", reasoning=ReasoningConfig(), characters=[elena]
+        )
+        draft.text = json.dumps({**reply, "lore": lore})
+        return draft.build(
+            root=tmp_path / "drafts", kept=window._kept(), read=window._collection_pictures().read
+        )
+
+    bundle, warnings = drafted(reply["lore"])
+    by_title = {entry.title: entry for entry in bundle.lore}
+    assert by_title["Hellsville"].content == "Hellsville is walled; Mara is not welcome there."
+    assert "The Harbour" in by_title and warnings == []
+    bundle, warnings = drafted([{"title": "Hellsville", "content": "The draft's own."}])
+    assert [e.content for e in bundle.lore if e.title == "Hellsville"] == ["The draft's own."]
+    assert any("“Hellsville” wasn't added" in warning for warning in warnings)
+
+
+def test_deleting_a_card_says_which_stories_link_to_it(app, window, monkeypatch):
+    elena = added_elena(window, monkeypatch)
+    window.session.save()
+    asked: list[str] = []
+    monkeypatch.setattr(window_collection_module, "move_to_trash", lambda path: True)
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda _parent, _title, text, *_a: asked.append(text) or QMessageBox.Cancel,
+    )
+    window.show_collection(True, elena.linked.card_id)
+    window.collection_page.action_requested.emit("delete", elena.linked.card_id)
+    assert asked and "Linked to this card in “Doomsville”" in asked[0]
 
 
 def test_draft_with_them_opens_the_premise_with_them(app, window, monkeypatch):

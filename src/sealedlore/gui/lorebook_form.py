@@ -19,6 +19,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -149,8 +150,18 @@ class LorebookForm(QWidget):
         self.secondary = QLineEdit()
         self.secondary.setPlaceholderText("comma-separated: SillyTavern's second keywords")
         self.secondary.textChanged.connect(lambda: self._entry_edited("secondary"))
-        self.selective = QCheckBox("Sent only when one of these is mentioned too")
+        # SillyTavern weighs second keywords four ways (`selectiveLogic`); a
+        # line saying "one of these too" was wrong for three of them.
+        self.selective = QCheckBox("Second keywords count:")
         self.selective.toggled.connect(lambda _on: self._entry_edited("selective"))
+        self.logic = QComboBox()
+        for value, words in lore.SELECTIVE_LOGIC:
+            self.logic.addItem(words, value)
+        self.logic.currentIndexChanged.connect(lambda _index: self._entry_edited("logic"))
+        logic_row = QHBoxLayout()
+        logic_row.setContentsMargins(0, 0, 0, 0)
+        logic_row.addWidget(self.selective)
+        logic_row.addWidget(self.logic, 1)
         self.entry_rest = JsonField(
             "Everything else on this entry (JSON)",
             tip="Its place in the prompt, its chance, groups, timing: SillyTavern's "
@@ -166,7 +177,7 @@ class LorebookForm(QWidget):
         entry_form.addRow("", switches)
         entry_form.addRow("Order", self.order)
         entry_form.addRow("Second keywords", self.secondary)
-        entry_form.addRow("", self.selective)
+        entry_form.addRow("", logic_row)
         entry_form.addRow("", self.entry_rest)
 
         self.empty = QLabel("No lorebook yet: add an entry, or import a lorebook.")
@@ -334,8 +345,14 @@ class LorebookForm(QWidget):
         secondary = lore.entry_keys(raw, "secondary_keys", numbered=numbered)
         set_field_text(self.secondary, _keys_text(secondary))
         self.selective.setChecked(lore.entry_selective(raw, numbered=numbered))
+        self._show_logic(raw)
         self.entry_rest.set_value(lore.entry_rest(raw))
         self._loading = False
+
+    def _show_logic(self, raw: dict[str, Any]) -> None:
+        logic = lore.entry_logic(raw, numbered=self._numbered)
+        self.logic.setCurrentIndex(max(0, self.logic.findData(logic)))
+        self.logic.setEnabled(self.selective.isChecked())
 
     def _entry_edited(self, what: object) -> None:
         raw = self._current()
@@ -365,6 +382,11 @@ class LorebookForm(QWidget):
             lore.entry_set(raw, "secondary_keys", secondary, numbered=numbered)
         elif what == "selective":
             raw["selective"] = self.selective.isChecked()
+            self.logic.setEnabled(self.selective.isChecked())
+        elif what == "logic":
+            lore.set_entry_logic(raw, self.logic.currentData(), numbered=numbered)
+            # In a card's entry it is in the extensions, which the JSON shows.
+            self.entry_rest.set_value(lore.entry_rest(raw))
         elif what == "order":
             lore.entry_set(raw, "insertion_order", self.order.value(), numbered=numbered)
         item = self.list.currentItem()
@@ -381,6 +403,7 @@ class LorebookForm(QWidget):
             # they say now.
             self._loading = True
             self.case_sensitive.setChecked(lore.entry_case_sensitive(raw, numbered=self._numbered))
+            self._show_logic(raw)
             self._loading = False
             self.changed.emit()
 

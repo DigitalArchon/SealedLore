@@ -334,6 +334,38 @@ def _a_story(story_id: str) -> None:
         raise ValueError(f"not a story's id: {story_id!r}")
 
 
+def stories_linking(card_ids: set[str], root: Path | None = None) -> list[str]:
+    """The titles of the stories with a character linked to one of
+    `card_ids` (Your characters' cards), read from their card files alone,
+    so deleting a card can say whose link it breaks. A story that can't be
+    read is left out."""
+    found: list[str] = []
+    directory = stories_dir(root)
+    if not directory.exists() or not card_ids:
+        return found
+    for entry in sorted(directory.iterdir()):
+        if not entry.is_dir() or not is_safe_story_id(entry.name):
+            continue
+        try:
+            cast = read_json(entry / "cast.json", [])
+            supporting = read_json(entry / "supporting.json", {})
+            story = read_json(entry / "story.json", {})
+        except (OSError, ValueError):
+            continue
+        cards = [*(cast if isinstance(cast, list) else [])]
+        if isinstance(supporting, dict) and isinstance(supporting.get("characters"), list):
+            cards += supporting["characters"]
+        if any(
+            isinstance(card, dict)
+            and isinstance(card.get("linked"), dict)
+            and card["linked"].get("card_id") in card_ids
+            for card in cards
+        ):
+            title = story.get("title") if isinstance(story, dict) else None
+            found.append(str(title or entry.name))
+    return found
+
+
 def stories_with_prompt_edits(
     root: Path | None = None, *, excluding: str | None = None
 ) -> list[tuple[str, str, dict[str, PromptEdit]]]:

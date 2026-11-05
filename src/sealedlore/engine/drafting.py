@@ -36,6 +36,8 @@ from sealedlore.storage.image_meta import picture_kind
 from sealedlore.storage.images import REFS_DIR
 from sealedlore.storage.repository import StoryBundle, append_api_log, save_story_bundle
 from sealedlore.storage.scenario import bundle_from_scenario
+from sealedlore.storage.tavern_cards import macro_filler
+from sealedlore.storage.tavern_lore import lore_from_book
 
 
 class StoryDraft:
@@ -159,9 +161,10 @@ def put_in_characters(
     """The author's own characters in the drafted story as their cards have
     them (engine/card_link.py), in the place the draft gave them (its id, so
     the scene and whom the author plays still name them, and whether they are
-    playable), with their pictures. What the draft says this story changes of
-    one (`in_this_story`) is added to their description as the story's own
-    change, which their card can take or not later."""
+    playable), with their pictures and their own lorebooks as the story's
+    lore, as Add to the story brings them. What the draft says this story
+    changes of one (`in_this_story`) is added to their description as the
+    story's own change, which their card can take or not later."""
     notes: dict[str, str] = {}
     for key in ("cast", "supporting"):
         items = data.get(key)
@@ -219,3 +222,27 @@ def put_in_characters(
             copy.reference_images.append(new)
             marks.append(picture_mark(ref, data_bytes))
         copy.linked.pictures = marks
+        _put_in_lore(scenario, card, user, warnings)
+
+
+def _put_in_lore(
+    scenario: Scenario, card: Character, user: str | None, warnings: list[str]
+) -> None:
+    """A card's own lorebook into the drafted story's lore (it was left out,
+    where Add to the story brings it). An entry the draft already has by its
+    title is the draft's: the two would say the same thing twice."""
+    book = card.tavern.character_book if card.tavern else None
+    if not book:
+        return
+    imported = lore_from_book(book, macro_filler(card.name, user))
+    titles = {entry.title.casefold() for entry in scenario.lore}
+    for entry in imported.entries:
+        if entry.title.casefold() in titles:
+            warnings.append(
+                f"{card.name}'s lore entry “{entry.title}” wasn't added: the draft has one by "
+                "that name"
+            )
+            continue
+        titles.add(entry.title.casefold())
+        scenario.lore.append(entry)
+    warnings += [f"{card.name}'s lorebook: left out {note}" for note in imported.notes()]

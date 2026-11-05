@@ -138,6 +138,27 @@ def test_the_case_tick_and_the_json_say_the_same(app):
     assert entry["extensions"]["case_sensitive"] is True and form.case_sensitive.isChecked()
 
 
+def test_how_second_keywords_count_is_chosen_as_sillytavern_reads_it(app):
+    """One line said "sent only when one of these is mentioned too", wrong for
+    three of SillyTavern's four ways; the way is chosen now, where it reads it."""
+    entry = {"id": 0, "keys": ["Hellsville"], "content": "c", "enabled": True}
+    entry.update({"secondary_keys": ["the walls"], "selective": True, "extensions": {}})
+    book = {"entries": [entry]}
+    form = book_form(book)
+    assert form.logic.isEnabled() and form.logic.currentData() == 0
+    form.logic.setCurrentIndex(form.logic.findData(2))  # not sent if one of them is mentioned
+    assert entry["extensions"]["selectiveLogic"] == 2
+    assert '"selectiveLogic": 2' in form.entry_rest.text.toPlainText()
+    assert lore.world_from_book(book)["entries"]["0"]["selectiveLogic"] == 2
+    form.selective.setChecked(False)
+    assert not form.logic.isEnabled() and entry["selective"] is False
+    numbered = {"entries": {"0": {"uid": 0, "key": ["a"], "content": "c", "selectiveLogic": 3}}}
+    form = book_form(numbered)
+    assert form.logic.currentData() == 3
+    form.logic.setCurrentIndex(form.logic.findData(1))
+    assert numbered["entries"]["0"]["selectiveLogic"] == 1
+
+
 def test_a_new_entry_is_the_one_chosen_and_shown(app):
     book = {
         "entries": {
