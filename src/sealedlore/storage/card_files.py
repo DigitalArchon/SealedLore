@@ -15,27 +15,44 @@ out the same way; it stays with the card in Your characters.
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 
 from sealedlore.models.image import ImageRef
 from sealedlore.models.tavern import CardAsset
 
-# RisuAI's (its parser's `assetRegex`, read Nov 4 2026).
+# The patterns below each stop where what they read must end: a macro at the
+# end of its line, a tag at a bracket or a blank line, a Markdown picture at
+# a bracket. A card's text is as its maker left it: read on to the next "}}"
+# or ">" anywhere, as a browser would, one left unclosed took the prose after
+# it out of the greeting, and a greeting of a few hundred unclosed tags took
+# seconds.
+
+# RisuAI's (its parser's `assetRegex`, read Nov 4 2026), its name on one
+# line and holding no brace.
 _MACRO = re.compile(
-    r"\{\{(raw|path|img|image|video|audio|bgm|bg|emotion|asset|video-img|source)::(.+?)\}\}",
-    re.IGNORECASE | re.DOTALL,
+    r"\{\{(raw|path|img|image|video|audio|bgm|bg|emotion|asset|video-img|source)::([^{}\r\n]+)\}\}",
+    re.IGNORECASE,
 )
+# Space inside a tag: never a blank line, where a broken tag's paragraph ends.
+_GAP = r"(?:[ \t\f\r]|\n(?![ \t\f\r]*\n))"
+# One of a tag's attributes: a name as HTML's are written, and a value,
+# quoted or not, that never holds a bracket. A tag that isn't made of them
+# (its ">" written "&gt;") is no tag: it stays in the text, and only a macro
+# in it shows its picture.
+_ATTRIBUTE = rf"""{_GAP}+[a-z_:][\w:.-]*(?:{_GAP}*={_GAP}*(?:"[^"<>]*"|'[^'<>]*'|[^\s"'<>=`]+))?"""
 _HTML_IMG = re.compile(
-    r"<img\b[^>]*?\bsrc\s*=\s*(?P<quote>[\"'])(?P<src>.*?)(?P=quote)[^>]*>",
-    re.IGNORECASE | re.DOTALL,
+    rf"""<img(?:{_ATTRIBUTE})*?{_GAP}+src{_GAP}*={_GAP}*(?P<quote>["'])(?P<src>[^"'<>]*)(?P=quote)"""
+    rf"""(?:{_ATTRIBUTE})*{_GAP}*/?>""",
+    re.IGNORECASE,
 )
-_MARKDOWN_IMG = re.compile(r"!\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
+# Its words never hold a bracket, nor its address a parenthesis or a space.
+_MARKDOWN_IMG = re.compile(r"""!\[[^\[\]]*\]\(\s*<?([^()\s<>]+)>?(?:\s+"[^"\r\n]*")?\s*\)""")
 _SHOWN = ("img", "image", "asset", "emotion", "raw", "path")
 _ANY = re.compile(
     f"(?P<tag>{_HTML_IMG.pattern})|(?P<markdown>{_MARKDOWN_IMG.pattern})|(?P<macro>{_MACRO.pattern})",
-    re.IGNORECASE | re.DOTALL,
+    re.IGNORECASE,
 )
 
 
@@ -68,22 +85,38 @@ def _stem(name: str) -> str:
     return _key(PurePosixPath(name.strip()).stem) if "." in name else _key(name)
 
 
+def _lookup(names: Sequence[str]) -> Callable[[str], int | None]:
+    """Which of the card's files (by their `names`, in the card's order) a
+    macro means by a name: the file named so in any case, else one named
+    so but for its extension ("snow" for snow.png);
+    failing both, the same for the name without its own extension
+    ("snow.jpg" for snow.png). The first file to answer wins."""
+    by_name: dict[str, int] = {}
+    for index, name in enumerate(names):
+        by_name.setdefault(_key(name), index)
+    for index, name in enumerate(names):
+        by_name.setdefault(_stem(name), index)
+
+    def find(name: str) -> int | None:
+        found = by_name.get(_key(name))
+        return found if found is not None else by_name.get(_stem(name))
+
+    return find
+
+
 def greeting_pictures(
     text: str, assets: Sequence[CardAsset], expressions: Sequence[ImageRef] = ()
 ) -> GreetingPictures:
     """The pictures `text` shows from the card's files (and the character's
     expression pictures), taken out of it."""
     held = [a for a in assets if a.held]
-    by_name: dict[str, CardAsset] = {}
-    for asset in held:
-        by_name.setdefault(_key(asset.name), asset)
-    for asset in held:
-        by_name.setdefault(_stem(asset.name), asset)
+    find = _lookup([asset.name for asset in held])
     by_path = {asset.path: asset for asset in held if asset.path}
     found = GreetingPictures(text="")
 
     def named(name: str) -> CardAsset | None:
-        return by_name.get(_key(name)) or by_name.get(_stem(name))
+        index = find(name)
+        return held[index] if index is not None else None
 
     def show(picture: CardAsset | ImageRef | None) -> None:
         if picture is None:
@@ -141,23 +174,41 @@ def greeting_pictures(
         return macro(_MACRO.fullmatch(match.group(0)))
 
     text = _ANY.sub(each, text)
-    text = re.sub(r"[ \t]+\n", "\n", text)
+    # Line by line: a pattern for the spaces before a line's end tried again
+    # at every space of a long run.
+    text = "\n".join(line.rstrip(" \t") for line in text.split("\n"))
     found.text = re.sub(r"\n{3,}", "\n\n", text).strip()
     return found
 
 
-def renamed_in(text: str, old: str, new: str) -> tuple[str, int]:
-    """`text` with RisuAI's macros that name the file `old` (any case, with or
-    without its extension) naming `new` instead, and how many did: a file
-    renamed on the card is still shown by the greetings that showed it."""
+def renamed_in(
+    text: str,
+    old: str,
+    new: str,
+    assets: Sequence[CardAsset] = (),
+    renamed: CardAsset | None = None,
+) -> tuple[str, int]:
+    """`text` with RisuAI's macros that name the file `old` naming `new`
+    instead, and how many did: a file renamed on the card is still shown by
+    the greetings that showed it. A macro names it as `greeting_pictures`
+    reads one (any case, with or without its extension). Given the card's
+    files (`assets`, `renamed` among them under its new name), only the
+    macros that meant that one: "snow" means snow.png, not snow.mp3, when
+    the picture comes first."""
+    held = [asset for asset in assets if asset.held]
+    if renamed is not None and any(asset is renamed for asset in held):
+        names = [old if asset is renamed else asset.name for asset in held]
+        target = next(index for index, asset in enumerate(held) if asset is renamed)
+    else:
+        names, target = [old], 0
+    find = _lookup(names)
     count = 0
 
     def swap(match: re.Match[str]) -> str:
         nonlocal count
-        name = match.group(2)
-        if _key(name) == _key(old) or _stem(name) == _key(old):
-            count += 1
-            return "{{" + match.group(1) + "::" + new + "}}"
-        return match.group(0)
+        if find(match.group(2)) != target:
+            return match.group(0)
+        count += 1
+        return "{{" + match.group(1) + "::" + new + "}}"
 
     return _MACRO.sub(swap, text), count

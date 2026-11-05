@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import json
+import time
 import zipfile
 import zlib
 from pathlib import Path
@@ -20,7 +21,7 @@ from sealedlore.models.image import ImageRef
 from sealedlore.models.tavern import CardAsset
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.storage import collection
-from sealedlore.storage.card_files import background_of, greeting_pictures
+from sealedlore.storage.card_files import background_of, greeting_pictures, renamed_in
 from sealedlore.storage.images import reference_files
 from sealedlore.storage.paths import COLLECTION_ID
 from sealedlore.storage.picture_store import DiskPictures
@@ -383,3 +384,61 @@ def test_the_opening_shows_them_once_and_a_restart_keeps_them(tmp_path: Path):
     again = scenario_from_bundle(session.bundle, files)
     assert [p.card_file for p in again.opening_pictures] == ["Farmhouse", "snow"]
     assert all(p.file in again.reference_files for p in again.opening_pictures)
+
+
+# --- a greeting as its maker left it ------------------------------------------------------
+
+SNOW_FILE = CardAsset(type="x-risu-asset", name="snow", ext="png", file="images/assets/e/snow.png")
+
+
+def test_a_broken_tag_or_macro_takes_none_of_the_prose_after_it():
+    """Read on to the next ">" or "}}" anywhere, a tag whose ">" was written
+    "&gt;" took the lines up to a quote's ">" out of the greeting, and an
+    unclosed macro the lines up to the next macro."""
+    text = (
+        '<img src="{{raw::snow.png}}" style="width:100%"/&gt;\n'
+        'Elena lowers the rifle an inch. "Who sent you?"\n\n> The wind howls outside.'
+    )
+    shown = greeting_pictures(text, [SNOW_FILE])
+    assert 'Elena lowers the rifle an inch. "Who sent you?"' in shown.text
+    assert "> The wind howls outside." in shown.text
+    text = "{{img::snow\nShe looks at {{user}}.\n\n<img src='{{raw::snow}}'\n\nThe door opens. >"
+    shown = greeting_pictures(text, [SNOW_FILE])
+    assert "She looks at {{user}}." in shown.text and "The door opens. >" in shown.text
+    # A tag over several lines is still a tag.
+    shown = greeting_pictures(
+        'She waits.\n<img\n  src="{{raw::snow}}"\n  style="width:60%">\n"Who are you?"',
+        [SNOW_FILE],
+    )
+    assert shown.pictures == [SNOW_FILE] and shown.text == 'She waits.\n\n"Who are you?"'
+
+
+def test_a_greeting_of_unclosed_tags_is_read_at_once():
+    """Four hundred unclosed tags (4 KB) took ten seconds, eight hundred
+    minutes; a long run of spaces took seconds too."""
+    text = '<img src="x' * 400 + "{{img::x " * 400 + "![a](" * 400 + " " * 40_000 + "."
+    started = time.monotonic()
+    shown = greeting_pictures(text, [SNOW_FILE])
+    assert time.monotonic() - started < 2.0
+    assert shown.text.endswith(".")
+
+
+def test_a_renamed_file_is_renamed_wherever_a_greeting_shows_it():
+    """With or without its extension, in any case, in a tag's address too:
+    "{{img::snow}}" showed snow.png and kept its old name."""
+    text = '{{img::snow}}, {{IMG::Snow.PNG}}, <img src="{{raw::snow.png}}"> and {{img::snowfall}}'
+    assert renamed_in(text, "snow.png", "ice.png") == (
+        '{{img::ice.png}}, {{IMG::ice.png}}, <img src="{{raw::ice.png}}"> and {{img::snowfall}}',
+        3,
+    )
+    # Given the card's files, only where it is the one meant: "snow" is the
+    # picture before it, not the sound renamed.
+    picture = CardAsset(type="x-risu-asset", name="snow.png", ext="png", file="images/a/1.png")
+    sound = CardAsset(type="x-risu-asset", name="snow.mp3", ext="mp3", file="images/a/2.mp3")
+    greeting = "{{img::snow}} {{audio::snow.mp3}}"
+    assert greeting_pictures(greeting, [picture, sound]).pictures == [picture]
+    sound.name = "wind"
+    assert renamed_in(greeting, "snow.mp3", "wind", [picture, sound], sound) == (
+        "{{img::snow}} {{audio::wind}}",
+        1,
+    )
