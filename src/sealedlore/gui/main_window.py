@@ -117,6 +117,8 @@ from sealedlore.gui.transcript import (
     TranscriptView,
     ViewToggle,
     kind_for,
+    may_branch,
+    may_retake,
     speaker_label_for,
 )
 from sealedlore.gui.usage_dialog import UsageDialog
@@ -945,6 +947,19 @@ class MainWindow(
         Oct 29 2026: separate per story). In memory, for the run: a
         memory-only chat's draft is never written either."""
         if self._draft_of is None:
+            return
+        session = self.session
+        if (
+            session is not None
+            and session.story.id == self._draft_of
+            and session.in_private
+            and session.open_span.keep == "memory"
+        ):
+            # Never one typed in a memory-only scene: put back as the story
+            # opened again, without the scene, Enter sent it to the story's
+            # model (the leak rule). A scene that ends drops its own
+            # (window_private `_drop_scene_draft`).
+            self._drafts.pop(self._draft_of, None)
             return
         text, ooc = self.composer.draft()
         if text.strip() or (ooc or "").strip():
@@ -2558,15 +2573,37 @@ class MainWindow(
         start of a new branch, under the name given (blank: "Branch N"). A
         turn is answered at once; a passage is the author's, and waits.
         `ooc`: the turn's OOC note as edited ("" for none); None keeps the
-        original's."""
+        original's. Refused, the editor (closed as Save was pressed) opens
+        again with what was typed, and the reason is said: the text used to
+        go with it, and a private scene's message raised in the slot."""
         if self.session is None or self._busy:
-            return
-        if self.session.in_private:
-            self.statusBar().showMessage("End the private scene to start a branch", 6000)
             return
         node = next((n for n in self.session.nodes if n.id == node_id), None)
         if node is None or not text.strip():
             return
+        if not may_branch(node.meta.private_span, self._open_scene()):
+            self._edit_again(
+                node_id,
+                text,
+                name,
+                ooc,
+                self._say(
+                    "End the private scene to start a branch."
+                    if self.session.in_private
+                    else "A private scene's messages can't start a branch: only the private "
+                    "model ever saw them."
+                ),
+            )
+            return
+        if node.kind == "user" and self.config.active_provider() is None and not self.use_mock:
+            QMessageBox.information(
+                self,
+                "No endpoint set up",
+                "Set a base URL, API key and model in Settings first.",
+            )
+            self._edit_again(node_id, text, name, ooc)
+            return
+        typed_name = name
         before = path_to(self.session.nodes, node_id)[:-1]
         current = self.session.current_branch()
         listed = self.session.branch_list()
@@ -2577,16 +2614,13 @@ class MainWindow(
             f"the branch bar). “{current.name if current else 'The story'}” is kept."
         )
         if node.kind != "user":
-            list(self.session.rewrite_from(node_id, text, name=name))
+            try:
+                list(self.session.rewrite_from(node_id, text, name=name))
+            except ValueError as exc:
+                self._edit_again(node_id, text, typed_name, ooc, f"No new branch: {exc}.")
+                return
             self._after_navigation(self.session.story.active_leaf_id)
             self.statusBar().showMessage(told, 10000)
-            return
-        if self.config.active_provider() is None and not self.use_mock:
-            QMessageBox.information(
-                self,
-                "No endpoint set up",
-                "Set a base URL, API key and model in Settings first.",
-            )
             return
         self.session.forget_review_undo()
         self.session.provider = self._current_provider()
@@ -2600,6 +2634,16 @@ class MainWindow(
         self.transcript.add_message(label, text, kind_for(node.speaker_id), shown_ooc)
         self.statusBar().showMessage(told, 10000)
         self._start(lambda: self.session.rewrite_from(node_id, text, name=name, ooc=ooc))
+
+    def _edit_again(
+        self, node_id: str, text: str, name: str, ooc: str | None, reason: str = ""
+    ) -> None:
+        """A new branch refused: its editor open again with what was typed."""
+        widget = self.transcript.message_widget(node_id)
+        if widget is not None:
+            widget.edit_again(text, ooc, name, rewrite=True)
+        if reason:
+            self.statusBar().showMessage(reason, 10000)
 
     def _scroll_to_node(self, node_id: str) -> None:
         if self._busy and self._streaming_job:
@@ -3000,8 +3044,8 @@ class MainWindow(
         path = self.session.full_path()
         if not path or not self._tee_allows_send():
             return
-        if not self._retakeable(path):
-            self.statusBar().showMessage(NOT_A_TAKE, 8000)
+        if (refusal := self._retake_refusal(path)) is not None:
+            self.statusBar().showMessage(refusal, 8000)
             return
         self.session.provider = self._current_provider()
         # The composer's controls are what the author has in front of them, so
@@ -3018,6 +3062,9 @@ class MainWindow(
             return
         path = self.session.full_path()
         if not path or (node_id and path[-1].id != node_id):
+            return
+        if (refusal := self._retake_refusal(path)) is not None:
+            self.statusBar().showMessage(refusal, 8000)
             return
         self.session.provider = self._current_provider()
         if shape is None:
@@ -3059,8 +3106,8 @@ class MainWindow(
         if path and path[-1].id == node_id:
             self.regenerate(shape)
             return
-        if not self._retakeable(path_to(self.session.nodes, node_id)):
-            self.statusBar().showMessage(NOT_A_TAKE, 8000)
+        if (refusal := self._retake_refusal(path_to(self.session.nodes, node_id))) is not None:
+            self.statusBar().showMessage(refusal, 8000)
             return
         self.session.provider = self._current_provider()
         # Show the story as it stood before that passage while the new take
@@ -3084,6 +3131,19 @@ class MainWindow(
             return
         node = next((n for n in self.session.nodes if n.id == node_id), None)
         if node is None or node.kind != "user":
+            return
+        if not may_retake(node.meta.private_span, self._open_scene()):
+            # A scene that has ended: back in the box, its words went to the
+            # story's model with the next Send, and the scene and its approved
+            # summary were deleted on the way (the leak rule).
+            self._warn_plain(
+                self._say("Not from a private scene that has ended"),
+                self._say(
+                    "A private scene's messages stay as they are once it has ended: taken "
+                    "back, its words would be in the box to send to the story's model, "
+                    "which only ever had its summary."
+                ),
+            )
             return
         try:
             deletion = self.session.deletion_for(node_id)
@@ -4278,16 +4338,34 @@ class MainWindow(
             return False
         return self._retakeable(self.session.full_path())
 
-    @staticmethod
-    def _retakeable(path: Sequence[Node]) -> bool:
-        """Whether the last message of `path` can be regenerated: an author
-        turn (a retry), or a passage answering one. An as-written opening
-        has no author turn before it (nothing wrote it), and a private
-        scene's summary is the author's approved text, not a take; the
-        session refused both with a raw error (the review, Oct 20 2026)."""
+    def _retakeable(self, path: Sequence[Node]) -> bool:
+        return self._retake_refusal(path) is None
+
+    def _retake_refusal(self, path: Sequence[Node]) -> str | None:
+        """Why the last message of `path` can't be regenerated, or None when
+        it can: an author turn (a retry), or a passage answering one. An
+        as-written opening has no author turn before it (nothing wrote it),
+        and a private scene's summary is the author's approved text, not a
+        take; the session refused both with a raw error (the review, Oct 20
+        2026). Nor, as the session has it (transcript `may_retake`), a turn
+        of a private scene that has ended, or one outside the scene open:
+        offered, each ended in "Generation failed"."""
         if not path or path[-1].meta.private_summary_of is not None:
-            return False
-        return path[-1].kind == "user" or (len(path) > 1 and path[-2].kind == "user")
+            return NOT_A_TAKE
+        turn = path[-1] if path[-1].kind == "user" else path[-2] if len(path) > 1 else None
+        if turn is None or turn.kind != "user":
+            return NOT_A_TAKE
+        open_scene = self._open_scene()
+        if may_retake(turn.meta.private_span, open_scene):
+            return None
+        if open_scene is not None:
+            return self._say("Leave the private scene to retake a passage from before it.")
+        return self._say("That private scene has ended: its messages stay as they are.")
+
+    def _open_scene(self) -> str | None:
+        """The private scene open now, by its id; None when none is."""
+        session = self.session
+        return session.open_span.id if session is not None and session.in_private else None
 
     def _refresh_model_button(self) -> None:
         # The line above the transcript says the same things, and more; an
@@ -5007,6 +5085,7 @@ class MainWindow(
         can_continue = has_story and self.session.can_continue()
         self._refresh_model_button()
         self.transcript.offer_continue(can_continue)
+        self.transcript.offer_for_scene(self._open_scene())
         self.composer.set_busy(
             busy,
             has_story=has_story,

@@ -107,8 +107,9 @@ class OpenEdit:
     text: str
     ooc: str | None
     branch_name: str
-    # (the text, the note) as the editor first opened, to tell what was typed.
-    opened: tuple[str, str | None]
+    # (the text, the note) as the editor first opened, to tell what was
+    # typed; None: all of it was (`MessageWidget.edit_again`).
+    opened: tuple[str, str | None] | None
     focused: bool
     cursor: int
 
@@ -231,10 +232,29 @@ class TextBody(QLabel):
         super().changeEvent(event)
 
 
+def may_retake(turn_scene: str | None, open_scene: str | None) -> bool:
+    """The session's rule for a private scene's messages, on the window's
+    side (StorySession.regenerate): a passage may be taken again, and a turn
+    taken back, when its author turn was written in the scene open now
+    (`open_scene`, its id), or in the story itself while none is open
+    (`turn_scene`: the turn's `meta.private_span`). An ended scene's messages
+    stay as they are, and an open one touches only its own. Offered anywhere
+    else, each ended in "Generation failed" (or, taken back, put the scene's
+    words in the box to send to the story's model)."""
+    return turn_scene == open_scene
+
+
+def may_branch(scene: str | None, open_scene: str | None) -> bool:
+    """The session's rule for a new branch (StorySession.rewrite_from): never
+    while a private scene is open, and never from a scene's own message."""
+    return open_scene is None and scene is None
+
+
 def _retakeable_ids(nodes: Sequence[Node]) -> set[str]:
     """The passages Regenerate applies to: those answering an author turn.
     An opening written as given has none before it, and a private scene's
-    summary is the author's approved text."""
+    summary is the author's approved text. Whether a private scene lets it
+    be offered now is `may_retake`'s (`MessageWidget.offer_for_scene`)."""
     return {
         node.id
         for before, node in zip(nodes, nodes[1:], strict=False)
@@ -375,6 +395,9 @@ class MessageWidget(QFrame):
         self._ooc_text = ooc or ""
         self._ooc_editor: QPlainTextEdit | None = None
         self._edit_opened: tuple[str, str | None] = ("", None)
+        # The private scenes it and its author turn were written in (`set_scenes`).
+        self._scene: str | None = None
+        self._turn_scene: str | None = None
         self.ooc: QLabel | None = None
         if ooc:
             self.ooc = TextBody(f"OOC — {ooc}")
@@ -586,6 +609,26 @@ class MessageWidget(QFrame):
     def set_text(self, text: str) -> None:
         self.body.set_markdown(text)
 
+    def set_scenes(self, scene: str | None, turn_scene: str | None) -> None:
+        """The private scene this message was written in, and the one of the
+        author turn it answers (None: the story's own), for `offer_for_scene`."""
+        self._scene, self._turn_scene = scene, turn_scene
+
+    def offer_for_scene(self, open_scene: str | None) -> None:
+        """What ⋯ offers here as the private scene open now allows (None: no
+        scene is open): Regenerate and Take back by `may_retake`, New branch
+        from here by `may_branch`, as the session decides them."""
+        retake = may_retake(self._turn_scene, open_scene)
+        for key, allowed in (
+            ("regenerate", retake),
+            ("reroll", retake),
+            ("take_back", may_retake(self._scene, open_scene)),
+            ("rewrite", may_branch(self._scene, open_scene)),
+        ):
+            action = self.actions_.get(key)
+            if action is not None:
+                action.setVisible(allowed)
+
     # --- inline editing (§5.3, §10) ---------------------------------------
 
     def begin_edit(self, rewrite: bool = False, *, focus: bool = True) -> None:
@@ -706,7 +749,7 @@ class MessageWidget(QFrame):
         self.begin_edit(state.rewrite, focus=False)
         if self._editor is None:
             return
-        text, ooc = state.opened
+        text, ooc = state.opened if state.opened is not None else (None, None)
         if state.text != text:
             self._editor.setPlainText(state.text)
         if self._ooc_editor is not None and state.ooc is not None and state.ooc != ooc:
@@ -718,6 +761,24 @@ class MessageWidget(QFrame):
             cursor.setPosition(min(state.cursor, len(self._editor.toPlainText())))
             self._editor.setTextCursor(cursor)
             self._editor.setFocus(Qt.OtherFocusReason)
+
+    def edit_again(
+        self, text: str, ooc: str | None, branch_name: str = "", *, rewrite: bool = False
+    ) -> None:
+        """The editor open again with `text`, the note and a branch's name in
+        it: a save the window refused (a new branch from a private scene's
+        message) had closed it, and the text went with it."""
+        self.resume_edit(
+            OpenEdit(
+                rewrite=rewrite,
+                text=text,
+                ooc=ooc,
+                branch_name=branch_name,
+                opened=None,
+                focused=True,
+                cursor=len(text),
+            )
+        )
 
     def commit_edit(self) -> None:
         """Save, as its button does (Ctrl+Enter in the editor)."""
@@ -1365,6 +1426,8 @@ class TranscriptView(QScrollArea):
         self.setObjectName("transcript")
         # The story is being written: no message may change it (set_busy).
         self._busy = False
+        # The private scene open now, for what ⋯ offers (`offer_for_scene`).
+        self._open_scene: str | None = None
         # A simple chat (`set_chat`): its labels, Keep in full, and a TEE
         # chat's private look.
         self._chat = False
@@ -1599,6 +1662,15 @@ class TranscriptView(QScrollArea):
             if action is not None and self._layout.indexOf(widget) >= 0:
                 action.setVisible(can)
 
+    def offer_for_scene(self, open_scene: str | None) -> None:
+        """The private scene open now (None: none is), for what ⋯ offers on
+        every message built and every one built later
+        (`MessageWidget.offer_for_scene`): entering a scene rebuilds nothing."""
+        self._open_scene = open_scene
+        for widget in self._container.findChildren(MessageWidget):
+            if self._layout.indexOf(widget) >= 0:
+                widget.offer_for_scene(open_scene)
+
     def open_editor(self, *, focused: bool = False) -> MessageWidget | None:
         """The message whose editor is open (with the keyboard's focus in it,
         if `focused`), or None."""
@@ -1720,10 +1792,12 @@ class TranscriptView(QScrollArea):
                 marked=node.id in marked_ids,
                 show_rolls=show_rolls,
                 branch_start=(branch_starts or {}).get(node.id),
+                turn=turn_of.get(node.id),
             )
             add_asides(node.id)
 
         retakeable = _retakeable_ids(nodes)
+        turn_of = {node.id: before for before, node in zip(nodes, nodes[1:], strict=False)}
         carries_on = continuable(nodes) if can_continue is None else can_continue
 
         units: list[_Unit] = [(None, lambda: add_asides(None))]
@@ -1785,9 +1859,11 @@ class TranscriptView(QScrollArea):
                 marked=node.id in marked_ids,
                 show_rolls=show_rolls,
                 branch_start=(branch_starts or {}).get(node.id),
+                turn=turn_of.get(node.id),
             )
 
         retakeable = _retakeable_ids(nodes)
+        turn_of = {node.id: before for before, node in zip(nodes, nodes[1:], strict=False)}
         units: list[_Unit] = [(None, note)]
         units += [(None, lambda chapter=chapter: card(chapter)) for chapter in chapters]
         units += [(node.id, lambda node=node: build(node)) for node in nodes]
@@ -1815,7 +1891,10 @@ class TranscriptView(QScrollArea):
         marked: bool = False,
         show_rolls: bool = True,
         branch_start: str | None = None,
+        turn: Node | None = None,
     ) -> MessageWidget:
+        """`turn`: the message before this one, the author turn a passage
+        answers, for what a private scene lets ⋯ offer."""
         label = speaker_label(node, cast_by_id, self._chat)
         if node.kind == "assistant":
             # How the author judges whether a length preset is working.
@@ -1874,6 +1953,11 @@ class TranscriptView(QScrollArea):
         faces_for = getattr(self, "_faces_for", None)
         if faces_for is not None and node.kind == "assistant":
             widget.add_faces(faces_for(node.id))
+        # The private scene it was written in, and a passage's turn's, for ⋯.
+        own = node.meta.private_span
+        answered = turn.meta.private_span if turn is not None and node.kind == "assistant" else own
+        widget.set_scenes(own, answered)
+        widget.offer_for_scene(self._open_scene)
         return widget
 
     # --- paging -------------------------------------------------------------

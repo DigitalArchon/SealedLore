@@ -72,6 +72,9 @@ class SummariesPanel(QWidget):
         self._in_parts: set[str] = set()
         self._rebuilding: set[str] = set()
         self._loading = False
+        # Turns Archive now would take, and why it can't now ("" when it can).
+        self._archivable = 0
+        self._paused = ""
 
         caption = QLabel(
             "Archived history. These chapters replace the original prose in every later "
@@ -240,11 +243,22 @@ class SummariesPanel(QWidget):
         self.chapters.setCurrentRow(row)
         self._loading = False
 
-        self.archive_button.setEnabled(archivable_turns > 0)
-        self.archive_button.setText(
-            f"Archive {archivable_turns} turns" if archivable_turns else "Nothing to archive"
-        )
+        self._archivable = archivable_turns
+        self._sync_archive()
         self._reload_editor()
+
+    def set_paused(self, reason: str) -> None:
+        """Archive now is off while a private scene is open, with why as its
+        tooltip ("" when it is on again): the session refuses to archive then,
+        and pressed, it ended in "Archiving failed"."""
+        self._paused = reason
+        self._sync_archive()
+
+    def _sync_archive(self) -> None:
+        turns = self._archivable
+        self.archive_button.setEnabled(turns > 0 and not self._paused)
+        self.archive_button.setText(f"Archive {turns} turns" if turns else "Nothing to archive")
+        self.archive_button.setToolTip(self._paused)
 
     def _go_to_chapter(self, _item: object) -> None:
         summary = self.selected()

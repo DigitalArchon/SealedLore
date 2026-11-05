@@ -172,6 +172,136 @@ def test_continue_waits_for_the_scene_s_own_passage(app, window: MainWindow):
     assert window.composer.continue_button.isEnabled()
 
 
+class _Approve:
+    """The summary dialog, answered Approve as it stands."""
+
+    APPROVE, AGAIN, BACK, DISCARD = "approve", "again", "back", "discard"
+
+    def __init__(self, summary, parent=None, *, note=None, chat=False):
+        self.choice = self.APPROVE
+
+    def exec(self):
+        return 1
+
+    def text(self):
+        return "They spoke in private."
+
+
+def _ended_scene(app, window: MainWindow, monkeypatch, keep: str):
+    window.composer.private_keep.setCurrentIndex(window.composer.private_keep.findData(keep))
+    window.composer.private_toggle.click()
+    for turn in ("a", "b"):
+        window.private_mock.responses = [f"A private reply with {MARKER} {turn}."]
+        send(app, window, f"I whisper {MARKER} {turn}.")
+    monkeypatch.setattr(window_private, "PrivateSummaryDialog", _Approve)
+    window.private_mock.responses = ["They spoke."]
+    window.composer.private_toggle.click()
+    wait_for(app, lambda: not window._busy and not window.session.in_private)
+    path = window.session.full_path()
+    return [node for node in path if node.meta.private_span]
+
+
+@pytest.mark.parametrize("keep", ["disk", "memory"])
+def test_an_ended_scenes_turn_is_never_taken_back_into_the_box(app, window, monkeypatch, keep):
+    """Take back on an ended scene's turn put its words in the public box,
+    deleted the scene and its approved summary, and Send gave them to the
+    story's model and the reads (the leak rule)."""
+    scene = _ended_scene(app, window, monkeypatch, keep)
+    turn = next(node for node in scene if node.kind == "user")
+    widget = window.transcript.message_widget(turn.id)
+    assert not widget.actions_["take_back"].isVisible(), "not offered"
+    warned: list[str] = []
+    monkeypatch.setattr(window, "_warn_plain", lambda title, _text: warned.append(title))
+    before = len(window.session.nodes)
+    window._take_back(turn.id)
+    assert warned == ["Not from a private scene that has ended"]
+    assert window.composer.text() == "" and len(window.session.nodes) == before
+
+
+def test_retakes_and_branches_are_offered_only_where_the_session_allows(app, window, monkeypatch):
+    """Right after a scene began, Regenerate was on and ⋯ offered it on every
+    earlier passage, and after it ended on its own passages: each ended in
+    "Generation failed". New branch from here… on an ended scene's message
+    raised in a slot, closing the editor and losing what was typed."""
+    public = window.session.full_path()[-1]
+    window.composer.private_toggle.click()
+    assert not window.composer.regenerate_button.isEnabled()
+    actions = window.transcript.message_widget(public.id).actions_
+    assert not actions["regenerate"].isVisible() and not actions["rewrite"].isVisible()
+    window.private_mock.responses = [f"A private reply with {MARKER}."]
+    send(app, window, f"I whisper {MARKER}.")
+    scene_passage = window.session.full_path()[-1]
+    assert window.composer.regenerate_button.isEnabled(), "the scene's own passage"
+    assert window.transcript.message_widget(scene_passage.id).actions_["regenerate"].isVisible()
+    monkeypatch.setattr(window_private, "PrivateSummaryDialog", _Approve)
+    window.private_mock.responses = ["They spoke."]
+    window.composer.private_toggle.click()
+    wait_for(app, lambda: not window._busy and not window.session.in_private)
+    actions = window.transcript.message_widget(scene_passage.id).actions_
+    assert not actions["regenerate"].isVisible() and not actions["rewrite"].isVisible()
+    assert window.transcript.message_widget(public.id).actions_["regenerate"].isVisible()
+    window._regenerate_node(scene_passage.id)
+    assert not window._busy and "ended" in window.statusBar().currentMessage()
+    # Reached anyway, a new branch from it is refused with the text kept.
+    widget = window.transcript.message_widget(scene_passage.id)
+    widget.begin_edit(rewrite=True)
+    widget._editor.setPlainText("Rewritten, and kept.")
+    widget.commit_edit()
+    widget = window.transcript.message_widget(scene_passage.id)
+    assert widget.editing() and widget._editor.toPlainText() == "Rewritten, and kept."
+    assert "can't start a branch" in window.statusBar().currentMessage()
+    widget.cancel_edit()
+
+
+def test_what_was_typed_in_a_private_scene_goes_with_it(app, window, monkeypatch):
+    """A memory-only scene's unsent text was kept as the story's draft: the
+    story opened again without the scene, put it back, and Enter sent it to
+    the story's model. A draft from before the scene, untouched, stays."""
+    window.composer.private_keep.setCurrentIndex(window.composer.private_keep.findData("memory"))
+    window.composer.private_toggle.click()
+    send(app, window, f"I whisper {MARKER}.")
+    window.composer.input.setPlainText(f"Unsent, still private: {MARKER}")
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+    story_id = window.session.story.id
+    window.close_story()
+    window.open_story(story_id)
+    assert MARKER not in window.composer.text() and story_id not in window._drafts
+    window.composer.input.setPlainText("A public draft.")
+    window.composer.private_keep.setCurrentIndex(window.composer.private_keep.findData("disk"))
+    window.composer.private_toggle.click()
+    window.composer.private_toggle.click()  # nothing written: ended at once
+    assert not window.session.in_private and window.composer.text() == "A public draft."
+    window.composer.private_toggle.click()
+    window.composer.input.setPlainText(f"Typed in the scene: {MARKER}")
+    window.composer.private_toggle.click()
+    assert not window.session.in_private and window.composer.text() == ""
+
+
+def test_a_failed_summary_says_why_in_the_box_that_follows(app, window, monkeypatch):
+    """The No summary box came before the failure's reason, and Try again
+    started a job that cleared it: the reason was never shown."""
+    window.composer.private_toggle.click()
+    send(app, window, f"{MARKER} a")
+    window.private_mock.error = ProviderError("upstream overloaded")
+    told: list[str | None] = []
+    warned: list[str] = []
+    monkeypatch.setattr(window, "_warn_plain", lambda title, _text: warned.append(title))
+    monkeypatch.setattr(window, "_ask_no_summary", lambda why=None: told.append(why) or "keep")
+    window.composer.private_toggle.click()  # end: the summary fails
+    wait_for(app, lambda: not window._busy)
+    assert told and "upstream overloaded" in told[0]
+    assert warned == [], "said once, in the box, not after it"
+
+
+def test_archive_now_waits_for_the_private_scene(app, window):
+    """The session refuses to archive in a scene ("Archiving failed")."""
+    archive = window.summaries_panel.archive_button
+    window.composer.private_toggle.click()
+    assert not archive.isEnabled() and "private scene" in archive.toolTip()
+    window.composer.private_toggle.click()  # nothing written: ended at once
+    assert archive.toolTip() == ""
+
+
 def test_no_private_model_says_where_to_set_one(app, window: MainWindow, monkeypatch):
     window.config.private_provider = None
     shown = []
@@ -356,12 +486,12 @@ def test_a_failed_summary_never_traps_the_author_in_the_scene(app, window, monke
     window.private_mock.error = ProviderError("the model took too long")
     monkeypatch.setattr(window, "_warn_plain", lambda *a: None)
     asked: list[str] = []
-    monkeypatch.setattr(window, "_ask_no_summary", lambda: asked.append("asked") or "keep")
+    monkeypatch.setattr(window, "_ask_no_summary", lambda _w=None: asked.append("asked") or "keep")
     window.composer.private_toggle.click()  # end: the summary fails
     wait_for(app, lambda: not window._busy)
     assert asked and window.session.in_private, "asked, and keep playing keeps the scene"
 
-    monkeypatch.setattr(window, "_ask_no_summary", lambda: "discard")
+    monkeypatch.setattr(window, "_ask_no_summary", lambda _why=None: "discard")
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
     window.composer.private_toggle.click()
     wait_for(app, lambda: not window._busy)

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtCore import QThread
+from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import QCheckBox, QInputDialog, QMessageBox
 
 from sealedlore.engine.session_plot import SessionNotice
@@ -104,6 +104,9 @@ class PrivateWindow:
         self._offered_instead: list[str] = []
         self._summarise_after_attest = False
         self._capture_hidden = False
+        # What was in the box to type in as the scene began (None: not known,
+        # a scene resumed), to drop what was typed in it when it ends.
+        self._draft_at_scene: tuple[str, str | None] | None = None
         self.composer.private_keep.setCurrentIndex(
             max(self.composer.private_keep.findData(self.config.private_keep), 0)
         )
@@ -157,6 +160,10 @@ class PrivateWindow:
         self.composer.set_private_state(span is not None, span.keep if span else None)
         # A TEE chat keeps its look with no span open.
         self.composer.set_private_look(self._shows_private())
+        # The session archives nothing while a scene is open.
+        self.summaries_panel.set_paused(
+            self._say("Archiving waits for the private scene to end.") if span else ""
+        )
         self._refresh_model_button()
         self._sync_capture()
 
@@ -283,6 +290,7 @@ class PrivateWindow:
         self.session.enter_private(
             keep=keep, provider=provider, model=settings.model, base_url=settings.base_url
         )
+        self._draft_at_scene = self.composer.draft()
         self._tee_state = ""
         fit = self.session.private_fit(self._current_turn("(checking the fit)"))
         self.session.last_prompt = None
@@ -755,8 +763,11 @@ class PrivateWindow:
             return
         if summary is None:
             if asked:
-                # Stopped, or failed (the reason was shown): never a dead end.
-                self._offer_no_summary()
+                # Stopped, or failed: never a dead end, and why it failed is
+                # said in the box itself. It came after the box, and a Try
+                # again started a job that cleared it unsaid.
+                failed, self._failed = self._failed, None
+                self._offer_no_summary(failed)
             return
         notes = {
             "failed": (
@@ -783,6 +794,8 @@ class PrivateWindow:
         session = self.session
         if dialog.choice == PrivateSummaryDialog.APPROVE:
             text = dialog.text()
+            # The scene's draft goes with it once the summary is in.
+            self._after_job = self._drop_scene_draft
             self._start(
                 lambda: session.close_private(text),
                 streaming=False,
@@ -815,28 +828,33 @@ class PrivateWindow:
             session.discard_private()
             self._after_private_ended(self._say("The private scene was discarded."))
 
-    def _offer_no_summary(self) -> None:
-        """The summary was stopped or failed. Before, nothing was said and the
-        only way out was another summary: stop that too and the author was
-        stuck in the scene until they quit the app."""
-        choice = self._ask_no_summary()
+    def _offer_no_summary(self, failed: str | None = None) -> None:
+        """The summary was stopped or failed (`failed`: why). Before, nothing
+        was said and the only way out was another summary: stop that too and
+        the author was stuck in the scene until they quit the app."""
+        choice = self._ask_no_summary(failed)
         if choice == "again":
             self.end_private()
         elif choice == "discard":
             self._confirm_discard_private()
 
-    def _ask_no_summary(self) -> str:
+    def _ask_no_summary(self, failed: str | None = None) -> str:
         """ "again", "discard" or "keep"."""
         box = QMessageBox(
             QMessageBox.Question,
             "No summary",
-            self._say(
-                "The private scene wasn't summarised. Ask again, end the scene without a "
-                "summary (nothing from it goes back into the story), or keep playing."
+            self._say("The private scene wasn't summarised")
+            + (f": {failed}" if failed else ".")
+            + "\n\n"
+            + self._say(
+                "Ask again, end the scene without a summary (nothing from it goes back "
+                "into the story), or keep playing."
             ),
             QMessageBox.NoButton,
             self,
         )
+        # The reason can carry the endpoint's own words: never read as HTML.
+        box.setTextFormat(Qt.PlainText)
         again = box.addButton("Try again", QMessageBox.AcceptRole)
         discard = box.addButton("End without a summary…", QMessageBox.DestructiveRole)
         box.addButton(self._say("Keep playing"), QMessageBox.RejectRole)
@@ -845,7 +863,20 @@ class PrivateWindow:
             return "again"
         return "discard" if box.clickedButton() is discard else "keep"
 
+    def _drop_scene_draft(self) -> None:
+        """What was typed in the box during the private scene just ended goes
+        with it: kept, the next Send took it to the story's model, and from a
+        memory-only scene a story opened again put it back (the leak rule). A
+        draft from before the scene, left as it was, stays."""
+        before, self._draft_at_scene = self._draft_at_scene, None
+        if before is not None and self.composer.draft() == before:
+            return
+        self.composer.set_draft("", None)
+        if self.session is not None:
+            self._drafts.pop(self.session.story.id, None)
+
     def _after_private_ended(self, message: str) -> None:
+        self._drop_scene_draft()
         self._tee_state = ""
         self._retired_model = None
         if self.session is not None:
@@ -866,6 +897,8 @@ class PrivateWindow:
         session = self.session
         if session is None:
             return
+        # Whatever the box holds for it was typed in the scene, or may have been.
+        self._draft_at_scene = None
         if session.private_notice:
             self.statusBar().showMessage(session.private_notice, 15000)
             session.private_notice = None
@@ -931,7 +964,8 @@ class PrivateWindow:
         return answer == QMessageBox.Yes
 
     def _discard_memory_scene(self) -> None:
-        """A memory-only scene the author agreed to lose (`_private_may_close`)."""
+        """A memory-only scene the author agreed to lose (`_private_may_close`),
+        and what was typed in it."""
         session = self.session
         if (
             session is not None
@@ -940,6 +974,7 @@ class PrivateWindow:
             and session.open_span.keep == "memory"
         ):
             session.discard_private()
+            self._drop_scene_draft()
 
     def _wait_for_attestation(self) -> None:
         for thread in list(self._attesting):
