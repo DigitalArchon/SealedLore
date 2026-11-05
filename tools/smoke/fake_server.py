@@ -129,6 +129,10 @@ def reply_for(body) -> str:
         return json.dumps({"pick": []})
     if "JSON array" in text or "JSON list" in text:
         return "[]"
+    if "Carry it on from exactly there" in text:
+        # Continue (turn.continue): more of the passage, never the passage
+        # again, which Continue rightly drops as a repeat.
+        return f"Somewhere up the street a shutter bangs twice in the wind. ({TAG}-MORE)"
     if "summar" in text.lower() and "scene" in text.lower() and TAG.startswith("PRIVATE"):
         return (
             f"In private they spoke of the town's debts and agreed to meet at dawn. ({TAG}-SUMMARY)"
