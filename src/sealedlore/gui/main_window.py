@@ -2608,6 +2608,11 @@ class MainWindow(
             return
         typed_name = name
         before = path_to(self.session.nodes, node_id)[:-1]
+        # The new branch shows the story up to the message: an edit open after
+        # it is asked about first.
+        if not self._edit_allows_leave(keeping={n.id for n in before}):
+            self._edit_again(node_id, text, typed_name, ooc)
+            return
         current = self.session.current_branch()
         listed = self.session.branch_list()
         name = " ".join(name.split())
@@ -3114,10 +3119,13 @@ class MainWindow(
         if (refusal := self._retake_refusal(path_to(self.session.nodes, node_id))) is not None:
             self.statusBar().showMessage(refusal, 8000)
             return
-        self.session.provider = self._current_provider()
         # Show the story as it stood before that passage while the new take
-        # streams in, so it doesn't appear below the later messages.
+        # streams in, so it doesn't appear below the later messages: an edit
+        # open on one of those is asked about first.
         before = path_to(self.session.nodes, node_id)[:-1]
+        if not self._edit_allows_leave(keeping={node.id for node in before}):
+            return
+        self.session.provider = self._current_provider()
         self._show_nodes(before)
         if shape is None:
             shape = self._current_shape()

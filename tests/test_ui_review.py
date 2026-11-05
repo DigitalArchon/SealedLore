@@ -638,6 +638,16 @@ def test_removing_a_message_being_edited_asks_and_the_rest_stay_open(app, window
     assert window.transcript.open_editor()._editor.toPlainText() == "Typed and not saved."
 
 
+def test_retaking_an_earlier_passage_asks_about_an_edit_after_it(app, window, monkeypatch):
+    """The story up to the passage is shown while its new take streams in:
+    an edit open on a later message went with the rest."""
+    titles = asked(monkeypatch, QMessageBox.Cancel)
+    changed_edit(app, window, "u1", "Typed and not saved.")
+    window._regenerate_node("a0")
+    assert titles == ["Discard your edit?"] and not window._busy
+    assert window.transcript.open_editor()._editor.toPlainText() == "Typed and not saved."
+
+
 def test_the_window_keeps_an_edit_far_back_built(app, tmp_path, story, cast, monkeypatch):
     """Going to a chapter or a Find match far off, or sending a turn while
     reading back, dropped the page with the editor, and its text with it."""
