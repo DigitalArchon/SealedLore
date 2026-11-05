@@ -64,6 +64,8 @@ from sealedlore.storage.tavern_lore import (
     json_of,
     looks_like_lorebook,
     lore_from_book,
+    lorebook_in_picture,
+    other_formats,
     read_json,
 )
 
@@ -696,13 +698,28 @@ def tavern_from_file(
     file.seek(0)
     data = file.read()
     if not lorebook and png:
-        return _png_card(data, name)
+        try:
+            return _png_card(data, name)
+        except CardError as not_a_card:
+            # NovelAI keeps a lorebook in a picture (`naidata`): by a link, one
+            # was taken for a card that isn't there.
+            try:
+                found = lorebook_in_picture(data, name)
+            except LorebookError:
+                raise not_a_card from None
+            if not other_formats(found):
+                raise
+            return _mended(found, name)
     try:
         parsed = json_of(data, name)
     except LorebookError as exc:
         raise CardError(f"{name} is neither a character card nor a lorebook: {exc}") from exc
     except RecursionError as exc:
         raise _too_deep(name) from exc
+    if other_formats(parsed):
+        # Another app's lorebook, which SillyTavern converts: an Agnai book
+        # with a description read as an old card.
+        return _mended(parsed, name)
     if not lorebook and looks_like_card(parsed):
         return _card_of(parsed, name, stripped_or_same(picture) if picture else None)
     if looks_like_lorebook(parsed):

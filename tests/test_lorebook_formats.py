@@ -647,3 +647,30 @@ def test_an_entry_moves_in_sillytaverns_own_shape_by_its_display_index():
         (3, 1),
         (9, 0),
     ]
+
+
+def test_by_a_link_another_apps_lorebook_is_never_taken_for_a_card(tmp_path: Path):
+    """An Agnai book with a description read as an old card, and a NovelAI
+    picture as a card that isn't there."""
+    import io
+
+    from sealedlore.storage.tavern_cards import TavernCard, tavern_from_file
+
+    agnai = json.dumps(AGNAI_BOOK).encode()
+    found = tavern_from_file(io.BytesIO(agnai), "doomsville.json")
+    assert not isinstance(found, TavernCard) and found["kind"] == "memory"
+    picture = novel_picture(tmp_path, NOVEL_BOOK).read_bytes()
+    found = tavern_from_file(io.BytesIO(picture), "doomsville.png")
+    assert not isinstance(found, TavernCard) and "lorebookVersion" in found
+
+
+def test_a_copied_entry_is_given_its_own_display_index():
+    """It took the original's, and SillyTavern listed it out of place."""
+    book = card_book()
+    farmhouse = lore.book_entries(book)[0]
+    copy = lore.copy_entry(book, farmhouse)
+    indexes = [
+        entry["extensions"]["display_index"] for entry in book["entries"] if isinstance(entry, dict)
+    ]
+    assert [e for e in book["entries"] if isinstance(e, dict)][1] is copy
+    assert indexes == sorted(set(indexes)), "each its own place, in the list's order"

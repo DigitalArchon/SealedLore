@@ -1115,7 +1115,21 @@ def copy_entry(book: dict[str, Any], raw: Mapping[str, Any]) -> dict[str, Any]:
     if isinstance(entries, list) and any(entry is raw for entry in entries):
         del entries[next(i for i, e in enumerate(entries) if e is new)]
         entries.insert(next(i for i, e in enumerate(entries) if e is raw) + 1, new)
+        # The copy took the original's display index too, and SillyTavern lists
+        # by that first: every entry carrying one is given its place again, as
+        # a move does (`_renumber_list`).
+        _renumber_list(entries)
     return new
+
+
+def _renumber_list(entries: list[Any]) -> None:
+    """A card's book's display indexes as their places in its list, for the
+    entries that carry one (SillyTavern writes it on a card's); one with
+    none, or null, goes by its place in the list already."""
+    for index, entry in enumerate(entries):
+        ext = entry.get("extensions") if isinstance(entry, Mapping) else None
+        if isinstance(ext, dict) and ext.get("display_index") is not None:
+            ext["display_index"] = index
 
 
 def move_entry(book: dict[str, Any], raw: Mapping[str, Any], step: int) -> bool:
@@ -1136,11 +1150,7 @@ def move_entry(book: dict[str, Any], raw: Mapping[str, Any], step: int) -> bool:
             return False
         here, there = places[at], places[at + step]
         entries[here], entries[there] = entries[there], entries[here]
-        for index, entry in enumerate(entries):
-            ext = entry.get("extensions") if isinstance(entry, Mapping) else None
-            # One with none (or null) goes by its place in the list already.
-            if isinstance(ext, dict) and ext.get("display_index") is not None:
-                ext["display_index"] = index
+        _renumber_list(entries)
         return True
     order = book_entries(book)
     at = next((n for n, entry in enumerate(order) if entry is raw), None)
@@ -1204,7 +1214,7 @@ def json_of(data: bytes, name: str) -> Any:
         raise LorebookError(f"{name} isn't valid JSON (line {exc.lineno}).") from exc
 
 
-def _in_picture(data: bytes, name: str) -> Any:
+def lorebook_in_picture(data: bytes, name: str) -> Any:
     """The lorebook a picture holds, found as SillyTavern finds one
     (`extractDataFromPng`): JSON in base64, in the text NovelAI names
     "naidata". Its JSON is read as UTF-8, where SillyTavern reads it a byte
@@ -1230,7 +1240,7 @@ def open_lorebook(path: Path) -> ReadLorebook:
     try:
         data = _file_bytes(path)
         if data.startswith(PNG_SIGNATURE):
-            return lorebook_of(_in_picture(data, name), name, picture=True)
+            return lorebook_of(lorebook_in_picture(data, name), name, picture=True)
         return lorebook_of(json_of(data, name), name)
     except RecursionError as exc:
         # Nested past any real one: it escaped as an error the window never
@@ -1257,7 +1267,7 @@ def is_converted_lorebook(path: Path) -> bool:
     try:
         data = _file_bytes(path)
         found = (
-            _in_picture(data, path.name)
+            lorebook_in_picture(data, path.name)
             if data.startswith(PNG_SIGNATURE)
             else json_of(data, path.name)
         )
