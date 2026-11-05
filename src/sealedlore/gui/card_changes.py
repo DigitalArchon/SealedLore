@@ -45,17 +45,106 @@ NONE = "(none)"
 Thumbnail = Callable[[str, str], QPixmap | None]
 
 
-def marked(text: str, other: str) -> list[tuple[str, bool]]:
+# A changed stretch longer than this (in words and spaces, both sides
+# together) is marked whole rather than word by word: a word diff takes time
+# with the square of its length, and a card's 3,000-word description,
+# diffed whole, held the window 1-2 seconds a side.
+WORD_DIFF_MOST = 1200
+
+Pieces = list[tuple[str, bool]]
+
+
+def marked(text: str, other: str) -> Pieces:
     """`text` in pieces, each said to be changed or not against `other`, by
     whole words (and the spaces between them): a long description changed in
     one sentence showed whole on both sides with nothing to say where."""
-    mine, theirs = re.findall(r"\S+|\s+", text), re.findall(r"\S+|\s+", other)
-    pieces: list[tuple[str, bool]] = []
-    matcher = difflib.SequenceMatcher(None, mine, theirs, autojunk=False)
-    for kind, start, end, _o_start, _o_end in matcher.get_opcodes():
+    return marked_both(text, other)[0]
+
+
+def marked_both(text: str, other: str) -> tuple[Pieces, Pieces]:
+    """`marked` for both sides, from one diff."""
+    mine, theirs = _tokens(text), _tokens(other)
+    ops = _diff(mine, theirs)
+    return _pieces(mine, [(kind, i1, i2) for kind, i1, i2, _j1, _j2 in ops]), _pieces(
+        theirs, [(kind, j1, j2) for kind, _i1, _i2, j1, j2 in ops]
+    )
+
+
+def _tokens(text: str) -> list[str]:
+    return re.findall(r"\S+|\s+", text)
+
+
+def _sentences(tokens: list[str]) -> list[tuple[int, int]]:
+    """The tokens' (start, end) by sentence or line: the space after one ends it."""
+    spans: list[tuple[int, int]] = []
+    start = 0
+    for index, token in enumerate(tokens):
+        if token.isspace() and ("\n" in token or (index and tokens[index - 1][-1] in '.!?…"”)')):
+            spans.append((start, index + 1))
+            start = index + 1
+    if start < len(tokens):
+        spans.append((start, len(tokens)))
+    return spans
+
+
+def _diff(mine: list[str], theirs: list[str]) -> list[tuple[str, int, int, int, int]]:
+    """Opcodes over the tokens: sentences matched first (few of them, and
+    seldom alike, so quick), then the words inside each stretch that differs."""
+    ours, others = _sentences(mine), _sentences(theirs)
+
+    def bounds(spans: list[tuple[int, int]], lo: int, hi: int, total: int) -> tuple[int, int]:
+        start = spans[lo][0] if lo < len(spans) else total
+        return start, spans[hi - 1][1] if hi > lo else start
+
+    ops: list[tuple[str, int, int, int, int]] = []
+    keys = ["".join(mine[a:b]) for a, b in ours], ["".join(theirs[a:b]) for a, b in others]
+    for kind, a1, a2, b1, b2 in difflib.SequenceMatcher(None, *keys, autojunk=False).get_opcodes():
+        i1, i2 = bounds(ours, a1, a2, len(mine))
+        j1, j2 = bounds(others, b1, b2, len(theirs))
+        if kind == "equal":
+            ops.append((kind, i1, i2, j1, j2))
+        else:
+            ops += _words_diff(mine, theirs, i1, i2, j1, j2)
+    return ops
+
+
+def _words_diff(
+    mine: list[str], theirs: list[str], i1: int, i2: int, j1: int, j2: int
+) -> list[tuple[str, int, int, int, int]]:
+    """A stretch that differs, word by word: what both ends share left out
+    first (a sentence added to a long paragraph is all that differs in it),
+    and what is left marked whole when it is long."""
+    head = 0
+    while i1 + head < i2 and j1 + head < j2 and mine[i1 + head] == theirs[j1 + head]:
+        head += 1
+    tail = 0
+    while (
+        i2 - tail > i1 + head
+        and j2 - tail > j1 + head
+        and mine[i2 - tail - 1] == theirs[j2 - tail - 1]
+    ):
+        tail += 1
+    ops = [("equal", i1, i1 + head, j1, j1 + head)] if head else []
+    a1, a2, b1, b2 = i1 + head, i2 - tail, j1 + head, j2 - tail
+    if (a2 - a1) + (b2 - b1) > WORD_DIFF_MOST:
+        ops.append(("replace", a1, a2, b1, b2))
+    elif a1 < a2 or b1 < b2:
+        matcher = difflib.SequenceMatcher(None, mine[a1:a2], theirs[b1:b2], autojunk=False)
+        ops += [
+            (kind, a1 + c1, a1 + c2, b1 + d1, b1 + d2)
+            for kind, c1, c2, d1, d2 in matcher.get_opcodes()
+        ]
+    if tail:
+        ops.append(("equal", i2 - tail, i2, j2 - tail, j2))
+    return ops
+
+
+def _pieces(tokens: list[str], spans: list[tuple[str, int, int]]) -> Pieces:
+    pieces: Pieces = []
+    for kind, start, end in spans:
         if start == end:
             continue
-        piece = "".join(mine[start:end])
+        piece = "".join(tokens[start:end])
         changed = kind != "equal" and bool(piece.strip())
         if pieces and pieces[-1][1] == changed:
             pieces[-1] = (pieces[-1][0] + piece, changed)
@@ -64,18 +153,18 @@ def marked(text: str, other: str) -> list[tuple[str, bool]]:
     return pieces
 
 
-def _mark(box: QPlainTextEdit, pieces: list[tuple[str, bool]]) -> None:
-    """The changed pieces of `box`'s text shown on the theme's accent."""
+def _mark(box: QPlainTextEdit, pieces: Pieces) -> None:
+    """`box`'s text written again a piece at a time, the changed pieces on
+    the theme's accent. Written, not marked at offsets into the text: a
+    document counts in UTF-16 (an emoji is two) and reads "\\r\\n" as one
+    break, so after either every mark landed on the wrong words."""
     shade = QTextCharFormat()
     shade.setBackground(theme.colour("accent", 70))
+    plain = QTextCharFormat()
+    box.clear()
     cursor = QTextCursor(box.document())
-    at = 0
     for piece, changed in pieces:
-        if changed:
-            cursor.setPosition(at)
-            cursor.setPosition(at + len(piece), QTextCursor.KeepAnchor)
-            cursor.mergeCharFormat(shade)
-        at += len(piece)
+        cursor.insertText(piece, shade if changed else plain)
 
 
 def _words(value: Any) -> str:
@@ -91,7 +180,16 @@ def _words(value: Any) -> str:
 class _Side(QWidget):
     """One side of a change: a heading, then its text or picture."""
 
-    def __init__(self, heading: str, change: Change, value: Any, side: str, thumb: Thumbnail):
+    def __init__(
+        self,
+        heading: str,
+        change: Change,
+        value: Any,
+        side: str,
+        thumb: Thumbnail,
+        pieces: Pieces | None = None,
+    ):
+        """`pieces`: a field's words, marked where the other side differs."""
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -102,13 +200,11 @@ class _Side(QWidget):
         if change.field:
             text = GrowingText(lines=1, most=6)
             text.setReadOnly(True)
-            mine = _words(value)
-            other = _words(change.card if side == STORY else change.story)
-            text.setPlainText(mine)
-            if mine != NONE and other != NONE:
+            text.setPlainText(_words(value))
+            if pieces is not None:
                 # The words the other side doesn't have, marked over the plain
                 # text (as HTML the box measured a line too many).
-                _mark(text, marked(mine, other))
+                _mark(text, pieces)
             layout.addWidget(text)
             return
         sha = value if change.key == PORTRAIT else (value.sha256 if value else "")
@@ -240,8 +336,13 @@ class CardChangesDialog(QDialog):
         tick.toggled.connect(lambda _on: self._sync())
         self._ticks[section].append((tick, change))
         grid.addWidget(tick, 0, 0, 1, 2)
-        story_side = _Side("In this story", change, change.story, STORY, thumb)
-        card_side = _Side("On their card", change, change.card, CARD, thumb)
+        ours, theirs = _words(change.story), _words(change.card)
+        # One diff for both sides (each side diffed it again, the other way).
+        story_marks = card_marks = None
+        if change.field and NONE not in (ours, theirs):
+            story_marks, card_marks = marked_both(ours, theirs)
+        story_side = _Side("In this story", change, change.story, STORY, thumb, story_marks)
+        card_side = _Side("On their card", change, change.card, CARD, thumb, card_marks)
         grid.addWidget(story_side, 1, 0, Qt.AlignTop)
         grid.addWidget(card_side, 1, 1, Qt.AlignTop)
         grid.setColumnStretch(0, 1)

@@ -161,6 +161,52 @@ def test_the_changes_dialog_marks_the_words_that_differ():
     assert marked("Same words.", "Same words.") == [("Same words.", False)]
 
 
+def test_the_changes_dialog_marks_the_right_words_and_quickly(app):
+    """Marks went at Python's offsets into a document that counts UTF-16 (an
+    emoji is two) and reads "\\r\\n" as one break: after either, every mark
+    was on the wrong words. And the diff, over every word with no junk,
+    took 1-2 seconds a side for a 3,000-word description."""
+    import random
+    import time
+
+    from PySide6.QtGui import QTextFormat
+    from PySide6.QtWidgets import QPlainTextEdit
+
+    from sealedlore.gui.card_changes import _mark, marked, marked_both
+
+    def shaded(mine: str, other: str) -> list[str]:
+        box = QPlainTextEdit()
+        box.setPlainText(mine)
+        _mark(box, marked(mine, other))
+        found, block = [], box.document().begin()
+        while block.isValid():
+            fragments = block.begin()
+            while not fragments.atEnd():
+                fragment = fragments.fragment()
+                if fragment.charFormat().hasProperty(QTextFormat.BackgroundBrush):
+                    found.append(fragment.text())
+                fragments += 1
+            block = block.next()
+        assert box.toPlainText() == QPlainTextEdit(mine).toPlainText(), "the text as it was"
+        return found
+
+    for before in ("", "🔥 ", "Line one.\r\n"):
+        mine = f"{before}She trusts nobody and keeps the farm."
+        assert shaded(mine, f"{before}She trusts John and keeps the farm.") == ["nobody"]
+    random.seed(3)
+    words = ["the", "farm", "she", "keeps", "trusts", "John", "winter", "and", "a", "road."]
+    text = " ".join(random.choice(words) for _ in range(6000))
+    added = text[: len(text) // 2] + " A new sentence about the creek." + text[len(text) // 2 :]
+    started = time.perf_counter()
+    ours, theirs = marked_both(text, added)
+    rewritten = marked_both(text, " ".join(random.choice(words) for _ in range(6000)))
+    assert time.perf_counter() - started < 1.0, "quick at 6,000 words"
+    assert "".join(p for p, _c in ours) == text and "".join(p for p, _c in theirs) == added
+    assert any("creek" in piece for piece, changed in theirs if changed)
+    assert not any(changed for _p, changed in ours[:1]), "the shared start is not marked"
+    assert any(changed for _p, changed in rewritten[0])
+
+
 # --- the window's second look (Nov 2026): what a dialog holds -------------------------
 
 
