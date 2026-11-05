@@ -403,9 +403,7 @@ class CollectionPage(QWidget):
         self.files_form.files_dropped.connect(
             lambda paths: self._current and self.files_dropped.emit(paths, self._current)
         )
-        self.files_form.greetings_changed.connect(
-            lambda: self.chat_form.load(self._card(self._current))
-        )
+        self.files_form.greetings_changed.connect(self._card_text_renamed)
         self.files_form.file_requested.connect(
             lambda what, index: (
                 self._current and self.file_requested.emit(what, index, self._current)
@@ -546,6 +544,13 @@ class CollectionPage(QWidget):
         under its name, so what was read stays read."""
         self.card_form.refresh_pictures()
         self._fill()
+
+    def _card_text_renamed(self) -> None:
+        """A file renamed in the card's text (from the Files tab): the forms
+        that show that text read it again."""
+        card = self._card(self._current)
+        self.chat_form.load(card)
+        self.card_form.load(card)
 
     def card_changed(self, card_id: str) -> None:
         """The card shown was changed from outside the page (a story saved its

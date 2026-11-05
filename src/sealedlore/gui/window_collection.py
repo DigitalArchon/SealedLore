@@ -54,13 +54,19 @@ from sealedlore.models.character import Character
 from sealedlore.models.image import ImageRef
 from sealedlore.models.tavern import CardAsset
 from sealedlore.storage import collection
-from sealedlore.storage.image_meta import picture_kind, strip_metadata, stripped_or_same
+from sealedlore.storage.image_meta import (
+    MetadataError,
+    picture_kind,
+    raster_kind,
+    strip_metadata,
+    stripped_or_same,
+)
 from sealedlore.storage.images import REFS_DIR, write_bytes_atomic
 from sealedlore.storage.paths import COLLECTION_ID, collection_dir
 from sealedlore.storage.picture_store import PictureStore
 from sealedlore.storage.repository import read_api_log, stories_linking
 from sealedlore.storage.tavern_cards import (
-    MAX_FILE_BYTES,
+    MAX_INFLATED,
     CardError,
     TavernCard,
     card_charx,
@@ -498,7 +504,7 @@ class CollectionWindow:
 
     def _clean_picture(self, data: bytes) -> bytes:
         """A picture whose hidden data couldn't be stripped, re-encoded."""
-        return clean_incoming({"picture": data})["picture"]
+        return clean_incoming({"picture": data}).get("picture", data)
 
     def _kept_from_card(self, card: TavernCard, came_from: str) -> tuple[Character, list[str]]:
         session = self._collection_session()
@@ -625,7 +631,7 @@ class CollectionWindow:
         trashed = False
         try:
             folder.mkdir(parents=True, exist_ok=True)
-            write_bytes_atomic(path, self._charx_of(card))
+            write_bytes_atomic(path, self._charx_of(card, shared=False))
             trashed = move_to_trash(path)
         except (OSError, CardError):
             trashed = False
@@ -659,8 +665,11 @@ class CollectionWindow:
 
     # --- cards out, and a story from one ------------------------------------------------------
 
-    def _charx_of(self, card: Character) -> bytes:
-        """The character as a CHARX with every picture, labelled."""
+    def _charx_of(self, card: Character, *, shared: bool = True) -> bytes:
+        """The character as a CHARX with every picture, labelled. `shared`: it
+        leaves this computer (an export), so a picture whose hidden data can't
+        be removed stops it; a copy kept here (the Trash's, one read back to
+        make a story) takes every picture as it is."""
         store = self._collection_store()
         pictures = []
         for ref in card.reference_images:
@@ -672,7 +681,7 @@ class CollectionWindow:
             for asset in (card.tavern.assets if card.tavern else [])
         ]
         _first, third = card_data(card, origin=MADE_HERE)
-        return card_charx(third, pictures, files)
+        return card_charx(third, pictures, files, shared=shared)
 
     def _kept_portrait_png(self, card: Character) -> bytes | None:
         if not card.reference_images:
@@ -724,7 +733,9 @@ class CollectionWindow:
         if card is None or self._story_job_says_wait():
             return
         try:
-            tavern = tavern_from_file(io.BytesIO(self._charx_of(card)), f"{card.name}.charx")
+            tavern = tavern_from_file(
+                io.BytesIO(self._charx_of(card, shared=False)), f"{card.name}.charx"
+            )
         except CardError as exc:
             self._warn_plain("Could not make the story", str(exc))
             return
@@ -837,7 +848,13 @@ class CollectionWindow:
             return
         if what == "renamed":
             store = self._collection_store()
-            old = collection.rename_file(card, assets[index], store)
+            try:
+                old = collection.rename_file(card, assets[index], store)
+            except OSError as exc:
+                # The file stays under its old name, and its record with it.
+                self._warn_plain("Couldn't rename the file", str(exc))
+                self.collection_page.show_files(index)
+                return
             if old is not None:
                 collection.touch(card)
                 self._save_collection()
@@ -924,16 +941,30 @@ class CollectionWindow:
         for name in chosen:
             path = Path(name)
             try:
-                if path.stat().st_size > MAX_FILE_BYTES:
-                    refused.append(f"{path.name}: larger than a card's file may be.")
+                # No larger than a card read back takes one (a CHARX's files
+                # are each read to this): larger, it went out with an export
+                # and was lost from the Trash's copy or a story made from it.
+                if path.stat().st_size > MAX_INFLATED:
+                    refused.append(
+                        f"{path.name}: larger than a card's file may be "
+                        f"({MAX_INFLATED // (1024 * 1024)} MB)."
+                    )
                     continue
                 data = path.read_bytes()
             except OSError as exc:
                 refused.append(f"{path.name}: {exc}")
                 continue
             ext = path.suffix.lstrip(".")
-            if picture_kind(data):
+            if raster_kind(data):
+                # Any picture made of pixels, not only those stripped in place:
+                # a GIF, a TIFF or an iPhone's HEIC kept its hidden data (GPS
+                # and all) and went out with it in an export.
                 data = self._clean_picture(data)
+                try:
+                    data = strip_metadata(data)
+                except MetadataError:
+                    refused.append(f"{path.name}: its hidden data couldn't be removed.")
+                    continue
                 ext = (picture_kind(data) or f".{ext}").lstrip(".").replace("jpeg", "jpg")
             else:
                 data = stripped_or_same(data)

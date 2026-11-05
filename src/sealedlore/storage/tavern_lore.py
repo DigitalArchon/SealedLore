@@ -888,7 +888,12 @@ def json_of(data: bytes, name: str) -> Any:
 
 
 def read_lorebook(path: Path) -> Mapping[str, Any]:
-    data = read_json(path)
+    try:
+        data = read_json(path)
+    except RecursionError as exc:
+        # Nested past any real one: it escaped as an error the window never
+        # catches, and the import did nothing without a word.
+        raise LorebookError(f"{Path(path).name} is nested deeper than any lorebook.") from exc
     if not looks_like_lorebook(data):
         raise LorebookError(f"{Path(path).name} isn't a SillyTavern lorebook.")
     return data

@@ -176,7 +176,10 @@ def clean_incoming(files: dict[str, bytes]) -> dict[str, bytes]:
     having no Qt, keeps anything else as it came; such a picture (a GIF, a
     BMP, a JPEG it can't follow) is re-encoded here, as one added from disk
     is. Records, videos (storage strips those) and anything that isn't a
-    picture are left as they are."""
+    picture are left as they are. A picture neither can clean (an iPhone's
+    HEIC, which Qt can't read) is left out: kept, it brought its hidden data
+    in with it."""
+    from sealedlore.storage.image_meta import raster_kind
     from sealedlore.storage.images import RECORD_FILES
     from sealedlore.storage.video_meta import is_mp4
 
@@ -192,6 +195,8 @@ def clean_incoming(files: dict[str, bytes]) -> dict[str, bytes]:
             pass
         image = image_of(data)
         if image.isNull():
+            if raster_kind(data) is not None:
+                del cleaned[relative]
             continue
         if image.hasAlphaChannel():
             cleaned[relative] = strip_metadata(_encoded(image, "PNG"))

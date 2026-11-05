@@ -964,3 +964,15 @@ def test_a_new_story_keeps_the_expressions_on_its_character(tmp_path: Path):
     assert any("expression pictures were left out" in note for note in left.notes)
     world = scenario_from_card(card, player="John", world=True)
     assert any("belong to one character" in note for note in world.notes)
+
+
+def test_json_nested_past_any_file_is_refused_in_words(tmp_path: Path):
+    """Deep nesting raised RecursionError, which the window doesn't catch: the
+    import did nothing and said nothing."""
+    from sealedlore.storage.archive import file_format
+
+    path = tmp_path / "deep.json"
+    path.write_bytes(b'{"entries": ' + b"[" * 100_000 + b"]" * 100_000 + b"}")
+    assert file_format(path) is None
+    with pytest.raises(LorebookError, match="nested"):
+        read_lorebook(path)

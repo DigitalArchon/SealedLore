@@ -480,3 +480,68 @@ def test_a_story_from_their_cards_scenario_asks_to_leave_before_it_is_saved(
     window._story_from_kept(elena.id)
     window.stories.refresh()
     assert window.stories.list.count() == 0, "no story left behind"
+
+
+def gif_with_comment(secret: bytes) -> bytes:
+    """A 1×1 GIF carrying a comment: hidden data only a redraw removes."""
+    header = b"GIF89a" + (1).to_bytes(2, "little") + (1).to_bytes(2, "little") + bytes([0x80, 0, 0])
+    palette = b"\x00\x00\x00\xff\xff\xff"
+    comment = b"\x21\xfe" + bytes([len(secret)]) + secret + b"\x00"
+    image = b"\x2c" + bytes(4) + (1).to_bytes(2, "little") + (1).to_bytes(2, "little") + b"\x00"
+    return header + palette + comment + image + b"\x02\x02\x44\x01\x00" + b"\x3b"
+
+
+def heic_with_exif(secret: bytes) -> bytes:
+    """An iPhone-style HEIC Qt can't read, its EXIF inside."""
+    import struct
+
+    def box(kind: bytes, payload: bytes) -> bytes:
+        return struct.pack(">I", 8 + len(payload)) + kind + payload
+
+    handler = box(b"hdlr", b"\x00" * 8 + b"pict" + b"\x00" * 13)
+    return (
+        box(b"ftyp", b"heic\x00\x00\x00\x00mif1heic")
+        + box(b"meta", b"\x00" * 4 + handler)
+        + box(b"mdat", b"Exif\x00\x00MM\x00*" + secret)
+    )
+
+
+def test_a_picture_of_any_kind_added_on_the_files_tab_keeps_no_hidden_data(
+    app, window, tmp_path: Path, monkeypatch
+):
+    """Only JPEG, PNG and WebP were cleaned: a GIF's comment, a HEIC's GPS
+    went onto the card and out with it in an export."""
+    elena = kept_elena(window, tmp_path, monkeypatch)
+    said: list = []
+    monkeypatch.setattr(window, "_say_left_out", lambda *args: said.append(args))
+    gif, heic = tmp_path / "wave.gif", tmp_path / "photo.heic"
+    gif.write_bytes(gif_with_comment(b"GPS 48.8584 N home"))
+    heic.write_bytes(heic_with_exif(b"GPS 48.8584 N home"))
+    window._add_card_files(elena, [str(gif), str(heic)])
+    store = window._collection_store()
+    kept = [store.read(asset.file) for asset in elena.tavern.assets if asset.held]
+    assert len(kept) == 1 and b"48.8584" not in kept[0], "the GIF redrawn, its comment gone"
+    assert said and any("photo.heic" in note for note in said[0][2])
+
+
+def test_a_picture_nothing_can_clean_is_left_out_of_what_comes_in(app):
+    from sealedlore.gui.ref_images import clean_incoming
+
+    files = {"images/refs/a.heic": heic_with_exif(b"home"), "story.json": b"{}"}
+    cleaned = clean_incoming(files)
+    assert "images/refs/a.heic" not in cleaned and "story.json" in cleaned
+
+
+def test_the_trash_takes_a_card_whose_picture_an_export_would_refuse(
+    app, window, tmp_path: Path, monkeypatch
+):
+    """A picture kept from 3.0.0b2 that can't be stripped stops an export
+    (it leaves this computer); Delete's copy to the Trash takes it as it is."""
+    from sealedlore.storage.tavern_cards import CardError
+
+    elena = kept_elena(window, tmp_path, monkeypatch)
+    store = window._collection_store()
+    store.write(elena.reference_images[0].file, heic_with_exif(b"home"))
+    with pytest.raises(CardError):
+        window._charx_of(elena)
+    assert window._charx_of(elena, shared=False)

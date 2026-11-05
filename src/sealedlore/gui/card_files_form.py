@@ -399,36 +399,55 @@ class FilesForm(QWidget):
         if index is None:
             return
         asset = self._assets[index]
-        old, self._name_before = self._name_before, asset.name
+        old = self._name_before
+        # Emptied, the field names nothing: the name it had stays the one the
+        # card's text shows, so the next name given is offered there.
+        if asset.name:
+            self._name_before = asset.name
         if old and asset.name and old != asset.name:
-            self._rename_in_greetings(old, asset.name)
+            self._rename_in_greetings(old, asset.name, asset)
         if asset.held:
             self.file_requested.emit("renamed", index)
 
-    def _rename_in_greetings(self, old: str, new: str) -> None:
-        """Greetings show a file by its name: offered the new one too."""
-        tavern = _tavern(self._character)
-        groups = (
-            [tavern.first_mes],
-            tavern.alternate_greetings,
-            tavern.group_only_greetings,
+    def _rename_in_greetings(self, old: str, new: str, asset: CardAsset) -> None:
+        """The card's text shows a file by its name: its greetings, and the
+        description, scenario and the rest a chat's first message is made
+        of. Offered the new name there too, each name read as the card's
+        files answer to it (`renamed_in`)."""
+        character, tavern = self._character, _tavern(self._character)
+
+        def rename(text: str) -> tuple[str, int]:
+            return renamed_in(text, old, new, self._assets, asset)
+
+        fields = (
+            (tavern, "first_mes"),
+            (tavern, "scenario"),
+            (tavern, "mes_example"),
+            (character, "full_description"),
+            (character, "personality"),
+            (character, "voice_notes"),
         )
-        count = sum(renamed_in(text, old, new)[1] for group in groups for text in group)
+        groups = (tavern.alternate_greetings, tavern.group_only_greetings)
+        count = sum(rename(getattr(owner, name) or "")[1] for owner, name in fields)
+        count += sum(rename(text)[1] for group in groups for text in group)
         if not count:
             return
         answer = QMessageBox.question(
             self,
-            "Rename it in the greetings too?",
-            f"{count} place{'s' if count != 1 else ''} in their greetings show “{old}”. Show "
-            f"“{new}” there instead? Otherwise they show nothing.",
+            "Rename it in their card too?",
+            f"{count} place{'s' if count != 1 else ''} in their card (its greetings, "
+            f"description or scenario) show “{old}”. Show “{new}” there instead? Otherwise "
+            "they show nothing.",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.Yes,
         )
         if answer != QMessageBox.Yes:
             return
-        tavern.first_mes = renamed_in(tavern.first_mes, old, new)[0]
-        for group in (tavern.alternate_greetings, tavern.group_only_greetings):
-            group[:] = [renamed_in(text, old, new)[0] for text in group]
+        for owner, name in fields:
+            if getattr(owner, name):
+                setattr(owner, name, rename(getattr(owner, name))[0])
+        for group in groups:
+            group[:] = [rename(text)[0] for text in group]
         self.changed.emit()
         self.greetings_changed.emit()
 

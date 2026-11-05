@@ -232,7 +232,9 @@ class TavernWindow:
             return
         notes: list[str] = []
         if card.picture is not None:
-            picture = clean_incoming({"card": card.picture})["card"]
+            # Left out of what comes back if nothing could clean it: then it
+            # is no picture SealedLore keeps (no kind of its own, below).
+            picture = clean_incoming({"card": card.picture}).get("card", card.picture)
             suffix = picture_kind(picture)
             if suffix is not None:
                 ref = store_reference(picture, suffix, session.pictures, PORTRAIT_CAPTION)
@@ -730,7 +732,9 @@ class TavernWindow:
         weren't a format SealedLore keeps."""
         session = self.session
         cleaned = clean_incoming({str(i): data for i, (_name, data) in enumerate(expressions)})
-        named = [(name, cleaned[str(i)]) for i, (name, _data) in enumerate(expressions)]
+        # One nothing could clean is left out of `cleaned`: as it came, it is
+        # no picture SealedLore keeps, and is counted among those.
+        named = [(name, cleaned.get(str(i), data)) for i, (name, data) in enumerate(expressions)]
 
         def keep(data: bytes, suffix: str, label: str):
             ref = store_reference(data, suffix, session.pictures)
