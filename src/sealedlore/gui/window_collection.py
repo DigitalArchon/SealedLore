@@ -1172,6 +1172,10 @@ class CollectionWindow:
         if what == "remove":
             self._remove_card_file(card, assets[index])
             return
+        if what == "replace":
+            if assets[index].held:
+                self._replace_card_file(card, index)
+            return
         if what == "renamed":
             store = self._collection_store()
             try:
@@ -1266,34 +1270,11 @@ class CollectionWindow:
         refused: list[str] = []
         for name in chosen:
             path = Path(name)
-            try:
-                # No larger than a card read back takes one (a CHARX's files
-                # are each read to this): larger, it went out with an export
-                # and was lost from the Trash's copy or a story made from it.
-                if path.stat().st_size > MAX_INFLATED:
-                    refused.append(
-                        f"{path.name}: larger than a card's file may be "
-                        f"({MAX_INFLATED // (1024 * 1024)} MB)."
-                    )
-                    continue
-                data = path.read_bytes()
-            except OSError as exc:
-                refused.append(f"{path.name}: {exc}")
+            read = self._card_file_from(path)
+            if isinstance(read, str):
+                refused.append(f"{path.name}: {read}")
                 continue
-            ext = path.suffix.lstrip(".")
-            if raster_kind(data):
-                # Any picture made of pixels, not only those stripped in place:
-                # a GIF, a TIFF or an iPhone's HEIC kept its hidden data (GPS
-                # and all) and went out with it in an export.
-                data = self._clean_picture(data)
-                try:
-                    data = strip_metadata(data)
-                except MetadataError:
-                    refused.append(f"{path.name}: its hidden data couldn't be removed.")
-                    continue
-                ext = (picture_kind(data) or f".{ext}").lstrip(".").replace("jpeg", "jpg")
-            else:
-                data = stripped_or_same(data)
+            data, ext = read
             collection.add_file(card, store, path.stem, ext, data, TYPES[0][0])
         added = len(chosen) - len(refused)
         if added:
@@ -1303,6 +1284,64 @@ class CollectionWindow:
             )
         if refused:
             self._say_left_out("Files for a card", f"Added {added}.", refused)
+
+    def _card_file_from(self, path: Path) -> tuple[bytes, str] | str:
+        """A file from disk as a card keeps one: (its bytes, its ending), or
+        why it can't be. A picture is stripped of its hidden data as any
+        picture coming in is (re-encoded where it can't be), a video stripped
+        too, anything else kept as it is."""
+        try:
+            # No larger than a card read back takes one (a CHARX's files are
+            # each read to this): larger, it went out with an export and was
+            # lost from the Trash's copy or a story made from it.
+            if path.stat().st_size > MAX_INFLATED:
+                return f"larger than a card's file may be ({MAX_INFLATED // (1024 * 1024)} MB)."
+            data = path.read_bytes()
+        except OSError as exc:
+            return str(exc)
+        ext = path.suffix.lstrip(".")
+        if not raster_kind(data):
+            return stripped_or_same(data), ext
+        # Any picture made of pixels, not only those stripped in place: a GIF,
+        # a TIFF or an iPhone's HEIC kept its hidden data (GPS and all) and
+        # went out with it in an export.
+        data = self._clean_picture(data)
+        try:
+            data = strip_metadata(data)
+        except MetadataError:
+            return "its hidden data couldn't be removed."
+        return data, (picture_kind(data) or f".{ext}").lstrip(".").replace("jpeg", "jpg")
+
+    def _replace_card_file(self, card: Character, index: int) -> None:
+        """A file's content from another on disk (the Files tab's Replace…):
+        its name, kind and place on the card kept, so the greetings that show
+        it still do."""
+        asset = card.tavern.assets[index]
+        chosen, _ = QFileDialog.getOpenFileName(
+            self._dialog_parent(), f"Replace {asset.name or asset.type}", str(Path.home())
+        )
+        if not chosen:
+            return
+        read = self._card_file_from(Path(chosen))
+        if isinstance(read, str):
+            self._warn_plain("Not replaced", f"{Path(chosen).name}: {read}")
+            return
+        store = self._collection_store()
+        try:
+            old = collection.replace_file(card, asset, store, *read)
+        except OSError as exc:
+            self._warn_plain("Not replaced", str(exc))
+            return
+        collection.touch(card)
+        if self._save_collection() and old is not None:
+            store.remove(old)
+        for file in (old, asset.file):
+            if file:
+                self.collection_page.forget_file(file)
+        self.collection_page.show_files(index)
+        self.statusBar().showMessage(
+            f"Replaced {asset.name or asset.type} on {card.name}'s card.", 6000
+        )
 
     def _add_card_link(self, card: Character) -> None:
         address, ok = QInputDialog.getText(

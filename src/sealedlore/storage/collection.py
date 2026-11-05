@@ -267,6 +267,23 @@ def rename_file(character: Character, asset: CardAsset, store: PictureStore) -> 
     return old
 
 
+def replace_file(
+    character: Character, asset: CardAsset, store: PictureStore, data: bytes, ext: str
+) -> str | None:
+    """New content for one of the character's files, everything else about it
+    kept (its kind, its name and where the card held it, so whatever shows
+    it still does) but its ending, now `ext`'s: written first, then its
+    record pointed there, and the old place returned for the window to remove
+    once the record is saved (None when it is the same place). A write that
+    fails (OSError) leaves the record as it was."""
+    updated = asset.model_copy(update={"ext": ext.lower().lstrip(".") or asset.ext})
+    wanted = file_path(character, updated, _taken(character, but=asset))
+    store.write(wanted, data)
+    old = asset.file
+    asset.ext, asset.file = updated.ext, wanted
+    return old if old.casefold() != wanted.casefold() else None
+
+
 def settle_files(characters: Sequence[Character], store: PictureStore) -> list[str]:
     """Card files kept before each character had a folder (3.0.0b1 kept them
     all in one) moved into their own character's: each written in its new

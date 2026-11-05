@@ -723,3 +723,45 @@ def test_those_chosen_join_the_story_ticked_in_the_picker(
     assert window.collection_page.chosen_add.isVisibleTo(window.collection_page)
     window.collection_page._chosen("add_to_story")
     assert sorted(card.id for card in ticked) == sorted([elena.id, ben.id])
+
+
+def test_a_cards_file_is_replaced_keeping_its_name_kind_and_place(
+    app, window, tmp_path: Path, monkeypatch
+):
+    """A greeting shows the file by its name: replaced, the name and the card's
+    place for it stay, so it still does."""
+    from PySide6.QtWidgets import QFileDialog
+
+    elena = kept_elena(window, tmp_path, monkeypatch)
+    red, blue = tmp_path / "barn.png", tmp_path / "barn-blue.png"
+    red.write_bytes(coloured_png("red"))
+    blue.write_bytes(coloured_png("blue"))
+    window._add_card_files(elena, [str(red)])
+    index = len(elena.tavern.assets) - 1
+    asset = elena.tavern.assets[index]
+    asset.path, before = "assets/other/barn.png", asset.file
+    store = window._collection_store()
+
+    def replace_with(path: Path) -> None:
+        monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(path), ""))
+        window._collection_file("replace", index, elena.id)
+
+    replace_with(blue)
+    assert asset.file == before and asset.name == "barn" and asset.path == "assets/other/barn.png"
+    assert store.read(asset.file) == coloured_png("blue")
+    jpeg = tmp_path / "barn.jpg"
+    from PySide6.QtGui import QColor, QImage
+
+    image = QImage(8, 8, QImage.Format_RGB32)
+    image.fill(QColor("green"))
+    image.save(str(jpeg), "JPEG")
+    replace_with(jpeg)
+    assert asset.ext == "jpg" and asset.file.endswith(".jpg") and asset.name == "barn"
+    assert store.read(before) is None, "the old file went once the record was saved"
+    warned: list[str] = []
+    monkeypatch.setattr(window, "_warn_plain", lambda title, text: warned.append(title))
+    heic = tmp_path / "photo.heic"
+    heic.write_bytes(heic_with_exif(b"home"))
+    kept = asset.file
+    replace_with(heic)
+    assert warned == ["Not replaced"] and asset.file == kept

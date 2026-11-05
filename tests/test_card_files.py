@@ -678,3 +678,21 @@ def test_one_file_on_a_card_is_said_as_one():
     wind = CardAsset(type="x-risu-asset", name="wind", ext="mp3", file="images/a/wind.mp3")
     said = collection.files_said([wind])
     assert "is kept with the card, and goes out with it in a CHARX export" in said
+
+
+def test_a_file_replaced_keeps_its_name_kind_and_place_on_the_card(tmp_path: Path):
+    store = DiskPictures(COLLECTION_ID, tmp_path)
+    elena = collection.kept("Elena")
+    asset = collection.add_file(elena, store, "barn", "png", b"old", "background")
+    asset.path = "assets/background/barn.png"
+    first = asset.file
+    assert collection.replace_file(elena, asset, store, b"new", "png") is None
+    assert asset.file == first and store.read(first) == b"new"
+    old = collection.replace_file(elena, asset, store, b"jpeg", "JPG")
+    assert old == first and asset.file.endswith("/barn.jpg") and asset.ext == "jpg"
+    assert (asset.name, asset.type, asset.path) == (
+        "barn",
+        "background",
+        "assets/background/barn.png",
+    )
+    assert store.read(asset.file) == b"jpeg"

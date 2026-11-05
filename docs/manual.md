@@ -1006,7 +1006,9 @@ a CHARX export. Each
 character's files are in a folder of their own, under the names the card
 gave them. **Add files…** puts files from your computer on the card and
 **Add a link…** a file it only points to (an `https://` address, never
-fetched); **Remove** takes one off. The one chosen can be renamed (a
+fetched); **Remove** takes one off; **Replace…** puts another file's content in
+the chosen one's place, keeping its name, kind and place on the card, so a
+greeting that shows it still does. The one chosen can be renamed (a
 greeting names its pictures so) and given another kind (a background, an
 expression, RisuAI's own, or any you type). **Save as…** saves one where you
 choose; **Add to their pictures** makes a copy of a picture one of the

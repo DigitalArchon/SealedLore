@@ -163,6 +163,12 @@ class FilesForm(QWidget):
         self.save_button = QPushButton("Save as…")
         self.save_button.setToolTip("Save this file of the card's where you choose")
         self.save_button.clicked.connect(lambda: self._action("save"))
+        self.replace_button = QPushButton("Replace…")
+        self.replace_button.setToolTip(
+            "This file's content from another file on this computer: its name, kind and place "
+            "on the card kept, so whatever shows it still does"
+        )
+        self.replace_button.clicked.connect(lambda: self._action("replace"))
         self.picture_button = QPushButton("Add to their pictures")
         self.picture_button.setToolTip(
             "A copy among their pictures (Card and Pictures tabs), to use as any of theirs; "
@@ -176,6 +182,7 @@ class FilesForm(QWidget):
             self.link_button,
             self.remove_button,
             self.save_button,
+            self.replace_button,
             self.picture_button,
         ):
             buttons.addWidget(button)
@@ -300,6 +307,7 @@ class FilesForm(QWidget):
         asset = self._chosen_asset()
         self.remove_button.setEnabled(asset is not None)
         self.save_button.setEnabled(asset is not None and asset.held)
+        self.replace_button.setEnabled(asset is not None and asset.held)
         self.picture_button.setEnabled(asset is not None and asset.held and asset.picture)
         self.editor.setVisible(asset is not None)
         if asset is None:
@@ -337,7 +345,12 @@ class FilesForm(QWidget):
         whole = menu.addAction("See it full size")
         whole.setEnabled(asset.held and asset.picture)
         whole.triggered.connect(lambda: self._activated(item))
-        for button in (self.save_button, self.picture_button, self.remove_button):
+        for button in (
+            self.save_button,
+            self.replace_button,
+            self.picture_button,
+            self.remove_button,
+        ):
             action = menu.addAction(button.text())
             action.setEnabled(button.isEnabled())
             action.triggered.connect(button.click)
