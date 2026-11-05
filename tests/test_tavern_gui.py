@@ -279,6 +279,109 @@ def test_a_card_with_no_lorebook_says_so(app, tmp_path: Path, monkeypatch, story
     window.close()
 
 
+def test_other_apps_lorebooks_go_into_the_lore_as_sillytavern_converts_them(
+    app, tmp_path: Path, monkeypatch, story, cast
+):
+    """NovelAI's (a .lorebook, and a picture with one in it), Agnai's and
+    RisuAI's, on the Lore page: what the conversion lost said with the rest."""
+    from tests.test_lorebook_formats import AGNAI_BOOK, NOVEL_BOOK, RISU_BOOK, novel_picture
+
+    window = window_on(tmp_path, story, cast)
+    books = {"dust.lorebook": NOVEL_BOOK, "agnai.json": AGNAI_BOOK, "risu.json": RISU_BOOK}
+    files = []
+    for name, book in books.items():
+        files.append(tmp_path / name)
+        files[-1].write_text(json.dumps(book))
+    files.append(novel_picture(tmp_path, NOVEL_BOOK))
+    said = no_boxes(monkeypatch)
+    for path in files:
+        choose_file(monkeypatch, path)
+        window.lore_panel.lorebook_import_requested.emit()
+    novel = ["Hellsville", "Entry 2", "ridge"]
+    assert [entry.title for entry in window.session.bundle.lore] == [
+        *novel,
+        "The farmhouse",
+        "creek",
+        "Entry 3",
+        "Hellsville",
+        "The world",
+        "creek",
+        *novel,
+    ]
+    assert [entry.always_on for entry in window.session.bundle.lore][6:8] == [False, True]
+    assert len(said) == 3, "the Agnai book lost nothing and left nothing out"
+    assert said[0].startswith("Added 3 lore entries from dust.lorebook.")
+    assert "NovelAI's Always On" in said[0] and "regular expressions" in said[0]
+    assert "second keywords" in said[1] and "a chance below 100%" in said[1]
+    assert said[2].startswith("Added 3 lore entries from doomsville.png.")
+    window.close()
+
+
+def test_file_import_takes_another_apps_lorebook_as_one(
+    app, tmp_path: Path, monkeypatch, story, cast
+):
+    """An Agnai book with a description reads as an old card too: File →
+    Import… tells it as SillyTavern's lorebook import would, first."""
+    from sealedlore.storage.tavern_cards import tavern_kind
+    from tests.test_lorebook_formats import AGNAI_BOOK, NOVEL_BOOK, novel_picture
+
+    agnai = tmp_path / "doomsville.json"
+    agnai.write_text(json.dumps(AGNAI_BOOK))
+    assert tavern_kind(agnai) == "card"
+    novel = tmp_path / "dust.lorebook"
+    novel.write_text(json.dumps(NOVEL_BOOK))
+    window = window_on(tmp_path, story, cast)
+    no_boxes(monkeypatch)
+    for path in (agnai, novel, novel_picture(tmp_path, NOVEL_BOOK)):
+        choose_file(monkeypatch, path)
+        window.import_file()
+    assert [entry.title for entry in window.session.bundle.lore][:4] == [
+        "The farmhouse",
+        "creek",
+        "Entry 3",
+        "Hellsville",
+    ]
+    assert len(window.session.bundle.lore) == 9 and not window.collection_shown()
+    window.close()
+
+    window = window_on(tmp_path / "two")
+    choose_file(monkeypatch, novel)
+    warned: list[str] = []
+    monkeypatch.setattr(window, "_warn_plain", lambda title, text: warned.append(text))
+    window.import_file()
+    assert warned == [
+        "dust.lorebook is a lorebook. Open the story it is for, then import it again (or from "
+        "the Lore page)."
+    ]
+    window.close()
+
+
+def test_what_is_no_lorebook_keeps_its_words_and_a_broken_one_says_why(
+    app, tmp_path: Path, monkeypatch, story, cast
+):
+    """A file of none of the shapes is refused as a JSON file always was; one
+    marked as another app's that SillyTavern couldn't convert either says why."""
+    window = window_on(tmp_path, story, cast)
+    warned: list[str] = []
+    monkeypatch.setattr(window, "_warn_plain", lambda title, text: warned.append(text))
+    for name, text in (
+        ("odd.json", '{"entries": "none"}'),
+        ("dust.lorebook", '{"title": "Doomsville"}'),
+        ("broken.lorebook", '{"lorebookVersion": 5, "entries": [null]}'),
+    ):
+        (tmp_path / name).write_text(text)
+        choose_file(monkeypatch, tmp_path / name)
+        window.import_lorebook()
+    assert warned == [
+        "odd.json isn't a SillyTavern lorebook.",
+        "dust.lorebook isn't a SillyTavern lorebook.",
+        "broken.lorebook is a NovelAI lorebook that SillyTavern can't import either: entry 1 "
+        "is empty.",
+    ]
+    assert window.session.bundle.lore == []
+    window.close()
+
+
 # --- by link ---------------------------------------------------------------------------
 
 
@@ -394,6 +497,43 @@ def test_a_lorebook_by_link_with_no_story_says_where_it_goes(app, tmp_path: Path
     window.import_from_link()
     wait_for(app, lambda: warned)
     assert "Open the story it is for" in warned[0] and window.session is None
+    window.close()
+
+
+def test_another_apps_lorebook_by_link_is_converted_too(
+    app, tmp_path: Path, monkeypatch, story, cast
+):
+    from tests.test_lorebook_formats import RISU_BOOK
+
+    window = window_on(tmp_path, story, cast)
+    paste_link(monkeypatch, "https://files.catbox.moe/doomsville.json")
+    answered_with(
+        monkeypatch,
+        Fetched(io.BytesIO(json.dumps(RISU_BOOK).encode()), "doomsville.json", "catbox"),
+    )
+    said = no_boxes(monkeypatch)
+    window.lore_panel.lorebook_link_requested.emit()
+    wait_for(app, lambda: window.session.bundle.lore)
+    assert [entry.title for entry in window.session.bundle.lore] == [
+        "Hellsville",
+        "The world",
+        "creek",
+    ]
+    assert "second keywords" in said[0]
+    # One SillyTavern's converter stops on says why.
+    broken = {"type": "risu", "data": [{"key": 7, "content": "c"}]}
+    answered_with(
+        monkeypatch, Fetched(io.BytesIO(json.dumps(broken).encode()), "broken.json", "catbox")
+    )
+    warned: list[str] = []
+    monkeypatch.setattr(window, "_warn_plain", lambda title, text: warned.append(text))
+    window.lore_panel.lorebook_link_requested.emit()
+    wait_for(app, lambda: warned)
+    assert warned == [
+        "broken.json is a RisuAI lorebook that SillyTavern can't import either: entry 1's "
+        "keywords aren't text."
+    ]
+    assert len(window.session.bundle.lore) == 3
     window.close()
 
 

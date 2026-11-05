@@ -3,18 +3,21 @@
 SillyTavern keeps a lorebook ("World Info") as a JSON file of entries keyed
 by number; a character card carries its own in another shape (`character_book`,
 entries in a list). Both are read here. A lorebook is written in the first
-shape, which SillyTavern imports as it is; a card's own in the second.
+shape, which SillyTavern imports as it is; a card's own in the second. The
+other apps' lorebooks SillyTavern imports (NovelAI's, Agnai's, RisuAI's) are
+converted into its own shape as it converts them, and read from there.
 
 SealedLore's lore is keywords, content, always-on and enabled. What a
 SillyTavern entry does beyond that (second keywords with their logic, a
 chance below 100%, timing, groups, where in the prompt it goes, regular
 expressions) has nothing to become, so it is left out and counted, and the
-import says what went. Conversions are pure; only `read_lorebook` and
-`write_lorebook` touch disk.
+import says what went. Conversions are pure; only `open_lorebook` (and
+`read_lorebook`), `is_converted_lorebook` and `write_lorebook` touch disk.
 """
 
 from __future__ import annotations
 
+import base64
 import itertools
 import json
 import re
@@ -26,6 +29,8 @@ from typing import Any
 
 from sealedlore.models.lore import LoreEntry
 from sealedlore.storage.atomic import atomic_write_json
+from sealedlore.storage.image_meta import PNG_SIGNATURE
+from sealedlore.storage.png_text import PngTextError, text_chunks
 
 # Far past any lorebook (a big one is a megabyte or two): something else.
 MAX_BYTES = 32 * 1024 * 1024
@@ -40,6 +45,11 @@ _DECORATORS = ("@@activate", "@@dont_activate")
 
 class LorebookError(ValueError):
     """A file that isn't a lorebook this version can read, in plain words."""
+
+
+class UnconvertibleLorebook(LorebookError):
+    """Another app's lorebook that SillyTavern's import can't convert either
+    (its converter stops on it), in plain words."""
 
 
 @dataclass
@@ -57,6 +67,10 @@ class LoreImport:
 
 
 _LEFT_OUT = {
+    # Lost converting another app's lorebook, as SillyTavern's import loses it
+    # (`convertNovelLorebook` sets every entry's `constant` false).
+    "always_on": "NovelAI's Always On, which SillyTavern's import drops too: the entry is "
+    "sent only when a keyword is mentioned",
     "secondary": "second keywords and their logic: the first keywords alone decide",
     "regex": "keywords written as regular expressions",
     "probability": "a chance below 100%: the entry is sent whenever it applies",
@@ -185,7 +199,11 @@ def entries_of(book: Mapping[str, Any]) -> list[dict[str, Any]]:
 
 
 def looks_like_lorebook(data: Any) -> bool:
-    """A SillyTavern lorebook (either shape), not a character card."""
+    """A lorebook SillyTavern imports, not a character card: its own (either
+    shape), or another app's it converts (`other_formats`), which
+    `lorebook_of` converts or says in words why it can't."""
+    if other_formats(data):
+        return True
     if not isinstance(data, Mapping) or "spec" in data or "format" in data:
         return False
     entries = data.get("entries")
@@ -623,6 +641,267 @@ def write_world(path: Path, book: Mapping[str, Any]) -> None:
     atomic_write_json(path, world_from_book(book))
 
 
+# --- other apps' lorebooks, as SillyTavern converts them on import ----------------------------
+#
+# SillyTavern's lorebook import (world-info.js `importWorldInfo`, release 1.19.0,
+# read Nov 5 2026) takes three other apps' lorebooks besides its own, and makes
+# each a lorebook file of its own shape, which it then keeps and reads as any
+# other: NovelAI's (`convertNovelLorebook`; a .lorebook file, or a picture with
+# the book inside), Agnai's memory books (`convertAgnaiMemoryBook`) and RisuAI's
+# lorebook exports (`convertRisuLorebook`). They are converted here field by
+# field as there, so the rest of this module reads the result as it reads one of
+# SillyTavern's own, and what a converter has no place for is gone, as it is
+# there. Where a story would have kept it (NovelAI's Always On), the import says
+# so (`ReadLorebook.left_out`).
+
+# The keyword of the text in a picture that NovelAI keeps a lorebook in.
+NOVEL_PICTURE_KEY = "naidata"
+# What SillyTavern's lorebook import offers to open (its file box's `accept`):
+# .lorebook is NovelAI's own.
+LOREBOOK_SUFFIXES = (".json", ".lorebook", ".png")
+# Each other app's lorebook in words, by the name `other_formats` gives it.
+_FORMAT_WORDS = {"novel": "a NovelAI", "agnai": "an Agnai", "risu": "a RisuAI"}
+# JavaScript's white space, which its `trim()` takes off: not Python's (a BOM
+# goes there, a file separator stays).
+_JS_SPACE = (
+    "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007"
+    "\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
+)
+
+
+def other_formats(data: Any) -> list[str]:
+    """Which other apps' lorebooks `data` is marked as, told as
+    `importWorldInfo` tells them, each on its own: NovelAI's by any
+    `lorebookVersion` (null too), Agnai's by `kind` "memory", RisuAI's by
+    `type` "risu". None, and it is SillyTavern's own (or a card's)."""
+    if not isinstance(data, Mapping):
+        return []
+    marked = {
+        "novel": "lorebookVersion" in data,
+        "agnai": data.get("kind") == "memory",
+        "risu": data.get("type") == "risu",
+    }
+    return [name for name, found in marked.items() if found]
+
+
+def _field(entry: Any, name: str) -> Any:
+    """`entry.name` in JavaScript: what anything but an object hasn't got is
+    undefined (an array's `keys` is a function, which JSON leaves out the same)."""
+    return entry.get(name, _ABSENT) if isinstance(entry, Mapping) else _ABSENT
+
+
+def _truthy(value: Any) -> bool:
+    """A value as JavaScript's `!!` reads it: an empty list or object is true."""
+    if value is _ABSENT or value is None:
+        return False
+    if isinstance(value, bool | int | float | str):
+        return bool(value) and value == value  # NaN is false there
+    return True
+
+
+def _js_split(text: str) -> list[str]:
+    """`text.split(',').map(x => x.trim())`: an empty part kept, as there."""
+    return [part.strip(_JS_SPACE) for part in text.split(",")]
+
+
+def _alike(index: int) -> dict[str, Any]:
+    """What the three converters set alike on every entry: listed in the
+    file's order, before the character, as the system's."""
+    return {
+        "vectorized": False,
+        "selectiveLogic": 0,  # AND ANY
+        "position": 0,
+        "excludeRecursion": False,
+        "delayUntilRecursion": False,
+        "displayIndex": index,
+        "outletName": "",
+        "group": "",
+        "groupOverride": False,
+        "groupWeight": 100,
+        "scanDepth": None,
+        "caseSensitive": None,
+        "matchWholeWords": None,
+        "useGroupScoring": None,
+        "automationId": "",
+        "role": 0,
+        "sticky": None,
+        "cooldown": None,
+        "delay": None,
+        "triggers": [],
+        "ignoreBudget": False,
+    }
+
+
+def _world(listed: Any, entry: Callable[[int, Any], dict[str, Any]]) -> dict[str, Any]:
+    """A converter's lorebook file: an entry made by `entry` from each one
+    listed, keyed by its place, on SillyTavern's new entry. Its `forEach`
+    stops on what isn't a list, and on a null entry (whose fields it reads),
+    and the import fails."""
+    if not isinstance(listed, list):
+        raise UnconvertibleLorebook("its entries aren't a list")
+    entries: dict[str, Any] = {}
+    for index, raw in enumerate(listed):
+        if raw is None:
+            raise UnconvertibleLorebook(f"entry {index + 1} is empty")
+        made = {**_WORLD_TEMPLATE, "uid": index, **entry(index, raw), **_alike(index)}
+        entries[str(index)] = _written(made)
+    return {"entries": entries}
+
+
+def world_from_novel(book: Mapping[str, Any]) -> dict[str, Any]:
+    """A NovelAI lorebook as SillyTavern's lorebook file, as SillyTavern
+    converts one (`convertNovelLorebook`): each entry's keys, text, name and
+    whether it is on, its budget priority as the order. NovelAI's other
+    settings go (its Always On, where and how much of it goes in, how far
+    back its keys are looked for, its categories and phrase bias)."""
+
+    def entry(index: int, raw: Any) -> dict[str, Any]:
+        name = _field(raw, "displayName")
+        if name is not _ABSENT and not isinstance(name, str):
+            # It trims any name there is: on anything but text that stops it.
+            raise UnconvertibleLorebook(f"entry {index + 1}'s name isn't text")
+        return {
+            "key": _field(raw, "keys"),
+            "keysecondary": [],
+            "comment": name if _truthy(name) else "",
+            "content": _field(raw, "text"),
+            "constant": False,
+            "selective": False,
+            "order": _or(_field(_field(raw, "contextConfig"), "budgetPriority"), 0),
+            "disable": not _truthy(_field(raw, "enabled")),
+            "addMemo": name is not _ABSENT and name.strip(_JS_SPACE) != "",
+            "probability": 100,
+            "useProbability": True,
+        }
+
+    return _world(book.get("entries"), entry)
+
+
+def world_from_agnai(book: Mapping[str, Any]) -> dict[str, Any]:
+    """An Agnai memory book as SillyTavern's lorebook file, as SillyTavern
+    converts one (`convertAgnaiMemoryBook`): each entry's keywords, text,
+    name and whether it is on, its weight as the order. Its priority goes,
+    and the book's own name and description."""
+
+    def entry(_index: int, raw: Any) -> dict[str, Any]:
+        return {
+            "key": _field(raw, "keywords"),
+            "keysecondary": [],
+            "comment": _field(raw, "name"),
+            "content": _field(raw, "entry"),
+            "constant": False,
+            "selective": False,
+            "order": _field(raw, "weight"),
+            "disable": not _truthy(_field(raw, "enabled")),
+            "addMemo": _truthy(_field(raw, "name")),
+            "probability": 100,
+            "useProbability": True,
+        }
+
+    return _world(book.get("entries"), entry)
+
+
+def world_from_risu(book: Mapping[str, Any]) -> dict[str, Any]:
+    """A RisuAI lorebook export as SillyTavern's lorebook file, as
+    SillyTavern converts one (`convertRisuLorebook`): its keys and second
+    keys split at their commas, whether it is always active or selective,
+    its insertion order, and its chance of being sent. RisuAI's other
+    settings go (its folders, its case setting, its switch for regular
+    expressions: a key is one by how it is written, `is_pattern`)."""
+
+    def entry(index: int, raw: Any) -> dict[str, Any]:
+        keys, second = _field(raw, "key"), _field(raw, "secondkey")
+        # It splits the keys, and any second keys there are: anything but
+        # text stops it.
+        if not isinstance(keys, str):
+            raise UnconvertibleLorebook(f"entry {index + 1}'s keywords aren't text")
+        if _truthy(second) and not isinstance(second, str):
+            raise UnconvertibleLorebook(f"entry {index + 1}'s second keywords aren't text")
+        chance = _field(raw, "activationPercent")
+        return {
+            "key": _js_split(keys),
+            "keysecondary": _js_split(second) if _truthy(second) else [],
+            "comment": _field(raw, "comment"),
+            "content": _field(raw, "content"),
+            "constant": _field(raw, "alwaysActive"),
+            "selective": _field(raw, "selective"),
+            "order": _field(raw, "insertorder"),
+            "disable": False,
+            "addMemo": True,
+            "probability": _or(chance, 100),
+            # The chance itself, as there: 0 is false, and then none is rolled.
+            "useProbability": _or(chance, True),
+        }
+
+    return _world(book.get("data"), entry)
+
+
+_CONVERTERS: dict[str, Callable[[Mapping[str, Any]], dict[str, Any]]] = {
+    "novel": world_from_novel,
+    "agnai": world_from_agnai,
+    "risu": world_from_risu,
+}
+
+
+def _lost_converting(kind: str, book: Mapping[str, Any]) -> Counter[str]:
+    """What converting `book` lost that a story would have kept, counted as
+    LoreImport counts: NovelAI's Always On (its `forceActivation`)."""
+    listed = book.get("entries")
+    if kind != "novel" or not isinstance(listed, list):
+        return Counter()
+    always = sum(1 for raw in listed if _truthy(_field(raw, "forceActivation")))
+    return Counter({"always_on": always}) if always else Counter()
+
+
+@dataclass
+class ReadLorebook:
+    """A lorebook file as SillyTavern's import reads it: the book in its own
+    shape (or a card's), and what converting it from another app's lost."""
+
+    book: Mapping[str, Any]
+    left_out: Counter[str] = field(default_factory=Counter)
+
+    def lore(self, fill: Callable[[str], str] = lambda text: text) -> LoreImport:
+        """Its entries as lore (`lore_from_book`), what the conversion lost
+        said with what reading them leaves out."""
+        imported = lore_from_book(self.book, fill)
+        imported.left_out.update(self.left_out)
+        return imported
+
+    def notes(self) -> list[str]:
+        """What converting it lost, in words, one line each."""
+        return LoreImport(left_out=Counter(self.left_out)).notes()
+
+
+def lorebook_of(data: Any, name: str, *, picture: bool = False) -> ReadLorebook:
+    """A lorebook file's JSON as SillyTavern's import takes it: another app's
+    converted into its own shape, its own (or a card's book) as it is.
+    `picture` for what a picture held, which it takes only as another app's.
+    LorebookError, in words, for anything else. A file marked as two apps'
+    it converts twice, and its server can't read the pair: refused too."""
+    formats = other_formats(data)
+    if len(formats) > 1:
+        both = " and ".join(_FORMAT_WORDS[kind] for kind in formats)
+        raise UnconvertibleLorebook(
+            f"{name} is marked as {both} lorebook at once, which SillyTavern can't import either."
+        )
+    if formats:
+        kind = formats[0]
+        try:
+            world = _CONVERTERS[kind](data)
+        except UnconvertibleLorebook as exc:
+            raise UnconvertibleLorebook(
+                f"{name} is {_FORMAT_WORDS[kind]} lorebook that SillyTavern can't import "
+                f"either: {exc}."
+            ) from exc
+        return ReadLorebook(world, _lost_converting(kind, data))
+    if picture:
+        raise LorebookError(f"{name} has no lorebook in it.")
+    if not looks_like_lorebook(data):
+        raise LorebookError(f"{name} isn't a SillyTavern lorebook.")
+    return ReadLorebook(data)
+
+
 # --- a card's own lorebook, edited in place -------------------------------------------------
 #
 # Your characters keep a card's lorebook as it came (TavernFields.character_book):
@@ -839,6 +1118,40 @@ def copy_entry(book: dict[str, Any], raw: Mapping[str, Any]) -> dict[str, Any]:
     return new
 
 
+def move_entry(book: dict[str, Any], raw: Mapping[str, Any], step: int) -> bool:
+    """`raw` a place earlier (`step` -1) or later (+1) in the book's own
+    order (`book_entries`); False where it can't go. A card's book moves it
+    in its list, and every entry with the display index SillyTavern writes
+    on a card's (`extensions.display_index`) is given its new place there:
+    SillyTavern lists by that before the list's order (`world_from_book`),
+    and the old numbers put the entry back. In SillyTavern's own shape the
+    entries are listed by their `displayIndex`, each renumbered in the new
+    order."""
+    entries = book.get("entries")
+    if isinstance(entries, list):
+        # Only entries are places: anything else in the list stays put.
+        places = [index for index, entry in enumerate(entries) if isinstance(entry, Mapping)]
+        at = next((n for n, index in enumerate(places) if entries[index] is raw), None)
+        if at is None or not 0 <= at + step < len(places):
+            return False
+        here, there = places[at], places[at + step]
+        entries[here], entries[there] = entries[there], entries[here]
+        for index, entry in enumerate(entries):
+            ext = entry.get("extensions") if isinstance(entry, Mapping) else None
+            # One with none (or null) goes by its place in the list already.
+            if isinstance(ext, dict) and ext.get("display_index") is not None:
+                ext["display_index"] = index
+        return True
+    order = book_entries(book)
+    at = next((n for n, entry in enumerate(order) if entry is raw), None)
+    if at is None or not 0 <= at + step < len(order):
+        return False
+    order[at], order[at + step] = order[at + step], order[at]
+    for index, entry in enumerate(order):
+        entry["displayIndex"] = index
+    return True
+
+
 def entry_rest(raw: Mapping[str, Any]) -> dict[str, Any]:
     """Everything on an entry the editor has no field for (its order, its
     place in the prompt, SillyTavern's own settings), to edit as JSON."""
@@ -863,16 +1176,20 @@ def set_book_rest(book: dict[str, Any], rest: Mapping[str, Any]) -> None:
     book.update({key: value for key, value in rest.items() if key not in BOOK_EDITED})
 
 
-def read_json(path: Path) -> Any:
-    """A JSON file, refused in plain words when it can't be one."""
-    name = Path(path).name
+def _file_bytes(path: Path) -> bytes:
+    """A file's bytes, refused in plain words when it can't be read or is
+    too large to be what is wanted."""
     try:
         if Path(path).stat().st_size > MAX_BYTES:
-            raise LorebookError(f"{name} is too large to read.")
-        data = Path(path).read_bytes()
+            raise LorebookError(f"{Path(path).name} is too large to read.")
+        return Path(path).read_bytes()
     except OSError as exc:
         raise LorebookError(f"Couldn't read {path}: {exc.strerror or exc}") from exc
-    return json_of(data, name)
+
+
+def read_json(path: Path) -> Any:
+    """A JSON file, refused in plain words when it can't be one."""
+    return json_of(_file_bytes(path), Path(path).name)
 
 
 def json_of(data: bytes, name: str) -> Any:
@@ -887,16 +1204,66 @@ def json_of(data: bytes, name: str) -> Any:
         raise LorebookError(f"{name} isn't valid JSON (line {exc.lineno}).") from exc
 
 
-def read_lorebook(path: Path) -> Mapping[str, Any]:
+def _in_picture(data: bytes, name: str) -> Any:
+    """The lorebook a picture holds, found as SillyTavern finds one
+    (`extractDataFromPng`): JSON in base64, in the text NovelAI names
+    "naidata". Its JSON is read as UTF-8, where SillyTavern reads it a byte
+    to a letter and garbles every one that isn't plain English."""
     try:
-        data = read_json(path)
+        text = text_chunks(data, lambda keyword: keyword == NOVEL_PICTURE_KEY)
+    except PngTextError as exc:
+        raise LorebookError(f"{name} has no lorebook in it.") from exc
+    if NOVEL_PICTURE_KEY not in text:
+        raise LorebookError(f"{name} has no lorebook in it.")
+    encoded = "".join(text[NOVEL_PICTURE_KEY].split())
+    try:
+        return json_of(base64.b64decode(encoded + "=" * (-len(encoded) % 4), validate=True), name)
+    except ValueError as exc:  # bad base64 (binascii.Error), or not JSON (LorebookError)
+        raise LorebookError(f"{name} has a lorebook in it that can't be read.") from exc
+
+
+def open_lorebook(path: Path) -> ReadLorebook:
+    """A lorebook file as SillyTavern's import reads one (`importWorldInfo`):
+    a picture by the lorebook NovelAI keeps in it, anything else as JSON,
+    each taken as `lorebook_of` takes it. LorebookError, in words, else."""
+    name = Path(path).name
+    try:
+        data = _file_bytes(path)
+        if data.startswith(PNG_SIGNATURE):
+            return lorebook_of(_in_picture(data, name), name, picture=True)
+        return lorebook_of(json_of(data, name), name)
     except RecursionError as exc:
         # Nested past any real one: it escaped as an error the window never
         # catches, and the import did nothing without a word.
-        raise LorebookError(f"{Path(path).name} is nested deeper than any lorebook.") from exc
-    if not looks_like_lorebook(data):
-        raise LorebookError(f"{Path(path).name} isn't a SillyTavern lorebook.")
-    return data
+        raise LorebookError(f"{name} is nested deeper than any lorebook.") from exc
+
+
+def read_lorebook(path: Path) -> Mapping[str, Any]:
+    """A lorebook file's book, as SillyTavern keeps it (`open_lorebook`)."""
+    return open_lorebook(path).book
+
+
+def is_converted_lorebook(path: Path) -> bool:
+    """Whether a file is another app's lorebook SillyTavern's import converts,
+    told as there: any .lorebook file (NovelAI's own name for one), a picture
+    with one of them in it, or JSON marked as one (`other_formats`). Whether
+    it converts is for `open_lorebook` to say, in words."""
+    path = Path(path)
+    suffix = path.suffix.lower()
+    if suffix == ".lorebook":
+        return True
+    if suffix not in LOREBOOK_SUFFIXES:
+        return False
+    try:
+        data = _file_bytes(path)
+        found = (
+            _in_picture(data, path.name)
+            if data.startswith(PNG_SIGNATURE)
+            else json_of(data, path.name)
+        )
+    except (LorebookError, RecursionError):
+        return False
+    return bool(other_formats(found))
 
 
 def write_lorebook(path: Path, entries: Sequence[LoreEntry]) -> None:

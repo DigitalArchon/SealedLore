@@ -58,10 +58,11 @@ from sealedlore.storage.tavern_cards import (
     write_card,
 )
 from sealedlore.storage.tavern_lore import (
+    LOREBOOK_SUFFIXES,
     LorebookError,
     LoreImport,
-    lore_from_book,
-    read_lorebook,
+    lorebook_of,
+    open_lorebook,
     write_lorebook,
 )
 from sealedlore.threads import BackgroundThread
@@ -476,7 +477,8 @@ class TavernWindow:
     # --- lorebooks (the Lore page) ------------------------------------------------
 
     def import_lorebook(self, path: Path | None = None) -> None:
-        """A SillyTavern lorebook (or a card's own) into the open story's lore."""
+        """A SillyTavern lorebook (or a card's own, or one SillyTavern converts
+        from NovelAI, Agnai or RisuAI) into the open story's lore."""
         session = self.session
         if session is None or self._busy or self.in_chat:
             return
@@ -485,7 +487,7 @@ class TavernWindow:
                 self._dialog_parent(),
                 "Import a lorebook",
                 str(Path.home()),
-                "Lorebooks and character cards (*.json *.png *.charx);;All files (*)",
+                "Lorebooks and character cards (*.json *.lorebook *.png *.charx);;All files (*)",
             )
             if not chosen:
                 return
@@ -494,10 +496,11 @@ class TavernWindow:
         user = held.name if held is not None else None
         imported: LoreImport | None = None
         problem = f"{path.name} has no lorebook in it."
-        if path.suffix.lower() == ".json":
+        if path.suffix.lower() in LOREBOOK_SUFFIXES:
             try:
-                # A lorebook of its own has no {{char}} to name: it stays.
-                imported = lore_from_book(read_lorebook(path), macro_filler("{{char}}", user))
+                # A lorebook of its own has no {{char}} to name: it stays. What
+                # converting another app's lost is said with the rest.
+                imported = open_lorebook(path).lore(macro_filler("{{char}}", user))
             except LorebookError as exc:
                 problem = str(exc)
         if imported is None:
@@ -720,13 +723,19 @@ class TavernWindow:
         if self.session is None or self.in_chat:
             self._warn_plain(
                 NOT_FOR_A_CHAT,
-                "That link is a SillyTavern lorebook. Open the story it is for, then import "
+                "That link is a lorebook. Open the story it is for, then import "
                 "it again from File → Import from a link… or its Lore page.",
             )
             return
+        try:
+            # Another app's is converted as SillyTavern converts it.
+            read = lorebook_of(book, name)
+        except LorebookError as exc:
+            self._warn_plain(LINK_FAILED, str(exc))
+            return
         held = self._held()
         # A lorebook of its own has no {{char}} to name: it stays.
-        imported = lore_from_book(book, macro_filler("{{char}}", held.name if held else None))
+        imported = read.lore(macro_filler("{{char}}", held.name if held else None))
         title = book.get("name")
         self._lore_into_story(imported, title if isinstance(title, str) and title else name)
 

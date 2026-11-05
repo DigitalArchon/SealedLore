@@ -231,6 +231,150 @@ def test_an_order_that_isnt_a_whole_number_shows_as_one(app):
     assert book["entries"][0]["insertion_order"] == 7.5, "shown, not written"
 
 
+def shown_names(form) -> list[str]:
+    return [form.list.item(row).text() for row in range(form.list.count())]
+
+
+def test_entries_move_up_and_down_and_stay_chosen(app):
+    """Move up / Move down, and Alt+Up / Alt+Down in the list, for the chosen
+    entry, which stays chosen. A card's book renumbers the display index
+    SillyTavern wrote on its entries, which the JSON box shows."""
+    from PySide6.QtTest import QTest
+
+    from sealedlore.gui.lorebook_form import MOVE_UP_TIP, SEARCH_HIDES
+
+    book = {
+        "entries": [
+            {"id": n, "keys": [name], "content": f"The {name}.", "extensions": {"display_index": n}}
+            for n, name in enumerate(["farmhouse", "creek", "ridge"])
+        ]
+    }
+    form = book_form(book)
+    changes: list[bool] = []
+    form.changed.connect(lambda: changes.append(True))
+    form.list.setCurrentRow(2)
+    assert form.up_button.isEnabled() and not form.down_button.isEnabled(), "the last"
+    form.up_button.click()
+    assert shown_names(form) == ["farmhouse", "ridge", "creek"]
+    assert [e["keys"][0] for e in book["entries"]] == ["farmhouse", "ridge", "creek"]
+    assert form.list.currentRow() == 1 and form._current() is book["entries"][1]
+    assert [e["extensions"]["display_index"] for e in book["entries"]] == [0, 1, 2]
+    assert '"display_index": 1' in form.entry_rest.text.toPlainText(), "the JSON box in step"
+    # The keys, with the list focused.
+    form.show()
+    form.activateWindow()
+    QTest.qWaitForWindowActive(form, 2000)
+    form.list.setFocus()
+    QTest.keyClick(form.list, Qt.Key_Up, Qt.AltModifier)
+    assert shown_names(form) == ["ridge", "farmhouse", "creek"] and form.list.currentRow() == 0
+    assert not form.up_button.isEnabled() and form.down_button.isEnabled(), "the first"
+    QTest.keyClick(form.list, Qt.Key_Up, Qt.AltModifier)
+    assert shown_names(form) == ["ridge", "farmhouse", "creek"], "no further"
+    QTest.keyClick(form.list, Qt.Key_Down, Qt.AltModifier)
+    QTest.keyClick(form.list, Qt.Key_Down, Qt.AltModifier)
+    assert shown_names(form) == ["farmhouse", "creek", "ridge"] and form.list.currentRow() == 2
+    assert form._current()["keys"] == ["ridge"] and len(changes) == 4
+    # A search hiding some entries stops them (they would pass unseen), and says so.
+    form.list.setCurrentRow(1)
+    form.find.setText("creek")
+    assert not form.up_button.isEnabled() and not form.down_button.isEnabled()
+    assert form.up_button.toolTip() == form.down_button.toolTip() == SEARCH_HIDES
+    QTest.keyClick(form.list, Qt.Key_Up, Qt.AltModifier)
+    assert shown_names(form) == ["farmhouse", "creek", "ridge"]
+    form.find.setText("the")  # every entry: none hidden
+    assert form.up_button.isEnabled() and form.up_button.toolTip() == MOVE_UP_TIP
+    form.find.clear()
+    form.close()
+
+
+def test_sillytaverns_own_shape_moves_by_its_display_index(app):
+    book = {
+        "entries": {
+            "0": {"uid": 0, "key": ["farmhouse"], "content": "a", "displayIndex": 0},
+            "1": {"uid": 1, "key": ["creek"], "content": "b", "displayIndex": 1},
+            "2": {"uid": 2, "key": ["ridge"], "content": "c"},
+        }
+    }
+    form = book_form(book)
+    form.list.setCurrentRow(1)
+    form.down_button.click()
+    assert shown_names(form) == ["farmhouse", "ridge", "creek"]
+    assert [book["entries"][n]["displayIndex"] for n in ("0", "2", "1")] == [0, 1, 2]
+    assert form._current() is book["entries"]["1"]
+    assert '"displayIndex": 2' in form.entry_rest.text.toPlainText()
+    assert list(book["entries"]) == ["0", "1", "2"], "each kept under its own number"
+
+
+def test_your_characters_take_another_apps_lorebook_and_say_what_it_lost(
+    app, window, tmp_path, monkeypatch, yes
+):
+    """A NovelAI lorebook on the Lorebook tab: converted as SillyTavern converts
+    it, then put on the card as SillyTavern puts a lorebook file on one; what
+    the conversion lost is said; moved, it is exported in its new order."""
+    import json
+
+    from tests.test_lorebook_formats import NOVEL_BOOK
+
+    elena, page = shown(window)
+    form = page.lorebook_form
+    path = tmp_path / "doomsville.lorebook"
+    path.write_text(json.dumps(NOVEL_BOOK))
+    monkeypatch.setattr(
+        window_collection.QFileDialog, "getOpenFileName", lambda *a, **k: (str(path), "")
+    )
+    said = no_boxes(monkeypatch)
+    form.import_button.click()
+    entries = lore.book_entries(elena.tavern.character_book)
+    assert [lore.entry_title(e) for e in entries] == ["Hellsville", "", "", ""]
+    assert entries[0]["insertion_order"] == 400 and entries[0]["use_regex"] is True
+    assert elena.tavern.character_book["name"] == "doomsville"
+    assert len(said) == 1 and "NovelAI's Always On" in said[0] and "(1 entry)" in said[0]
+    assert "4 entries are Elena's own lorebook now." in said[0]
+    assert on_disk(window).tavern.character_book == elena.tavern.character_book, "kept"
+    # Moved, it goes out in its new order.
+    form.list.setCurrentRow(3)
+    form.up_button.click()
+    out = tmp_path / "elena lorebook.json"
+    monkeypatch.setattr(
+        window_collection.QFileDialog, "getSaveFileName", lambda *a, **k: (str(out), "")
+    )
+    form.export_button.click()
+    world = json.loads(out.read_text())
+    assert [e.get("content") for e in lore.entries_of(world)] == [
+        "Hellsville is walled, and wary of strangers.",
+        "Four winters after the end of the world.",
+        "The ridge.",
+        None,  # what was no entry at all in the NovelAI file has no text
+    ]
+    assert on_disk(window).tavern.character_book == elena.tavern.character_book
+
+
+def test_your_characters_say_why_another_apps_lorebook_cant_be_taken(
+    app, window, tmp_path, monkeypatch
+):
+    import json
+
+    elena, page = shown(window)
+    warned: list[str] = []
+    monkeypatch.setattr(window, "_warn_plain", lambda title, text: warned.append(text))
+    for name, data in (
+        ("broken.json", {"type": "risu", "data": [{"key": 7}]}),
+        ("odd.json", {"entries": "none"}),
+    ):
+        path = tmp_path / name
+        path.write_text(json.dumps(data))
+        monkeypatch.setattr(
+            window_collection.QFileDialog, "getOpenFileName", lambda *a, p=path, **k: (str(p), "")
+        )
+        page.lorebook_form.import_button.click()
+    assert warned == [
+        "broken.json is a RisuAI lorebook that SillyTavern can't import either: entry 1's "
+        "keywords aren't text.",
+        "odd.json has no lorebook.",  # none of these shapes: the words it always had
+    ]
+    assert lore.book_entries(elena.tavern.character_book)[0]["keys"] == ["Hellsville", "the town"]
+
+
 def test_the_files_tab_adds_renames_retypes_links_and_removes(
     app, window, tmp_path, monkeypatch, yes
 ):

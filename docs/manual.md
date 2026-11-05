@@ -966,9 +966,12 @@ to or taken off:
   and what comes after the chat (SillyTavern's post-history instructions). A
   story never sends these.
 - **Lorebook**: the card's own lore, offered to a story's lore when they join
-  one. **Add an entry**, **Copy** or **Remove** one; the one chosen shows its
-  name, keywords, text, whether it is on or always sent, its order,
-  SillyTavern's second keywords and how its keywords match. Everything else
+  one. **Add an entry**, **Copy** or **Remove** one, or move the one chosen
+  with **Move up** and **Move down** (or Alt+Up and Alt+Down in the list; not
+  while a search hides some entries). Their order is the one SillyTavern lists
+  them in and a story takes them in. The one chosen shows its name, keywords,
+  text, whether it is on or always sent, its order, SillyTavern's second
+  keywords and how its keywords match. Everything else
   on an entry (its place in the prompt, its chance, groups and timing, other
   apps' settings) is under **Everything else on this entry (JSON)**, and the
   book's own settings likewise. A story uses an entry's keywords, its text and
@@ -978,8 +981,11 @@ to or taken off:
   itself does between a card's lorebook and its lorebook files. As there, a
   lorebook file has no place for a few of a card's settings (the book's
   description, scan depth, budget and recursion, and an entry's priority), so
-  a book exported and imported again loses those. **Remove the lorebook**
-  takes it off. As in SillyTavern, a keyword written `/like this/` is a
+  a book exported and imported again loses those. Import also takes the
+  lorebooks SillyTavern takes from other apps (NovelAI's, Agnai's and
+  RisuAI's, below), converted as SillyTavern converts them before they go on
+  the card. **Remove the lorebook** takes it off. As in SillyTavern, a
+  keyword written `/like this/` is a
   regular expression and any other is matched as written, whatever the
   entry's **Keywords are regular expressions** says; a story uses the plain
   ones. An entry whose text begins with SillyTavern's `@@activate` is always
@@ -1188,6 +1194,22 @@ expressions, a chance below 100%, sticky, cooldown and delay, inclusion
 groups, a place in the prompt such as the Author's Note or a depth,
 recursion settings and character filters. Characters and lore the plot
 hasn't brought in yet are exported only with spoilers shown.
+
+Besides SillyTavern's own lorebook files, the Lore page, File → Import… and a
+character's Lorebook tab in Your characters take the ones SillyTavern itself
+imports from other apps (and so does a link to one's JSON file, below):
+**NovelAI**'s (a `.lorebook` file, or a picture with the lorebook inside it),
+**Agnai**'s memory books and **RisuAI**'s lorebook exports. Each is converted
+exactly as SillyTavern converts it, and what that conversion has no place for
+is lost as it is in SillyTavern: a NovelAI entry keeps its keys, text, name,
+whether it is on and its budget priority (as its order), and loses the rest,
+its Always On among them (which is listed, as a story could have kept it); an
+Agnai entry keeps all but its priority; a RisuAI entry keeps its keys and
+second keys, whether it is always active or selective, its order and its
+chance of being sent, and loses its folder and its own case and
+regular-expression switches. A file SillyTavern couldn't convert either is
+refused, saying why. A character's own lorebook in Your characters can also
+be put in order there, entry by entry (**Move up**, **Move down**).
 
 **By link.** Instead of downloading a card first, paste its link: File →
 Import from a link… (or Import on Your characters' page) to keep it in Your

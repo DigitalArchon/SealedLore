@@ -192,6 +192,7 @@ from sealedlore.storage.scenario import (
     write_scenario,
 )
 from sealedlore.storage.tavern_cards import tavern_kind
+from sealedlore.storage.tavern_lore import is_converted_lorebook
 from sealedlore.storage.template_pictures import apply_kept, read_kept, template_of
 from sealedlore.threads import BackgroundThread
 from sealedlore.tree import path_to
@@ -1329,13 +1330,14 @@ class MainWindow(
             # Every kind, shown together by default: split by kind, a plot
             # file once needed "All files" to be seen at all.
             f"SealedLore files and SillyTavern cards (*{SCENARIO_SUFFIX} *{ARCHIVE_SUFFIX} "
-            f"*{BACKUP_SUFFIX} *{PLOT_SUFFIX} *{PROMPT_SET_SUFFIX} *.png *.json *.charx);;"
+            f"*{BACKUP_SUFFIX} *{PLOT_SUFFIX} *{PROMPT_SET_SUFFIX} *.png *.json *.charx "
+            "*.lorebook);;"
             f"Scenarios (*{SCENARIO_SUFFIX});;"
             f"Story backups (*{ARCHIVE_SUFFIX});;"
             f"Backups of your characters (*{BACKUP_SUFFIX});;"
             f"Plot files (*{PLOT_SUFFIX});;"
             f"Prompt sets (*{PROMPT_SET_SUFFIX});;"
-            "SillyTavern cards and lorebooks (*.png *.json *.charx);;"
+            "SillyTavern cards and lorebooks (*.png *.json *.charx *.lorebook);;"
             "All files (*)",
         )
 
@@ -1375,6 +1377,12 @@ class MainWindow(
         elif suffix == ".zip" and is_backup(Path(path)):
             # Your characters, put back: no story opens, nothing is asked.
             self.restore_collection(Path(path))
+        elif kind is None and is_converted_lorebook(Path(path)):
+            # NovelAI's (a .lorebook, or a picture), Agnai's or RisuAI's, which
+            # SillyTavern converts. Asked before a card: a picture would be
+            # taken for one, and an Agnai book with a description reads as an
+            # old one.
+            self._import_lorebook_file(Path(path))
         elif suffix in (".png", ".charx"):
             self._import_card(Path(path))
         elif kind == ARCHIVE_FORMAT:
@@ -1391,12 +1399,12 @@ class MainWindow(
             self._import_scenario(Path(path))
 
     def _import_lorebook_file(self, path: Path) -> None:
-        """File → Import… of a SillyTavern lorebook: lore for the open story;
-        it makes no story of its own."""
+        """File → Import… of a lorebook (SillyTavern's, or one it converts):
+        lore for the open story; it makes no story of its own."""
         if self.session is None or self.in_chat:
             self._warn_plain(
                 "A lorebook is lore for a story",
-                f"{path.name} is a SillyTavern lorebook. Open the story it is for, then "
+                f"{path.name} is a lorebook. Open the story it is for, then "
                 "import it again (or from the Lore page).",
             )
             return

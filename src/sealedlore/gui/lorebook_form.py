@@ -1,5 +1,5 @@
 """Your characters' Lorebook tab: a card's own lorebook, every entry of it to
-read, change, add or take off, for the card to go out again as changed.
+read, change, add, move or take off, for the card to go out again as changed.
 
 The book is kept as the card had it (TavernFields.character_book), in the
 spec's shape or SillyTavern's own, and edited in place through
@@ -8,7 +8,8 @@ story takes from an entry (its keywords, text, always sent and on) has a
 field each, as do the keywords' other switches a card's apps share; the
 rest of an entry (its order, its place in the prompt, SillyTavern's own
 settings) and of the book is JSON under a heading, so nothing on it is out
-of reach (the author, Nov 2026).
+of reach (the author, Nov 2026). Entries are moved in the book's own order,
+the one SillyTavern lists them in and a story takes them in.
 """
 
 from __future__ import annotations
@@ -48,6 +49,10 @@ INTRO = (
     "when it is exported. A story uses an entry's keywords, its text and whether it is "
     "always sent or switched off; the rest is kept for SillyTavern and other apps."
 )
+MOVE_UP_TIP = "Earlier in the lorebook (Alt+Up)"
+MOVE_DOWN_TIP = "Later in the lorebook (Alt+Down)"
+# Moved past entries a search hides, an entry would land somewhere unseen.
+SEARCH_HIDES = "Clear the search to move entries: it hides some of them"
 
 
 def _keys_text(keys: list[str]) -> str:
@@ -106,9 +111,23 @@ class LorebookForm(QWidget):
         self.copy_button.clicked.connect(self._copy)
         self.remove_button = QPushButton("Remove")
         self.remove_button.clicked.connect(self._remove)
+        self.up_button = QPushButton("Move up")
+        self.up_button.clicked.connect(lambda: self._move(-1))
+        self.down_button = QPushButton("Move down")
+        self.down_button.clicked.connect(lambda: self._move(1))
+        for keys, step in (("Alt+Up", -1), ("Alt+Down", 1)):
+            move_key = QShortcut(QKeySequence(keys), self.list)
+            move_key.setContext(Qt.WidgetShortcut)
+            move_key.activated.connect(lambda step=step: self._move(step))
         entry_buttons = QHBoxLayout()
         entry_buttons.setContentsMargins(0, 0, 0, 0)
-        for button in (self.add_button, self.copy_button, self.remove_button):
+        for button in (
+            self.add_button,
+            self.copy_button,
+            self.remove_button,
+            self.up_button,
+            self.down_button,
+        ):
             entry_buttons.addWidget(button)
         entry_buttons.addStretch(1)
 
@@ -304,6 +323,7 @@ class LorebookForm(QWidget):
             text = " ".join([lore.entry_title(raw), *keys, str(raw.get("content") or "")])
             text = text.casefold()
             self.list.setRowHidden(row, not all(word in text for word in wanted))
+        self._sync_moves()
 
     def _book_edited(self) -> None:
         book = self._book
@@ -330,6 +350,7 @@ class LorebookForm(QWidget):
         self.entry_box.setVisible(raw is not None)
         self.copy_button.setEnabled(raw is not None)
         self.remove_button.setEnabled(raw is not None)
+        self._sync_moves()
         if raw is None:
             return
         numbered = self._numbered
@@ -423,6 +444,31 @@ class LorebookForm(QWidget):
             return
         self._show_new(lore.copy_entry(book, raw))
         self.changed.emit()
+
+    def _sync_moves(self) -> None:
+        """Move up and down for the chosen entry where it can go. Not while a
+        search hides some entries, which it would pass unseen: the buttons
+        say so."""
+        row = self.list.currentRow()
+        hidden = any(self.list.isRowHidden(index) for index in range(self.list.count()))
+        self.up_button.setEnabled(not hidden and 0 < row < len(self._entries))
+        self.down_button.setEnabled(not hidden and 0 <= row < len(self._entries) - 1)
+        self.up_button.setToolTip(SEARCH_HIDES if hidden else MOVE_UP_TIP)
+        self.down_button.setToolTip(SEARCH_HIDES if hidden else MOVE_DOWN_TIP)
+
+    def _move(self, step: int) -> None:
+        """The chosen entry a place up (-1) or down (+1), still chosen, and
+        the tab shown again: SillyTavern's number for its place (its display
+        index, in the entry's JSON) changes with it, and left showing the old
+        one, the next edit there would have put the entry back."""
+        raw, book = self._current(), self._book
+        button = self.up_button if step < 0 else self.down_button
+        if raw is None or book is None or not button.isEnabled():
+            return
+        if lore.move_entry(book, raw, step):
+            rows = lore.book_entries(book)
+            self.load(self._character, row=next(i for i, e in enumerate(rows) if e is raw))
+            self.changed.emit()
 
     def _show_new(self, new: dict[str, Any]) -> None:
         """The list again with `new` chosen, found by itself rather than taken

@@ -92,9 +92,10 @@ from sealedlore.storage.tavern_cards import (
 )
 from sealedlore.storage.tavern_lore import (
     LorebookError,
+    UnconvertibleLorebook,
     book_from_world,
     entries_of,
-    read_lorebook,
+    open_lorebook,
     write_world,
 )
 
@@ -1075,6 +1076,8 @@ class CollectionWindow:
         if card is None or card.tavern is None:
             return
         tavern = card.tavern
+        # What converting another app's lorebook lost, said once it is kept.
+        lost: list[str] = []
         if what == "remove":
             answer = QMessageBox.question(
                 self._dialog_parent(),
@@ -1113,23 +1116,29 @@ class CollectionWindow:
                 self._dialog_parent(),
                 f"A lorebook for {card.name}",
                 str(Path.home()),
-                "Lorebooks and character cards (*.json *.png *.charx);;All files (*)",
+                "Lorebooks and character cards (*.json *.lorebook *.png *.charx);;All files (*)",
             )
             if not chosen:
                 return
             path = Path(chosen)
             book = None
+            problem = f"{path.name} has no lorebook."
             try:
-                book = read_lorebook(path)
-            except LorebookError:
+                read = open_lorebook(path)
+                book, lost = read.book, read.notes()
+            except LorebookError as exc:
+                if isinstance(exc, UnconvertibleLorebook):
+                    # Another app's that can't be converted: why, in words.
+                    problem = str(exc)
                 other = self._read_card(path, quietly=True)
                 book = other.book if other is not None else None
             if book is None:
-                self._warn_plain("Could not read the lorebook", f"{path.name} has no lorebook.")
+                self._warn_plain("Could not read the lorebook", problem)
                 return
             # Kept whole, every setting of it to edit on the Lorebook tab: a
             # card's own as it came, SillyTavern's lorebook file as SillyTavern
-            # itself puts one on a card.
+            # itself puts one on a card (another app's once SillyTavern has
+            # converted it into one).
             whole = book_from_world(book, name=path.stem)
             count = len(entries_of(whole))
             if tavern.character_book and (
@@ -1145,13 +1154,14 @@ class CollectionWindow:
             ):
                 return
             tavern.character_book = whole
-            self.statusBar().showMessage(
-                f"{count} entries are {card.name}'s own lorebook now.", 8000
-            )
+            said = f"{count} entries are {card.name}'s own lorebook now."
+            self.statusBar().showMessage(said, 8000)
         collection.touch(card)
         self._save_collection()
         self.collection_page.show_book()
         self._refresh_collection()
+        if lost:
+            self._say_left_out(f"A lorebook for {card.name}", said, lost)
 
     def _collection_file(self, what: str, index: int, card_id: str) -> None:
         """One of a card's own files (the Files tab): seen full size, saved
