@@ -470,3 +470,155 @@ def test_a_videos_direction_is_asked_about_and_the_writers_prompt_is_not(app, wi
     dialog.reject()
     assert dialog.isVisible() and titles == ["Discard what you wrote?"]
     dialog.done(0)
+
+
+# --- the window's second look: a message's edit -----------------------------------------
+
+
+def changed_edit(app, window, node_id: str = "u0", text: str = "Typed and not saved."):
+    widget = window.transcript.message_widget(node_id)
+    assert isinstance(widget, MessageWidget)
+    widget.begin_edit()
+    settle(app)
+    widget._editor.setPlainText(text)
+    return widget
+
+
+def test_every_changed_edit_is_asked_about_not_the_first_only(app, window, monkeypatch):
+    titles = asked(monkeypatch, QMessageBox.Cancel)
+    untouched = window.transcript.message_widget("u0")
+    untouched.begin_edit()  # opened and left as it was
+    changed_edit(app, window, "u1", "A long rewrite of turn one.")
+    story_id = window.session.story.id
+    window.close_story()
+    assert titles == ["Discard your edit?"], "the second editor's change counts"
+    assert window.session is not None and window.session.story.id == story_id
+    assert len(window.transcript.open_editors()) == 2
+
+
+def test_an_editor_left_alone_is_no_change_and_saving_it_writes_nothing(app, window, monkeypatch):
+    """A plain text box gives a no-break space back as a space: an editor
+    opened and left alone already "differed", so Esc asked about an edit
+    nobody made and Save wrote the passage again, marking its chapter out of
+    date for nothing."""
+    titles = asked(monkeypatch, QMessageBox.Cancel)
+    node = next(n for n in window.session.nodes if n.id == "a1")
+    node.content = "« Bonjour », dit-elle. Ten km to the keep. Then rain."
+    window.reload_transcript()
+    settle(app)
+    edited: list[str] = []
+    monkeypatch.setattr(window.session, "edit_node", lambda *a, **k: edited.append(a[0]) or [])
+    widget = window.transcript.message_widget("a1")
+    widget.begin_edit()
+    settle(app)
+    assert not widget.edit_changed()
+    window._on_escape()
+    assert titles == [] and not widget.editing(), "Esc closes it, nothing asked"
+    for save in ("button", "ctrl+enter"):
+        widget = window.transcript.message_widget("a1")
+        widget.begin_edit()
+        settle(app)
+        if save == "button":
+            widget._save_button.click()
+        else:
+            widget._editor.setFocus()
+            settle(app)
+            window.send_turn()  # what Ctrl+Enter runs
+        settle(app)
+        assert not widget.editing() and edited == [], f"saved unchanged by {save}: nothing sent"
+    assert " " in node.content
+    widget = window.transcript.message_widget("a1")
+    widget.begin_edit(rewrite=True)
+    settle(app)
+    assert not widget.edit_changed()
+    widget._branch_name.setText("Another way")
+    assert widget.edit_changed(), "a branch's name typed is something to lose"
+    widget.cancel_edit()
+
+
+def test_rebuilds_open_an_edit_again_with_what_was_typed(app, window, monkeypatch):
+    """A rebuild for anything else destroyed the editor mid-sentence: the
+    view toggle, dice shown, the text size, another message saved."""
+    titles = asked(monkeypatch, QMessageBox.Cancel)
+    widget = changed_edit(app, window, "u1", "Typed and not saved.")
+    widget._editor.setFocus()
+    settle(app)
+
+    def still_open() -> str | None:
+        editor = window.transcript.open_editor()
+        return editor._editor.toPlainText() if editor is not None else None
+
+    window.set_show_dice_rolls(not window.config.show_dice_rolls)
+    assert still_open() == "Typed and not saved."
+    assert window.transcript.open_editor(focused=True) is not None, "the keyboard stays in it"
+    try:
+        window.set_text_scale(1.1)
+        assert still_open() == "Typed and not saved."
+    finally:
+        window.set_text_scale(1.0)
+    window.set_storyteller_view(True)  # u1 is still sent word for word
+    assert still_open() == "Typed and not saved."
+    window.set_storyteller_view(False)
+    other = window.transcript.message_widget("a0")
+    other.begin_edit()
+    settle(app)
+    other._editor.setPlainText("The world answers, changed.")
+    other._save_button.click()
+    settle(app)
+    assert next(n for n in window.session.nodes if n.id == "a0").content.endswith("changed.")
+    assert still_open() == "Typed and not saved." and titles == []
+
+
+def test_removing_a_message_being_edited_asks_and_the_rest_stay_open(app, window, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox as Box
+
+    titles = asked(monkeypatch, QMessageBox.Cancel)
+
+    def answer(label: str):
+        def press(box) -> int:
+            next(b for b in box.buttons() if b.text() == label).click()
+            return 0
+
+        return press
+
+    monkeypatch.setattr(Box, "exec", answer("Delete"))
+    changed_edit(app, window, "u1")
+    before = len(window.session.nodes)
+    window._delete_node("a0")  # takes u1 with it: asked, and Cancel keeps all
+    assert titles == ["Discard your edit?"] and len(window.session.nodes) == before
+    assert window.transcript.open_editor() is not None
+    window._delete_node("a1")  # after u1: no question, and the edit stays open
+    assert titles == ["Discard your edit?"] and len(window.session.nodes) == before - 1
+    assert window.transcript.open_editor()._editor.toPlainText() == "Typed and not saved."
+
+
+def test_the_window_keeps_an_edit_far_back_built(app, tmp_path, story, cast, monkeypatch):
+    """Going to a chapter or a Find match far off, or sending a turn while
+    reading back, dropped the page with the editor, and its text with it."""
+    from sealedlore.gui.main_window import MainWindow
+    from sealedlore.storage.repository import StoryBundle, save_story_bundle
+    from tests.conftest import make_exchange
+
+    bundle = StoryBundle(story=story, cast=cast, nodes=make_exchange(60))
+    bundle.story.active_leaf_id = "a59"
+    bundle.story.held_character_id = "char-serrik"
+    save_story_bundle(bundle, root=tmp_path)
+    window = MainWindow(root=tmp_path, use_mock=True)
+    window.resize(1366, 768)
+    window.show()
+    window.open_story(story.id)
+    try:
+        window.transcript.scroll_to_node("u2")
+        settle(app)
+        changed_edit(app, window, "u2", "Turn two, rewritten and not saved.")
+        window.transcript.scroll_to_node("a58")  # far off
+        settle(app)
+        assert window.transcript.open_editor()._editor.toPlainText().startswith("Turn two")
+        window.transcript.jump_to_start()
+        window.transcript.ensure_at_latest()
+        settle(app)
+        assert window.transcript.open_editor().node_id == "u2"
+        assert window.transcript.message_widget("a59") is not None
+    finally:
+        window.transcript.open_editor().cancel_edit()
+        window.close()

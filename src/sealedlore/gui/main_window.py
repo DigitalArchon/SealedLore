@@ -9,7 +9,7 @@ and difficulty) live in the composer's second row, per §10.
 from __future__ import annotations
 
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -113,6 +113,7 @@ from sealedlore.gui.tab_rows import TabRows
 from sealedlore.gui.tavern_dialog import LINK_IMPORT_LABEL
 from sealedlore.gui.transcript import (
     ChapterCard,
+    MessageWidget,
     TranscriptView,
     ViewToggle,
     kind_for,
@@ -2276,9 +2277,23 @@ class MainWindow(
         )
 
     def set_storyteller_view(self, on: bool) -> None:
-        """As written, or as sent to the storyteller (the view toggle)."""
+        """As written, or as sent to the storyteller (the view toggle). An
+        edit on a message the other view doesn't show (summarised prose, in
+        the storyteller's) is asked about first; the rest stay open."""
         if on == self._storyteller_view:
             return
+        if self.session is not None and not self._busy:
+            # What the other view shows: the prose still sent word for word,
+            # or every message.
+            shown = (
+                {node.id for node in self.session.split().verbatim}
+                if on
+                else self._path_ids_without(())
+            )
+            if not self._edit_allows_leave(keeping=shown):
+                self.view_toggle.set_mode(self._storyteller_view)
+                self.storyteller_view_action.setChecked(self._storyteller_view)
+                return
         self._storyteller_view = on
         self.view_toggle.set_mode(on)
         self.storyteller_view_action.setChecked(on)
@@ -2349,6 +2364,9 @@ class MainWindow(
         ids = [take.id for take in self.session.takes(node_id)]
         target = ids.index(node_id) + delta
         if not 0 <= target < len(ids):
+            return
+        # The take showing goes from the story; what followed it stays.
+        if not self._edit_allows_leave(keeping=self._path_ids_without([node_id])):
             return
         try:
             stale = self.session.switch_take(node_id, delta)
@@ -2427,23 +2445,49 @@ class MainWindow(
         self._select_from_map(start_id, node_id)
         self.show_map(False)
 
-    def _edit_allows_leave(self) -> bool:
-        """A message's edit open and changed: asked before the story goes or
-        moves on (it was dropped without a word)."""
-        editing = self.transcript.open_editor()
-        if editing is None or not editing.edit_changed():
+    def _edit_allows_leave(self, *, keeping: Collection[str] = (), discard: bool = True) -> bool:
+        """Messages' edits open and changed: asked about before the story goes
+        or moves on (they were dropped without a word), every one of them (it
+        asked about the first only). `keeping`: the messages still shown
+        after the rebuild that follows, whose editors it opens again with
+        what was typed (transcript `_reopen`): only the others are asked
+        about. On Discard they are closed, unless `discard` is False: closing
+        the window asks every question before it lets go of anything."""
+        changed = self._edits_lost(keeping)
+        if not changed:
             return True
+        if len(changed) == 1:
+            title = "Discard your edit?"
+            text = "A message you were editing hasn't been saved. Discard the edit?"
+        else:
+            title = "Discard your edits?"
+            text = f"{len(changed)} messages you were editing haven't been saved. Discard them?"
         answer = QMessageBox.question(
-            self,
-            "Discard your edit?",
-            "A message you were editing hasn't been saved. Discard the edit?",
-            QMessageBox.Discard | QMessageBox.Cancel,
-            QMessageBox.Cancel,
+            self, title, text, QMessageBox.Discard | QMessageBox.Cancel, QMessageBox.Cancel
         )
         if answer != QMessageBox.Discard:
             return False
-        editing.cancel_edit()
+        if discard:
+            self._discard_edits(keeping)
         return True
+
+    def _edits_lost(self, keeping: Collection[str] = ()) -> list[MessageWidget]:
+        return [
+            widget
+            for widget in self.transcript.open_editors()
+            if widget.edit_changed() and widget.node_id not in keeping
+        ]
+
+    def _discard_edits(self, keeping: Collection[str] = ()) -> None:
+        """The changed edits the author agreed to lose (`_edit_allows_leave`)."""
+        for widget in self._edits_lost(keeping):
+            widget.cancel_edit()
+
+    def _path_ids_without(self, node_ids: Collection[str]) -> set[str]:
+        """The messages the transcript will still show once `node_ids` go."""
+        if self.session is None:
+            return set()
+        return {node.id for node in self.session.full_path()} - set(node_ids)
 
     def _switch_branch(self, start_id: str | None) -> None:
         if self.session is None or self._busy or self.session.in_private:
@@ -2495,6 +2539,8 @@ class MainWindow(
             QMessageBox.No,
         )
         if answer != QMessageBox.Yes:
+            return
+        if not self._edit_allows_leave(keeping=self._path_ids_without(doomed.node_ids)):
             return
         self.session.delete_branch(start_id)
         self._after_navigation(self.session.story.active_leaf_id)
@@ -3083,6 +3129,9 @@ class MainWindow(
         box.exec()
         if box.clickedButton() is not take_back:
             return
+        # An edit open on what goes with it is asked about; the rest stay open.
+        if not self._edit_allows_leave(keeping=self._path_ids_without(deletion.node_ids)):
+            return
         self._return_turn(node)
         self.reload_transcript()
         self.refresh_panels()
@@ -3325,6 +3374,9 @@ class MainWindow(
         box.setDefaultButton(QMessageBox.Cancel)
         box.exec()
         if box.clickedButton() is not delete:
+            return
+        # An edit open on what goes is asked about; the rest stay open.
+        if not self._edit_allows_leave(keeping=self._path_ids_without(deletion.node_ids)):
             return
 
         self.session.delete_from(node_id)

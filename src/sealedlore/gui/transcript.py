@@ -97,6 +97,23 @@ class PendingPicture:
 
 
 @dataclass(frozen=True)
+class OpenEdit:
+    """A message's editor as it stood before the view was rebuilt, to open
+    it again with what was typed (`MessageWidget.resume_edit`): a rebuild
+    for anything else (the text size, dice shown, another message saved)
+    destroyed it, mid-sentence, with nothing said."""
+
+    rewrite: bool
+    text: str
+    ooc: str | None
+    branch_name: str
+    # (the text, the note) as the editor first opened, to tell what was typed.
+    opened: tuple[str, str | None]
+    focused: bool
+    cursor: int
+
+
+@dataclass(frozen=True)
 class FailedPictureItem:
     """A picture that didn't come back, where it was meant to appear."""
 
@@ -357,6 +374,7 @@ class MessageWidget(QFrame):
         self.kind = kind
         self._ooc_text = ooc or ""
         self._ooc_editor: QPlainTextEdit | None = None
+        self._edit_opened: tuple[str, str | None] = ("", None)
         self.ooc: QLabel | None = None
         if ooc:
             self.ooc = TextBody(f"OOC — {ooc}")
@@ -570,11 +588,13 @@ class MessageWidget(QFrame):
 
     # --- inline editing (§5.3, §10) ---------------------------------------
 
-    def begin_edit(self, rewrite: bool = False) -> None:
+    def begin_edit(self, rewrite: bool = False, *, focus: bool = True) -> None:
         """Swap the body for an editor in place, so the column doesn't reflow.
 
         With `rewrite`, saving makes a new branch from this message instead of
         correcting it (the author's rule: editing an earlier message forks).
+        `focus`: the keyboard goes to the editor (not for one opened again
+        after a rebuild, `resume_edit`, unless it had it).
         """
         if self._editor is not None or not self.node_id:
             return
@@ -640,15 +660,64 @@ class MessageWidget(QFrame):
         self._ooc_editor = ooc_editor
         self._edit_row = row
         self._save_button = save
+        # What the editors held as they opened. Compared with the message
+        # itself, an editor left alone already differed: a plain text box
+        # gives a no-break space back as a space, and a line or paragraph
+        # separator as a new line.
+        self._edit_opened = self._edit_now()
         self._sync_save()
-        editor.setFocus(Qt.OtherFocusReason)
+        if focus:
+            editor.setFocus(Qt.OtherFocusReason)
+
+    def _edit_now(self) -> tuple[str, str | None]:
+        """(the text, the OOC note or None with no note's field), as typed."""
+        assert self._editor is not None
+        ooc = self._ooc_editor.toPlainText() if self._ooc_editor is not None else None
+        return self._editor.toPlainText(), ooc
 
     def edit_changed(self) -> bool:
-        """The open editor holds text other than the message's own."""
+        """The open editor holds something other than it opened with: the
+        text, the OOC note, or a new branch's name."""
         if self._editor is None:
             return False
-        ooc = self._ooc_editor.toPlainText() if self._ooc_editor is not None else self._ooc_text
-        return self._editor.toPlainText() != self.body.source or ooc != self._ooc_text
+        named = self._branch_name is not None and bool(self._branch_name.text().strip())
+        return self._edit_now() != self._edit_opened or named
+
+    def edit_state(self) -> OpenEdit:
+        """The open editor as it stands, to open it again once the view is
+        rebuilt (`resume_edit`)."""
+        assert self._editor is not None
+        text, ooc = self._edit_now()
+        focus = QApplication.focusWidget()
+        return OpenEdit(
+            rewrite=self._rewriting,
+            text=text,
+            ooc=ooc,
+            branch_name=self._branch_name.text() if self._branch_name is not None else "",
+            opened=self._edit_opened,
+            focused=focus is not None and self.isAncestorOf(focus),
+            cursor=self._editor.textCursor().position(),
+        )
+
+    def resume_edit(self, state: OpenEdit) -> None:
+        """An editor open before the view was rebuilt, open again here with
+        what was typed in it. Only what was typed: an editor left alone opens
+        on the message as it is now."""
+        self.begin_edit(state.rewrite, focus=False)
+        if self._editor is None:
+            return
+        text, ooc = state.opened
+        if state.text != text:
+            self._editor.setPlainText(state.text)
+        if self._ooc_editor is not None and state.ooc is not None and state.ooc != ooc:
+            self._ooc_editor.setPlainText(state.ooc)
+        if self._branch_name is not None:
+            self._branch_name.setText(state.branch_name)
+        if state.focused:
+            cursor = self._editor.textCursor()
+            cursor.setPosition(min(state.cursor, len(self._editor.toPlainText())))
+            self._editor.setTextCursor(cursor)
+            self._editor.setFocus(Qt.OtherFocusReason)
 
     def commit_edit(self) -> None:
         """Save, as its button does (Ctrl+Enter in the editor)."""
@@ -711,6 +780,13 @@ class MessageWidget(QFrame):
     def _commit_edit(self) -> None:
         if self._editor is None or self._busy:
             return  # the editor stays, and Save with it, until the job is done
+        if not self._rewriting and self._edit_now() == self._edit_opened:
+            # Saved as it opened: nothing to save. Saved anyway, the message
+            # was written again (a no-break space a space), and the chapter
+            # over it marked out of date and a part merged from it dropped,
+            # for nothing. A new branch from here may begin unchanged.
+            self.cancel_edit()
+            return
         text = self._editor.toPlainText()
         rewriting = self._rewriting
         name = self._branch_name.text().strip() if self._branch_name is not None else ""
@@ -1527,20 +1603,36 @@ class TranscriptView(QScrollArea):
         """The message whose editor is open (with the keyboard's focus in it,
         if `focused`), or None."""
         focus = QApplication.focusWidget()
-        for widget in self._container.findChildren(MessageWidget):
-            if self._layout.indexOf(widget) < 0 or not widget.editing():
-                continue
+        for widget in self.open_editors():
             if not focused or (focus is not None and widget.isAncestorOf(focus)):
                 return widget
         return None
 
-    def editing(self) -> bool:
-        """Whether a message's editor is open: a rebuild would destroy it."""
-        return any(
-            widget.editing()
+    def open_editors(self) -> list[MessageWidget]:
+        """Every message whose editor is open: more than one may be."""
+        return [
+            widget
             for widget in self._container.findChildren(MessageWidget)
-            if self._layout.indexOf(widget) >= 0
-        )
+            if self._layout.indexOf(widget) >= 0 and widget.editing()
+        ]
+
+    def editing(self) -> bool:
+        """Whether a message's editor is open."""
+        return bool(self.open_editors())
+
+    def _open_edits(self) -> list[tuple[str, OpenEdit]]:
+        """Every open editor as it stands, before a rebuild (`_reopen`)."""
+        return [(widget.node_id, widget.edit_state()) for widget in self.open_editors()]
+
+    def _reopen(self, edits: list[tuple[str, OpenEdit]]) -> None:
+        """The editors open before a rebuild, open again on the messages
+        still shown, with what was typed in them. A message no longer shown
+        loses its editor: the window asks before that (`_edit_allows_leave`)."""
+        for node_id, state in edits:
+            if node_id in self._unit_of:
+                widget = self.message_widget(node_id)
+                if widget is not None:
+                    widget.resume_edit(state)
 
     def add_picture(self, image: GeneratedImage, data: bytes | None) -> ImageMessageWidget:
         widget = ImageMessageWidget(image, data, chat=self._chat)
@@ -1597,6 +1689,7 @@ class TranscriptView(QScrollArea):
         whether the last message can be carried on (a private scene's rule);
         None reads it from the messages alone."""
         cast_by_id = {character.id: character for character in cast}
+        edits = self._open_edits()
         self.clear()
         self._faces_for = faces_for
 
@@ -1640,6 +1733,7 @@ class TranscriptView(QScrollArea):
         if not nodes and self._layout.count() == 1:
             self.show_placeholder(empty_text, empty_actions)
         self.scroll_to_end()
+        self._reopen(edits)
 
     def show_storyteller_view(
         self,
@@ -1657,6 +1751,7 @@ class TranscriptView(QScrollArea):
         where prose has been archived, then the prose still sent verbatim.
         Asides and pictures are left out: it never sees them."""
         cast_by_id = {character.id: character for character in cast}
+        edits = self._open_edits()
         self.clear()
         self._faces_for = None  # what the storyteller is sent: words only
 
@@ -1699,6 +1794,7 @@ class TranscriptView(QScrollArea):
         self._show_units(units)
         self._texts = [(node.id, node.content) for node in nodes]
         self.scroll_to_end()
+        self._reopen(edits)
 
     def set_chat(self, chat: bool, *, tee: bool = False) -> None:
         """Before a rebuild: whether the view is a simple chat's, and a TEE one."""
@@ -1872,11 +1968,13 @@ class TranscriptView(QScrollArea):
         never the reader's message (`_anchor_node`) or half a page past it:
         the window may run over for a while rather than cut what's on screen.
         (Dropping the anchor made the next re-anchor move the window back,
-        and paging up from the bottom of the view went round in circles.)"""
+        and paging up from the bottom of the view went round in circles.)
+        Nor a message whose editor is open (`_editing_units`)."""
         excess = self._messages(self._lo, self._hi) - MAX_BUILT
         if excess <= 0:
             return
         anchor = self._unit_of.get(self._anchor_node[0]) if self._anchor_node else None
+        editing = self._editing_units()
         if keep_top:
             if self._loose:
                 return
@@ -1886,6 +1984,8 @@ class TranscriptView(QScrollArea):
                 dropped += self._units[cut][0] is not None
             if anchor is not None:
                 cut = max(cut, self._forward(anchor, PAGE // 2))
+            if editing:
+                cut = max(cut, editing[-1] + 1)
             if cut < self._hi:
                 self._drop_range(cut, self._hi)
         else:
@@ -1896,8 +1996,21 @@ class TranscriptView(QScrollArea):
                     keep -= 1
                     taken += self._units[keep][0] is not None
                 cut = min(cut, keep)
+            if editing:
+                cut = min(cut, editing[0])
             if cut > self._lo:
                 self._drop_range(self._lo, cut)
+
+    def _editing_units(self) -> list[int]:
+        """The built units holding a message whose editor is open, in story
+        order. The window keeps them: dropped (going to a chapter or a Find
+        match far off, sending a turn while reading back), the editor went
+        with what was typed in it, and nothing was said."""
+        return sorted(
+            index
+            for index, widgets in self._unit_widgets.items()
+            if any(isinstance(widget, MessageWidget) and widget.editing() for widget in widgets)
+        )
 
     def _hold_place(self) -> None:
         """Keep the reader's first visible message where it is while a page
@@ -2010,7 +2123,11 @@ class TranscriptView(QScrollArea):
 
     def _jump_to(self, index: int) -> None:
         """Rebuild the window around unit `index`: about half a page either
-        side, a whole page in all, clamped to the story."""
+        side, a whole page in all, clamped to the story. With a message's
+        editor open, the window runs on to it instead (`_run_on_to`)."""
+        if self._editing_units():
+            self._run_on_to(index)
+            return
         self._drop_range(self._lo, self._hi)
         self._lo = self._hi = index
         lo = self._back(index, PAGE // 2)
@@ -2019,6 +2136,21 @@ class TranscriptView(QScrollArea):
         self._follow = False
         self._anchor_bottom = None
         self._build_range(lo, hi)
+        self._sync_rows()
+
+    def _run_on_to(self, index: int) -> None:
+        """The window built on, from where it is to unit `index` and half a
+        page past it, and trimmed of what no editor holds: one run of units
+        still, and the editors in it. Slower than a jump for a message far
+        off, and only while a message far off is being edited."""
+        if index < self._lo:
+            self._build_range(self._back(index, PAGE // 2), self._lo)
+            self._trim(keep_top=True)
+        elif index >= self._hi:
+            self._build_range(self._hi, self._forward(index, PAGE // 2))
+            self._trim(keep_top=False)
+        self._follow = False
+        self._anchor_bottom = None
         self._sync_rows()
 
     def jump_to_start(self) -> None:
@@ -2033,10 +2165,13 @@ class TranscriptView(QScrollArea):
     def jump_to_latest(self) -> None:
         """The newest page, followed at the bottom as when the story opened."""
         if self._units and not self.at_latest:
-            self._drop_range(self._lo, self._hi)
-            self._lo = self._hi = len(self._units)
-            self._build_range(self._back(len(self._units), PAGE), len(self._units))
-            self._sync_rows()
+            if self._editing_units():
+                self._run_on_to(len(self._units) - 1)
+            else:
+                self._drop_range(self._lo, self._hi)
+                self._lo = self._hi = len(self._units)
+                self._build_range(self._back(len(self._units), PAGE), len(self._units))
+                self._sync_rows()
         self.scroll_to_end()
 
     def ensure_at_latest(self) -> None:
