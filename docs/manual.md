@@ -940,8 +940,8 @@ whole window, as the cast board does; **Back to the story** (or Esc) brings
 the story back as it was, its job still running if one was.
 
 On the left is every character, with a search over what their card says of
-them (names, descriptions, personality, scenario, maker, notes and tags), a
-tag to list them by, and an order (by name, changed last, added last);
+them (names, descriptions, personality, scenario, greetings and examples, its
+prompts, its lorebook, maker, notes and tags), a tag to list them by, and an order (by name, changed last, added last);
 **Everyone** shows all their portraits together.
 
 ![Your characters: thirty characters from the five sample stories, each with their portrait and the story they came from, and down the left a search, tags and the list of them, with New character and Import](screenshots/your-characters.webp)

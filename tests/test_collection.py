@@ -132,3 +132,19 @@ def test_a_name_taken_is_numbered():
     taken = [collection.kept("Elena"), collection.kept("Elena (2)")]
     assert collection.unique_name("John", taken) == "John"
     assert collection.unique_name("Elena", taken) == "Elena (3)"
+
+
+def test_a_character_is_found_by_their_greetings_prompts_and_lorebook():
+    """The search read their name, description and tags; a line from a
+    greeting or a lorebook entry found nobody."""
+    from sealedlore.models.tavern import TavernFields
+
+    elena = collection.kept("Elena")
+    elena.tavern = TavernFields(
+        alternate_greetings=["The barn door creaks open."],
+        system_prompt="Answer as the farmer would.",
+        character_book={"entries": [{"keys": ["Hellsville"], "content": "Walled and wary."}]},
+    )
+    for words in ("barn door", "farmer", "hellsville", "walled wary"):
+        assert collection.matches(elena, words), words
+    assert not collection.matches(elena, "submarine")

@@ -42,6 +42,7 @@ from sealedlore.storage.tavern_cards import (
     character_from_card,
     expression_refs,
 )
+from sealedlore.storage.tavern_lore import entries_of, entry_title
 
 COLLECTION_TITLE = "Your characters"
 MAIN_CARD = "Main card"
@@ -343,6 +344,10 @@ def has_tag(character: Character, tag: str) -> bool:
 
 
 def searchable(character: Character) -> str:
+    """Everything on the card a person might look for it by: its own fields,
+    what it has for chats (greetings, examples, its prompts) and its
+    lorebook (searched by name alone, a character was found by none of
+    those)."""
     tavern = character.tavern or TavernFields()
     parts = [
         character.name,
@@ -350,19 +355,33 @@ def searchable(character: Character) -> str:
         character.summary or "",
         character.full_description or "",
         character.personality or "",
+        character.voice_notes or "",
         character.canon or "",
         info(character).version,
         tavern.scenario,
+        tavern.first_mes,
+        *tavern.alternate_greetings,
+        *tavern.group_only_greetings,
+        tavern.mes_example,
+        tavern.system_prompt,
+        tavern.post_history_instructions,
         tavern.creator,
         tavern.creator_notes,
         *tavern.tags,
     ]
+    for entry in entries_of(tavern.character_book or {}):
+        keys = entry.get("keys", entry.get("key"))
+        parts += [
+            entry_title(entry),
+            ", ".join(map(str, keys)) if isinstance(keys, list) else str(keys or ""),
+            str(entry.get("content") or ""),
+        ]
     return "\n".join(part for part in parts if part).casefold()
 
 
 def matches(character: Character, words: str) -> bool:
     """Every word of `words` somewhere on the card (its name, tags, what it
-    says of them), any case."""
+    says of them, its greetings and lorebook), any case."""
     text = searchable(character)
     return all(word in text for word in words.casefold().split())
 
