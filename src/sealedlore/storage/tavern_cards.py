@@ -907,7 +907,8 @@ def expression_refs(
     """Expression pictures as a character's pictures, labelled
     (`expression_of`, or a SealedLore card's own `labels` by name: look,
     expression, caption and framing): `keep(data, suffix, label)` stores one
-    and returns its ref. How many were in a format SealedLore doesn't keep."""
+    and returns its ref, or None when it won't keep it. How many were in a
+    format SealedLore doesn't keep, or weren't kept."""
     refs: list[ImageRef] = []
     skipped = 0
     for name, data in expressions:
@@ -919,11 +920,13 @@ def expression_refs(
             name, ("", expression_of(name), "", "")
         )
         ref = keep(data, suffix, expression)
-        if ref is not None:
-            ref.look, ref.framing = look, framing
-            if caption:
-                ref.caption = caption
-            refs.append(ref)
+        if ref is None:
+            skipped += 1
+            continue
+        ref.look, ref.framing = look, framing
+        if caption:
+            ref.caption = caption
+        refs.append(ref)
     return refs, skipped
 
 

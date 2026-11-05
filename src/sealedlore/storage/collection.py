@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Mapping, Sequence
+from pathlib import PurePosixPath
 
 from sealedlore.ids import new_id, utc_now_iso
 from sealedlore.models.character import Character
@@ -29,7 +30,7 @@ from sealedlore.models.collection import CollectionInfo
 from sealedlore.models.image import ImageRef
 from sealedlore.models.story import Story
 from sealedlore.models.tavern import CardAsset, TavernFields
-from sealedlore.storage.image_meta import picture_kind
+from sealedlore.storage.image_meta import MetadataError, picture_kind, raster_kind, strip_metadata
 from sealedlore.storage.images import REFS_DIR
 from sealedlore.storage.paths import COLLECTION_ID
 from sealedlore.storage.picture_store import PictureStore
@@ -403,6 +404,19 @@ def _listed(parts: Sequence[str]) -> str:
     return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
 
 
+def _without_hidden_data(data: bytes, clean: Callable[[bytes], bytes] | None) -> bytes | None:
+    """A picture with nothing hidden left in it: stripped, after `clean` (the
+    window's re-encode) has redrawn what can't be (a GIF, a BMP). None when
+    neither can (an iPhone's HEIC, which Qt can't read): such a picture
+    isn't kept, as no picture coming in is kept with its hidden data."""
+    if clean is not None:
+        data = clean(data)
+    try:
+        return strip_metadata(data)
+    except MetadataError:
+        return None
+
+
 def kept_from_card(
     card: TavernCard,
     store: PictureStore,
@@ -413,16 +427,17 @@ def kept_from_card(
     """A card read into the collection: the character with every field the
     card has and its pictures (its own, and any expression pictures, labelled),
     `{{char}}` and `{{user}}` left as written. `clean`: what the window does
-    to a picture whose hidden data couldn't be stripped (a re-encode).
-    And what didn't come along, in words."""
+    to a picture whose hidden data couldn't be stripped (a re-encode); a
+    picture neither can clean is left out. And what didn't come along, in
+    words."""
     character = character_from_card(card, lambda text: text, for_story=False)
     character.collection = CollectionInfo(came_from=came_from)
     notes: list[str] = []
 
     def keep(data: bytes, caption: str = "") -> ImageRef | None:
-        data = clean(data) if clean is not None else data
-        suffix = picture_kind(data)
-        if suffix is None:
+        data = _without_hidden_data(data, clean)
+        suffix = picture_kind(data) if data is not None else None
+        if data is None or suffix is None:
             return None
         ref_id = new_id()
         ref = ImageRef(id=ref_id, file=f"{REFS_DIR}/{ref_id}{suffix}", caption=caption)
@@ -458,22 +473,42 @@ def kept_from_card(
     notes += card.expression_notes
     assert character.tavern is not None
     taken: set[str] = set()
+    # A file the card names twice is the same bytes (tavern_cards reads each
+    # once): cleaned once too.
+    cleaned: dict[int, bytes | None] = {}
+    unclean: list[str] = []
     for found in card.files:
         asset = CardAsset(type=found.type, name=found.name, ext=found.ext, path=found.path)
         if found.data is None:
             asset.uri = found.uri
         else:
-            # A picture in a form that can't be stripped (a GIF) is redrawn
-            # by `clean`, as any picture brought in is; anything else (a
-            # sound, a font) is kept as it came, for the card's sake.
-            data = clean(found.data) if clean is not None else found.data
-            if picture_kind(data):
-                asset.ext = picture_kind(data).lstrip(".").replace("jpeg", "jpg")
+            data: bytes | None = found.data
+            # A picture, told by its bytes, goes in as any picture does,
+            # nothing hidden left in it; one that can't be had so is left
+            # out. Anything else (a sound, a font, a PDF or an SVG, which Qt
+            # would have redrawn as a picture) is kept as it came, for the
+            # card's sake.
+            if raster_kind(found.data) is not None:
+                if id(found.data) not in cleaned:
+                    cleaned[id(found.data)] = _without_hidden_data(found.data, clean)
+                data = cleaned[id(found.data)]
+                if data is None:
+                    unclean.append(found.name or PurePosixPath(found.path).name or found.type)
+                    continue
+                asset.ext = (picture_kind(data) or f".{asset.ext}").lstrip(".")
             asset.file = file_path(character, asset, taken)
             store.write(asset.file, data)
         character.tavern.assets.append(asset)
-    if card.files:
+    if card.files and character.tavern.assets:
         notes.append(files_said(character.tavern.assets))
+    if unclean:
+        several = len(unclean) > 1
+        notes.append(
+            f"{_count(len(unclean), 'picture')} on the card ({', '.join(unclean)}) "
+            f"{'are' if several else 'is'} in a format SealedLore can't remove hidden data "
+            f"from, so {'they were' if several else 'it was'} left out and won't go out with "
+            "the card again."
+        )
     depth = card.extensions.get("depth_prompt")
     if isinstance(depth, Mapping) and str(depth.get("prompt") or "").strip():
         notes.append(

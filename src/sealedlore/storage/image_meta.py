@@ -43,6 +43,62 @@ def picture_kind(data: bytes) -> str | None:
     return None
 
 
+# The brands of an ISO BMFF file that make it a picture (HEIF and HEIC, an
+# iPhone's photos, and AVIF; image sequences too), not a video: both begin
+# with the same `ftyp` box, and only its brands, major or compatible, tell
+# them apart.
+PICTURE_BRANDS = frozenset(
+    {
+        b"heic",
+        b"heix",
+        b"hevc",
+        b"heim",
+        b"heis",
+        b"hevm",
+        b"hevs",
+        b"mif1",
+        b"msf1",
+        b"miaf",
+        b"avif",
+        b"avis",
+    }
+)
+# A BMP's header sizes, one per version of the format.
+_BMP_HEADERS = {12, 16, 40, 52, 56, 64, 108, 124}
+
+
+def bmff_brands(data: bytes) -> list[bytes]:
+    """The brands an ISO BMFF file (an MP4, a HEIF or AVIF picture) says it
+    is in its `ftyp` box, the major brand first; none for any other file.
+    Only the box's first four kilobytes are read: a real one names a handful
+    of brands, and its size may claim gigabytes."""
+    if len(data) < 12 or data[4:8] != b"ftyp":
+        return []
+    end = min(int.from_bytes(data[:4], "big"), len(data), 4096)
+    return [data[8:12]] + [data[at : at + 4] for at in range(16, end - 3, 4)]
+
+
+def raster_kind(data: bytes) -> str | None:
+    """The file's extension by its content, for any picture made of pixels
+    this app knows: those `picture_kind` knows (and `strip_metadata`
+    strips), and GIF, BMP, TIFF, HEIF and AVIF, whose hidden data only a
+    re-encode removes (the window's, with Qt) or nothing here can. None for
+    anything else, a drawing or a document (SVG, PDF) among them."""
+    kind = picture_kind(data)
+    if kind is not None:
+        return kind
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return ".gif"
+    if data[:4] in (b"II*\x00", b"MM\x00*", b"II+\x00", b"MM\x00+"):
+        return ".tiff"
+    if data[:2] == b"BM" and int.from_bytes(data[14:18], "little") in _BMP_HEADERS:
+        return ".bmp"
+    brands = bmff_brands(data)
+    if PICTURE_BRANDS.intersection(brands):
+        return ".avif" if brands[0] in (b"avif", b"avis") else ".heic"
+    return None
+
+
 def strip_metadata(data: bytes) -> bytes:
     """The same picture with nothing but its pixels, colour profile and
     orientation. Stripping a stripped file changes nothing."""

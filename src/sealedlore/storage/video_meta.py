@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import struct
 
-from sealedlore.storage.image_meta import MetadataError
+from sealedlore.storage.image_meta import PICTURE_BRANDS, MetadataError, bmff_brands
 
 # Boxes whose children are boxes, walked into.
 _CONTAINERS = {
@@ -45,7 +45,11 @@ _ENCODER_TEXT = (b"x264 - core ", b"x265 (build ")
 
 
 def is_mp4(data: bytes) -> bool:
-    return len(data) >= 12 and data[4:8] == b"ftyp"
+    """An MP4 (or another ISO BMFF video): an `ftyp` box first, and no brand
+    in it that makes it a picture. An iPhone's HEIC and an AVIF begin the
+    same way; taken for videos, they kept their EXIF (GPS and all)."""
+    brands = bmff_brands(data)
+    return bool(brands) and not PICTURE_BRANDS.intersection(brands)
 
 
 def _boxes(data: bytes | bytearray, start: int, end: int):

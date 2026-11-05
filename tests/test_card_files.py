@@ -442,3 +442,84 @@ def test_a_renamed_file_is_renamed_wherever_a_greeting_shows_it():
         "{{img::snow}} {{audio::wind}}",
         1,
     )
+
+
+# --- pictures cleaned as they come in, and as they go out ---------------------------------
+
+
+def heif(major: bytes = b"heic", compatible: bytes = b"mif1heic") -> bytes:
+    """A HEIC (an AVIF with its brands) as a phone writes one, cut down: its
+    EXIF, with where it was taken, among the image's data."""
+
+    def box(kind: bytes, payload: bytes) -> bytes:
+        return (8 + len(payload)).to_bytes(4, "big") + kind + payload
+
+    exif = b"Exif\x00\x00MM\x00*GPSLatitude 51.5007N"
+    return box(b"ftyp", major + bytes(4) + compatible) + box(b"meta", bytes(4)) + box(b"mdat", exif)
+
+
+def charx_of_files(tmp_path: Path, files: dict[str, bytes]) -> Path:
+    """Elena with `files` (name: bytes) on her card, each under assets/other."""
+    assets = [
+        {
+            "type": "x-risu-asset",
+            "uri": f"embeded://assets/other/{name}",
+            "name": name.rsplit(".", 1)[0],
+            "ext": name.rsplit(".", 1)[1],
+        }
+        for name in files
+    ]
+    path = tmp_path / "elena.charx"
+    with zipfile.ZipFile(path, "w") as archive:
+        data = {**ELENA, "assets": assets}
+        archive.writestr("card.json", json.dumps({"spec": "chara_card_v3", "data": data}))
+        for name, raw in files.items():
+            archive.writestr(f"assets/other/{name}", raw)
+    return path
+
+
+GIF = (
+    b"GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\x00\x00\x00\x00\x00"
+    b"!\xfe\x13taken at home, 4pm\x00"  # a comment: hidden data
+    b",\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;"
+)
+PDF = b"%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n"
+SVG = b'<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4"/></svg>'
+FONT = b"\x00\x01\x00\x00" + bytes(60)
+
+
+def test_only_a_cards_pictures_are_cleaned_and_the_rest_kept_as_it_came(tmp_path: Path):
+    """The window's re-encode was run on every file, and Qt reads a PDF and
+    an SVG as pictures: they came in as PNGs."""
+    path = charx_of_files(
+        tmp_path,
+        {"sheet.pdf": PDF, "emblem.svg": SVG, "wind.mp3": WIND, "hand.ttf": FONT, "dance.gif": GIF},
+    )
+    cleaned: list[bytes] = []
+
+    def clean(data: bytes) -> bytes:
+        cleaned.append(data)
+        return png_of(9)  # as Qt redraws anything it can read
+
+    root = tmp_path / "data"
+    elena, _notes = collection.kept_from_card(read_card(path), store(root), clean=clean)
+    kept = {a.name: (a.ext, store(root).read(a.file)) for a in elena.tavern.assets}
+    assert kept["sheet"] == ("pdf", PDF) and kept["emblem"] == ("svg", SVG)
+    assert kept["wind"] == ("mp3", WIND) and kept["hand"] == ("ttf", FONT)
+    assert kept["dance"] == ("png", png_of(9)), "a GIF is redrawn: its comment goes"
+    assert cleaned == [GIF]
+
+
+def test_a_picture_nothing_can_clean_is_left_out_and_said(tmp_path: Path):
+    """An iPhone's HEIC and an AVIF were taken for videos, so nothing tried
+    to strip them, and they were kept with where they were taken. Qt can't
+    read either to redraw it."""
+    files = {"beach.heic": heif(), "dusk.avif": heif(b"avif", b"avifmif1miaf"), "barn.png": BARN}
+    root = tmp_path / "data"
+    card = read_card(charx_of_files(tmp_path, files))
+    elena, notes = collection.kept_from_card(card, store(root), clean=lambda data: data)
+    assert [a.name for a in elena.tavern.assets] == ["barn"]
+    folder = root / "characters" / collection.files_folder(elena)
+    assert not any(b"51.5007N" in file.read_bytes() for file in folder.iterdir())
+    said = " ".join(notes)
+    assert "2 pictures on the card (beach, dusk) are in a format SealedLore can't remove" in said

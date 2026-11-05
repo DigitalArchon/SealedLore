@@ -227,6 +227,35 @@ def test_a_file_that_isnt_a_video_is_refused():
         strip_video_metadata(MP4[:40])
 
 
+@pytest.mark.parametrize(
+    ("major", "compatible", "kind"),
+    [
+        (b"heic", b"mif1heic", ".heic"),  # an iPhone's photo
+        (b"mif1", b"mif1heix", ".heic"),
+        (b"avif", b"avifmif1miaf", ".avif"),
+        (b"avis", b"avismsf1", ".avif"),  # an animated AVIF
+        (b"isom", b"isommif1", ".heic"),  # a picture's brand among the compatible ones
+    ],
+)
+def test_heif_and_avif_pictures_are_not_taken_for_videos(
+    major: bytes, compatible: bytes, kind: str
+):
+    """They begin with the same `ftyp` box as an MP4: taken for videos, they
+    were never stripped, and kept their EXIF, GPS and all."""
+    from sealedlore.storage.image_meta import raster_kind
+    from sealedlore.storage.video_meta import is_mp4
+
+    payload = major + bytes(4) + compatible
+    exif = b"\0\0\0\x10mdatExif\0\0MM"
+    picture = (8 + len(payload)).to_bytes(4, "big") + b"ftyp" + payload + exif
+    assert not is_mp4(picture)
+    assert raster_kind(picture) == kind
+    # Storage can't strip one: where it would be kept, it is left out
+    # (tests/test_card_files.py).
+    assert stripped_or_same(picture) == picture
+    assert is_mp4(MP4) and raster_kind(MP4) is None
+
+
 # --- where videos live ---------------------------------------------------------------
 
 
