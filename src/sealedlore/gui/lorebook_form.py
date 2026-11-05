@@ -53,8 +53,13 @@ def _keys_text(keys: list[str]) -> str:
     return ", ".join(keys)
 
 
-def _keys_of(text: str) -> list[str]:
-    return [key.strip() for key in text.split(",") if key.strip()]
+def _order_of(value: Any) -> int:
+    """An entry's order as the box can show it: its whole number (7.5 as 7,
+    "40" as 40), and SillyTavern's own 100 for none."""
+    try:
+        return int(float(value))
+    except (TypeError, ValueError, OverflowError):
+        return 100
 
 
 class LorebookForm(QWidget):
@@ -129,8 +134,9 @@ class LorebookForm(QWidget):
         self.constant.setToolTip("Sent whatever is mentioned, keywords or not")
         self.use_regex = QCheckBox("Keywords are regular expressions")
         self.use_regex.setToolTip(
-            "A keyword written /like this/ is a pattern whatever this says. SillyTavern ticks "
-            "it on every entry of a card it makes; a plain word finds the same either way."
+            "SillyTavern reads a keyword written /like this/ as a pattern and any other as "
+            "words, whatever this says (it ticks it on every entry of a card it makes); kept "
+            "for other apps."
         )
         self.case_sensitive = QCheckBox("Keywords match only in the same case")
         for box in (self.enabled, self.constant, self.use_regex, self.case_sensitive):
@@ -225,6 +231,12 @@ class LorebookForm(QWidget):
         tavern = self._tavern
         return tavern.character_book if tavern is not None else None
 
+    @property
+    def _numbered(self) -> bool:
+        """The book is in SillyTavern's own shape: its fields go by its names."""
+        book = self._book
+        return book is not None and lore.is_numbered(book)
+
     def load(self, character: Character | None, *, row: int = 0) -> None:
         self._character = character
         self.setEnabled(character is not None)
@@ -244,9 +256,9 @@ class LorebookForm(QWidget):
 
     def _line(self, raw: dict[str, Any]) -> str:
         marks = (["always sent"] if raw.get("constant") else []) + (
-            ["switched off"] if not lore.entry_enabled(raw) else []
+            ["switched off"] if not lore.entry_enabled(raw, numbered=self._numbered) else []
         )
-        keys = lore.entry_keys(raw)
+        keys = lore.entry_keys(raw, numbered=self._numbered)
         title = lore.entry_title(raw) or (keys[0] if keys else "(no name)")
         return " · ".join([title, *marks])
 
@@ -255,7 +267,9 @@ class LorebookForm(QWidget):
         self.list.clear()
         for raw in self._entries:
             item = QListWidgetItem(self._line(raw))
-            item.setToolTip(_keys_text(lore.entry_keys(raw)) or "No keywords")
+            item.setToolTip(
+                _keys_text(lore.entry_keys(raw, numbered=self._numbered)) or "No keywords"
+            )
             self.list.addItem(item)
         shown = bool(self._entries)
         self.list.setVisible(shown)
@@ -275,9 +289,9 @@ class LorebookForm(QWidget):
         """Only the entries with every word in their name, keywords or text."""
         wanted = words.casefold().split()
         for row, raw in enumerate(self._entries):
-            text = " ".join(
-                [lore.entry_title(raw), *lore.entry_keys(raw), str(raw.get("content") or "")]
-            ).casefold()
+            keys = lore.entry_keys(raw, numbered=self._numbered)
+            text = " ".join([lore.entry_title(raw), *keys, str(raw.get("content") or "")])
+            text = text.casefold()
             self.list.setRowHidden(row, not all(word in text for word in wanted))
 
     def _book_edited(self) -> None:
@@ -307,18 +321,19 @@ class LorebookForm(QWidget):
         self.remove_button.setEnabled(raw is not None)
         if raw is None:
             return
+        numbered = self._numbered
         self._loading = True
         set_field_text(self.title, lore.entry_title(raw))
-        set_field_text(self.keys, _keys_text(lore.entry_keys(raw)))
+        set_field_text(self.keys, _keys_text(lore.entry_keys(raw, numbered=numbered)))
         self.content.setPlainText(str(raw.get("content") or ""))
-        self.enabled.setChecked(lore.entry_enabled(raw))
+        self.enabled.setChecked(lore.entry_enabled(raw, numbered=numbered))
         self.constant.setChecked(bool(raw.get("constant")))
         self.use_regex.setChecked(bool(raw.get("use_regex")))
-        self.case_sensitive.setChecked(lore.entry_case_sensitive(raw))
-        order = lore.entry_get(raw, "insertion_order")
-        self.order.setValue(order if isinstance(order, int) else 100)
-        set_field_text(self.secondary, _keys_text(lore.entry_keys(raw, "secondary_keys")))
-        self.selective.setChecked(bool(raw.get("selective")))
+        self.case_sensitive.setChecked(lore.entry_case_sensitive(raw, numbered=numbered))
+        self.order.setValue(_order_of(lore.entry_get(raw, "insertion_order", numbered=numbered)))
+        secondary = lore.entry_keys(raw, "secondary_keys", numbered=numbered)
+        set_field_text(self.secondary, _keys_text(secondary))
+        self.selective.setChecked(lore.entry_selective(raw, numbered=numbered))
         self.entry_rest.set_value(lore.entry_rest(raw))
         self._loading = False
 
@@ -326,36 +341,47 @@ class LorebookForm(QWidget):
         raw = self._current()
         if self._loading or raw is None:
             return
+        numbered = self._numbered
         if what == "title":
             lore.set_entry_title(raw, self.title.text())
         elif what == "keys":
-            lore.entry_set(raw, "keys", _keys_of(self.keys.text()))
+            lore.entry_set(raw, "keys", lore.split_keys(self.keys.text()), numbered=numbered)
         elif what == "content":
             raw["content"] = self.content.toPlainText()
         elif what is self.enabled:
-            lore.set_entry_enabled(raw, self.enabled.isChecked())
+            lore.set_entry_enabled(raw, self.enabled.isChecked(), numbered=numbered)
         elif what is self.constant:
             raw["constant"] = self.constant.isChecked()
         elif what is self.use_regex:
             raw["use_regex"] = self.use_regex.isChecked()
         elif what is self.case_sensitive:
-            lore.set_entry_case_sensitive(raw, self.case_sensitive.isChecked())
+            lore.set_entry_case_sensitive(raw, self.case_sensitive.isChecked(), numbered=numbered)
+            # A card's entry has it in its extensions too, which the JSON
+            # shows: left showing the old value, the next edit there would
+            # put it back.
+            self.entry_rest.set_value(lore.entry_rest(raw))
         elif what == "secondary":
-            lore.entry_set(raw, "secondary_keys", _keys_of(self.secondary.text()))
+            secondary = lore.split_keys(self.secondary.text())
+            lore.entry_set(raw, "secondary_keys", secondary, numbered=numbered)
         elif what == "selective":
             raw["selective"] = self.selective.isChecked()
         elif what == "order":
-            lore.entry_set(raw, "insertion_order", self.order.value())
+            lore.entry_set(raw, "insertion_order", self.order.value(), numbered=numbered)
         item = self.list.currentItem()
         if item is not None:
             item.setText(self._line(raw))
-            item.setToolTip(_keys_text(lore.entry_keys(raw)) or "No keywords")
+            item.setToolTip(_keys_text(lore.entry_keys(raw, numbered=numbered)) or "No keywords")
         self.changed.emit()
 
     def _entry_rest_edited(self, rest: dict[str, Any]) -> None:
         raw = self._current()
         if raw is not None:
             lore.set_entry_rest(raw, rest)
+            # The case is read from the extensions too: the tick says what
+            # they say now.
+            self._loading = True
+            self.case_sensitive.setChecked(lore.entry_case_sensitive(raw, numbered=self._numbered))
+            self._loading = False
             self.changed.emit()
 
     def _add(self) -> None:
@@ -364,8 +390,7 @@ class LorebookForm(QWidget):
             return
         if tavern.character_book is None:
             tavern.character_book = lore.new_book()
-        lore.add_entry(tavern.character_book)
-        self.load(self._character, row=len(lore.book_entries(tavern.character_book)) - 1)
+        self._show_new(lore.add_entry(tavern.character_book))
         self.title.setFocus()
         self.changed.emit()
 
@@ -373,10 +398,16 @@ class LorebookForm(QWidget):
         raw, book = self._current(), self._book
         if raw is None or book is None:
             return
-        new = lore.copy_entry(book, raw)
-        rows = lore.book_entries(book)
-        self.load(self._character, row=next(i for i, e in enumerate(rows) if e is new))
+        self._show_new(lore.copy_entry(book, raw))
         self.changed.emit()
+
+    def _show_new(self, new: dict[str, Any]) -> None:
+        """The list again with `new` chosen, found by itself rather than taken
+        as the last row (SillyTavern's own shape lists by display index), and
+        a search left in the box cleared, which would hide it."""
+        self.find.clear()
+        rows = lore.book_entries(self._book or {})
+        self.load(self._character, row=next(i for i, e in enumerate(rows) if e is new))
 
     def _remove(self) -> None:
         raw, book = self._current(), self._book

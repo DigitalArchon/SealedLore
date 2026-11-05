@@ -18,6 +18,9 @@ from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtWidgets import QInputDialog, QMessageBox  # noqa: E402
 
 from sealedlore.gui import window_collection  # noqa: E402
+from sealedlore.gui.lorebook_form import LorebookForm  # noqa: E402
+from sealedlore.models.character import Character  # noqa: E402
+from sealedlore.models.tavern import TavernFields  # noqa: E402
 from sealedlore.storage import collection  # noqa: E402
 from sealedlore.storage import tavern_lore as lore  # noqa: E402
 from sealedlore.storage.paths import COLLECTION_ID  # noqa: E402
@@ -91,6 +94,120 @@ def test_the_lorebook_tab_adds_changes_and_removes_entries(app, window, yes):
     ]
     assert lore.book_entries(book)[0] == before[0], "the entry already there untouched"
     assert lore.book_entries(book)[1]["extensions"] == {"depth": 2}
+
+
+def book_form(book):
+    """The Lorebook tab on its own, showing a character with `book`."""
+    form = LorebookForm()
+    form.load(Character(name="Elena", tavern=TavernFields(character_book=book)))
+    return form
+
+
+def test_a_pattern_typed_with_a_comma_stays_one_keyword(app):
+    book = {"entries": [{"id": 0, "keys": [r"/\b\d{1,3} men\b/i", "farm"], "content": "c"}]}
+    form = book_form(book)
+    form.keys.setText(form.keys.text() + ", barn")
+    assert book["entries"][0]["keys"] == [r"/\b\d{1,3} men\b/i", "farm", "barn"]
+    form.secondary.setText("/gate,door/i, wall")
+    assert book["entries"][0]["secondary_keys"] == ["/gate,door/i", "wall"]
+
+
+def test_the_case_tick_and_the_json_say_the_same(app):
+    """Ticked, a card's entry's extensions change; the JSON box showing the
+    old ones put the old value back with its next edit."""
+    entry = {
+        "id": 0,
+        "keys": ["US"],
+        "content": "c",
+        "enabled": True,
+        "extensions": {"case_sensitive": None, "probability": 100},
+    }
+    book = {"entries": [entry]}
+    form = book_form(book)
+    form.case_sensitive.setChecked(True)
+    assert entry["extensions"]["case_sensitive"] is True
+    text = form.entry_rest.text.toPlainText()
+    assert '"case_sensitive": true' in text
+    form.entry_rest.text.setPlainText(text.replace('"probability": 100', '"probability": 50'))
+    assert entry["extensions"] == {"case_sensitive": True, "probability": 50}
+    assert lore.world_from_book(book)["entries"]["0"]["caseSensitive"] is True
+    # Changed in the JSON, the tick follows what the extensions now say.
+    form.case_sensitive.setChecked(False)
+    assert entry["case_sensitive"] is False and entry["extensions"]["case_sensitive"] is False
+    form.entry_rest.text.setPlainText(text)
+    assert entry["extensions"]["case_sensitive"] is True and form.case_sensitive.isChecked()
+
+
+def test_a_new_entry_is_the_one_chosen_and_shown(app):
+    book = {
+        "entries": {
+            "0": {"uid": 0, "key": ["farm"], "content": "The farm.", "displayIndex": 5},
+            "1": {"uid": 1, "key": ["creek"], "content": "The creek.", "displayIndex": 6},
+        }
+    }
+    form = book_form(book)
+    form.add_button.click()
+    form.content.setPlainText("Red and empty.")
+    assert [e["content"] for e in lore.book_entries(book)] == [
+        "The farm.",
+        "The creek.",
+        "Red and empty.",
+    ], "typed into the new entry, not the creek"
+    # A search left in the box doesn't hide the next one, nor a copy.
+    form.find.setText("farm")
+    form.copy_button.click()
+    assert form.find.text() == "" and not form.list.isRowHidden(form.list.currentRow())
+    assert form._current()["content"] == "Red and empty." and form._current()["uid"] == 3
+    form.find.setText("creek")
+    form.add_button.click()
+    assert not form.list.isRowHidden(form.list.currentRow())
+    assert form._current()["uid"] == 4 and form._current()["content"] == ""
+
+
+def test_sillytaverns_own_entry_is_edited_under_its_own_names(app):
+    raw = {"uid": 3, "content": "Cold.", "disable": True}
+    form = book_form({"entries": {"3": raw}})
+    form.keys.setText("creek, water")
+    form.secondary.setText("winter")
+    form.order.setValue(40)
+    form.case_sensitive.setChecked(True)
+    form.enabled.setChecked(True)
+    assert (raw["key"], raw["keysecondary"], raw["order"], raw["caseSensitive"]) == (
+        ["creek", "water"],
+        ["winter"],
+        40,
+        True,
+    )
+    assert raw["disable"] is False
+    assert not {"keys", "secondary_keys", "insertion_order", "case_sensitive", "enabled"} & set(raw)
+
+
+def test_an_emptied_json_box_takes_nothing_away(app):
+    entry = {"uid": 3, "key": ["creek"], "content": "Cold.", "position": 4, "probability": 50}
+    form = book_form({"entries": {"3": entry}})
+    form.entry_rest.button.click()
+    form.entry_rest.text.setPlainText("")
+    assert entry["uid"] == 3 and entry["position"] == 4 and entry["probability"] == 50
+    assert form.entry_rest.broken() and "{}" in form.entry_rest.problem.text()
+    form.entry_rest.text.setPlainText("{}")
+    assert entry == {"key": ["creek"], "content": "Cold."}, "written out, it clears"
+
+
+def test_an_order_that_isnt_a_whole_number_shows_as_one(app):
+    book = {
+        "entries": [
+            {"id": 0, "keys": ["a"], "content": "a", "insertion_order": 7.5},
+            {"id": 1, "keys": ["b"], "content": "b", "insertion_order": "40"},
+            {"id": 2, "keys": ["c"], "content": "c", "insertion_order": "soon"},
+        ]
+    }
+    form = book_form(book)
+    shown = []
+    for row in range(3):
+        form.list.setCurrentRow(row)
+        shown.append(form.order.value())
+    assert shown == [7, 40, 100]
+    assert book["entries"][0]["insertion_order"] == 7.5, "shown, not written"
 
 
 def test_the_files_tab_adds_renames_retypes_links_and_removes(

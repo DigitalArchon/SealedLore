@@ -15,6 +15,7 @@ import says what went. Conversions are pure; only `read_lorebook` and
 
 from __future__ import annotations
 
+import itertools
 import json
 import re
 from collections import Counter
@@ -28,12 +29,13 @@ from sealedlore.storage.atomic import atomic_write_json
 
 # Far past any lorebook (a big one is a megabyte or two): something else.
 MAX_BYTES = 32 * 1024 * 1024
-# A key written /like this/i is a regular expression in SillyTavern.
-_REGEX_KEY = re.compile(r"^/.+/[a-z]*$", re.S)
-# The signs that make a key a pattern rather than words, where an entry says
-# its keys are patterns (`use_regex`). A dot is left out: "Mr. Smith" finds
-# the same either way.
-_PATTERN_SIGNS = re.compile(r"[\\^$|?*+()\[\]{}]")
+# A key SillyTavern reads as a regular expression (its `parseRegexFromString`):
+# /pattern/flags whole, the pattern as short as will do, and no slash inside
+# it that isn't escaped.
+_REGEX_KEY = re.compile(r"/([\s\S]+?)/([gimsuy]*)")
+_UNESCAPED_SLASH = re.compile(r"(^|[^\\])/")
+# SillyTavern's switches at the head of an entry's text (`KNOWN_DECORATORS`).
+_DECORATORS = ("@@activate", "@@dont_activate")
 
 
 class LorebookError(ValueError):
@@ -70,10 +72,86 @@ _ORDER = {kind: index for index, kind in enumerate(_LEFT_OUT)}
 
 def _keys(value: Any) -> list[str]:
     if isinstance(value, str):
-        value = value.split(",")
+        value = split_keys(value)
     if not isinstance(value, list):
         return []
-    return [str(key).strip() for key in value if str(key).strip()]
+    # A null in the list is no keyword at all (it was the keyword "None").
+    return [text for key in value if key is not None and (text := str(key).strip())]
+
+
+def is_pattern(key: str) -> bool:
+    """Whether SillyTavern reads `key` as a regular expression, as its
+    `parseRegexFromString` does: written /like this/ with flags from
+    "gimsuy", each once, and every slash inside escaped. Any other key it
+    matches as written, whatever the entry's `use_regex` says (it never
+    reads that: it ticks it on every entry of a card it writes). Whether
+    JavaScript would compile the pattern itself isn't checked here, its
+    patterns not being Python's: a broken one counts as a pattern too."""
+    match = _REGEX_KEY.fullmatch(key)
+    if match is None or _UNESCAPED_SLASH.search(match.group(1)):
+        return False
+    flags = match.group(2)
+    return len(set(flags)) == len(flags)
+
+
+def split_keys(text: str) -> list[str]:
+    """Keywords typed on one line, split at their commas as SillyTavern's
+    own box splits them (world-info.js `customTokenizer`): a comma inside a
+    pattern begun /like this and not yet closed doesn't split, and one
+    finished that is no pattern after all is split at its commas. The line
+    is read again whole after every key, so two things go as a pattern
+    needs rather than as SillyTavern has them: only a slash where a keyword
+    begins opens one (opened at any slash, "AC/DC, Queen" ran into one
+    keyword, though a pattern can only begin with its slash), and the
+    line's end finishes the last one too (left open, "/me, barn" did)."""
+    keys: list[str] = []
+    start, opened, closed = 0, False, False
+    for index, char in enumerate(text):
+        if char == "/" and (index == 0 or text[index - 1] != "\\"):
+            if not opened and not text[start:index].strip():
+                opened = True
+            elif opened:
+                closed = True
+        elif char == "," and (not opened or closed):
+            keys += _finished(text[start:index])
+            start, opened, closed = index + 1, False, False
+    return keys + _finished(text[start:])
+
+
+def _finished(token: str) -> list[str]:
+    token = token.strip()
+    if token.startswith("/") and not is_pattern(token):
+        return [part.strip() for part in token.split(",") if part.strip()]
+    return [token] if token else []
+
+
+def _decorators(content: str) -> tuple[list[str], str]:
+    """SillyTavern's `parseDecorators`, exactly: the @@ lines an entry's
+    text begins with that it knows, and the text with all its @@ lines
+    taken off the head. A line of @@@ is a fallback, read only after one it
+    didn't know; a text of nothing but @@ lines keeps them, as there."""
+
+    def known(line: str) -> bool:
+        line = line[1:] if line.startswith("@@@") else line
+        return any(line.startswith(name) for name in _DECORATORS)
+
+    if not content.startswith("@@"):
+        return [], content
+    found: list[str] = []
+    rest, fallback = content, False
+    lines = content.split("\n")
+    for index, line in enumerate(lines):
+        if not line.startswith("@@"):
+            rest = "\n".join(lines[index:])
+            break
+        if line.startswith("@@@") and not fallback:
+            continue
+        if known(line):
+            found.append(line[1:] if line.startswith("@@@") else line)
+            fallback = False
+        else:
+            fallback = True
+    return found, rest
 
 
 def _int(value: Any, default: int) -> int:
@@ -83,12 +161,24 @@ def _int(value: Any, default: int) -> int:
         return default
 
 
+def is_numbered(book: Mapping[str, Any]) -> bool:
+    """A lorebook in SillyTavern's own shape (entries keyed by number), not a
+    card's (entries in a list)."""
+    return isinstance(book.get("entries"), Mapping)
+
+
+def _shown_at(entry: Mapping[str, Any]) -> int:
+    """Where SillyTavern lists an entry of its own shape: by its display
+    index, else its number."""
+    return _int(_or(entry.get("displayIndex"), entry.get("uid")), 0)
+
+
 def entries_of(book: Mapping[str, Any]) -> list[dict[str, Any]]:
     """A lorebook's entries, in its own order, whichever shape it has."""
     entries = book.get("entries")
     if isinstance(entries, Mapping):
         found = [entry for entry in entries.values() if isinstance(entry, Mapping)]
-        return sorted(found, key=lambda entry: _int(entry.get("displayIndex", entry.get("uid")), 0))
+        return sorted(found, key=_shown_at)
     if isinstance(entries, list):
         return [entry for entry in entries if isinstance(entry, Mapping)]
     return []
@@ -109,52 +199,67 @@ def lore_from_book(
     book: Mapping[str, Any], fill: Callable[[str], str] = lambda text: text
 ) -> LoreImport:
     """A lorebook's entries as lore. `fill` puts names in for {{char}} and
-    {{user}} (storage/tavern_cards.py `macro_filler`)."""
+    {{user}} (storage/tavern_cards.py `macro_filler`). Each field is read
+    as the Lorebook tab edits it, under the book's own names for it; the
+    switches SillyTavern reads at the head of an entry's text are read as
+    there and taken off it: @@activate sends the entry whatever is said,
+    @@dont_activate never (and @@activate wins, being looked at first)."""
     result = LoreImport()
+    numbered = is_numbered(book)
     for number, raw in enumerate(entries_of(book), start=1):
-        content = fill(str(raw.get("content") or "")).strip()
+        decorators, text = _decorators(str(raw.get("content") or ""))
+        content = fill(text).strip()
         if not content:
             result.left_out["empty"] += 1
             continue
-        primary = _keys(raw.get("key", raw.get("keys")))
-        # A pattern can't be a keyword: one written /like this/ (SillyTavern's
-        # way), or one using a pattern's signs in an entry whose keys are
-        # patterns. A plain word finds the same either way, and SillyTavern
-        # marks every entry of a card it writes so ("ST keys are always
-        # regex", its source): read as no keywords, an entry of a card made
-        # there reached a story with none.
-        patterns = bool(raw.get("use_regex"))
-        keywords = [
-            key
-            for key in primary
-            if not _REGEX_KEY.match(key) and not (patterns and _PATTERN_SIGNS.search(key))
+        # SillyTavern puts the names in before it reads a key, and takes only
+        # one written /like this/ as a pattern (`is_pattern`), which can't be
+        # a keyword. Any other it matches as written, whatever `use_regex`
+        # says, and so does a story: told by their signs where that was on
+        # (every card SillyTavern writes), "{{user}}'s farm" and "(the) king"
+        # were lost.
+        primary = [
+            key for key in (fill(key).strip() for key in entry_keys(raw, numbered=numbered)) if key
         ]
+        keywords = [key for key in primary if not is_pattern(key)]
         if len(keywords) < len(primary):
             result.left_out["regex"] += 1
-        secondary = _keys(raw.get("keysecondary", raw.get("secondary_keys")))
-        if secondary and raw.get("selective", True):
+        secondary = entry_keys(raw, "secondary_keys", numbered=numbered)
+        if secondary and entry_selective(raw, numbered=numbered):
             result.left_out["secondary"] += 1
-        for kind in _features(raw):
+        for kind in _features(raw, numbered):
             result.left_out[kind] += 1
-        title = str(raw.get("comment") or raw.get("name") or "").strip()
-        title = title or (keywords[0] if keywords else f"Entry {number}")
-        disabled = raw.get("disable", not raw.get("enabled", True))
+        title = entry_title(raw)
+        title = fill(title) if title else (keywords[0] if keywords else f"Entry {number}")
+        always_on, enabled = bool(raw.get("constant")), entry_enabled(raw, numbered=numbered)
+        if "@@activate" in decorators:
+            always_on = True
+        elif "@@dont_activate" in decorators:
+            enabled = False
         result.entries.append(
             LoreEntry(
-                title=fill(title),
+                title=title,
                 content=content,
-                keywords=list(dict.fromkeys(fill(key) for key in keywords)),
-                always_on=bool(raw.get("constant")),
-                enabled=not disabled,
+                keywords=list(dict.fromkeys(keywords)),
+                always_on=always_on,
+                enabled=enabled,
             )
         )
     return result
 
 
-def _features(raw: Mapping[str, Any]) -> Iterable[str]:
+def _features(raw: Mapping[str, Any], numbered: bool) -> Iterable[str]:
     """The kinds of what a SillyTavern entry does that SealedLore doesn't."""
     extensions = raw.get("extensions") if isinstance(raw.get("extensions"), Mapping) else {}
-    merged = {**extensions, **raw}
+    if numbered:
+        merged = {**extensions, **raw}
+    else:
+        # A card's entry is read by its extensions first, as SillyTavern
+        # reads one (`convertCharacterBook`): its own `position` only says
+        # before or after the character, and read first it hid a place at a
+        # depth or by the Author's Note there.
+        set_there = {name: value for name, value in extensions.items() if value is not None}
+        merged = {**raw, **set_there}
     probability = merged.get("probability")
     if (
         merged.get("useProbability", True)
@@ -331,6 +436,29 @@ def _written(fields: Mapping[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in fields.items() if value is not _ABSENT}
 
 
+def _js_key(value: Any) -> str:
+    """A value as JavaScript names an object's key by it (`String(value)`):
+    null, true and false in its words, a whole number without a ".0"."""
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, float) and value.is_integer() and abs(value) < 1e21:
+        return str(int(value))
+    return str(value)
+
+
+def _array_index(key: str) -> bool:
+    """A key JavaScript puts first in an object, in number order: a whole
+    number written plainly ("7", never "07" or "²"), below 2**32 - 1."""
+    return (
+        key.isascii()
+        and key.isdigit()
+        and (key == "0" or not key.startswith("0"))
+        and int(key) < 2**32 - 1
+    )
+
+
 def world_from_book(book: Mapping[str, Any]) -> dict[str, Any]:
     """A card's lorebook as SillyTavern's lorebook file, as SillyTavern makes
     one from a card (`convertCharacterBook`), with the card's book itself
@@ -353,7 +481,7 @@ def world_from_book(book: Mapping[str, Any]) -> dict[str, Any]:
         def x(name: str, default: Any, ext: Mapping[str, Any] = ext) -> Any:
             return _or(ext.get(name), default)
 
-        entries[str(uid)] = _written(
+        entries[_js_key(uid)] = _written(
             {
                 **_WORLD_TEMPLATE,
                 "uid": uid,
@@ -404,10 +532,11 @@ def world_from_book(book: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _js_order(entries: Mapping[str, Any]) -> list[Any]:
-    """An object's values in JavaScript's order: whole-number keys first,
+    """An object's values in JavaScript's order: its array-index keys first,
     ascending, then the rest as written."""
-    numbered = sorted((key for key in entries if str(key).isdigit()), key=int)
-    return [entries[key] for key in [*numbered, *(k for k in entries if not str(k).isdigit())]]
+    first = sorted((key for key in entries if _array_index(str(key))), key=int)
+    rest = [key for key in entries if not _array_index(str(key))]
+    return [entries[key] for key in [*first, *rest]]
 
 
 def book_from_world(world: Mapping[str, Any], name: str = "") -> dict[str, Any]:
@@ -499,8 +628,12 @@ def write_world(path: Path, book: Mapping[str, Any]) -> None:
 # Your characters keep a card's lorebook as it came (TavernFields.character_book):
 # the spec's shape (entries in a list), or SillyTavern's own (entries keyed
 # by number) that some cards carry. The editor reads and writes each field
-# under whichever name the entry already uses, so an edit changes only what
-# was edited and the book goes out again in its own shape.
+# under the name the book's own shape gives it (`numbered`: SillyTavern's,
+# else the spec's), or the other where the entry has only that, so an edit
+# changes only what was edited, reaches whoever reads the book, and the book
+# goes out again in its own shape. Following the entry alone, an entry of
+# SillyTavern's shape missing a field was given the spec's name for it,
+# which SillyTavern never reads.
 
 # A field as the editor names it: the spec's name, then SillyTavern's.
 _ALIASES = {
@@ -532,17 +665,20 @@ EDITED = (
 BOOK_EDITED = ("name", "description", "entries")
 
 
-def _name_in(raw: Mapping[str, Any], field_name: str) -> str:
+def _name_in(raw: Mapping[str, Any], field_name: str, numbered: bool) -> str:
     names = _ALIASES.get(field_name, (field_name,))
+    names = names[::-1] if numbered else names
     return next((name for name in names if name in raw), names[0])
 
 
-def entry_get(raw: Mapping[str, Any], field_name: str, default: Any = None) -> Any:
-    return raw.get(_name_in(raw, field_name), default)
+def entry_get(
+    raw: Mapping[str, Any], field_name: str, default: Any = None, *, numbered: bool = False
+) -> Any:
+    return raw.get(_name_in(raw, field_name, numbered), default)
 
 
-def entry_set(raw: dict[str, Any], field_name: str, value: Any) -> None:
-    raw[_name_in(raw, field_name)] = value
+def entry_set(raw: dict[str, Any], field_name: str, value: Any, *, numbered: bool = False) -> None:
+    raw[_name_in(raw, field_name, numbered)] = value
 
 
 def entry_title(raw: Mapping[str, Any]) -> str:
@@ -557,36 +693,58 @@ def set_entry_title(raw: dict[str, Any], title: str) -> None:
         raw["name"] = title
 
 
-def entry_keys(raw: Mapping[str, Any], field_name: str = "keys") -> list[str]:
-    return _keys(entry_get(raw, field_name))
+def entry_keys(
+    raw: Mapping[str, Any], field_name: str = "keys", *, numbered: bool = False
+) -> list[str]:
+    return _keys(entry_get(raw, field_name, numbered=numbered))
 
 
-def entry_case_sensitive(raw: Mapping[str, Any]) -> bool:
-    """The spec's own field, or SillyTavern's (in the entry's extensions,
-    which is the one it reads)."""
+def entry_case_sensitive(raw: Mapping[str, Any], *, numbered: bool = False) -> bool:
+    """SillyTavern's own entry by its `caseSensitive`; a card's by the spec's
+    field or its extensions' (the one SillyTavern reads there)."""
+    if numbered:
+        return bool(entry_get(raw, "case_sensitive", numbered=True))
     ext = raw.get("extensions")
     in_ext = ext.get("case_sensitive") if isinstance(ext, Mapping) else None
     return bool(entry_get(raw, "case_sensitive") or in_ext)
 
 
-def set_entry_case_sensitive(raw: dict[str, Any], on: bool) -> None:
-    entry_set(raw, "case_sensitive", on)
+def set_entry_case_sensitive(raw: dict[str, Any], on: bool, *, numbered: bool = False) -> None:
+    """A card's entry has it in its extensions too, made for it if need be:
+    SillyTavern reads only those there (`convertCharacterBook`), so written
+    only where they had it, the tick never reached it."""
+    entry_set(raw, "case_sensitive", on, numbered=numbered)
+    if not numbered and raw.get("extensions") is None:
+        raw["extensions"] = {}
     ext = raw.get("extensions")
-    if isinstance(ext, dict) and "case_sensitive" in ext:
+    if isinstance(ext, dict) and (not numbered or "case_sensitive" in ext):
         ext["case_sensitive"] = on
 
 
-def entry_enabled(raw: Mapping[str, Any]) -> bool:
-    if "enabled" in raw:
-        return bool(raw["enabled"])
-    return not raw.get("disable", False)
+def entry_enabled(raw: Mapping[str, Any], *, numbered: bool = False) -> bool:
+    """SillyTavern's own entry is switched off by `disable`, a card's by the
+    spec's `enabled`; the other counts where an entry has only that."""
+    names = ("disable", "enabled") if numbered else ("enabled", "disable")
+    name = next((name for name in names if name in raw), None)
+    if name is None:
+        return True
+    return not raw[name] if name == "disable" else bool(raw[name])
 
 
-def set_entry_enabled(raw: dict[str, Any], enabled: bool) -> None:
-    if "disable" in raw and "enabled" not in raw:
+def set_entry_enabled(raw: dict[str, Any], enabled: bool, *, numbered: bool = False) -> None:
+    """Under the book's own name for it, and kept in step under the other
+    where the entry has that too."""
+    if numbered or "disable" in raw:
         raw["disable"] = not enabled
-    else:
+    if not numbered or "enabled" in raw:
         raw["enabled"] = enabled
+
+
+def entry_selective(raw: Mapping[str, Any], *, numbered: bool = False) -> bool:
+    """Whether its second keywords count: SillyTavern's own entry is selective
+    unless it says not (its new entry is), a card's only if it says so
+    (`selective || false`, convertCharacterBook)."""
+    return bool(raw.get("selective", numbered))
 
 
 def book_entries(book: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -600,12 +758,19 @@ def new_book(name: str = "") -> dict[str, Any]:
 
 
 def add_entry(book: dict[str, Any]) -> dict[str, Any]:
-    """A new, empty entry at the end of the book, in the book's own shape."""
+    """A new, empty entry at the end of the book, in the book's own shape.
+    In SillyTavern's, numbered as it numbers one (`getFreeWorldEntryUid`):
+    the first number no entry is kept under. Numbered past the highest
+    `uid`, it took the place of an entry kept under that number but with
+    another uid, or none."""
     entries = book.get("entries")
     if isinstance(entries, Mapping):
         found = [entry for entry in entries.values() if isinstance(entry, Mapping)]
-        uid = max([*(_int(entry.get("uid"), -1) for entry in found), -1]) + 1
+        taken = {str(key) for key in entries}
+        uid = next(number for number in itertools.count() if str(number) not in taken)
         raw = _entry(uid, LoreEntry(title="", content=""))
+        # Listed after the others, as SillyTavern puts an entry it moves in.
+        raw["displayIndex"] = max([*(_shown_at(entry) for entry in found), -1]) + 1
         entries[str(uid)] = raw
         return raw
     if not isinstance(entries, list):

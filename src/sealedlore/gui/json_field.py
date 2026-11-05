@@ -6,6 +6,9 @@ The card's own fields have fields of their own in Your characters; this is
 for the rest, so nothing on a card is out of reach (the author, Nov 2026:
 "change, add or remove anything at all"). It is applied only while it reads
 as a JSON object; otherwise it says why, and the last good value stands.
+An emptied box doesn't read as one either: taken as {}, a slip of the
+keyboard took everything under it away (an entry's number, its extensions,
+every setting SillyTavern keeps), so clearing it takes a written {}.
 """
 
 from __future__ import annotations
@@ -77,7 +80,10 @@ class JsonField(QWidget):
     def _edited(self) -> None:
         if self._loading:
             return
-        source = self.text.toPlainText().strip() or "{}"
+        source = self.text.toPlainText().strip()
+        if not source:
+            self._say("Empty (write {} to clear it): kept as it last was.")
+            return
         try:
             value = json.loads(source)
         except json.JSONDecodeError as exc:

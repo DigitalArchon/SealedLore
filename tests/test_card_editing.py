@@ -64,15 +64,17 @@ def test_a_spec_entry_is_edited_under_its_own_names():
 def test_sillytaverns_own_shape_stays_its_own():
     book = {"entries": {"3": dict(WORLD_BOOK["entries"]["3"])}}
     raw = lore.book_entries(book)[0]
-    lore.entry_set(raw, "keys", ["creek", "water"])
-    lore.set_entry_enabled(raw, True)
+    lore.entry_set(raw, "keys", ["creek", "water"], numbered=True)
+    lore.set_entry_enabled(raw, True, numbered=True)
     assert raw["key"] == ["creek", "water"] and "keys" not in raw
     assert raw["disable"] is False and "enabled" not in raw
     added = lore.add_entry(book)
-    assert added["uid"] == 4 and sorted(book["entries"]) == ["3", "4"]
+    # The first free number, as SillyTavern numbers one, and listed last.
+    assert added["uid"] == 0 and sorted(book["entries"]) == ["0", "3"]
+    assert lore.book_entries(book) == [raw, added]
     assert "key" in added, "a new entry in the book's own shape"
     lore.remove_entry(book, raw)
-    assert list(book["entries"]) == ["4"]
+    assert list(book["entries"]) == ["0"]
 
 
 def test_entries_are_added_copied_and_removed():
@@ -261,7 +263,9 @@ def test_entries_numbered_by_javascripts_order():
 
 def test_a_cards_entry_marked_as_patterns_keeps_its_plain_keywords():
     """SillyTavern marks every entry of a card it writes as patterns; read as
-    no keywords, such an entry reached a story with none."""
+    no keywords, such an entry reached a story with none. It never reads the
+    mark: only a key written /like this/ is a pattern, any other is matched
+    as written, signs and all."""
     book = {
         "entries": [
             {"keys": ["Hellsville", "the town", "Mr. Smith"], "content": "x", "use_regex": True},
@@ -271,7 +275,7 @@ def test_a_cards_entry_marked_as_patterns_keeps_its_plain_keywords():
     read = lore.lore_from_book(book)
     assert [entry.keywords for entry in read.entries] == [
         ["Hellsville", "the town", "Mr. Smith"],
-        ["pack"],
+        ["wolf(ves)?", "pack"],
     ]
     assert read.left_out["regex"] == 1, "only the entry that had patterns says so"
 
@@ -283,3 +287,103 @@ def test_a_copy_lands_right_after_its_original():
     lore.set_entry_title(second, "Second")
     lore.copy_entry(book, first)
     assert [lore.entry_title(e) for e in lore.book_entries(book)] == ["First", "First", "Second"]
+
+
+def test_a_new_entry_in_sillytaverns_shape_takes_a_free_number_and_comes_last():
+    """getFreeWorldEntryUid: the first number nothing is kept under. Past the
+    highest uid, it took the place of entries kept with none."""
+    farm, creek = {"key": ["farm"], "content": "The farm."}, {"key": ["creek"], "content": "Cold."}
+    book = {"entries": {"0": farm, "1": creek}}
+    added = lore.add_entry(book)
+    assert (added["uid"], book["entries"]["0"], book["entries"]["1"]) == (2, farm, creek)
+    assert lore.book_entries(book)[-1] is added
+    # A gap is filled, and the new one is still listed after the others.
+    book = {
+        "entries": {
+            "0": {"uid": 0, "content": "a", "displayIndex": 5},
+            "2": {"uid": 2, "content": "b", "displayIndex": 6},
+        }
+    }
+    added = lore.add_entry(book)
+    assert (added["uid"], added["displayIndex"], sorted(book["entries"])) == (1, 7, ["0", "1", "2"])
+    copy = lore.copy_entry(book, book["entries"]["0"])
+    assert (copy["uid"], copy["displayIndex"], copy["content"]) == (3, 8, "a")
+    assert lore.book_entries(book)[-2:] == [added, copy]
+
+
+def test_each_field_goes_by_the_name_of_the_books_shape():
+    """An entry of SillyTavern's own shape missing a field got the spec's
+    name for it (`keys`, `insertion_order`, `enabled`), which SillyTavern
+    never reads."""
+    raw = {"uid": 3, "content": "Cold.", "disable": True}
+    lore.entry_set(raw, "keys", ["creek"], numbered=True)
+    lore.entry_set(raw, "secondary_keys", ["winter"], numbered=True)
+    lore.entry_set(raw, "insertion_order", 40, numbered=True)
+    lore.set_entry_case_sensitive(raw, True, numbered=True)
+    assert {"key", "keysecondary", "order", "caseSensitive"} <= set(raw)
+    spec_names = {"keys", "secondary_keys", "insertion_order", "case_sensitive", "extensions"}
+    assert not spec_names & set(raw)
+    unswitched = {"uid": 4, "key": ["farm"], "content": "c"}
+    lore.set_entry_enabled(unswitched, False, numbered=True)
+    assert unswitched["disable"] is True and "enabled" not in unswitched
+    assert lore.world_from_book({"entries": {"4": unswitched}})["entries"]["4"]["disable"]
+    # A card's entry under both names is edited, and read, under the spec's.
+    card = {"id": 0, "keys": ["old"], "key": ["old"], "content": "c", "enabled": True}
+    lore.entry_set(card, "keys", ["new"])
+    assert (card["keys"], lore.entry_keys(card)) == (["new"], ["new"])
+    assert lore.lore_from_book({"entries": [card]}).entries[0].keywords == ["new"]
+    switched = {"keys": ["farm"], "content": "c", "disable": False}
+    lore.set_entry_enabled(switched, False)
+    assert switched["enabled"] is False and switched["disable"] is True
+
+
+def test_the_case_tick_reaches_sillytavern_from_a_cards_book():
+    """SillyTavern reads a card's entry's case from its extensions alone
+    (convertCharacterBook): written only where they had it, it never got
+    there."""
+    book = lore.new_book("Doomsville")
+    raw = lore.add_entry(book)
+    raw["content"] = "Cold."
+    lore.set_entry_case_sensitive(raw, True)
+    assert raw["case_sensitive"] is True and raw["extensions"] == {"case_sensitive": True}
+    assert lore.world_from_book(book)["entries"]["0"]["caseSensitive"] is True
+    bare = {"keys": ["US"], "content": "c", "enabled": True}
+    lore.set_entry_case_sensitive(bare, True)
+    assert bare["extensions"] == {"case_sensitive": True}, "made for it"
+    assert lore.entry_case_sensitive(bare)
+    lore.set_entry_case_sensitive(bare, False)
+    assert bare["extensions"]["case_sensitive"] is False and not lore.entry_case_sensitive(bare)
+
+
+def test_keywords_typed_on_a_line_are_split_as_sillytavern_splits_them():
+    split = lore.split_keys
+    assert split(r"/\b\d{1,3} men\b/i, farm") == [r"/\b\d{1,3} men\b/i", "farm"]
+    assert split("farm,/a,b/i") == ["farm", "/a,b/i"]
+    assert split(r"/a\/b,c/, d") == [r"/a\/b,c/", "d"], "an escaped slash closes nothing"
+    # A finished one that is no pattern after all is split at its commas.
+    assert split("/a,b/x, farm") == ["/a", "b/x", "farm"]
+    assert split("farm, /me, barn") == ["farm", "/me", "barn"], "the end finishes the last"
+    # Only a slash where a keyword begins opens a pattern.
+    assert split("AC/DC, Queen, 24/7") == ["AC/DC", "Queen", "24/7"]
+    assert split(" farm , ,barn,") == ["farm", "barn"]
+    for keys in (["/x/", "y"], ["/usr", "bin"], ["/a,b/i", "/c/"], ["and/or", "it"]):
+        assert split(", ".join(keys)) == keys, keys
+    # A card that keeps its keys as one line is read the same way.
+    assert lore.entry_keys({"keys": "farm, /a,b/i"}) == ["farm", "/a,b/i"]
+
+
+def test_books_go_by_javascripts_own_rules_for_keys():
+    world = {
+        "entries": {
+            "01": {"uid": 1, "content": "c"},
+            "²": {"uid": 2, "content": "d"},
+            "1": {"uid": 1, "content": "b"},
+            "4294967295": {"uid": 3, "content": "e"},
+            "0": {"uid": 0, "content": "a"},
+        }
+    }
+    entries = lore.book_from_world(world)["entries"]
+    assert [entry["content"] for entry in entries] == ["a", "b", "c", "d", "e"]
+    card = {"entries": [{"id": None, "keys": ["a"], "content": "x"}]}
+    card["entries"] += [{"id": True, "content": "y"}, {"id": 3.0, "content": "z"}]
+    assert list(lore.world_from_book(card)["entries"]) == ["null", "true", "3"]

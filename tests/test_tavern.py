@@ -37,6 +37,7 @@ from sealedlore.storage.tavern_lore import (
     LorebookError,
     book_from_lore,
     character_book_from_lore,
+    is_pattern,
     looks_like_lorebook,
     lore_from_book,
     read_lorebook,
@@ -470,6 +471,136 @@ def test_a_lorebook_becomes_lore_and_says_what_it_left_out():
 def test_a_cards_own_lorebook_reads_the_same():
     entries = lore_from_book(ELENA["character_book"]).entries
     assert [(e.title, e.keywords) for e in entries] == [("Hellsville", ["Hellsville", "the town"])]
+
+
+def card_entry(**fields) -> dict:
+    """A card's entry as SillyTavern writes one (convertWorldInfoToCharacterBook)."""
+    return {
+        "id": 0,
+        "keys": ["farm"],
+        "secondary_keys": [],
+        "comment": "The farm",
+        "content": "The farm is cold.",
+        "constant": False,
+        "selective": True,
+        "insertion_order": 100,
+        "enabled": True,
+        "position": "before_char",
+        "use_regex": True,
+        "extensions": {"position": 0, "probability": 100, "useProbability": True},
+        **fields,
+    }
+
+
+def test_only_a_key_written_like_a_pattern_is_one():
+    """SillyTavern puts the names in, then reads a key as a pattern only if it
+    is written /like this/ whole (parseRegexFromString), whatever `use_regex`
+    says: told by their signs, these keys of a card it wrote were lost."""
+    keys = [
+        "{{char}}",
+        "{{user}}'s farm",
+        "(the) king",
+        "Who goes there?",
+        "C++",
+        "/howl/i",
+        "/path/to",
+        "/wolf/x",
+        "/twice/ii",
+        None,
+        "Hellsville",
+    ]
+    read = lore_from_book({"entries": [card_entry(keys=keys)]}, macro_filler("Elena", "John"))
+    assert read.entries[0].keywords == [
+        "Elena",
+        "John's farm",
+        "(the) king",
+        "Who goes there?",
+        "C++",
+        "/path/to",
+        "/wolf/x",
+        "/twice/ii",
+        "Hellsville",
+    ], "a slash inside, or flags JavaScript refuses, make it words; a null is no keyword"
+    assert read.left_out == {"regex": 1}, "only the pattern is said to be left out"
+    assert lore_from_book({"entries": [card_entry()]}).left_out == {}
+
+
+def test_a_pattern_is_told_as_sillytavern_tells_one():
+    for pattern in ("/howl/i", r"/a\/b/", "/a,b/gimsuy", "/x/", "/(?:hidden)\\s+caves?/"):
+        assert is_pattern(pattern), pattern
+    for words in ("/path/to", "/usr/bin/", "and/or", "//", "/a/I", "/a/x", "/a/gg", "/a/ "):
+        assert not is_pattern(words), words
+
+
+def test_the_switches_at_the_head_of_an_entrys_text_are_read_as_sillytavern_reads_them():
+    """parseDecorators: @@activate sends the entry whatever is said,
+    @@dont_activate never, @@activate first; a @@@ line is a fallback for
+    one it didn't know; only whole lines count, and the lines go."""
+    texts = [
+        "@@activate\nThe farm is haunted.",
+        "@@dont_activate\nThe cellar.",
+        "@@dont_activate\n@@activate\nBoth.",
+        "@@@activate\nA fallback with nothing to fall back from.",
+        "@@remember\n@@@dont_activate\nFallen back.",
+        "@@activate now\nNot a whole line.",
+        "The farm.\n@@activate",
+        "@@activate",
+    ]
+    book = {"entries": [card_entry(content=text, constant=False) for text in texts]}
+    read = lore_from_book(book)
+    assert [(e.content, e.always_on, e.enabled) for e in read.entries] == [
+        ("The farm is haunted.", True, True),
+        ("The cellar.", False, False),
+        ("Both.", True, True),
+        ("A fallback with nothing to fall back from.", False, True),
+        ("Fallen back.", False, False),
+        ("Not a whole line.", False, True),
+        ("The farm.\n@@activate", False, True),
+        ("@@activate", True, True),
+    ], "a text of nothing but switches keeps them, as there"
+    assert [entry["content"] for entry in book["entries"]] == texts, "the card keeps its text"
+
+
+def test_a_cards_entry_is_placed_by_its_extensions():
+    """convertCharacterBook reads a card's entry by its extensions first: its
+    own `position` only says before or after the character."""
+    at_depth = card_entry(position="after_char", extensions={"position": 4, "depth": 2})
+    after = card_entry(position="after_char", extensions={"position": 1})
+    unset = card_entry(position="after_char", extensions={"position": None, "probability": 40})
+    read = lore_from_book({"entries": [at_depth, after, unset]})
+    assert read.left_out == {"placement": 1, "probability": 1}
+    # SillyTavern's own entry by its own fields first.
+    world = {"entries": {"0": {"uid": 0, "key": ["farm"], "content": "c", "position": 0}}}
+    world["entries"]["0"]["extensions"] = {"position": 4}
+    assert lore_from_book(world).left_out == {}
+
+
+def test_second_keywords_count_where_each_shape_says_they_do():
+    """A card's entry is selective only if it says so (convertCharacterBook's
+    `selective || false`); SillyTavern's own is unless it says not."""
+    card = [
+        {"keys": ["farm"], "secondary_keys": ["door"], "content": "a"},
+        {"keys": ["farm"], "secondary_keys": ["door"], "content": "b", "selective": True},
+    ]
+    assert lore_from_book({"entries": card}).left_out == {"secondary": 1}
+    own = {
+        "0": {"uid": 0, "key": ["farm"], "keysecondary": ["door"], "content": "a"},
+        "1": {"uid": 1, "key": ["farm"], "keysecondary": ["door"], "content": "b"},
+    }
+    own["1"]["selective"] = False
+    assert lore_from_book({"entries": own}).left_out == {"secondary": 1}
+
+
+def test_a_story_takes_the_fields_the_lorebook_tab_edits():
+    """An entry with a field under both names gives a story the one the
+    Lorebook tab edits: the spec's in a card's book, SillyTavern's in its own."""
+    card = {"keys": ["new"], "key": ["old"], "content": "c", "enabled": False, "disable": False}
+    [entry] = lore_from_book({"entries": [card]}).entries
+    assert (entry.keywords, entry.enabled) == (["new"], False)
+    own = {"uid": 0, "keys": ["old"], "key": ["new"], "content": "c", "enabled": False}
+    own["disable"] = False
+    [entry] = lore_from_book({"entries": {"0": own}}).entries
+    assert (entry.keywords, entry.enabled) == (["new"], True)
 
 
 def test_lore_goes_out_and_comes_back(tmp_path: Path):
