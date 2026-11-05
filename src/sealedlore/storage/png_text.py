@@ -7,12 +7,17 @@ A SillyTavern character card is a PNG with its card in a text chunk
 from __future__ import annotations
 
 import zlib
+from collections.abc import Callable
 
 from sealedlore.storage.image_meta import PNG_SIGNATURE
 
 # A compressed chunk's text may not inflate past this: a card is a few
 # hundred kilobytes, and a chunk that claims more is not one.
 MAX_INFLATED = 16 * 1024 * 1024
+# Nor may all the text read from one picture come to more than this, however
+# it was compressed: a card's PNG may be no larger (tavern_cards.MAX_BYTES),
+# and a few small chunks can inflate to gigabytes.
+MAX_TEXT = 64 * 1024 * 1024
 
 
 class PngTextError(ValueError):
@@ -40,20 +45,28 @@ def _chunks(data: bytes) -> list[tuple[bytes, bytes, int, int]]:
 
 def _inflated(body: bytes) -> bytes:
     inflater = zlib.decompressobj()
-    text = inflater.decompress(body, MAX_INFLATED)
-    if inflater.unconsumed_tail:
+    # A byte past the limit, so text that runs on past it is told from text
+    # that ends at it.
+    text = inflater.decompress(body, MAX_INFLATED + 1)
+    if inflater.unconsumed_tail or len(text) > MAX_INFLATED:
         raise PngTextError("a compressed text chunk is too large")
     return text
 
 
-def text_chunks(data: bytes) -> dict[str, str]:
-    """The picture's text, by keyword: tEXt, zTXt and iTXt alike. A chunk
-    that can't be read is passed over; the first of a keyword wins."""
+def text_chunks(data: bytes, wanted: Callable[[str], bool] | None = None) -> dict[str, str]:
+    """The picture's text, by keyword: tEXt, zTXt and iTXt alike, or only
+    the keywords `wanted` takes (the rest are never inflated). A chunk that
+    can't be read is passed over; the first of a keyword wins. PngTextError
+    when what is read comes to more than MAX_TEXT."""
     found: dict[str, str] = {}
+    total = 0
     for kind, body, _start, _stop in _chunks(data):
         if kind not in (b"tEXt", b"zTXt", b"iTXt") or b"\0" not in body:
             continue
-        keyword, rest = body.split(b"\0", 1)
+        raw_keyword, rest = body.split(b"\0", 1)
+        keyword = raw_keyword.decode("latin-1")
+        if keyword in found or (wanted is not None and not wanted(keyword)):
+            continue
         try:
             if kind == b"tEXt":
                 text = rest.decode("latin-1")
@@ -65,7 +78,12 @@ def text_chunks(data: bytes) -> dict[str, str]:
                 text = (_inflated(value) if compressed else value).decode("utf-8")
         except (ValueError, IndexError, zlib.error):
             continue
-        found.setdefault(keyword.decode("latin-1"), text)
+        total += len(text)
+        if total > MAX_TEXT:
+            raise PngTextError(
+                f"its text comes to more than {MAX_TEXT // (1024 * 1024)} MB, far past any card's"
+            )
+        found[keyword] = text
     return found
 
 

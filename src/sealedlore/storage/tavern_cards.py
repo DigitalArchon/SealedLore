@@ -26,7 +26,9 @@ import binascii
 import io
 import json
 import re
+import struct
 import zipfile
+import zlib
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -59,6 +61,11 @@ from sealedlore.storage.tavern_lore import (
     read_json,
 )
 
+try:
+    from lzma import LZMAError
+except ImportError:  # a Python built without it reads no LZMA member either
+    LZMAError = zipfile.BadZipFile  # type: ignore[misc,assignment]
+
 CARD_SUFFIXES = (".png", ".json", ".charx")
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 # Far past any card (a big PNG card is a few megabytes): something else.
@@ -74,9 +81,32 @@ MAX_INFLATED = 32 * 1024 * 1024
 MAX_EXPRESSIONS = 120
 MAX_EXPRESSION_BYTES = 96 * 1024 * 1024
 # A card's other files (backgrounds, pictures its greetings show, sounds):
-# RisuAI's run to hundreds, and its CHARX files to tens of megabytes.
+# RisuAI's run to hundreds, and its CHARX files to tens of megabytes. The
+# links among them count too.
 MAX_FILES = 1000
 MAX_FILE_BYTES = 384 * 1024 * 1024
+# Deeper than any card's JSON nests (a lorebook entry's extensions sit a few
+# levels down): past it, copying or saving the character recursed too far.
+MAX_NESTING = 100
+# Half of a UTF-16 pair, as a broken escape in a card's JSON ("\ud800")
+# leaves it: no file holds one in UTF-8, so every save after it failed.
+_HALF_PAIR = re.compile("[\ud800-\udfff]")
+# What reading a damaged zip raises besides BadZipFile: a broken deflate
+# stream (zlib.error), a member cut short (EOFError), a way of compressing
+# zipfile can't read, deflate64 or AES (NotImplementedError, a
+# RuntimeError), an encrypted member (RuntimeError), and what its other
+# decompressors and its header readers raise.
+_DAMAGED: tuple[type[Exception], ...] = (
+    zipfile.BadZipFile,
+    zipfile.LargeZipFile,
+    zlib.error,
+    EOFError,
+    RuntimeError,
+    OSError,
+    ValueError,
+    struct.error,
+    LZMAError,
+)
 SPEC_V2 = "chara_card_v2"
 SPEC_V3 = "chara_card_v3"
 PORTRAIT_CAPTION = "portrait"
@@ -249,17 +279,53 @@ def _card_of(
     name: str,
     picture: bytes | None = None,
     member: Callable[[str], bytes | None] | None = None,
+    size: Callable[[str], int | None] | None = None,
 ) -> TavernCard:
-    """A card from its fields, its files read through `member` (a CHARX's
-    archive, a PNG's asset chunks; none for JSON, whose files can only be
-    data: URLs or links)."""
+    """A card from its fields, its files sized through `size` and read
+    through `member` (a CHARX's archive, a PNG's asset chunks; none for
+    JSON, whose files can only be data: URLs or links)."""
+    data = _mended(data, name)
     found = card_fields(data)
     if found is None:
         raise CardError(f"{name} isn't a character card.")
     fields, spec = found
     card = TavernCard(fields=fields, picture=picture, spec=spec)
-    _read_assets(card, member or (lambda _path: None))
+    _read_assets(card, _Held(member or (lambda _path: None), size or (lambda _path: None)))
     return card
+
+
+def _mended(data: Any, name: str) -> Any:
+    """A card's (or a lorebook's) JSON as SealedLore can keep it: every half
+    of a UTF-16 pair in its text made a replacement character, and refused
+    (CardError) when it nests deeper than MAX_NESTING. Walked, never
+    recursed into, so a deep one is said rather than crashed on."""
+
+    def text(value: str) -> str:
+        return _HALF_PAIR.sub("\N{REPLACEMENT CHARACTER}", value)
+
+    if isinstance(data, str):
+        return text(data)
+    stack: list[tuple[Any, int]] = [(data, 1)]
+    while stack:
+        item, depth = stack.pop()
+        if depth > MAX_NESTING:
+            raise _too_deep(name)
+        if isinstance(item, dict):
+            if any(isinstance(key, str) and _HALF_PAIR.search(key) for key in item):
+                mended = {(text(k) if isinstance(k, str) else k): v for k, v in item.items()}
+                item.clear()
+                item.update(mended)
+            children = list(item.items())
+        elif isinstance(item, list):
+            children = list(enumerate(item))
+        else:
+            continue
+        for key, value in children:
+            if isinstance(value, dict | list):
+                stack.append((value, depth + 1))
+            elif isinstance(value, str) and _HALF_PAIR.search(value):
+                item[key] = text(value)
+    return data
 
 
 def _decoded(text: str, name: str) -> Any:
@@ -267,62 +333,100 @@ def _decoded(text: str, name: str) -> Any:
         return json.loads(base64.b64decode(text.strip(), validate=False).decode("utf-8"))
     except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise CardError(f"{name}'s card data can't be read.") from exc
+    except RecursionError as exc:
+        raise _too_deep(name) from exc
+
+
+def _too_deep(name: str) -> CardError:
+    return CardError(
+        f"{name} is nested far deeper than any card or lorebook is, so it can't be read."
+    )
+
+
+def _card_text(keyword: str) -> bool:
+    """A PNG card's own text: the card (V3's and V2's) and the files it
+    holds. Nothing else in the picture is inflated or read."""
+    return keyword in ("ccv3", "chara") or keyword.startswith("chara-ext-asset_")
 
 
 def _png_card(data: bytes, name: str) -> TavernCard:
     try:
-        texts = text_chunks(data)
+        texts = text_chunks(data, _card_text)
     except PngTextError as exc:
         raise CardError(f"{name}: {exc}.") from exc
 
-    def member(path: str) -> bytes | None:
+    def chunk(path: str) -> str | None:
         # The spec's "chara-ext-asset_:{path}"; RisuAI has written it
         # without the colon too.
         for keyword in (f"chara-ext-asset_:{path}", f"chara-ext-asset_{path}"):
             if keyword in texts:
-                try:
-                    return base64.b64decode(texts[keyword].strip(), validate=False)
-                except (binascii.Error, ValueError):
-                    return None
+                return texts[keyword]
         return None
+
+    def member(path: str) -> bytes | None:
+        text = chunk(path)
+        try:
+            return base64.b64decode(text.strip(), validate=False) if text is not None else None
+        except (binascii.Error, ValueError):
+            return None
+
+    def size(path: str) -> int | None:
+        text = chunk(path)
+        return len(text) * 3 // 4 if text is not None else None
 
     # V3 first, as SillyTavern reads it: a card written by both has both.
     for keyword in ("ccv3", "chara"):
         if keyword in texts:
-            return _card_of(_decoded(texts[keyword], name), name, stripped_or_same(data), member)
+            parsed = _decoded(texts[keyword], name)
+            return _card_of(parsed, name, stripped_or_same(data), member, size)
     raise CardError(f"{name} is a picture with no character card in it.")
 
 
 def _charx_card(source: BinaryIO, name: str) -> TavernCard:
     try:
-        with zipfile.ZipFile(source) as archive:
-            card = _member(archive, "card.json", name)
-            if card is None:
-                raise CardError(f"{name} has no card.json in it.")
-            try:
-                parsed = json.loads(card.decode("utf-8-sig"))
-            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-                raise CardError(f"{name}'s card.json isn't valid JSON.") from exc
-
-            def member(path: str) -> bytes | None:
-                try:
-                    return _member(archive, path, name)
-                except CardError:
-                    return None  # too large: said with the files not read
-
-            return _card_of(parsed, name, member=member)
-    except zipfile.BadZipFile as exc:
+        archive = zipfile.ZipFile(source)
+    except _DAMAGED as exc:
         raise CardError(f"{name} isn't a CHARX file.") from exc
+    with archive:
+        card = _member(archive, "card.json", name)
+        if card is None:
+            raise CardError(f"{name} has no card.json in it.")
+        try:
+            parsed = json.loads(card.decode("utf-8-sig"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise CardError(f"{name}'s card.json isn't valid JSON.") from exc
+        except RecursionError as exc:
+            raise _too_deep(name) from exc
+
+        def member(path: str) -> bytes | None:
+            try:
+                return _member(archive, path, name)
+            except CardError:
+                return None  # too large or damaged: said with the files not read
+
+        def size(path: str) -> int | None:
+            try:
+                return archive.getinfo(path).file_size
+            except KeyError:
+                return None
+
+        return _card_of(parsed, name, member=member, size=size)
 
 
 def _member(archive: zipfile.ZipFile, member: str, name: str) -> bytes | None:
+    """A member's bytes, None when the archive has none by that name;
+    CardError when it is too large to read or too damaged to."""
     try:
         info = archive.getinfo(member)
     except KeyError:
         return None
     if info.file_size > MAX_INFLATED:
         raise CardError(f"{name}: {member} is too large.")
-    return archive.read(info)
+    try:
+        # zipfile reads no more than the size it was told, and checks it.
+        return archive.read(info)
+    except _DAMAGED as exc:
+        raise CardError(f"{name}: {member} is damaged and can't be read.") from exc
 
 
 def _embedded(uri: str) -> str | None:
@@ -333,24 +437,51 @@ def _embedded(uri: str) -> str | None:
     return None
 
 
-def _asset_source(
-    uri: str, member: Callable[[str], bytes | None]
-) -> tuple[str, bytes | None] | None:
-    """(where the card holds it, its data) for a file the card holds: a path
-    in the card ("embeded://", "__asset:") or a data: URL. None for a link
-    (https://…, ccdefault:), which is never fetched."""
-    path = _embedded(uri)
-    if path is not None:
-        return path, member(path)
-    if uri.startswith("data:"):
+class _Held:
+    """The files a card holds, as its assets name them (`uri`): a path in the
+    card, sized by `size` and read by `read` (a CHARX's members, a PNG's
+    chunks), or a data: URL. Each is sized before it is read, so a file past
+    a limit is never read at all, and read once however many name it: a
+    small CHARX naming one large member forty times took seconds and half a
+    gigabyte. A link (https://…, ccdefault:) isn't held: never fetched."""
+
+    def __init__(
+        self, read: Callable[[str], bytes | None], size: Callable[[str], int | None]
+    ) -> None:
+        self._read, self._size = read, size
+        self._data: dict[tuple[str, str], bytes | None] = {}
+
+    @staticmethod
+    def holds(uri: str) -> bool:
+        return _embedded(uri) is not None or uri.startswith("data:")
+
+    def size(self, uri: str) -> int | None:
+        """How large it is, before it is read; None when the card hasn't it."""
+        path = _embedded(uri)
+        if path is not None:
+            return self._size(path)
         header, _comma, body = uri.partition(",")
-        try:
-            if ";base64" in header:
-                return "", base64.b64decode(body, validate=False)
-            return "", unquote_to_bytes(body)
-        except (binascii.Error, ValueError):
-            return "", None
-    return None
+        return len(body) * 3 // 4 if ";base64" in header else len(body)
+
+    def data(self, uri: str) -> bytes | None:
+        """Its bytes, their hidden data removed where that can be done; None
+        when it can't be read."""
+        path = _embedded(uri)
+        key = ("path", path) if path is not None else ("data", uri)
+        if key not in self._data:
+            raw = self._read(path) if path is not None else _data_url(uri)
+            self._data[key] = stripped_or_same(raw) if raw else None
+        return self._data[key]
+
+
+def _data_url(uri: str) -> bytes | None:
+    header, _comma, body = uri.partition(",")
+    try:
+        if ";base64" in header:
+            return base64.b64decode(body, validate=False)
+        return unquote_to_bytes(body)
+    except (binascii.Error, ValueError):
+        return None
 
 
 def _extension(value: object, path: str = "", data: bytes | None = None) -> str:
@@ -363,14 +494,15 @@ def _extension(value: object, path: str = "", data: bytes | None = None) -> str:
     return ext if re.fullmatch(r"[a-z0-9]{1,10}", ext) else "bin"
 
 
-def _read_assets(card: TavernCard, member: Callable[[str], bytes | None]) -> None:
+def _read_assets(card: TavernCard, held: _Held) -> None:
     """Every file the card's `assets` names, where SealedLore keeps it: the
     main icon its picture (a PNG card's is the PNG itself), "emotion" files its
     expressions (MAX_EXPRESSIONS, MAX_EXPRESSION_BYTES), everything else (and
-    expressions past those) its files, with their data where the card holds
-    it and as links where it doesn't (never fetched). The spec asks for every
-    file to be kept so the card can go out whole, and for the user to be told
-    of any that couldn't be."""
+    expressions past those) its files (MAX_FILES, MAX_FILE_BYTES), with their
+    data where the card holds it and as links where it doesn't (never
+    fetched). Each limit is held to before a file is read. The spec asks for
+    every file to be kept so the card can go out whole, and for the user to
+    be told of any that couldn't be."""
     assets = card.fields.get("assets")
     entries = [a for a in assets if isinstance(a, Mapping)] if isinstance(assets, list) else []
     icons = [a for a in entries if a.get("type") == "icon"]
@@ -381,44 +513,56 @@ def _read_assets(card: TavernCard, member: Callable[[str], bytes | None]) -> Non
         kind = str(asset.get("type") or "").strip() or "other"
         label = str(asset.get("name") or "").strip()
         uri = str(asset.get("uri") or "").strip()
-        source = _asset_source(uri, member)
         if asset is main:
-            if source is None:
+            if not held.holds(uri):
                 # ccdefault: (a PNG card's own picture) or a link.
                 linked_picture = card.picture is None and uri != "ccdefault:"
                 continue
             if card.picture is None:
-                if source[1]:
-                    card.picture = stripped_or_same(source[1])
-                else:
+                card.picture = held.data(uri)
+                if card.picture is None:
                     unread += 1
             continue
-        path, data = source if source is not None else ("", None)
-        if source is not None and not data:
-            unread += 1
-            continue
-        if (
-            kind == "emotion"
-            and data
-            and len(card.expressions) < MAX_EXPRESSIONS
-            and expression_bytes + len(data) <= MAX_EXPRESSION_BYTES
-        ):
-            expression_bytes += len(data)
-            card.expressions.append((label or PurePosixPath(path).stem, stripped_or_same(data)))
-            continue
-        if data is not None:
-            if len(card.files) >= MAX_FILES or file_bytes + len(data) > MAX_FILE_BYTES:
+        if not held.holds(uri):
+            # A link, kept as the card's own and never fetched.
+            if len(card.files) >= MAX_FILES:
                 left += 1
                 continue
-            file_bytes += len(data)
-            data = stripped_or_same(data)
+            card.files.append(
+                CardFile(type=kind, name=label, ext=_extension(asset.get("ext"), uri), uri=uri)
+            )
+            continue
+        size = held.size(uri)
+        if not size:
+            unread += 1
+            continue
+        path = _embedded(uri) or ""
+        if (
+            kind == "emotion"
+            and len(card.expressions) < MAX_EXPRESSIONS
+            and expression_bytes + size <= MAX_EXPRESSION_BYTES
+        ):
+            data = held.data(uri)
+            if data is None:
+                unread += 1
+                continue
+            expression_bytes += size
+            card.expressions.append((label or PurePosixPath(path).stem, data))
+            continue
+        if len(card.files) >= MAX_FILES or file_bytes + size > MAX_FILE_BYTES:
+            left += 1
+            continue
+        data = held.data(uri)
+        if data is None:
+            unread += 1
+            continue
+        file_bytes += size
         card.files.append(
             CardFile(
                 type=kind,
                 name=label,
                 ext=_extension(asset.get("ext"), path or uri, data),
                 path=path,
-                uri="" if source is not None else uri,
                 data=data,
             )
         )
@@ -465,30 +609,35 @@ def expressions_from_zip(path: Path) -> tuple[list[tuple[str, bytes]], list[str]
     found: list[tuple[str, bytes]] = []
     total = left = 0
     try:
-        with zipfile.ZipFile(path) as archive:
-            for info in archive.infolist():
-                if info.is_dir() or Path(info.filename).suffix.lower() not in (
-                    ".png",
-                    ".jpg",
-                    ".jpeg",
-                    ".webp",
-                ):
-                    continue
-                if (
-                    len(found) >= MAX_EXPRESSIONS
-                    or info.file_size > MAX_INFLATED
-                    or total + info.file_size > MAX_EXPRESSION_BYTES
-                ):
-                    left += 1
-                    continue
-                data = archive.read(info)
-                if picture_kind(data) is None:
-                    left += 1
-                    continue
-                total += len(data)
-                found.append((Path(info.filename).stem, stripped_or_same(data)))
-    except (OSError, zipfile.BadZipFile) as exc:
+        archive = zipfile.ZipFile(path)
+    except _DAMAGED as exc:
         raise CardError(f"{Path(path).name} isn't a zip of pictures: {exc}") from exc
+    with archive:
+        for info in archive.infolist():
+            if info.is_dir() or Path(info.filename).suffix.lower() not in (
+                ".png",
+                ".jpg",
+                ".jpeg",
+                ".webp",
+            ):
+                continue
+            if (
+                len(found) >= MAX_EXPRESSIONS
+                or info.file_size > MAX_INFLATED
+                or total + info.file_size > MAX_EXPRESSION_BYTES
+            ):
+                left += 1
+                continue
+            try:
+                data = archive.read(info)
+            except _DAMAGED:
+                left += 1  # damaged: the rest of the pack is read
+                continue
+            if picture_kind(data) is None:
+                left += 1
+                continue
+            total += len(data)
+            found.append((Path(info.filename).stem, stripped_or_same(data)))
     return found, _expression_notes(left, 0)
 
 
@@ -497,9 +646,12 @@ def read_card(path: Path) -> TavernCard:
     suffix = path.suffix.lower()
     if suffix == ".json":
         try:
-            return _card_of(read_json(path), path.name)
+            parsed = read_json(path)
         except LorebookError as exc:
             raise CardError(str(exc)) from exc
+        except RecursionError as exc:
+            raise _too_deep(path.name) from exc
+        return _card_of(parsed, path.name)
     if suffix not in CARD_SUFFIXES:
         raise CardError(f"{path.name} isn't a card: a card is a .png, .json or .charx file.")
     limit = MAX_BYTES if suffix == ".png" else MAX_ARCHIVE_BYTES
@@ -543,10 +695,12 @@ def tavern_from_file(
         parsed = json_of(data, name)
     except LorebookError as exc:
         raise CardError(f"{name} is neither a character card nor a lorebook: {exc}") from exc
+    except RecursionError as exc:
+        raise _too_deep(name) from exc
     if not lorebook and looks_like_card(parsed):
         return _card_of(parsed, name, stripped_or_same(picture) if picture else None)
     if looks_like_lorebook(parsed):
-        return parsed
+        return _mended(parsed, name)
     raise CardError(f"{name} is neither a character card nor a lorebook.")
 
 
@@ -557,7 +711,7 @@ def tavern_kind(path: Path) -> str | None:
         return None
     try:
         data = read_json(path)
-    except LorebookError:
+    except (LorebookError, RecursionError):
         return None
     if looks_like_card(data):
         return "card"

@@ -6,6 +6,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import struct
 import zipfile
 import zlib
 from pathlib import Path
@@ -15,8 +16,11 @@ import pytest
 from sealedlore.engine.rules import render_cast_sheet
 from sealedlore.models.character import Character, Competence
 from sealedlore.models.lore import LoreEntry
-from sealedlore.storage import tavern_cards
+from sealedlore.storage import collection, png_text, tavern_cards
+from sealedlore.storage.paths import COLLECTION_ID
+from sealedlore.storage.picture_store import DiskPictures
 from sealedlore.storage.png_text import text_chunks, with_text
+from sealedlore.storage.repository import save_story_bundle
 from sealedlore.storage.scenario import bundle_from_scenario
 from sealedlore.storage.tavern_cards import (
     CardError,
@@ -31,6 +35,7 @@ from sealedlore.storage.tavern_cards import (
     read_card,
     scenario_from_card,
     tavern_from_file,
+    tavern_kind,
     write_card,
 )
 from sealedlore.storage.tavern_lore import (
@@ -114,6 +119,48 @@ def test_text_goes_into_a_png_and_comes_back_out():
     # In place of the old one, not beside it.
     again = with_text(data, {"chara": "def"})
     assert text_chunks(again) == {"other": "x", "chara": "def"}
+
+
+def png_chunk(kind: bytes, body: bytes) -> bytes:
+    crc = zlib.crc32(kind + body) & 0xFFFFFFFF
+    return len(body).to_bytes(4, "big") + kind + body + crc.to_bytes(4, "big")
+
+
+def with_chunks(png: bytes, *chunks: bytes) -> bytes:
+    """`png` with `chunks` just before its end (its last twelve bytes)."""
+    return png[:-12] + b"".join(chunks) + png[-12:]
+
+
+# A megabyte of text in a kilobyte, as a compressed chunk.
+INFLATES = zlib.compress(b"A" * 1024 * 1024, 9)
+
+
+def test_a_png_cards_other_text_is_never_inflated(tmp_path: Path, monkeypatch):
+    """Twenty small chunks of other text, each inflating to a megabyte (to
+    sixteen, as one could be made): each was inflated, and a 300 KB card
+    took 385 MB to read."""
+    inflated: list[bytes] = []
+    real = png_text._inflated
+    monkeypatch.setattr(png_text, "_inflated", lambda body: inflated.append(body) or real(body))
+    notes = [png_chunk(b"zTXt", f"note{n}".encode() + b"\0\0" + INFLATES) for n in range(20)]
+    path = tmp_path / "elena.png"
+    path.write_bytes(with_chunks(png_card(tmp_path, {"chara": v2()}).read_bytes(), *notes))
+    assert read_card(path).name == "Elena"
+    assert inflated == []
+
+
+def test_a_png_cards_own_text_is_held_to_a_total(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(png_text, "MAX_TEXT", 3 * 1024 * 1024)
+    files = [
+        png_chunk(b"zTXt", f"chara-ext-asset_:{n}".encode() + b"\0\0" + INFLATES) for n in range(4)
+    ]
+    path = tmp_path / "elena.png"
+    path.write_bytes(with_chunks(png_card(tmp_path, {"chara": v2()}).read_bytes(), *files))
+    with pytest.raises(CardError, match="its text comes to more than 3 MB"):
+        read_card(path)
+    # Within it, the card's own compressed text is read as before.
+    path.write_bytes(with_chunks(png_card(tmp_path, {"chara": v2()}).read_bytes(), files[0]))
+    assert text_chunks(path.read_bytes())["chara-ext-asset_:0"] == "A" * 1024 * 1024
 
 
 # --- reading cards ------------------------------------------------------------------
@@ -214,6 +261,176 @@ def test_what_isnt_a_card_is_said_plainly(tmp_path: Path, name: str, content: by
     with pytest.raises(CardError, match=said):
         read_card(path)
     assert not is_card_file(path)
+
+
+# --- damaged cards --------------------------------------------------------------------
+
+SOUND = b"ID3\x03" + bytes(4000)
+
+
+def charx_with_a_sound(tmp_path: Path, *, stored: bool = False) -> Path:
+    """Elena with her picture, a barn and a sound: deflated, or stored, so a
+    byte changed in it is a bad CRC rather than a broken stream."""
+    data = {
+        **ELENA,
+        "assets": [
+            {"type": "icon", "uri": "embeded://assets/icon/main.png", "name": "main"},
+            {"type": "x-risu-asset", "uri": "embeded://assets/other/wind.mp3", "name": "wind"},
+            {"type": "background", "uri": "embeded://assets/other/barn.png", "name": "barn"},
+        ],
+    }
+    path = tmp_path / "elena.charx"
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("card.json", json.dumps({"spec": "chara_card_v3", "data": data}))
+        archive.writestr("assets/icon/main.png", tiny_png())
+        method = zipfile.ZIP_STORED if stored else zipfile.ZIP_DEFLATED
+        archive.writestr("assets/other/wind.mp3", SOUND, compress_type=method)
+        archive.writestr("assets/other/barn.png", tiny_png())
+    return path
+
+
+def damaged(data: bytes, member: str, how: str) -> bytes:
+    """A zip with one member damaged as a bad download or another tool
+    leaves one: in its local header, its central entry, or its data."""
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        central = archive.start_dir
+        for info in archive.infolist():
+            if info.filename == member:
+                break
+            central += 46 + len(info.filename.encode()) + len(info.extra) + len(info.comment)
+    local = info.header_offset
+    raw = bytearray(data)
+    name_length, extra_length = struct.unpack_from("<HH", raw, local + 26)
+    body = local + 30 + name_length + extra_length
+    if how == "broken stream":
+        raw[body : body + 4] = b"\xff\xff\xff\xff"
+    elif how == "bad CRC":
+        raw[body + 100] ^= 0x01
+    elif how in ("deflate64", "AES"):
+        method = 9 if how == "deflate64" else 99
+        struct.pack_into("<H", raw, local + 8, method)
+        struct.pack_into("<H", raw, central + 10, method)
+    elif how == "encrypted":
+        for flags in (local + 6, central + 8):
+            struct.pack_into("<H", raw, flags, struct.unpack_from("<H", raw, flags)[0] | 1)
+    elif how == "cut short":
+        struct.pack_into("<I", raw, central + 20, 10_000_000)
+    return bytes(raw)
+
+
+@pytest.mark.parametrize(
+    "how", ["broken stream", "bad CRC", "deflate64", "AES", "encrypted", "cut short"]
+)
+def test_a_damaged_file_in_a_charx_is_left_out_and_said(tmp_path: Path, how: str):
+    """Each of these escaped as zlib's, zipfile's or Python's own error,
+    which the window doesn't catch, and the card failed with nothing said;
+    one cut short failed the whole card as "not a CHARX"."""
+    path = charx_with_a_sound(tmp_path, stored=how == "bad CRC")
+    path.write_bytes(damaged(path.read_bytes(), "assets/other/wind.mp3", how))
+    by_link = tavern_from_file(io.BytesIO(path.read_bytes()), "elena.charx")
+    for card in (read_card(path), by_link):
+        assert card.name == "Elena" and card.picture is not None
+        assert [f.name for f in card.files] == ["barn"]
+        assert any("couldn't be read" in note for note in card.expression_notes)
+
+
+def test_a_charx_whose_card_is_damaged_is_refused_in_words(tmp_path: Path):
+    path = charx_with_a_sound(tmp_path)
+    path.write_bytes(damaged(path.read_bytes(), "card.json", "broken stream"))
+    with pytest.raises(CardError, match="card.json is damaged"):
+        read_card(path)
+    pack = tmp_path / "pack.zip"
+    with zipfile.ZipFile(pack, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("elena/joy.png", tiny_png() + bytes(400))
+        archive.writestr("elena/anger.png", tiny_png())
+    pack.write_bytes(damaged(pack.read_bytes(), "elena/joy.png", "broken stream"))
+    found, notes = expressions_from_zip(pack)
+    assert [name for name, _data in found] == ["anger"] and notes
+
+
+@pytest.mark.parametrize("depth", [150, 200_000])
+def test_a_card_nested_past_any_real_one_is_refused_in_words(tmp_path: Path, depth: int):
+    """Two hundred thousand brackets escaped as a RecursionError; a hundred
+    and fifty were read, and copying the character later recursed too far."""
+    fields = '{"name": "Elena", "description": "x", "extensions": {"deep": '
+    text = '{"spec": "chara_card_v2", "data": ' + fields + "[" * depth + "]" * depth + "}}}"
+    path = tmp_path / "elena.json"
+    path.write_text(text)
+    with pytest.raises(CardError, match="nested far deeper than any card"):
+        read_card(path)
+    with pytest.raises(CardError, match="nested far deeper than any card"):
+        tavern_from_file(io.BytesIO(text.encode()), "elena.json")
+    charx = tmp_path / "elena.charx"
+    with zipfile.ZipFile(charx, "w") as archive:
+        archive.writestr("card.json", text)
+    with pytest.raises(CardError, match="nested far deeper than any card"):
+        read_card(charx)
+    if depth > 1000:
+        assert tavern_kind(path) is None
+
+
+def test_half_a_character_in_a_cards_json_is_mended_so_it_can_be_kept(tmp_path: Path):
+    """A broken escape ("\\ud800") read as half a UTF-16 pair: no file holds
+    one in UTF-8, so every save of Your characters failed after it came in."""
+    half = chr(0xD800)
+    data = {**ELENA, "description": f"Keeps the farm {half} north.", "tags": [half]}
+    path = tmp_path / "elena.json"
+    path.write_text(json.dumps({"spec": "chara_card_v3", "data": {**data, "x" + half: 1}}))
+    card = read_card(path)
+    assert card.text("description") == "Keeps the farm \N{REPLACEMENT CHARACTER} north."
+    root = tmp_path / "data"
+    elena, _notes = collection.kept_from_card(card, DiskPictures(COLLECTION_ID, root))
+    bundle = collection.load_collection(root)
+    bundle.cast.append(elena)
+    save_story_bundle(bundle, root=root)
+    assert collection.load_collection(root).cast[0].tavern.tags == ["\N{REPLACEMENT CHARACTER}"]
+
+
+# --- what a card holds, within limits ---------------------------------------------------
+
+
+def test_a_file_the_card_names_many_times_is_read_once_within_the_limits(
+    tmp_path: Path, monkeypatch
+):
+    """A 31 KB CHARX naming one 31 MB member forty times read it forty times,
+    keeping copies to the limit: 2.9 s and 524 MB."""
+    assets = [
+        {"type": "x-risu-asset", "uri": "embeded://assets/other/big.bin", "name": f"big{n}"}
+        for n in range(40)
+    ]
+    path = tmp_path / "elena.charx"
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(
+            "card.json", json.dumps({"spec": "chara_card_v3", "data": {**ELENA, "assets": assets}})
+        )
+        archive.writestr("assets/other/big.bin", bytes(1000))
+    monkeypatch.setattr(tavern_cards, "MAX_FILE_BYTES", 3500)
+    reads: list[str] = []
+    real = zipfile.ZipFile.read
+
+    def read(archive, name, pwd=None):
+        reads.append(getattr(name, "filename", name))
+        return real(archive, name, pwd)
+
+    monkeypatch.setattr(zipfile.ZipFile, "read", read)
+    card = read_card(path)
+    assert [f.name for f in card.files] == ["big0", "big1", "big2"]
+    assert reads.count("assets/other/big.bin") == 1
+    assert any("37 of its files went past" in note for note in card.expression_notes)
+
+
+def test_links_count_among_a_cards_files(tmp_path: Path, monkeypatch):
+    """Links had no limit: a card of a hundred thousand kept them all."""
+    monkeypatch.setattr(tavern_cards, "MAX_FILES", 5)
+    assets = [
+        {"type": "x-risu-asset", "uri": f"https://example.com/{n}.png", "name": f"far{n}"}
+        for n in range(12)
+    ]
+    path = tmp_path / "elena.json"
+    path.write_text(json.dumps({"spec": "chara_card_v3", "data": {**ELENA, "assets": assets}}))
+    card = read_card(path)
+    assert [f.name for f in card.files] == [f"far{n}" for n in range(5)]
+    assert any("7 of its files went past" in note for note in card.expression_notes)
 
 
 # --- into SealedLore -----------------------------------------------------------------
