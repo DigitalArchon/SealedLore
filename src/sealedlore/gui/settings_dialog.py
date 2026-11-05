@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import NamedTuple
 from urllib.parse import urlparse
 
 from PySide6.QtCore import QSize, Qt, QTimer
@@ -78,6 +79,8 @@ from sealedlore.models.config import (
     ProviderConfig,
     _same_host,
     chat_api,
+    is_local_host,
+    is_loopback_host,
     on_nanogpt,
     qualify,
     recommended_model,
@@ -134,6 +137,57 @@ def _note_label() -> QLabel:
 def _scrolled(page: QWidget) -> QScrollArea:
     """A tab page that scrolls when it is taller than the dialog."""
     return FormScroll(page)
+
+
+class SentPlain(NamedTuple):
+    """A key that goes over plain http to another machine (`keys_in_the_clear`)."""
+
+    page: str  # the page its address and key are on
+    whose: str  # whose key, as the question names it
+    address: str
+    key: str
+
+    def already_among(self, others: list[SentPlain]) -> bool:
+        """The same key goes to the same host in `others` (scheme, name and
+        port, as a key is shared out, `_same_host`): a new path on the same
+        machine sends it nowhere new."""
+        return any(
+            other.key == self.key and _same_host(other.address, self.address) for other in others
+        )
+
+
+def _in_the_clear(url: str) -> bool:
+    """Plain http to another machine on the local network: allowed
+    (`require_https`), but anyone on that network can read what goes, a
+    café's or a hotel's Wi-Fi included. To this computer it never leaves."""
+    parsed = urlparse(url.strip())
+    host = parsed.hostname or ""
+    return parsed.scheme == "http" and is_local_host(host) and not is_loopback_host(host)
+
+
+def keys_in_the_clear(config: Config) -> list[SentPlain]:
+    """Every key `config` sends over plain http to another machine: each
+    chat endpoint's own, then the embeddings', pictures', video's and
+    private scenes', a blank key filled as Config fills it (the chat
+    endpoint's, on its own host only), so a key taken from the chat
+    endpoint is counted where it goes."""
+    sent = [
+        SentPlain("Endpoints", f"{p.name} (Endpoints)", p.base_url.strip(), p.api_key)
+        for p in config.providers
+    ]
+    embeddings = config.embeddings()
+    if embeddings is not None:
+        sent.append(SentPlain("Lore", "Embeddings (Lore)", embeddings.base_url, embeddings.api_key))
+    for page, whose, media in (
+        ("Images", "Pictures (Images)", config.images()),
+        ("Video", "Video", config.videos()),
+    ):
+        if media is not None:
+            sent.append(SentPlain(page, whose, media.base_url, media.api_key))
+    private = config.private()
+    if private is not None:
+        sent.append(SentPlain("Private", "Private scenes", private.base_url, private.api_key))
+    return [entry for entry in sent if entry.key.strip() and _in_the_clear(entry.address)]
 
 
 # What each page is for, under its name.
@@ -199,6 +253,9 @@ class SettingsDialog(QDialog):
         self.setMinimumWidth(860)
         size_to_screen(self, 0.55, 0.86, at_least=QSize(900, 680))
         self.config = config
+        # The keys already going over plain http to another machine: Save
+        # asks only about the rest (`_ask_before_plain`).
+        self._plain_at_open = keys_in_the_clear(config)
         self.story = story
         self._catalog = catalog
         # Browse… lists the models of the endpoint typed here, saved or not.
@@ -1862,6 +1919,106 @@ class SettingsDialog(QDialog):
 
     # --- saving -----------------------------------------------------------
 
+    def _as_typed(self, endpoints: list[ProviderConfig], embed_url: str) -> Config:
+        """Every endpoint as Save is about to write it, in a Config of their
+        own: where each key would go is Config's to say (a blank one is
+        filled from the chat endpoint by `images()` and the rest)."""
+        return Config(
+            providers=[p.model_copy(update={"base_url": p.base_url.strip()}) for p in endpoints],
+            active_provider_name=endpoints[self._default_index].name,
+            image_endpoint=MediaEndpoint(
+                base_url=self.image_url.text().strip(),
+                api_key=self.image_key.text().strip(),
+                api=self.image_api.currentData(),
+            ),
+            video_endpoint=MediaEndpoint(
+                base_url=self.video_url.text().strip() or DEFAULT_BASE_URL,
+                api_key=self.video_key.text().strip(),
+                api=self.video_api.currentData(),
+            ),
+            private_provider=self._private_as_typed(),
+            embedding_provider=self._embeddings_as_typed(embed_url),
+        )
+
+    def _private_as_typed(self) -> ProviderConfig | None:
+        private_url = self.private_url.text().strip()
+        private_model = self.private_model.text().strip()
+        if not (private_url and private_model):
+            return None
+        # Keep what the form doesn't show (timeout, extra_body); the URL was
+        # checked before this is built.
+        existing = self.config.private_provider or ProviderConfig(name="private")
+        return existing.model_copy(
+            update={
+                "name": "private",
+                "base_url": private_url,
+                "api_key": self.private_key.text(),
+                "model": private_model,
+            }
+        )
+
+    def _embeddings_as_typed(self, embed_url: str) -> EmbeddingProviderConfig | None:
+        if not self.embeddings_enabled.isChecked():
+            return None
+        return EmbeddingProviderConfig(
+            base_url=embed_url,
+            api_key=self.embed_api_key.text(),
+            model=self.embed_model.text().strip() or DEFAULT_EMBEDDING_MODEL,
+            dimensions=self.embed_dimensions.value(),
+            query_prefix=self.query_prefix.text(),
+            document_prefix=self.document_prefix.text(),
+        )
+
+    def _ask_before_plain(self, typed: Config) -> None:
+        """A key about to go over plain http to another machine, where anyone
+        on the network can read it (a café's or a hotel's Wi-Fi too), is asked
+        about first: every such key at once, and only where it wasn't going
+        already when Settings opened. No, the default, raises on the first
+        one's page, its endpoint shown, so the address or the key can be
+        changed there."""
+        new: list[SentPlain] = []
+        for sent in keys_in_the_clear(typed):
+            # Once each: pictures taking the chat endpoint's key send it
+            # where the chat endpoint does.
+            if not sent.already_among(self._plain_at_open + new):
+                new.append(sent)
+        if not new:
+            return
+        one = len(new) == 1
+        listed = "\n".join(f"•  {sent.whose}: {sent.address}" for sent in new)
+        answer = QMessageBox.question(
+            self,
+            "Send the key unencrypted?" if one else "Send the keys unencrypted?",
+            f"{'This key goes' if one else 'These keys go'} over plain http, which isn't "
+            f"encrypted, to another machine on your network:\n\n{listed}\n\n"
+            f"Anyone on that network can read {'it' if one else 'them'} on the way, a café's "
+            "or a hotel's Wi-Fi included. (A key sent to this computer itself, localhost or "
+            "127.0.0.1, never leaves it.)\n\n"
+            f"Send {'it' if one else 'them'} unencrypted? No goes back to change the address "
+            "or the key.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer == QMessageBox.Yes:
+            return
+        first = new[0]
+        if first.page == "Endpoints":
+            row = next(
+                (
+                    index
+                    for index, settings in enumerate(self._endpoints)
+                    if (settings.base_url.strip(), settings.api_key) == (first.address, first.key)
+                ),
+                None,
+            )
+            if row is not None:
+                self.endpoint_list.setCurrentRow(row)
+        raise SettingsProblem(
+            first.page,
+            f"the key for {first.address} would go unencrypted. Use the server's https:// "
+            "address, leave its key blank if it needs none, or Save again and choose Yes.",
+        )
+
     def _save(self) -> None:
         endpoints = self._endpoints_as_typed()
         embed_url = self.embed_base_url.text().strip()
@@ -1884,6 +2041,8 @@ class SettingsDialog(QDialog):
                     except ValueError as exc:
                         raise SettingsProblem(page, f"{field} {exc}") from exc
             self._carry_keys(endpoints)
+            typed = self._as_typed(endpoints, embed_url)
+            self._ask_before_plain(typed)
         except ValueError as exc:
             # Said where it is, and that page shown: a bad address on another
             # page used to leave the author looking at the one they were on.
@@ -1900,9 +2059,7 @@ class SettingsDialog(QDialog):
         # a removed one is gone, key and all (storage/repository.py drops its
         # keychain slot). Every copy was checked above; the fields it doesn't
         # show (timeout, extra_body) rode along in the copy.
-        self.config.providers[:] = [
-            p.model_copy(update={"base_url": p.base_url.strip()}) for p in endpoints
-        ]
+        self.config.providers[:] = typed.providers
         provider = self.config.providers[self._default_index]
         self.config.key_storage = self.key_storage.currentData()
         provider.model = self.model.text().strip()
@@ -1917,20 +2074,12 @@ class SettingsDialog(QDialog):
         self.config.portrait_model = (
             self.portrait_model.text().strip() or self.config.portrait_model
         )
-        images = MediaEndpoint(
-            base_url=self.image_url.text().strip(),
-            api_key=self.image_key.text().strip(),
-            api=self.image_api.currentData(),
-        )
+        images = typed.image_endpoint
         if images != self.config.image_endpoint:
             # Another endpoint's models: fetched afresh when next needed.
             self.config.image_models_fetched_at = None
         self.config.image_endpoint = images
-        video = MediaEndpoint(
-            base_url=self.video_url.text().strip() or DEFAULT_BASE_URL,
-            api_key=self.video_key.text().strip(),
-            api=self.video_api.currentData(),
-        )
+        video = typed.video_endpoint
         if video != self.config.video_endpoint:
             self.config.video_models_fetched_at = None
         self.config.video_endpoint = video
@@ -1946,22 +2095,7 @@ class SettingsDialog(QDialog):
             chosen = self.model.effective_route()
             if chosen != self._route_at_open:
                 self.story.defaults.main_route = chosen
-        private_url = self.private_url.text().strip()
-        private_model = self.private_model.text().strip()
-        if private_url and private_model:
-            # Keep what the form doesn't show (timeout, extra_body); the URL
-            # was checked above.
-            existing = self.config.private_provider or ProviderConfig(name="private")
-            self.config.private_provider = existing.model_copy(
-                update={
-                    "name": "private",
-                    "base_url": private_url,
-                    "api_key": self.private_key.text(),
-                    "model": private_model,
-                }
-            )
-        else:
-            self.config.private_provider = None
+        self.config.private_provider = typed.private_provider
         self.config.private_budget = self.private_budget.value()
         self.config.private_verify_tee = self.private_tee.isChecked()
         self.config.phone.start_on_launch = self.phone_on_launch.isChecked()
@@ -1975,17 +2109,7 @@ class SettingsDialog(QDialog):
         self.config.cache_control_mode = self.cache_mode.currentData()  # type: ignore[assignment]
         self.config.cache_ttl = self.cache_ttl.currentData()
 
-        if self.embeddings_enabled.isChecked():
-            self.config.embedding_provider = EmbeddingProviderConfig(
-                base_url=embed_url,
-                api_key=self.embed_api_key.text(),
-                model=self.embed_model.text().strip() or DEFAULT_EMBEDDING_MODEL,
-                dimensions=self.embed_dimensions.value(),
-                query_prefix=self.query_prefix.text(),
-                document_prefix=self.document_prefix.text(),
-            )
-        else:
-            self.config.embedding_provider = None
+        self.config.embedding_provider = typed.embedding_provider
         self.config.lore_retrieval_k = self.retrieval_k.value()
         self.config.lore_similarity_threshold = self.similarity.value()
         self.config.lore_query_turns = self.query_turns.value()

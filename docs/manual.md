@@ -2539,8 +2539,13 @@ on this computer or your local network: `localhost`, a private address such
 as `192.168.1.10`, or a `.local` name; a proxy is never used for these). The
 one exception the other way is phone access, which answers
 phones over plain `http://` on its onion address, where tor encrypts the
-whole way (see [Playing from your phone](#playing-from-your-phone)). There is
-no telemetry, no update check and no crash reporting.
+whole way (see [Playing from your phone](#playing-from-your-phone)). An API
+key sent over plain `http://` to another machine, even one on your own
+network, can be read by anyone on that network, a café's or a hotel's Wi-Fi
+included, so Settings asks before it saves one there (and `sealedlore
+configure` warns); one sent to this computer itself (`localhost`,
+`127.0.0.1`) never leaves it. There is no telemetry, no update check and no
+crash reporting.
 
 - **The chat endpoints** (Settings → Endpoints) get every prompt: the world,
   cast, lore, the recent story and your turn; the chapter summaries, scene

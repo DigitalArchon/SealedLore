@@ -324,6 +324,23 @@ def is_local_host(host: str) -> bool:
     return any(address in network for network in _LOCAL_NETWORKS)
 
 
+def is_loopback_host(host: str) -> bool:
+    """`host` is this computer itself (127.0.0.0/8, ::1, a localhost name):
+    what goes there over plain http never leaves it. Any other local host is
+    taken for another machine (nothing is looked up), and plain http to it
+    can be read by anyone on the network between, a café's or a hotel's
+    Wi-Fi included."""
+    host = host.strip().lower().rstrip(".")
+    if host == "localhost" or host.endswith(".localhost"):
+        return is_local_host(host)
+    try:
+        address = ip_address(host)
+    except ValueError:
+        return False
+    mapped = getattr(address, "ipv4_mapped", None)
+    return (mapped or address).is_loopback
+
+
 def require_https(url: str) -> str:
     """`url` when it is https, or http to this computer or the local network;
     refused in words a person can act on otherwise."""

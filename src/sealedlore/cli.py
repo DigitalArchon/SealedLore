@@ -13,6 +13,7 @@ import json
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from urllib.parse import urlparse
 
 from sealedlore import __version__
 from sealedlore.engine.archival import chapter_number, turns_in
@@ -33,6 +34,9 @@ from sealedlore.models.config import (
     ENDPOINT_SEPARATOR,
     Config,
     ProviderConfig,
+    _same_host,
+    is_local_host,
+    is_loopback_host,
     recommended_models,
     require_https,
 )
@@ -151,6 +155,8 @@ def cmd_configure(args: argparse.Namespace) -> int:
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
     existing = next((p for p in config.providers if p.name == name), None)
+    # Where each saved key goes before this changes any (`warn_if_plain`).
+    before = [(p.base_url, p.api_key) for p in config.providers]
     provider = existing or ProviderConfig(
         name=name, base_url=args.base_url, model=DEFAULT_STORY_MODEL
     )
@@ -184,7 +190,40 @@ def cmd_configure(args: argparse.Namespace) -> int:
         print(f"Its models are named {name}::<model id> in Settings and stories.")
     if provider.api_key:
         print(f"API key: {key_place(config, f'provider:{name}', root)}")
+    warn_if_plain(provider, before, kept=existing is not None and args.api_key is None)
     return 0
+
+
+def warn_if_plain(provider: ProviderConfig, before: list[tuple[str, str]], *, kept: bool) -> None:
+    """Said when the endpoint's key now goes over plain http to another
+    machine on the local network, and didn't before: anyone on that network
+    can read it (Settings asks before it saves one). `kept`: the key was
+    saved before and not given now, so it goes to an address it wasn't
+    meant for. This endpoint is the one place configure can send a key
+    somewhere new: pictures, embeddings and private scenes take the chat
+    endpoint's key only to its own host (Config.images() and the rest)."""
+    parsed = urlparse(provider.base_url)
+    host = parsed.hostname or ""
+    plain = parsed.scheme == "http" and is_local_host(host) and not is_loopback_host(host)
+    if not plain or not provider.api_key.strip():
+        return
+    if any(key == provider.api_key and _same_host(url, provider.base_url) for url, key in before):
+        return  # going there already
+    if kept:
+        print(
+            f"Warning: the API key already saved for {provider.name!r} is kept, and now goes "
+            f"unencrypted to {provider.base_url}, another machine on your network, where "
+            "anyone on that network can read it (a café's or a hotel's Wi-Fi too). Give "
+            '--api-key "" if this server needs no key, or its own key with --api-key.',
+            file=sys.stderr,
+        )
+    else:
+        print(
+            f"Warning: {provider.base_url} is plain http to another machine on your network: "
+            "the API key goes unencrypted, and anyone on that network can read it (a café's or "
+            "a hotel's Wi-Fi too). Use the server's https:// address if it has one.",
+            file=sys.stderr,
+        )
 
 
 def key_place(config: Config, slot: str, root: Path | None) -> str:
