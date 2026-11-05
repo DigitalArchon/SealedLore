@@ -695,3 +695,51 @@ def test_a_draft_can_go_back_to_nobody(app, window):
     )
     assert picker.ok.isEnabled() and picker.chosen() == []
     picker.deleteLater()
+
+
+@pytest.mark.parametrize("expressions", [False, True])
+def test_a_story_from_their_cards_scenario_has_them_linked_to_their_card(
+    app, window, monkeypatch, expressions
+):
+    """Unlinked, Keep in Your characters… made a second card of them. Pictures
+    the dialog left behind count as kept here (the author's call)."""
+    from sealedlore.engine.card_link import changes
+    from sealedlore.gui.tavern_dialog import CardImportDialog
+    from tests.test_collection_backup import png
+
+    elena = window._kept()[0]
+    store = window._collection_pictures()
+    for shade, (name, label) in enumerate((("joy", "happy"), ("anger", "angry"))):
+        # Clean pictures, as every kept one is: cleaned again on the way into
+        # the story, they are the same bytes, so the link starts in step.
+        store.write(f"{REFS_DIR}/{name}.png", png(100 + shade))
+        elena.reference_images.append(
+            ImageRef(id=name, file=f"{REFS_DIR}/{name}.png", expression=label)
+        )
+    window._save_collection()
+
+    def accepted(dialog) -> int:
+        dialog.player.setText("John")
+        dialog.expressions.setChecked(expressions)
+        return QDialog.Accepted
+
+    monkeypatch.setattr(CardImportDialog, "exec", accepted)
+    monkeypatch.setattr(window, "open_setup", lambda: False)
+    monkeypatch.setattr(window, "_say_left_out", lambda *args: None)
+    window._story_from_kept(elena.id)
+    session = window.session
+    linked = next(c for c in session.cast if c.name == "Elena")
+    assert linked.linked is not None and linked.linked.card_id == elena.id
+    assert linked.linked.user == "John" and "She trusts John slowly." in linked.full_description
+    assert len(linked.reference_images) == (3 if expressions else 1)
+    assert session.story.setup.starting_scene.present_character_ids.count(linked.id) == 1
+    window._sync_card_link()
+    window.cast_panel.select_character(linked.id)
+    words = window.cast_panel.link_words.text()
+    assert "In step with their card" in words or "kept here" in words, words
+    if not expressions:
+        story_marks, _refs, _unknown = window._marks(
+            linked.reference_images, session.pictures, session.story.id
+        )
+        found = changes(linked, elena, story_marks, linked.linked.pictures)
+        assert found and all(change.side == "story" for change in found), "left behind: kept"

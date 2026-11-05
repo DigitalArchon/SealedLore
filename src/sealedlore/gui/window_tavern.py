@@ -162,7 +162,9 @@ class TavernWindow:
         if card is not None:
             self._card_into_collection(card, path.name)
 
-    def _story_from_card(self, card: TavernCard) -> None:
+    def _story_from_card(self, card: TavernCard, kept: Character | None = None) -> None:
+        """A new story from a card's own scenario; `kept`, the character it is
+        from in Your characters, whom the story's character is linked to."""
         dialog = CardImportDialog(card, self._dialog_parent())
         accepted = dialog.exec() == QDialog.Accepted
         options = dialog.options()
@@ -172,6 +174,10 @@ class TavernWindow:
         if not accepted or not self._leave_for_new():
             return
         imported = scenario_from_card(card, **options)
+        if kept is not None and not options["world"]:
+            self._link_scenario_character(
+                imported.scenario, kept, user=options["player"], expressions=options["expressions"]
+            )
         bundle = bundle_from_scenario(imported.scenario)
         bundle.pending_files = clean_incoming(bundle.pending_files)
         if imported.notes:

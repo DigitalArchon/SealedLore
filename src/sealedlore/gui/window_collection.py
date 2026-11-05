@@ -1066,7 +1066,7 @@ class CollectionWindow:
             self._warn_plain("Could not make the story", str(exc))
             return
         if isinstance(tavern, TavernCard):
-            self._story_from_card(tavern)
+            self._story_from_card(tavern, kept=card)
 
     # --- their own lorebook, and expression pictures ------------------------------------------
 

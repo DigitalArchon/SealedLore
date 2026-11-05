@@ -1146,7 +1146,11 @@ example messages their voice, its scenario the story's world, its lorebook
 the story's lore, and its picture their portrait (a world's picture goes
 behind the story). The card's own background goes behind the story, and the
 pictures the opening greeting shows appear under the opening once the story
-begins. Setup opens next, to set the style before the story begins. What the card holds that SealedLore has no place for is listed: its
+begins. The story's character is linked to their card in Your characters, as
+**Add to the story** links one, so **Changes…** on the Cast page works for
+them; expression pictures you chose to leave out of the story count as kept
+here, not as a change. Setup opens next, to set the style before the story
+begins. What the card holds that SealedLore has no place for is listed: its
 own system prompt (SealedLore's storyteller rules stand, though a tick adds
 it to Style → Other notes), its tags, macros other than `{{char}}` and
 `{{user}}`, the other greetings, and lorebook settings (below).

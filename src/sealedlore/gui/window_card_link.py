@@ -12,6 +12,7 @@ own session (gui/window_collection.py), the one writer of their folder.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -29,6 +30,7 @@ from sealedlore.ids import new_id
 from sealedlore.models.character import Character
 from sealedlore.models.collection import PictureMark
 from sealedlore.models.image import ImageRef
+from sealedlore.models.scenario import Scenario
 from sealedlore.storage import collection
 from sealedlore.storage.image_meta import picture_kind
 from sealedlore.storage.images import REFS_DIR
@@ -240,6 +242,51 @@ class CardLinkWindow:
                 notes += [f"{card.name}'s lorebook: left out {note}." for note in imported.notes()]
         session.add_card(copy, to_cast=to_cast, lore=lore)
         return copy
+
+    def _link_scenario_character(
+        self, scenario: Scenario, card: Character, *, user: str, expressions: bool
+    ) -> None:
+        """The character a story from their card's own scenario is made with,
+        as Add to the story makes them (the card's fields as `given`, linked,
+        their pictures copied in), in place of the one the scenario read from
+        the card's file, under its id. Unlinked, Keep in Your characters…
+        made a second card of them. Pictures the dialog left behind count as
+        kept here (the author's call, Nov 5 2026): in step at the start, so
+        Changes… says nothing of them until something else changes."""
+        made = next((c for c in scenario.cast if c.id != scenario.suggested_character_id), None)
+        if made is None:
+            return
+        copy = card_link.story_copy(card, self._kept(), user or None)
+        copy.id = made.id
+        copy.is_player_available, copy.author_only = made.is_player_available, made.author_only
+        source = self._collection_store()
+        brought = card.reference_images if expressions else card.reference_images[:1]
+        card_marks, story_marks = [], []
+        for ref in card.reference_images:
+            data = source.read(ref.file)
+            suffix = picture_kind(data) if data else None
+            if data is None or suffix is None:
+                continue
+            mark = picture_mark(ref, data)
+            card_marks.append(mark)
+            if ref in brought:
+                ref_id = new_id()
+                new = ref.model_copy(update={"id": ref_id, "file": f"{REFS_DIR}/{ref_id}{suffix}"})
+                new.drawn_as = ""
+                scenario.reference_files[new.file] = base64.b64encode(data).decode("ascii")
+                copy.reference_images.append(new)
+                story_marks.append(mark)
+        copy.linked.pictures = card_marks
+        copy.linked.kept_here = card_link.fingerprint(
+            card_link.changes(copy, card, story_marks, card_marks)
+        )
+        # The pictures the scenario read for them give way to these, but for
+        # any the opening shows (a greeting's expression picture).
+        shown = {picture.file for picture in scenario.opening_pictures}
+        for ref in made.reference_images:
+            if ref.file not in shown:
+                scenario.reference_files.pop(ref.file, None)
+        scenario.cast[scenario.cast.index(made)] = copy
 
     def _story_user(self) -> str | None:
         """Whom a card's `{{user}}` becomes in the open story: the character
