@@ -2542,9 +2542,10 @@ phones over plain `http://` on its onion address, where tor encrypts the
 whole way (see [Playing from your phone](#playing-from-your-phone)). An API
 key sent over plain `http://` to another machine, even one on your own
 network, can be read by anyone on that network, a café's or a hotel's Wi-Fi
-included, so Settings asks before it saves one there (and `sealedlore
-configure` warns); one sent to this computer itself (`localhost`,
-`127.0.0.1`) never leaves it. There is no telemetry, no update check and no
+included, so Settings asks before it saves one there, or sends one there
+before Save (Browse…, Test speed…, Test attestation and Detect use the keys
+as typed), and `sealedlore configure` warns; one sent to this computer itself
+(`localhost`, `127.0.0.1`) never leaves it. There is no telemetry, no update check and no
 crash reporting.
 
 - **The chat endpoints** (Settings → Endpoints) get every prompt: the world,

@@ -230,3 +230,115 @@ def test_each_key_is_counted_with_its_page():
         ("Video", "http://10.0.0.9/v1", "v"),
         ("Private", LAN, "k"),
     ]
+
+
+def studio(dialog: SettingsDialog) -> None:
+    """A second endpoint on another machine, its key typed, not saved; the
+    story model on it."""
+    dialog._add_endpoint()
+    dialog.provider_name.setText("Studio")
+    dialog.base_url.setText(LAN)
+    dialog.api_key.setText("lan-key")
+    dialog.endpoint_list.setCurrentRow(0)
+    dialog.model.setText("Studio::llama3")
+
+
+def test_browse_and_test_speed_ask_before_they_send_a_typed_key(app, monkeypatch):
+    """Both send the keys as typed, before Save: the same question, No
+    sending nothing, and a Yes standing for Save too."""
+    from sealedlore.gui import settings_dialog as module
+    from sealedlore.gui.model_picker import ModelCatalog
+
+    opened: list[str] = []
+    monkeypatch.setattr(module, "pick_model", lambda *_a, **_k: opened.append("picker"))
+
+    class Speed:
+        def __init__(self, targets, *_a, **_k):
+            opened.append("speed: " + ", ".join(t.settings.name for t in targets))
+
+        def exec(self):
+            return 0
+
+        def deleteLater(self):  # noqa: N802 - Qt naming
+            pass
+
+    monkeypatch.setattr(module, "SpeedTestDialog", Speed)
+    cfg = nano()
+    dialog = SettingsDialog(cfg, None, catalog=ModelCatalog())
+    studio(dialog)
+    questions = asked(monkeypatch, QMessageBox.No)
+    assert dialog._browse_models("") is None
+    dialog._test_speed()
+    assert opened == [], "No: nothing sent"
+    assert len(questions) == 2
+    title, text, default = questions[0]
+    assert title == "Send the key unencrypted?" and default == QMessageBox.No
+    assert f"Studio (Endpoints): {LAN}" in text and text.endswith("No sends nothing.")
+    assert f"Studio (Endpoints): {LAN}" in questions[1][1]
+
+    questions = asked(monkeypatch, QMessageBox.Yes)
+    dialog._browse_models("")
+    dialog._test_speed()
+    assert opened[0] == "picker" and opened[1].startswith("speed: ") and "Studio" in opened[1]
+    assert len(questions) == 1, "a Yes once is enough"
+    dialog._save()
+    assert len(questions) == 1 and dialog.result() == QDialog.Accepted, "nor asked at Save"
+    assert cfg.endpoint_for("Studio::llama3").api_key == "lan-key"
+    dialog.deleteLater()
+
+
+def test_test_attestation_and_detect_ask_before_they_send_the_private_key(app, monkeypatch):
+    from sealedlore.gui import attest_check
+    from sealedlore.gui import settings_dialog as module
+
+    started: list[str] = []
+
+    class Tests:
+        def start(self, settings):
+            started.append(settings.base_url)
+            return 1
+
+    detected: list[str] = []
+    monkeypatch.setattr(
+        module, "detect_context", lambda url, key, model: detected.append(key) or None
+    )
+    dialog = SettingsDialog(nano(), None)
+    # After the button has connected to the real one's results.
+    monkeypatch.setattr(attest_check, "attestation_tests", lambda: Tests())
+    dialog.private_url.setText(LAN)
+    dialog.private_key.setText("private-key")
+    dialog.private_model.setText("TEE/glm-5.3-flash")
+    questions = asked(monkeypatch, QMessageBox.No)
+    dialog.private_attest.run()
+    assert started == [] and dialog.private_attest.last.outcome == "error"
+    assert "would have gone unencrypted" in dialog.private_attest.last.headline
+    dialog._detect_private_context()
+    assert detected == [] and "would have gone unencrypted" in dialog.detect_note.text()
+    assert [q[1].count(f"Private scenes: {LAN}") for q in questions] == [1, 1]
+
+    questions = asked(monkeypatch, QMessageBox.Yes)
+    dialog.private_attest.run()
+    dialog._detect_private_context()
+    assert started == [LAN] and detected == ["private-key"] and len(questions) == 1
+    dialog.deleteLater()
+
+
+def test_detect_sends_the_key_save_would_keep(app, monkeypatch):
+    """A blank private key is the default endpoint's on its own host, as
+    Config.private has it: not the key of whichever endpoint is shown."""
+    from sealedlore.gui import settings_dialog as module
+
+    detected: list[str] = []
+    monkeypatch.setattr(
+        module, "detect_context", lambda url, key, model: detected.append(key) or None
+    )
+    dialog = SettingsDialog(nano(), None)
+    dialog._add_endpoint()
+    dialog.provider_name.setText("Other")
+    dialog.base_url.setText(NANO)
+    dialog.api_key.setText("other-key")
+    dialog.private_url.setText(NANO)
+    dialog.private_model.setText("llama3")
+    dialog._detect_private_context()
+    assert detected == ["nano-key"]
+    dialog.deleteLater()

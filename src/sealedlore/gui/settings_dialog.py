@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.engine.attestation_check import testable
 from sealedlore.engine.image_variants import family_id, picture_support
 from sealedlore.engine.portraits import portrait_size
 from sealedlore.engine.reasoning import (
@@ -171,10 +172,7 @@ def keys_in_the_clear(config: Config) -> list[SentPlain]:
     private scenes', a blank key filled as Config fills it (the chat
     endpoint's, on its own host only), so a key taken from the chat
     endpoint is counted where it goes."""
-    sent = [
-        SentPlain("Endpoints", f"{p.name} (Endpoints)", p.base_url.strip(), p.api_key)
-        for p in config.providers
-    ]
+    sent = endpoint_keys(config.providers)
     embeddings = config.embeddings()
     if embeddings is not None:
         sent.append(SentPlain("Lore", "Embeddings (Lore)", embeddings.base_url, embeddings.api_key))
@@ -187,7 +185,26 @@ def keys_in_the_clear(config: Config) -> list[SentPlain]:
     private = config.private()
     if private is not None:
         sent.append(SentPlain("Private", "Private scenes", private.base_url, private.api_key))
+    return _plain(sent)
+
+
+def endpoint_keys(providers: list[ProviderConfig]) -> list[SentPlain]:
+    """The chat endpoints' keys that go over plain http to another machine."""
+    return _plain(
+        [
+            SentPlain("Endpoints", f"{p.name} (Endpoints)", p.base_url.strip(), p.api_key)
+            for p in providers
+        ]
+    )
+
+
+def _plain(sent: list[SentPlain]) -> list[SentPlain]:
     return [entry for entry in sent if entry.key.strip() and _in_the_clear(entry.address)]
+
+
+# Said by a question asked before Browse…, Test speed…, Test attestation or
+# Detect sends a key as typed (`SettingsDialog._may_send`).
+NOTHING_SENT = "No sends nothing."
 
 
 # What each page is for, under its name.
@@ -256,14 +273,14 @@ class SettingsDialog(QDialog):
         # The keys already going over plain http to another machine: Save
         # asks only about the rest (`_ask_before_plain`).
         self._plain_at_open = keys_in_the_clear(config)
+        # Those a Yes was given for while the dialog is open: Browse…, Test
+        # speed…, Test attestation and Detect send the keys as typed, before
+        # Save, so they ask too, and Save doesn't ask again (`_may_send`).
+        self._plain_allowed: list[SentPlain] = []
         self.story = story
         self._catalog = catalog
         # Browse… lists the models of the endpoint typed here, saved or not.
-        self._browse: Browse | None = (
-            (lambda current: pick_model(catalog, self._model_source, current, self))
-            if catalog is not None
-            else None
-        )
+        self._browse: Browse | None = self._browse_models if catalog is not None else None
 
         # Every page scrolls: the Lore page was taller than the dialog, and
         # its last rows were drawn over. Every text model is on Models, by
@@ -340,6 +357,13 @@ class SettingsDialog(QDialog):
         super().reject()
 
     # --- tabs -------------------------------------------------------------
+
+    def _browse_models(self, current: str) -> str | None:
+        """Browse… for a text model: every endpoint's list, fetched with its
+        key as typed, so a key that would go unencrypted is asked about first."""
+        if self._catalog is None or not self._may_send(endpoint_keys(self._endpoints_as_typed())):
+            return None
+        return pick_model(self._catalog, self._model_source, current, self)
 
     def _model_source(self) -> tuple[ChatProvider, str, bool]:
         """Browse… lists every endpoint's models as the endpoints stand in
@@ -1095,9 +1119,33 @@ class SettingsDialog(QDialog):
             self.recommended_note.setText(str(exc))
             self.recommended_note.show()
             return
+        if not self._may_send(self._keys_sent_by(targets)):
+            return
         dialog = SpeedTestDialog(targets, self, prices=self.config.model_prices)
         dialog.exec()
         dialog.deleteLater()
+
+    def _keys_sent_by(self, targets: list[SpeedTarget]) -> list[SentPlain]:
+        """The keys Test speed… would send unencrypted, named as Save names
+        them: the endpoints its models are on, and the private one."""
+        known = endpoint_keys(self._endpoints_as_typed()) + self._private_keys()
+        sent = []
+        for target in targets:
+            settings = target.settings
+            named = next(
+                (
+                    entry
+                    for entry in known
+                    if entry.key == settings.api_key
+                    and _same_host(entry.address, settings.base_url)
+                ),
+                None,
+            )
+            sent.append(
+                named
+                or SentPlain("Models", settings.name, settings.base_url.strip(), settings.api_key)
+            )
+        return _plain(sent)
 
     def _fill_recommended(self) -> None:
         """Put the recommended model in each field it has one for. The ids are
@@ -1386,16 +1434,26 @@ class SettingsDialog(QDialog):
             self._catalog.changed.disconnect(self._show_routes)
         super().done(result)
 
-    def _private_source(self) -> tuple[ChatProvider, str, bool]:
+    def _private_typed(self) -> tuple[str, str]:
+        """The private endpoint's address and key as typed. A blank key is the
+        default endpoint's, on its own host (Config.private)."""
         url = self.private_url.text().strip()
-        if not url:
-            raise ValueError("Set the private endpoint's base URL first.")
-        require_https(url)
-        # A blank key is the default endpoint's, on its own host (Config.private).
         default = self._default_endpoint()
         key = self.private_key.text() or (
             default.api_key if _same_host(url, default.base_url.strip()) else ""
         )
+        return url, key
+
+    def _private_keys(self) -> list[SentPlain]:
+        """The private endpoint's key as typed, if it would go unencrypted."""
+        url, key = self._private_typed()
+        return _plain([SentPlain("Private", "Private scenes", url, key)])
+
+    def _private_source(self) -> tuple[ChatProvider, str, bool]:
+        url, key = self._private_typed()
+        if not url:
+            raise ValueError("Set the private endpoint's base URL first.")
+        require_https(url)
         provider = make_chat_provider(
             ProviderConfig(name="private-browse", base_url=url, api_key=key)
         )
@@ -1409,6 +1467,18 @@ class SettingsDialog(QDialog):
             return None
         provider.close()
         return provider.config.model_copy(update={"model": self.private_model.text().strip()})
+
+    def _private_attest_settings(self) -> ProviderConfig | None:
+        """Test attestation's endpoint and model, its key asked about first
+        when it would go unencrypted. ValueError, said under the button: No."""
+        settings = self._private_test_settings()
+        if (
+            settings is not None
+            and testable(settings.model)
+            and not self._may_send(self._private_keys())
+        ):
+            raise ValueError("Not checked: its key would have gone unencrypted.")
+        return settings
 
     def _phone_tab(self) -> QWidget:
         """Phone access (gui/window_phone.py): only whether it starts with the
@@ -1485,6 +1555,8 @@ class SettingsDialog(QDialog):
         self._private_catalog = ModelCatalog(self)
 
         def browse(current: str) -> str | None:
+            if not self._may_send(self._private_keys()):
+                return None
             return pick_model(self._private_catalog, self._private_source, current, self)
 
         self.private_model = ModelField(existing.model if existing else "", browse)
@@ -1534,7 +1606,7 @@ class SettingsDialog(QDialog):
         )
         # Before choosing it: does this model's enclave attest? (The author:
         # rather than start a scene and have it refused.)
-        self.private_attest = AttestationButton(self._private_test_settings)
+        self.private_attest = AttestationButton(self._private_attest_settings)
         self.private_model.textChanged.connect(self.private_attest.model_changed)
         self.private_attest.model_changed(self.private_model.text())
         form.addRow("", self.private_attest)
@@ -1564,9 +1636,12 @@ class SettingsDialog(QDialog):
         except ValueError as exc:
             self.detect_note.setText(str(exc))
             return
-        key = self.private_key.text() or (
-            self.api_key.text() if _same_host(url, self.base_url.text().strip()) else ""
-        )
+        # The key as everything else here sends it: a blank one is the
+        # default endpoint's on its own host, not the endpoint shown's.
+        _url, key = self._private_typed()
+        if not self._may_send(self._private_keys()):
+            self.detect_note.setText("Not asked: its key would have gone unencrypted.")
+            return
         self.detect_button.setEnabled(False)
         self.detect_note.setText("Asking the server…")
         QApplication.processEvents()
@@ -1969,21 +2044,27 @@ class SettingsDialog(QDialog):
             document_prefix=self.document_prefix.text(),
         )
 
-    def _ask_before_plain(self, typed: Config) -> None:
-        """A key about to go over plain http to another machine, where anyone
-        on the network can read it (a café's or a hotel's Wi-Fi too), is asked
-        about first: every such key at once, and only where it wasn't going
-        already when Settings opened. No, the default, raises on the first
-        one's page, its endpoint shown, so the address or the key can be
-        changed there."""
+    def _may_send(self, sent: list[SentPlain]) -> bool:
+        """Before Browse…, Test speed…, Test attestation or Detect sends a key
+        as typed, over plain http to another machine: asked as Save asks
+        (`_ask_before_plain`), No first, and a Yes stands for Save too.
+        False: No, and nothing is sent."""
+        new = self._not_asked(sent)
+        return not new or self._ask_plain(new, NOTHING_SENT)
+
+    def _not_asked(self, sent: list[SentPlain]) -> list[SentPlain]:
+        """Those of `sent` not going there when Settings opened, nor said Yes
+        to since. Once each: pictures taking the chat endpoint's key send it
+        where the chat endpoint does."""
         new: list[SentPlain] = []
-        for sent in keys_in_the_clear(typed):
-            # Once each: pictures taking the chat endpoint's key send it
-            # where the chat endpoint does.
-            if not sent.already_among(self._plain_at_open + new):
-                new.append(sent)
-        if not new:
-            return
+        for entry in sent:
+            if not entry.already_among(self._plain_at_open + self._plain_allowed + new):
+                new.append(entry)
+        return new
+
+    def _ask_plain(self, new: list[SentPlain], after_no: str) -> bool:
+        """The question, every key in `new` at once; True on Yes, which is
+        kept (`_plain_allowed`). `after_no`: what No does."""
         one = len(new) == 1
         listed = "\n".join(f"•  {sent.whose}: {sent.address}" for sent in new)
         answer = QMessageBox.question(
@@ -1994,12 +2075,24 @@ class SettingsDialog(QDialog):
             f"Anyone on that network can read {'it' if one else 'them'} on the way, a café's "
             "or a hotel's Wi-Fi included. (A key sent to this computer itself, localhost or "
             "127.0.0.1, never leaves it.)\n\n"
-            f"Send {'it' if one else 'them'} unencrypted? No goes back to change the address "
-            "or the key.",
+            f"Send {'it' if one else 'them'} unencrypted? {after_no}",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
-        if answer == QMessageBox.Yes:
+        if answer != QMessageBox.Yes:
+            return False
+        self._plain_allowed += new
+        return True
+
+    def _ask_before_plain(self, typed: Config) -> None:
+        """A key about to go over plain http to another machine, where anyone
+        on the network can read it (a café's or a hotel's Wi-Fi too), is asked
+        about first: every such key at once, and only where it wasn't going
+        already when Settings opened. No, the default, raises on the first
+        one's page, its endpoint shown, so the address or the key can be
+        changed there."""
+        new = self._not_asked(keys_in_the_clear(typed))
+        if not new or self._ask_plain(new, "No goes back to change the address or the key."):
             return
         first = new[0]
         if first.page == "Endpoints":

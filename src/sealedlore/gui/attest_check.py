@@ -83,7 +83,8 @@ def attestation_tests() -> AttestationTests:
 
 class AttestationButton(QWidget):
     """ "Test attestation" and what it found. Shown only for a TEE/ or private/
-    model; `settings` gives the endpoint and model as they stand when pressed."""
+    model; `settings` gives the endpoint and model as they stand when pressed,
+    or raises ValueError to refuse in words."""
 
     def __init__(self, settings: Settings, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -128,7 +129,13 @@ class AttestationButton(QWidget):
 
     def run(self) -> None:
         get = self._settings()
-        settings = get() if get is not None else None
+        try:
+            settings = get() if get is not None else None
+        except ValueError as exc:
+            # Refused before anything is sent, in words (Settings: a key that
+            # would go unencrypted, and the author said No).
+            self._show(AttestationCheck("error", str(exc)))
+            return
         if settings is None or not testable(settings.model):
             self._show(AttestationCheck("error", "Choose a TEE/ or private/ model first."))
             return
