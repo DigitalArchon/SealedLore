@@ -622,9 +622,13 @@ archiving, rebuilding summaries.
   skips the reads, the passage stays, and the scene or the clock stays as
   it was.
 - **Shortcuts**: Enter sends, Shift+Enter is a new line, Ctrl+Enter sends
-  from anywhere, Esc stops, Ctrl+N new, Ctrl+O import, Ctrl+S save,
-  Ctrl+, settings, Ctrl+Shift+I picture, Ctrl+Shift+V the transcript view,
-  Ctrl+Q quit.
+  from anywhere, Ctrl+R regenerates the latest passage (in a chat, the
+  latest reply) and Ctrl+Shift+Enter continues it, as Regenerate and
+  Continue beside the box do (both are in the Story menu too), Esc stops,
+  Ctrl+N new, Ctrl+O import, Ctrl+S save, Ctrl+, settings, Ctrl+Shift+I
+  picture, Ctrl+Shift+V the transcript view, Ctrl+Q quit. In a message you
+  are editing, Ctrl+Enter saves the edit, Esc cancels it, and Ctrl+R and
+  Ctrl+Shift+Enter do nothing.
 
 ## Models
 

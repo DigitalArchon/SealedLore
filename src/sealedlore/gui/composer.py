@@ -116,6 +116,21 @@ SCOPE_LABELS: list[tuple[str, NpcScope]] = [
 ]
 
 
+# What Regenerate and Continue do, in a story's words and a chat's (False,
+# True): the buttons' tooltips, with their keys, and the Story menu's
+# entries, which do the same (main_window `_retake_actions` binds the keys).
+RETAKE_TIPS = {
+    False: (
+        "Another take of the latest passage, in its place; the one before is kept (‹ ›)",
+        "Write more of the latest passage, carried on from where it stops; Length says how much",
+    ),
+    True: (
+        "Another take of the latest reply, in its place; the one before is kept (‹ ›)",
+        "Write more of the latest reply, carried on from where it stops",
+    ),
+}
+RETAKE_KEYS = ("Ctrl+R", "Ctrl+Shift+Enter")
+
 MORE_LABEL = "More ▸"
 FEWER_LABEL = "Fewer ▾"
 MORE_TIP = (
@@ -389,9 +404,6 @@ class Composer(QWidget):
         self.regenerate_button = QPushButton("Regenerate")
         self.regenerate_button.clicked.connect(self.regenerate_requested)
         self.continue_button = QPushButton("Continue")
-        self.continue_button.setToolTip(
-            "Write more of the latest passage, carried on from where it stops; Length says how much"
-        )
         self.continue_button.clicked.connect(self.continue_requested)
         self.image_button = QPushButton("Picture…")
         self.image_button.setToolTip(
@@ -418,6 +430,7 @@ class Composer(QWidget):
         self.controls_host = QWidget()
         self.controls_host.setLayout(controls)
         self._chat = False
+        self._sync_retake_tips()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -769,15 +782,21 @@ class Composer(QWidget):
                 widget.hide()
         else:
             self._sync_scope_button()
-        self.continue_button.setToolTip(
-            "Write more of the latest reply, carried on from where it stops"
-            if on
-            else "Write more of the latest passage, carried on from where it stops; "
-            "Length says how much"
-        )
+        self._sync_retake_tips()
         self._sync_question_mode()
         self._sync_private_tips()
         self._sync_more()
+
+    def _sync_retake_tips(self) -> None:
+        """Regenerate's and Continue's tooltips in this mode's words, each
+        with its key."""
+        for button, tip, key in zip(
+            (self.regenerate_button, self.continue_button),
+            RETAKE_TIPS[self._chat],
+            RETAKE_KEYS,
+            strict=True,
+        ):
+            button.setToolTip(f"{tip} ({key})")
 
     def set_private_offered(self, offered: bool) -> None:
         """Whether a part can be held in private: not in a chat on a TEE

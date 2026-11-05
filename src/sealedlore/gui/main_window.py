@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6 import __version__ as pyside_version
-from PySide6.QtCore import QFile, Qt, QThread, QTimer, QUrl, Signal
+from PySide6.QtCore import QEvent, QFile, Qt, QThread, QTimer, QUrl, Signal
 from PySide6.QtGui import QAction, QDesktopServices, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -67,7 +67,7 @@ from sealedlore.gui.banners import HeldAwayBanner, OverBudgetBanner, StalenessBa
 from sealedlore.gui.branch_bar import BranchBar, opening_words
 from sealedlore.gui.busy_lock import BusyLock
 from sealedlore.gui.cast_panel import CastPanel
-from sealedlore.gui.composer import DEFAULT_SUFFIX, Composer
+from sealedlore.gui.composer import DEFAULT_SUFFIX, RETAKE_KEYS, RETAKE_TIPS, Composer
 from sealedlore.gui.fields import PageStack, install_wheel_guard
 from sealedlore.gui.generate_dialog import GenerateDialog
 from sealedlore.gui.guides import WRITING_LABEL, WRITING_TIP, open_guide
@@ -269,6 +269,34 @@ def _standard_keys(action: QAction, key: QKeySequence.StandardKey, *also: str) -
         if QKeySequence(extra) not in keys:
             keys.append(QKeySequence(extra))
     action.setShortcuts(keys)
+
+
+# The Story menu's Regenerate and Continue, in a story's words and a chat's
+# (as the ⋯ menu has "this passage" and "this reply").
+RETAKE_WORDS = {
+    False: ("Re&generate the latest passage", "Co&ntinue the latest passage"),
+    True: ("Re&generate the latest reply", "Co&ntinue the latest reply"),
+}
+
+
+class _KeyedAction(QAction):
+    """A menu entry that knows whether its key set it off or the menu did
+    (`by_key`): Regenerate's and Continue's keys, typed in a message's
+    editor, are the editor's, while the entries themselves do what they say
+    wherever the keyboard is."""
+
+    def __init__(self, text: str, parent: QWidget) -> None:
+        super().__init__(text, parent)
+        self.by_key = False
+
+    def event(self, event) -> bool:
+        if event.type() != QEvent.Shortcut:
+            return super().event(event)
+        self.by_key = True
+        try:
+            return super().event(event)
+        finally:
+            self.by_key = False
 
 
 class MainWindow(
@@ -786,6 +814,7 @@ class MainWindow(
         )
         self.restart_action.triggered.connect(lambda: self.restart_story(review=True))
         story_menu.addAction(self.restart_action)
+        self._retake_actions(story_menu)
         # Pictures before the rarer things: they are what play reaches for.
         self._image_actions(story_menu)
         self._video_menu_actions(story_menu)
@@ -3123,6 +3152,68 @@ class MainWindow(
         if path and path[-1].id == node_id:
             self.continue_passage()
 
+    def _retake_actions(self, story_menu) -> None:
+        """Regenerate and Continue from the keyboard and the Story menu, in a
+        chat too: SillyTavern's players reach for keys, and Ctrl+Enter is
+        Send here. Ctrl+R and Ctrl+Shift+Enter: no shortcut of the window's,
+        no standard key on Linux or Windows, and no text box's own key."""
+        story_menu.addSeparator()
+        regenerate, carry_on = RETAKE_WORDS[False]
+        regenerate_key, continue_key = RETAKE_KEYS
+        self.regenerate_action = _KeyedAction(regenerate, self)
+        self.regenerate_action.setShortcut(QKeySequence(regenerate_key))
+        self.regenerate_action.triggered.connect(
+            lambda _checked=False: self._retake_from(self.regenerate_action, self.regenerate)
+        )
+        story_menu.addAction(self.regenerate_action)
+        self.continue_action = _KeyedAction(carry_on, self)
+        # Enter and Return both, as Send has them; Enter first, as the menu
+        # shows it: the key's name on the keyboard and in the manual.
+        self.continue_action.setShortcuts(
+            [QKeySequence(continue_key), QKeySequence("Ctrl+Shift+Return")]
+        )
+        self.continue_action.triggered.connect(
+            lambda _checked=False: self._retake_from(self.continue_action, self.continue_passage)
+        )
+        story_menu.addAction(self.continue_action)
+
+    def _sync_retake_actions(self) -> None:
+        """On exactly when the composer's Regenerate and Continue are, and
+        worded for a chat's replies in a chat."""
+        chat = self.in_chat
+        for action, button, words, tip in zip(
+            (self.regenerate_action, self.continue_action),
+            (self.composer.regenerate_button, self.composer.continue_button),
+            RETAKE_WORDS[chat],
+            RETAKE_TIPS[chat],
+            strict=True,
+        ):
+            action.setEnabled(button.isEnabled())
+            action.setText(words)
+            action.setStatusTip(tip)
+
+    def _retake_from(self, action: _KeyedAction, act: Callable[[], None]) -> None:
+        """What the composer's button does, through the same code. Its key
+        typed in a message's editor is the editor's (Ctrl+Enter there saves
+        the edit, `send_turn`), and under Your characters or the cast board,
+        whose fields have the keyboard, it does nothing, as Ctrl+Enter does
+        nothing there; the menu's entry acts wherever it is chosen. The story
+        comes back first wherever it was put away, so the take is written
+        where it can be watched, and stopped."""
+        if action.by_key and (
+            self._page_covers() or self.transcript.open_editor(focused=True) is not None
+        ):
+            return
+        if self.collection_shown():
+            self.show_collection(False)
+        if self.board_shown():
+            self.show_cast_board(False)
+        if self.map_shown():
+            # The take is at the end, not at the message last clicked on the map.
+            self._map_focus = None
+            self.show_map(False)
+        act()
+
     def _regenerate_node(self, node_id: str, shape: TurnShape | None = None) -> None:
         """Another take of any passage; the old one stays as a sibling (§2.2)."""
         if self.session is None or self._busy:
@@ -5122,6 +5213,7 @@ class MainWindow(
             background=self._background,
             queued=self._queued is not None,
         )
+        self._sync_retake_actions()
         # Edit and ⋯ on every message are off too (the worker is the only
         # writer); an editor already open keeps its text until the job ends.
         self.transcript.set_busy(busy)
