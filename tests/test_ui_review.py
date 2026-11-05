@@ -622,3 +622,53 @@ def test_the_window_keeps_an_edit_far_back_built(app, tmp_path, story, cast, mon
     finally:
         window.transcript.open_editor().cancel_edit()
         window.close()
+
+
+# --- the window's second look: closing while a job runs ---------------------------------
+
+
+def wait_for(app, condition, timeout: float = 20.0) -> None:
+    import time
+
+    deadline = time.monotonic() + timeout
+    while not condition():
+        assert time.monotonic() < deadline, "timed out"
+        app.processEvents()
+        time.sleep(0.005)
+
+
+def test_a_close_cancelled_during_a_job_stops_nothing_and_closes_nothing_later(
+    app, window, monkeypatch
+):
+    """Quit while a passage streamed stopped it first, then asked about the
+    edit; answered Cancel, the window stayed half finished (still streaming,
+    never rebuilt), and closed by itself when the next job ended."""
+    from sealedlore.providers.mock import MockChatProvider
+
+    long = "A long passage. " * 30
+    window.config.scene_reads = "manual"
+    window.config.suggest_characters = False
+    window._provider = MockChatProvider([long, "Another passage."])
+    window._provider.delay = 0.01
+    titles = asked(monkeypatch, QMessageBox.Cancel)
+    changed_edit(app, window, "u0", "An edit I mean to keep.")
+    window.composer.select_speaker("char-serrik")
+    window.composer.input.setPlainText("I go up the stairs.")
+    window.composer.input.setFocus()
+    window.send_turn()
+    wait_for(app, lambda: window._busy)
+    window.close()  # Ctrl+Q while it streams
+    assert titles == ["Discard your edit?"] and window.isVisible()
+    assert not window._close_when_idle and window._busy, "the passage goes on"
+    wait_for(app, lambda: not window._busy)
+    settle(app, 20)
+    assert window.session.path()[-1].content == long, "written to the end, never stopped"
+    assert window.transcript._streaming is None and window.composer.send_button.isEnabled()
+    window.transcript.open_editor().cancel_edit()
+    window.composer.input.setPlainText("I wait.")
+    window.composer.input.setFocus()
+    window.send_turn()
+    wait_for(app, lambda: not window._busy)
+    settle(app, 20)
+    assert window.isVisible(), "the next job's end closes nothing"
+    assert titles == ["Discard your edit?"]

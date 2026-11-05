@@ -896,8 +896,20 @@ class PrivateWindow:
         """Closing, or leaving the story (New, Import, Duplicate), in the
         middle of a memory-only scene loses it: ask. Yes discards the scene.
         A chat kept in memory only asks the same (window_chat). A message's
-        edit still open is asked about first, whatever the story."""
-        if not self._edit_allows_leave():
+        edit still open is asked about first, whatever the story. Nothing is
+        let go until every question is answered: a Cancel at the second
+        question used to find the edit already gone."""
+        if not self._private_may_close():
+            return False
+        self._discard_edits()
+        self._discard_memory_scene()
+        return True
+
+    def _private_may_close(self) -> bool:
+        """`_private_allows_close`'s questions, with nothing let go: closing the
+        window during a job asks them before the job is stopped, and the
+        scene is discarded only once the job is done (closeEvent)."""
+        if not self._edit_allows_leave(discard=False):
             return False
         session = self.session
         if session is not None and session.memory_only:
@@ -913,11 +925,21 @@ class PrivateWindow:
                 "Cancel and end the scene first. Close anyway?"
             ),
             QMessageBox.Yes | QMessageBox.Cancel,
+            # Enter on a box that loses the scene must not do it.
+            QMessageBox.Cancel,
         )
-        if answer != QMessageBox.Yes:
-            return False
-        session.discard_private()
-        return True
+        return answer == QMessageBox.Yes
+
+    def _discard_memory_scene(self) -> None:
+        """A memory-only scene the author agreed to lose (`_private_may_close`)."""
+        session = self.session
+        if (
+            session is not None
+            and not session.memory_only
+            and session.in_private
+            and session.open_span.keep == "memory"
+        ):
+            session.discard_private()
 
     def _wait_for_attestation(self) -> None:
         for thread in list(self._attesting):

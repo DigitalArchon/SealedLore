@@ -3633,6 +3633,13 @@ class MainWindow(
         self._background = False
         self._waits.stop()
         self._hide_busy()
+        # Done whether or not the window closes next: it may yet stay (a
+        # picture begun meanwhile is asked about), and skipped, it was left
+        # streaming, with the job's controls and a stale transcript.
+        self.transcript.end_streaming()
+        self._phone_job_finished()
+        returned = self._return_unanswered()
+        self._finish_job()
         if self._close_when_idle:
             # thread.finished fires just before the thread exits; wait out that
             # moment, or closeEvent could still see it running and ignore the
@@ -3642,10 +3649,6 @@ class MainWindow(
             # The worker's finalizer has saved; closeEvent does the rest.
             QTimer.singleShot(0, self.close)
             return
-        self.transcript.end_streaming()
-        self._phone_job_finished()
-        returned = self._return_unanswered()
-        self._finish_job()
         if returned and self._failed is None:
             self.statusBar().showMessage(
                 "No passage came: your turn is back in the composer, ready to send again.", 10000
@@ -3696,10 +3699,14 @@ class MainWindow(
             self.status_strip.add_usage(result.usage)
         self.stories.refresh(selected_id=self.session.story.id if self.session else None)
         self._update_controls()
+        self._sync_private_ui()
+        if self._close_when_idle:
+            # Closing once this is done: nothing is offered, or its dialog
+            # would stand in the way as the window goes.
+            return
         self._offer_pending_tiers()
         self._offer_pending_review()
         self._offer_pending_scene()
-        self._sync_private_ui()
         self._offer_private_summary()
         # What the job's starter wanted done once it is in (`_after_job`:
         # Fill with lore characters…, window_cast.py).
@@ -5105,6 +5112,18 @@ class MainWindow(
         for action in (self.restart_action, self.export_action):
             action.setVisible(not self.memory_chat)
 
+    def _may_close(self, running: bool) -> bool:
+        """Every question closing the window asks, before anything is stopped:
+        a turn waiting to go, a message's edit, and a memory-only scene or
+        chat, none of them let go until all are answered; then pictures and
+        videos still being made, which stop as soon as they are answered
+        (window_images, window_videos)."""
+        if running and self._queued is not None and not self._may_lose_queued():
+            return False
+        if not self._private_may_close():
+            return False
+        return self._images_allow_close() and self._videos_allow_close()
+
     def _may_lose_queued(self) -> bool:
         """Closing with a turn still waiting to go: asked, Keep playing first."""
         text = (self._queued_text or ("", None))[0]
@@ -5159,32 +5178,40 @@ class MainWindow(
             if self._plot_editor.isVisible():
                 event.ignore()
                 return
-        if self._thread is not None and self._thread.isRunning():
-            if self._queued is not None and not self._close_when_idle:
-                # Typed and sent while the reads ran: closing now loses it,
-                # and used to without a word (the review, Oct 20 2026).
-                if not self._may_lose_queued():
-                    event.ignore()
-                    return
+        running = self._thread is not None and self._thread.isRunning()
+        if not self._close_when_idle:
+            # Every question first, before anything is stopped: answered
+            # Cancel, the job goes on and the window is as it was. The job
+            # used to be stopped first, and a Cancel after it left the window
+            # half finished, to close by itself when the next job ended.
+            if not self._may_close(running):
+                event.ignore()
+                return
+            if running:
                 self._queued = None
                 self._queued_text = None
                 self._queued_origin = "desktop"
-            # A stream notices stop() only at its next chunk, so waiting here
-            # with a timeout could save under the worker and destroy a running
-            # thread. Close once thread.finished says it is done instead.
-            if self._worker is not None:
-                self._worker.stop()
-            self._close_when_idle = True
-            self.statusBar().showMessage("Stopping — closes when the current response ends")
+                # A stream notices stop() only at its next chunk, so waiting
+                # here with a timeout could save under the worker and destroy
+                # a running thread. Close once thread.finished says it is
+                # done instead.
+                if self._worker is not None:
+                    self._worker.stop()
+                self._close_when_idle = True
+                self.statusBar().showMessage("Stopping — closes when the current response ends")
+                event.ignore()
+                return
+        elif running:
+            event.ignore()  # still stopping: thread.finished closes the window
+            return
+        elif not self._images_allow_close() or not self._videos_allow_close():
+            # The job is done; only a picture or video begun while it stopped
+            # is asked about, and kept, the window stays as the job left it.
+            self._close_when_idle = False
             event.ignore()
             return
-        if (
-            not self._images_allow_close()
-            or not self._private_allows_close()
-            or not self._videos_allow_close()
-        ):
-            event.ignore()
-            return
+        # What the answers agreed to lose, now that nothing else writes the story.
+        self._discard_memory_scene()
         self._wait_for_attestation()
         self.stories.stop_search()
         self.stop_link_fetch()
