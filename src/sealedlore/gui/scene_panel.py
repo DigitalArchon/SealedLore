@@ -381,6 +381,13 @@ class ScenePanel(QWidget):
                 text = note.text().strip()
                 if text:
                     offstage.append(OffstageCharacter(character_id=character.id, note=text))
+        # Whoever the page doesn't show (the plot hides them until an event
+        # brings them in) stays as the card had them: rebuilt from the rows
+        # alone, any edit here dropped a hidden character the read had put
+        # in the scene.
+        shown = {character.id for character, is_supporting, _row in self._rows if not is_supporting}
+        present += [i for i in scene.present_character_ids if i not in shown]
+        offstage += [e for e in scene.offstage_but_nearby if e.character_id not in shown]
 
         scene.present_character_ids = present
         scene.offstage_but_nearby = offstage

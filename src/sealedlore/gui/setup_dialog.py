@@ -734,11 +734,17 @@ class SetupDialog(QDialog):
             self.presence.show_roster(scene.present_character_ids)
 
     def _pinned(self) -> tuple[list[str], list[str]]:
-        """(pinned present, pinned not present); as they were with no cast to show."""
+        """(pinned present, pinned not present); as they were with no cast to
+        show. Whom the plot hides isn't shown, so their pins are kept as they
+        were: read from the rows alone, Save dropped them."""
+        setup = self.story.setup
         if self.presence is None:
-            setup = self.story.setup
             return list(setup.starting_scene.present_character_ids), list(setup.absent_at_start)
-        return self.presence.pinned()
+        present, absent = self.presence.pinned()
+        hidden = self._hidden
+        present += [i for i in setup.starting_scene.present_character_ids if i in hidden]
+        absent += [i for i in setup.absent_at_start if i in hidden]
+        return present, absent
 
     def _starting_scene(self) -> SceneState:
         present, _ = self._pinned()

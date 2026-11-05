@@ -334,6 +334,33 @@ def test_setup_sees_a_change_on_a_starting_scene_built_again(app, window, monkey
     dialog.done(0)
 
 
+def test_what_the_plot_hides_keeps_its_place_through_scene_setup_and_start(app, window):
+    """The Scene page rewrote the roster from the rows it shows, and Setup's
+    Save and Start wrote the start's pins from theirs: a plot-hidden
+    character on the card, or pinned at the start, was dropped by any edit."""
+    from sealedlore.gui.start_dialog import StartDialog
+    from sealedlore.models.scene import OffstageCharacter
+
+    session = window.session
+    hidden, nearby = session.cast[-1], session.cast[-2]
+    scene = session.story.scene
+    scene.present_character_ids = [session.cast[0].id, hidden.id]
+    scene.offstage_but_nearby = [OffstageCharacter(character_id=nearby.id, note="on the stair")]
+    window.scene_panel.set_scene(scene, [c for c in session.cast if c.id != nearby.id][:-1])
+    window.scene_panel.location.setText("The undercroft, by the north stair")
+    window.scene_panel._apply_edits()  # what an edit on the page runs
+    assert hidden.id in scene.present_character_ids
+    assert [e.character_id for e in scene.offstage_but_nearby] == [nearby.id]
+    session.story.setup.absent_at_start = [hidden.id]
+    setup = SetupDialog(session.story, session.cast, parent=window, hidden=frozenset({hidden.id}))
+    setup._save()  # only Save, nothing changed
+    assert session.story.setup.absent_at_start == [hidden.id]
+    start = StartDialog(session.story, session.cast[:-1], parent=window)
+    present, absent = start.pinned()
+    assert hidden.id in absent and hidden.id not in present
+    start.done(0)
+
+
 def test_settings_asks_once_a_key_is_typed_and_not_after_a_look_round(app, monkeypatch):
     """Esc after pasting an API key lost it without a word. Choosing another
     endpoint, which fills the fields with its own, changes nothing."""

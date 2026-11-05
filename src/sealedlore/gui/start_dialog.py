@@ -55,6 +55,9 @@ class StartDialog(QDialog):
         self.setMinimumWidth(460)
         size_to_screen(self, 0.4, 0.7)
         self._choose_one_of = list(story.setup.choose_one_of)
+        # The pins as Setup left them, for whoever isn't offered here (`pinned`).
+        self._setup = story.setup
+        self._offered = {character.id for character in cast}
 
         self.play_as = QComboBox()
         self.play_as.addItem("Nobody — I'll direct", None)
@@ -170,8 +173,16 @@ class StartDialog(QDialog):
         return self.play_as.currentData()
 
     def pinned(self) -> tuple[list[str], list[str]] | None:
-        """(pinned present, pinned not present) at the start; None with no cast."""
-        return self.presence.pinned() if self.presence is not None else None
+        """(pinned present, pinned not present) at the start; None with no cast.
+        Whom the plot hides isn't offered, so their pins stay as Setup left
+        them: read from the rows alone, Start dropped them."""
+        if self.presence is None:
+            return None
+        present, absent = self.presence.pinned()
+        setup, offered = self._setup, self._offered
+        present += [i for i in setup.starting_scene.present_character_ids if i not in offered]
+        absent += [i for i in setup.absent_at_start if i not in offered]
+        return present, absent
 
     def kept_wanted(self) -> bool:
         return self.kept is not None and self.kept.isChecked()
