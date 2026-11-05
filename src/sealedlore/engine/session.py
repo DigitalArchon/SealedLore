@@ -2071,7 +2071,11 @@ class StorySession(
             )
         yield PassageDone()
         if span is not None:
-            self._check_tee(passage)
+            # Only when the continuation added something: a reply that only
+            # wrote the passage out again was left out, and its check would
+            # stand for text it didn't write.
+            if self.last_result is not None and self.last_result.node is passage:
+                self._check_tee(passage)
             self.save()
             if not self.last_result or not self.last_result.stopped_early:
                 yield from self.update_looks_after_turn(self._prepare_look_read(passage))
@@ -2282,6 +2286,12 @@ class StorySession(
         """A continuation written onto its passage: the text joined (`text`
         starts with its joiner), the reasoning after the first's, the cost
         added. The note that it was cut off goes: it has been carried on."""
+        # A TEE mark proves the text it was given for: the passage is unchecked
+        # until the continuation's own reply is checked, and then keeps the
+        # less proven of the two marks (`_check_tee`).
+        self._carried_mark = (node.id, node.meta.tee)
+        if node.meta.tee is not None:
+            node.meta.tee = "unchecked"
         node.content = node.content.rstrip() + text
         if reasoning:
             node.meta.reasoning = "\n\n".join(
@@ -2748,6 +2758,10 @@ class StorySession(
         if node is None:
             raise KeyError(f"unknown node id: {node_id!r}")
 
+        if content != node.content:
+            # A TEE mark is for the text as it came, or as it was sent: edited,
+            # the text is no longer that.
+            node.meta.tee = None
         node.content = content
         if ooc is not None:
             node.ooc = ooc.strip() or None

@@ -11,7 +11,8 @@ Two things every client here needs and none should have to remember:
 - **A redirect never downgrades.** A 307/308 re-sends the whole body — a
   prompt, or every reference picture — to wherever `Location` points. The
   response hook refuses one whose target isn't https (or http to a local server),
-  whether or not the client follows redirects.
+  whether or not the client follows redirects, and one from a server on the
+  internet into this computer or the local network.
 """
 
 from __future__ import annotations
@@ -40,16 +41,31 @@ def is_secure(url: str) -> bool:
 
 
 def refuse_insecure_redirect(response: httpx.Response) -> None:
-    """A response hook: a redirect to anywhere the app wouldn't send to directly."""
+    """A response hook: a redirect to anywhere the app wouldn't send to directly,
+    or from a server out on the internet into this computer or the local
+    network (a card's link must not reach the router's admin page)."""
     if not response.is_redirect:
         return
-    target = response.next_request.url if response.next_request is not None else None
-    if target is None:
-        target = response.headers.get("location")
-    if target is not None and not is_secure(str(target)):
+    location = response.headers.get("location")
+    if location is None:
+        return
+    # httpx runs the hooks before it builds the next request, so `Location` is
+    # read here as written, and a relative one ("/c/2") is resolved the way the
+    # client will resolve it.
+    try:
+        target = str(response.request.url.join(location))
+    except httpx.InvalidURL:
+        target = location
+    source = str(response.request.url)
+    if not is_secure(target):
         raise ProviderError(
-            f"{response.request.url.host} redirected to {str(target)[:120]!r}; refusing to "
+            f"{response.request.url.host} redirected to {target[:120]!r}; refusing to "
             "send over an insecure connection"
+        )
+    if is_local(target) and not is_local(source):
+        raise ProviderError(
+            f"{response.request.url.host} redirected to {target[:120]!r}, a server on this "
+            "computer or your local network; refused"
         )
 
 

@@ -14,7 +14,7 @@ import httpx
 import pytest
 
 from sealedlore.engine.images import ImageRequest, run_image_request
-from sealedlore.models.config import Config
+from sealedlore.models.config import Config, is_local_host, require_https
 from sealedlore.models.generation import GenerationParams
 from sealedlore.providers.base import (
     ChatRequest,
@@ -63,6 +63,27 @@ def test_https_or_http_on_the_local_network_and_nothing_else():
         "http://100.64.0.1/v1",
     ):
         assert not is_secure(public), public
+
+
+def test_a_name_after_an_addresss_percent_sign_is_not_local():
+    """An address cut at its "%" read as local, though the whole name is what
+    DNS is asked for; an IPv6 zone id is still part of its address."""
+    for url in (
+        "http://192.168.1.1%.attacker.example/v1",
+        "http://127.0.0.1%2e.example:8080/v1",
+        "http://10.0.0.5%25.example/v1",
+        "http://printer%2f.local/v1",
+    ):
+        assert not is_secure(url), url
+        with pytest.raises(ValueError):
+            require_https(url)
+    assert is_local_host("fe80::1%eth0")
+    assert is_local_host("studio.local.") and is_local_host("dev.localhost")
+
+
+def test_the_address_a_server_listens_on_says_which_to_use():
+    with pytest.raises(ValueError, match="127.0.0.1"):
+        require_https("http://0.0.0.0:11434/v1")
 
 
 def test_a_server_on_the_local_network_is_never_reached_through_a_proxy(monkeypatch):
@@ -118,6 +139,58 @@ def test_a_redirect_that_stays_on_https_is_followed():
 
     reply = _image_client(handler).generate({"model": "m", "prompt": "p"})
     assert len(seen) == 2 and reply.images == [PNG]
+
+
+def test_a_relative_redirect_is_followed():
+    """httpx runs response hooks before it resolves `Location`: read raw, a
+    relative one ("/v2/images") had no scheme and every one was refused."""
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        if len(seen) == 1:
+            return httpx.Response(308, headers={"location": "/v2/images"})
+        return httpx.Response(
+            200, json={"data": [{"b64_json": base64.b64encode(PNG).decode()}], "cost": 0.01}
+        )
+
+    reply = _image_client(handler).generate({"model": "m", "prompt": "p"})
+    assert seen == ["https://api.test/v1/images/generations", "https://api.test/v2/images"]
+    assert reply.images == [PNG]
+
+
+@pytest.mark.parametrize(
+    "location",
+    ["https://192.168.1.1/admin", "http://192.168.1.1/admin", "http://localhost:8080/x"],
+)
+def test_a_server_on_the_internet_cannot_redirect_into_the_local_network(location):
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return httpx.Response(302, headers={"location": location})
+
+    with pytest.raises(ProviderError, match="local network"):
+        _image_client(handler).generate({"model": "m", "prompt": "p"})
+    assert len(seen) == 1, "the redirect was not followed"
+
+
+def test_a_local_server_may_redirect_on_the_local_network():
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        if len(seen) == 1:
+            return httpx.Response(307, headers={"location": "http://192.168.1.20:7860/v1/x"})
+        return httpx.Response(
+            200, json={"data": [{"b64_json": base64.b64encode(PNG).decode()}], "cost": 0.0}
+        )
+
+    client = make_client(
+        "http://192.168.1.10:7860/v1", transport=httpx.MockTransport(handler), follow_redirects=True
+    )
+    ImageClient("http://192.168.1.10:7860/v1", "", client=client).generate({"model": "m"})
+    assert seen[-1] == "http://192.168.1.20:7860/v1/x"
 
 
 def test_without_an_endpoint_nothing_is_written_as_story():

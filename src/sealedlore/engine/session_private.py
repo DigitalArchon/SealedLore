@@ -77,6 +77,8 @@ PRIVATE_CONDENSE_MAX_TOKENS = 4000
 PRIVATE_CONDENSE_WORDS = 600
 # How the condensed part reads where it stands in the history.
 CONDENSED_LEAD = "Earlier in this scene (condensed):"
+# A reply's TEE marks (NodeMeta.tee), the most proven first.
+_MARK_ORDER = ("encrypted", "verified", "signed", "unchecked", "failed")
 
 
 @dataclass(frozen=True)
@@ -563,7 +565,7 @@ class PrivateRuntime:
         An end-to-end encrypted one needs no check: only the attested enclave's
         key could have sealed it (providers/private_mode.py)."""
         if node is not None and getattr(self, "_last_sealed", False):
-            node.meta.tee = "encrypted"
+            node.meta.tee = self._with_carried(node, "encrypted")
             self._mark_sent(node, "encrypted")
             return
         if node is None or self.private_tee is None:
@@ -574,11 +576,25 @@ class PrivateRuntime:
         self._mark_sent(node, "attested")
         completed = getattr(self, "_last_completed", None)
         try:
-            node.meta.tee = self.private_tee.check_reply(
+            mark = self.private_tee.check_reply(
                 getattr(self, "_last_response_id", None), **_reply_record(completed)
             )
         except Exception:  # an unreachable check is not a failed one
-            node.meta.tee = "unchecked"
+            mark = "unchecked"
+        node.meta.tee = self._with_carried(node, mark)
+
+    def _with_carried(self, node: Node, mark: str) -> str | None:
+        """A passage just carried on (Continue) is only as proven as its less
+        proven part: what it was before and what the continuation's check
+        found. A first part with no mark proves nothing, nor does the whole."""
+        carried = getattr(self, "_carried_mark", None)
+        self._carried_mark = None
+        if carried is None or carried[0] != node.id:
+            return mark
+        before = carried[1]
+        if before not in _MARK_ORDER or mark not in _MARK_ORDER:
+            return None
+        return max(before, mark, key=_MARK_ORDER.index)
 
     def _mark_sent(self, reply: Node, how: str) -> None:
         """Mark the author's message a reply answers with how it was sent."""

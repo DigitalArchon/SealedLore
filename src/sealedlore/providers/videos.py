@@ -37,7 +37,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from sealedlore.models.config import media_api
+from sealedlore.models.config import _same_host, media_api
 from sealedlore.providers import wavespeed
 from sealedlore.providers.base import ProviderError
 from sealedlore.providers.http import make_client
@@ -620,17 +620,24 @@ class VideoClient:
             )
             return nanogpt_status(body)
         if job.api in ("openrouter", "openai"):
-            url = job.poll_url or f"{job.base_url.rstrip('/')}/videos/{job.id}"
-            if url.startswith("/"):
-                parsed = urlparse(job.base_url)
-                url = f"{parsed.scheme}://{parsed.netloc}{url}"
-            return openrouter_status(self.http.json("GET", url))
+            return openrouter_status(self.http.json("GET", self._poll_url(job)))
         prediction = wavespeed.result(self.http, job.id)
         if prediction.status == wavespeed.DONE:
             return VideoStatus("done", urls=prediction.outputs, detail=prediction.status)
         if prediction.status in wavespeed.FAILED:
             return VideoStatus("failed", error=prediction.error or prediction.status)
         return VideoStatus("waiting", detail=prediction.status)
+
+    def _poll_url(self, job: VideoJob) -> str:
+        """Where a job's status is asked: the address its reply named, when that
+        is on this endpoint's own host, else the endpoint's own path. The record
+        comes from videos.json, which a story backup carries: a polling address
+        it names elsewhere would be handed the video key."""
+        own = f"{self.base_url.rstrip('/')}/videos/{job.id}"
+        if not job.poll_url:
+            return own
+        url = str(httpx.URL(self.base_url).join(job.poll_url))
+        return url if _same_host(url, self.base_url) else own
 
     def fetch(self, url: str) -> bytes:
         """The finished video. The key goes only to the endpoint's own host

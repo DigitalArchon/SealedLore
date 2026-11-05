@@ -8,6 +8,7 @@ local server (§7).
 
 from __future__ import annotations
 
+import re
 from ipaddress import ip_address, ip_network
 from typing import Any, Literal
 from urllib.parse import urlparse
@@ -297,6 +298,9 @@ _LOCAL_NETWORKS = tuple(
         "fe80::/10",
     )
 )
+# A host name as DNS writes it: letters, digits, hyphens (and underscores),
+# dot-separated.
+_DNS_NAME = re.compile(r"[a-z0-9_-]+(\.[a-z0-9_-]+)*")
 
 
 def is_local_host(host: str) -> bool:
@@ -304,9 +308,14 @@ def is_local_host(host: str) -> bool:
     .local or .localhost name: nothing is looked up)."""
     host = host.strip().lower().rstrip(".")
     if host == "localhost" or host.endswith((".localhost", ".local")):
-        return True
+        # Only a name a resolver reads as written: "%", "/" and the like in a
+        # name could reach DNS as something else.
+        return bool(_DNS_NAME.fullmatch(host))
     try:
-        address = ip_address(host.split("%", 1)[0])
+        # Whole: an IPv6 zone id ("fe80::1%eth0") is part of the address, and
+        # anything else after a "%" ("192.168.1.1%.example.com") makes it a
+        # name, which DNS would resolve to wherever it likes.
+        address = ip_address(host)
     except ValueError:
         return False
     mapped = getattr(address, "ipv4_mapped", None)
@@ -327,6 +336,13 @@ def require_https(url: str) -> str:
         raise ValueError("needs an address (https://…)")
     if not parsed.scheme or not parsed.netloc:
         raise ValueError(f"{url!r} needs to begin with https://")
+    if (parsed.hostname or "") in ("0.0.0.0", "::"):
+        # The address a server listens on (Ollama prints it), not one to
+        # reach it at.
+        raise ValueError(
+            f"{url!r} is the address a server listens on, not one to reach it at: use "
+            "127.0.0.1 for this computer, or the server's own address on your network"
+        )
     raise ValueError(
         f"must use https: {url!r} isn't (plain http is allowed only for a server on this "
         "computer or your local network)"

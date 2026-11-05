@@ -256,6 +256,61 @@ def test_a_nanogpt_job_is_sent_asked_after_and_fetched_without_the_key():
     assert "authorization" not in seen[2].headers, "a storage host never gets the key"
 
 
+@pytest.mark.parametrize(
+    "poll_url",
+    ["https://attacker.example/x", "http://attacker.example/x", "http://openrouter.ai/x"],
+)
+def test_a_polling_address_off_the_endpoint_is_never_given_the_key(poll_url):
+    """A pending video's record comes from videos.json, which a story backup
+    carries: a polling address it names elsewhere is not asked, the
+    endpoint's own path is, and the key goes nowhere else."""
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"status": "in_progress"})
+
+    base = "https://openrouter.ai/api/v1"
+    job = VideoJob("job_1", "openrouter", base, poll_url=poll_url)
+    status = client(handler, base=base, api="openrouter").status(job)
+    assert status.state == "waiting"
+    assert [str(r.url) for r in seen] == ["https://openrouter.ai/api/v1/videos/job_1"]
+
+
+def test_a_polling_address_on_the_endpoint_is_used_relative_or_whole():
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return httpx.Response(200, json={"status": "in_progress"})
+
+    base = "https://openrouter.ai/api/v1"
+    videos = client(handler, base=base, api="openrouter")
+    videos.status(VideoJob("j", "openrouter", base, poll_url="/api/v1/videos/j/poll"))
+    videos.status(VideoJob("j", "openrouter", base, poll_url="https://openrouter.ai/api/v1/v/j"))
+    assert seen == [
+        "https://openrouter.ai/api/v1/videos/j/poll",
+        "https://openrouter.ai/api/v1/v/j",
+    ]
+
+
+def test_the_key_is_never_sent_to_another_address():
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={})
+
+    videos = client(handler)
+    with pytest.raises(ProviderError, match="key wasn't sent"):
+        videos.http.json("GET", "https://elsewhere.example/status")
+    with pytest.raises(ProviderError, match="key wasn't sent"):
+        videos.http.json("GET", "http://nano-gpt.com/api/video/status")
+    assert seen == [], "nothing went out"
+    videos.http.request("GET", "https://cdn.example.net/v.mp4", authorised=False)
+    assert "authorization" not in seen[0].headers
+
+
 def test_a_failed_job_says_why():
     def handler(_request):
         return httpx.Response(

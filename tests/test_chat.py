@@ -24,6 +24,7 @@ from sealedlore.models.image import ImageRef
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.node import CHAT_USER_ID
 from sealedlore.models.story import Story
+from sealedlore.providers.base import ProviderError, TextDelta
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.storage.repository import StoryBundle, save_story_bundle
 from sealedlore.storage.scenario import (
@@ -279,6 +280,52 @@ def test_a_tee_chats_replies_are_marked_by_their_signature(tmp_path):
     session.private_tee = FakeTee(signed=False)
     say(session, "Again")
     assert session.path()[-1].meta.tee == "failed"
+
+
+class BreaksAfterText(MockChatProvider):
+    """Some text, then the stream fails: what came is kept, and was never
+    checked (a relay could send invented text, then an error)."""
+
+    def stream(self, request):
+        self.requests.append(request)
+        yield TextDelta(text=" Text the relay made up.")
+        raise ProviderError("the stream broke")
+
+
+def tee_chat(tmp_path, replies, *, signed: bool):
+    session, _provider = chat_session(tmp_path, replies)
+    session.story.defaults.main_model = "TEE/gemma-3-27b"
+    session.private_tee = FakeTee(signed=signed)
+    say(session, "Hello")
+    return session, session.path()[-1]
+
+
+def test_a_continued_tee_reply_is_only_as_proven_as_its_weaker_part(tmp_path):
+    session, passage = tee_chat(tmp_path, ["A reply.", " More of it."], signed=False)
+    assert passage.meta.tee == "failed"
+    session.private_tee = FakeTee(signed=True)
+    list(session.continue_passage())
+    assert passage.content.endswith("More of it.")
+    assert passage.meta.tee == "failed", "a verified rest doesn't make the first part verified"
+
+
+def test_a_tee_reply_carried_on_with_text_never_checked_is_unchecked(tmp_path):
+    session, passage = tee_chat(tmp_path, ["A genuine reply."], signed=True)
+    assert passage.meta.tee == "verified"
+    session.provider = BreaksAfterText()
+    with pytest.raises(ProviderError):
+        list(session.continue_passage())
+    assert passage.content.endswith("made up.") and passage.meta.tee == "unchecked"
+
+
+def test_an_edited_tee_message_loses_its_mark(tmp_path):
+    session, reply = tee_chat(tmp_path, ["A genuine reply."], signed=True)
+    turn = session.path()[-2]
+    session.edit_node(reply.id, reply.content)
+    assert reply.meta.tee == "verified", "saved unchanged, it is still the text that came"
+    session.edit_node(reply.id, "Written by hand.")
+    session.edit_node(turn.id, "Hello, said otherwise.")
+    assert reply.meta.tee is None and turn.meta.tee is None
 
 
 def test_a_tee_chat_never_moves_to_a_model_that_isnt(tmp_path):

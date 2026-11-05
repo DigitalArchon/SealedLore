@@ -280,7 +280,9 @@ class VideosWindow:
         media = self.config.videos()
         if media is None or not _same_host(media.base_url, video.base_url):
             return None
-        return VideoClient(video.base_url, media.api_key, api=video.api)
+        # The service as Settings has it, not as the record says: videos.json
+        # comes back with a story backup, which may be anyone's.
+        return VideoClient(video.base_url, media.api_key, api=media.api)
 
     def _resume_videos(self) -> None:
         """Ask after every video of the open story that is still being made

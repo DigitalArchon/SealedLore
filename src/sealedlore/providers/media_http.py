@@ -24,6 +24,7 @@ from typing import Any
 
 import httpx
 
+from sealedlore.models.config import _same_host
 from sealedlore.providers.base import ProviderError, StreamCancelled
 from sealedlore.providers.http import make_client
 from sealedlore.providers.streaming import (
@@ -170,6 +171,15 @@ class MediaHttp:
         headers = kwargs.pop("headers", None)
         if headers is None:
             headers = self.headers() if authorised else {}
+        if any(name.lower() == "authorization" for name in headers) and not _same_host(
+            url, self.base_url
+        ):
+            # The key is for this endpoint alone (scheme, host and port): an
+            # address from a reply or a stored record that points elsewhere,
+            # or at plain http, never gets it.
+            raise ProviderError(
+                f"{_where(url)} isn't this endpoint's own address, so the key wasn't sent there"
+            )
         try:
             response = self._get_client().request(
                 method, url, headers=headers, extensions={"trace": self._trace}, **kwargs
