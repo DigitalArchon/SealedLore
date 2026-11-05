@@ -470,7 +470,7 @@ class Composer(QWidget):
         # caps set when the lists were filled would cut them short.
         # After the event: the combos may not have their new font yet.
         if event.type() in (QEvent.FontChange, QEvent.StyleChange):
-            QTimer.singleShot(0, self._refit_popups)
+            QTimer.singleShot(0, self, self._refit_popups)
 
     def _refit_popups(self) -> None:
         for combo in (

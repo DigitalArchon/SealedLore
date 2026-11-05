@@ -78,7 +78,7 @@ class BusyLock(QObject):
 
     def _later(self, *_args) -> None:
         # After the page has built what the new choice shows.
-        QTimer.singleShot(0, self._lock_new)
+        QTimer.singleShot(0, self, self._lock_new)
 
     def _lock_new(self) -> None:
         if not self.locked:

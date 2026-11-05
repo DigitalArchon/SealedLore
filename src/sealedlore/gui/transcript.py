@@ -2107,7 +2107,7 @@ class TranscriptView(QScrollArea):
         self._anchor_node = place
         self._layout.activate()
         self._apply_anchor()
-        QTimer.singleShot(0, self._apply_anchor)
+        QTimer.singleShot(0, self, self._apply_anchor)
 
     @property
     def unbuilt(self) -> int:
@@ -2203,7 +2203,7 @@ class TranscriptView(QScrollArea):
         if self._anchor_node is not None:
             self._layout.activate()
             self._apply_anchor()
-            QTimer.singleShot(0, self._apply_anchor)
+            QTimer.singleShot(0, self, self._apply_anchor)
 
     def _jump_to(self, index: int) -> None:
         """Rebuild the window around unit `index`: about half a page either
@@ -2244,7 +2244,7 @@ class TranscriptView(QScrollArea):
         self._jump_to(0)
         self._layout.activate()
         self._set_value(0)
-        QTimer.singleShot(0, lambda: self._set_value(0))
+        QTimer.singleShot(0, self, lambda: self._set_value(0))
 
     def jump_to_latest(self) -> None:
         """The newest page, followed at the bottom as when the story opened."""
@@ -2410,7 +2410,7 @@ class TranscriptView(QScrollArea):
         self._anchor_node = place
         # Held against the rebuild's own scroll to the end, and re-applied as
         # word-wrapped heights settle (`_on_range_changed`).
-        QTimer.singleShot(0, self._apply_anchor)
+        QTimer.singleShot(0, self, self._apply_anchor)
 
     def _apply_anchor(self) -> None:
         if self._anchor_node is None:
@@ -2438,7 +2438,7 @@ class TranscriptView(QScrollArea):
         self._anchor_node = (node_id, 0)
         self._layout.activate()
         self._apply_anchor()
-        QTimer.singleShot(0, self._apply_anchor)
+        QTimer.singleShot(0, self, self._apply_anchor)
 
     @property
     def searchable_texts(self) -> list[tuple[str, str]]:
@@ -2466,7 +2466,7 @@ class TranscriptView(QScrollArea):
         self._anchor_match = (label, start)
         self._layout.activate()
         self._reveal_match()
-        QTimer.singleShot(0, self._reveal_match)
+        QTimer.singleShot(0, self, self._reveal_match)
         return True
 
     def _reveal_match(self) -> None:
@@ -2494,7 +2494,7 @@ class TranscriptView(QScrollArea):
         self._anchor_bottom = None
         self._anchor_node = None
         self._anchor_match = None
-        QTimer.singleShot(0, self._jump_to_bottom)
+        QTimer.singleShot(0, self, self._jump_to_bottom)
 
     def _jump_to_bottom(self) -> None:
         if self._anchor_node is not None:
@@ -2532,6 +2532,6 @@ class TranscriptView(QScrollArea):
         # Only the newest page is followed as it grows.
         self._follow = self.at_latest and value >= bar.maximum() - FOLLOW_TOLERANCE_PX
         if value <= bar.minimum() and self._lo > 0:
-            QTimer.singleShot(0, self.show_earlier)
+            QTimer.singleShot(0, self, self.show_earlier)
         elif value >= bar.maximum() > 0 and not self.at_latest:
-            QTimer.singleShot(0, self.show_later)
+            QTimer.singleShot(0, self, self.show_later)

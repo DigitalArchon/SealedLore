@@ -2416,7 +2416,7 @@ class MainWindow(
         self._reassemble_inspector()
         self._update_controls()
         if focus_id:
-            QTimer.singleShot(0, lambda: self.transcript.scroll_to_node(focus_id))
+            QTimer.singleShot(0, self, lambda: self.transcript.scroll_to_node(focus_id))
 
     def _switch_variant(self, node_id: str, delta: int) -> None:
         """‹ › on a passage: the other take stands in its place, and the story
@@ -2471,7 +2471,7 @@ class MainWindow(
         elif leaving:
             focus, self._map_focus = self._map_focus, None
             if focus:
-                QTimer.singleShot(0, lambda: self.transcript.scroll_to_node(focus))
+                QTimer.singleShot(0, self, lambda: self.transcript.scroll_to_node(focus))
 
     def refresh_map(self, *, keep_view: bool = False) -> None:
         if self.session is None:
@@ -3826,7 +3826,7 @@ class MainWindow(
             if self._thread is not None:
                 self._thread.wait()
             # The worker's finalizer has saved; closeEvent does the rest.
-            QTimer.singleShot(0, self.close)
+            QTimer.singleShot(0, self, self.close)
             return
         if returned and self._failed is None:
             self.statusBar().showMessage(
@@ -3840,7 +3840,7 @@ class MainWindow(
         self._reload_unless_editing()
         focus, self._focus_after_job = self._focus_after_job, None
         if focus is not None:
-            QTimer.singleShot(0, lambda: self.transcript.scroll_to_node(focus))
+            QTimer.singleShot(0, self, lambda: self.transcript.scroll_to_node(focus))
         self.refresh_summaries()
         self.refresh_retrieval()
         # Card pictures that came back while the worker owned the story.
@@ -3891,10 +3891,10 @@ class MainWindow(
         # Fill with lore characters…, window_cast.py).
         after, self._after_job = getattr(self, "_after_job", None), None
         if after is not None:
-            QTimer.singleShot(0, after)
+            QTimer.singleShot(0, self, after)
         if self._queued is not None:
             # After the thread has let go of the job, not inside its signal.
-            QTimer.singleShot(0, self._run_queued)
+            QTimer.singleShot(0, self, self._run_queued)
 
     # --- panels ------------------------------------------------------------
 

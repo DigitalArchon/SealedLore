@@ -189,7 +189,7 @@ class CollectionPage(QWidget):
         # Esc in a field gives the page the focus first (main_window._on_escape).
         self.setFocusPolicy(Qt.ClickFocus)
         self._pictures = pictures
-        self._thumbs = Thumbs(pictures, self._thumbs_ready)
+        self._thumbs = Thumbs(pictures, self._thumbs_ready, self)
         self._characters: list[Character] = []
         self._current: str | None = None
         # The character the forms hold: loaded again only for another one,

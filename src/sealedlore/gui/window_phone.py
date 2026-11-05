@@ -787,7 +787,7 @@ class _Backend:
             raise Refused(409, LEAVING_ASKS)
         # Opened once this answer is on its way: the phone hears of it by
         # its events, as it would of the desktop opening one.
-        QTimer.singleShot(0, lambda: window.open_story(story_id))
+        QTimer.singleShot(0, window, lambda: window.open_story(story_id))
 
     def send(self, turn: PhoneTurn, device: str) -> dict:
         window = self.window

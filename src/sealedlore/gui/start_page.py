@@ -327,7 +327,7 @@ class StartChooser(QScrollArea):
         self.setWidget(page)
         if self.isVisible():
             self._lay_samples()
-            QTimer.singleShot(0, self._show_pictures)
+            QTimer.singleShot(0, self, self._show_pictures)
 
     def _section(self, title: str, text: str) -> None:
         label = QLabel(title)
@@ -397,14 +397,14 @@ class StartChooser(QScrollArea):
         super().showEvent(event)
         self._lay_samples()
         if not self._pictures_shown:
-            QTimer.singleShot(0, self._show_pictures)
+            QTimer.singleShot(0, self, self._show_pictures)
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt naming
         super().resizeEvent(event)
         self._lay_samples()
         if self._pictures_shown:
             # Cut again to the cards' new width.
-            QTimer.singleShot(0, self._show_pictures)
+            QTimer.singleShot(0, self, self._show_pictures)
 
 
 class NewDialog(QDialog):

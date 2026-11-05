@@ -327,7 +327,7 @@ class SettingsDialog(QDialog):
     def showEvent(self, event) -> None:  # noqa: N802 - Qt naming
         super().showEvent(event)
         if self._opened is None:
-            QTimer.singleShot(0, self._remember_opened)
+            QTimer.singleShot(0, self, self._remember_opened)
 
     def _remember_opened(self) -> None:
         if self._opened is None:

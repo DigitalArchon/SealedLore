@@ -60,7 +60,7 @@ class TextSizeWindow:
         if self._text_scale() != 1.0 or not defaults:
             text_size.apply(QApplication.instance(), self._text_scale())
         # A window moved to another screen may have more room, or less.
-        QTimer.singleShot(0, self._watch_screen)
+        QTimer.singleShot(0, self, self._watch_screen)
 
     def _appearance_actions(self, view_menu) -> None:
         """View → Theme and View → Fonts…."""

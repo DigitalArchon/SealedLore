@@ -59,7 +59,9 @@ class CastBoardWindow:
         self.image_jobs.changed.connect(self._refresh_board)
         # A new look's first picture failed: the rest of its row is let go
         # (once the failure is out of the pending list).
-        self.image_jobs.failed.connect(lambda *_args: QTimer.singleShot(0, self._start_waiting))
+        self.image_jobs.failed.connect(
+            lambda *_args: QTimer.singleShot(0, self, self._start_waiting)
+        )
         # What the board put away, each as it was, to bring back as it was.
         self._board_away: list[tuple[object, bool]] = []
         # Gaps approved to be drawn from a new look's first picture once it

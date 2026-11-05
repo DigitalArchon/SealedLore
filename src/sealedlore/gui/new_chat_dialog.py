@@ -218,7 +218,7 @@ class NewChatDialog(QDialog):
         super().showEvent(event)
         # Once filled in: what changes from here on is the author's typing.
         if getattr(self, "_typed", None) is None:
-            QTimer.singleShot(0, lambda: setattr(self, "_typed", typed_texts(self)))
+            QTimer.singleShot(0, self, lambda: setattr(self, "_typed", typed_texts(self)))
 
     def reject(self) -> None:
         """Cancel or Esc: a system prompt or greeting typed here is asked

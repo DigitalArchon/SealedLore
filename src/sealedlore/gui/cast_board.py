@@ -18,7 +18,7 @@ from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from PySide6.QtCore import QByteArray, QMimeData, QRectF, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QByteArray, QMimeData, QObject, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QColor,
     QDrag,
@@ -108,12 +108,14 @@ class Thumbs:
 
     PER_TICK = 3
 
-    def __init__(self, pictures: StoryPictures, ready: Callable[[], None]) -> None:
+    def __init__(self, pictures: StoryPictures, ready: Callable[[], None], owner: QObject) -> None:
         self._pictures = pictures
         self._ready = ready
         self._cache: dict[tuple[str, int, int], QPixmap] = {}
         self._queue: list[tuple[str, int, int]] = []
-        self._timer = QTimer()
+        # The owner's: a timer of its own outlived the page whose pictures it
+        # read, and told the page's deleted widgets of them.
+        self._timer = QTimer(owner)
         self._timer.setInterval(0)
         self._timer.timeout.connect(self._work)
 
@@ -643,7 +645,7 @@ class CastBoard(QWidget):
     def __init__(self, pictures: StoryPictures, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("castBoard")
-        self._thumbs = Thumbs(pictures, self._thumbs_ready)
+        self._thumbs = Thumbs(pictures, self._thumbs_ready, self)
         self._cards: list[Character] = []
         self._shown: dict[str, str] = {}
         self._wanted: dict[str, Mapping[str, int]] = {}

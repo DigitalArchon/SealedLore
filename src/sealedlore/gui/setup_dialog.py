@@ -202,7 +202,7 @@ class SetupDialog(QDialog):
         super().showEvent(event)
         # Once filled in: what changes from here on is the author's doing.
         if self._opened is None:
-            QTimer.singleShot(0, self._remember_opened)
+            QTimer.singleShot(0, self, self._remember_opened)
 
     def _remember_opened(self) -> None:
         if self._opened is None:

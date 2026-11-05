@@ -53,7 +53,7 @@ class CollectionPicker(QDialog):
         size_to_screen(self, 0.35, 0.7, at_least=QSize(560, 600))
         self._characters = list(characters)
         self._placing = placing
-        self._thumbs = Thumbs(pictures, lambda: None)
+        self._thumbs = Thumbs(pictures, lambda: None, self)
         heading = QLabel(lead)
         heading.setWordWrap(True)
         self.search = QLineEdit()

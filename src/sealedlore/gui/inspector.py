@@ -239,7 +239,7 @@ class ContextInspector(QWidget):
     def _copy(self, button: QPushButton, label: str, text: str) -> None:
         copy_text(text)
         button.setText("Copied")
-        QTimer.singleShot(1500, lambda: button.setText(label))
+        QTimer.singleShot(1500, button, lambda: button.setText(label))
 
     def _show_section_text(self, current: QTreeWidgetItem | None) -> None:
         name = current.data(0, Qt.UserRole) if current is not None else None
