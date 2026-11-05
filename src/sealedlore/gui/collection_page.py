@@ -78,6 +78,7 @@ DUPLICATE, VERSION, RENAME_VERSION, DELETE = "duplicate", "version", "rename_ver
 STORY_FROM_CARD = "story_from_card"
 ADD_TO_STORY = "add_to_story"
 CHAT, DRAFT = "chat", "draft"
+BACKUP, RESTORE = "backup", "restore"
 CHAT_LABEL = "Chat with them…"
 DRAFT_LABEL = "Draft a story with them…"
 ADD_LABEL = "Add to the story"
@@ -245,10 +246,32 @@ class CollectionPage(QWidget):
             "SillyTavern character cards (PNG, CHARX or JSON), as SillyTavern, Chub and "
             "RisuRealm share them"
         )
+        # All of them at once, ids and versions kept: a story's links to them
+        # still hold once put back, on this computer or another (one card
+        # file each loses both).
+        self.backup_button = QToolButton()
+        self.backup_button.setText("Backup")
+        self.backup_button.setPopupMode(QToolButton.InstantPopup)
+        backup_menu = QMenu(self.backup_button)
+        self.backup_action = backup_menu.addAction("Back up all your characters…")
+        self.backup_action.setToolTip(
+            "Every character, their versions, pictures and files, in one file to keep or "
+            "take to another computer"
+        )
+        self.backup_action.triggered.connect(lambda: self.action_requested.emit(BACKUP, ""))
+        restore_action = backup_menu.addAction("Restore from a backup…")
+        restore_action.setToolTip(
+            "Put back the characters a backup holds: those you have already are asked about"
+        )
+        restore_action.triggered.connect(lambda: self.action_requested.emit(RESTORE, ""))
+        backup_menu.setToolTipsVisible(True)
+        self.backup_button.setMenu(backup_menu)
+        self.backup_button.setToolTip("Back up all your characters, or put a backup back")
         left_buttons = QHBoxLayout()
         left_buttons.setContentsMargins(0, 0, 0, 0)
         left_buttons.addWidget(self.new_button)
         left_buttons.addWidget(self.import_button)
+        left_buttons.addWidget(self.backup_button)
         left_buttons.addStretch(1)
         filters = QHBoxLayout()
         filters.setContentsMargins(0, 0, 0, 0)
@@ -460,6 +483,7 @@ class CollectionPage(QWidget):
         """Every character kept, versions too. The one shown stays shown (or
         its main card, if it went)."""
         self._characters = list(characters)
+        self.backup_action.setEnabled(bool(self._characters))
         self._fill_tags()
         if self._current is not None and self._card(self._current) is None:
             self._current = None

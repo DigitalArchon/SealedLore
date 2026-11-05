@@ -16,10 +16,11 @@ from __future__ import annotations
 
 import io
 import re
+from contextlib import contextmanager
 from pathlib import Path
 
-from PySide6.QtCore import QFile, QTimer
-from PySide6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
+from PySide6.QtCore import QFile, Qt, QTimer
+from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMessageBox
 
 from sealedlore.engine.look_sheet import label_key
 from sealedlore.engine.looks import look_words
@@ -28,6 +29,7 @@ from sealedlore.engine.usage import usage_report
 from sealedlore.gui.card_files_form import TYPES, link_problem
 from sealedlore.gui.collection_page import (
     ADD_TO_STORY,
+    BACKUP,
     CHAT,
     DELETE,
     DRAFT,
@@ -41,6 +43,7 @@ from sealedlore.gui.collection_page import (
     NEW,
     PAGE_LABEL,
     RENAME_VERSION,
+    RESTORE,
     STORY_FROM_CARD,
     VERSION,
     CollectionPage,
@@ -54,6 +57,14 @@ from sealedlore.models.character import Character
 from sealedlore.models.image import ImageRef
 from sealedlore.models.tavern import CardAsset
 from sealedlore.storage import collection
+from sealedlore.storage.collection_backup import (
+    BACKUP_SUFFIX,
+    BackupError,
+    new_log_entries,
+    open_backup,
+    restore,
+    write_backup,
+)
 from sealedlore.storage.image_meta import (
     MetadataError,
     picture_kind,
@@ -64,7 +75,7 @@ from sealedlore.storage.image_meta import (
 from sealedlore.storage.images import REFS_DIR, write_bytes_atomic
 from sealedlore.storage.paths import COLLECTION_ID, collection_dir
 from sealedlore.storage.picture_store import PictureStore
-from sealedlore.storage.repository import read_api_log, stories_linking
+from sealedlore.storage.repository import append_api_log, read_api_log, stories_linking
 from sealedlore.storage.tavern_cards import (
     MAX_INFLATED,
     CardError,
@@ -118,6 +129,17 @@ def move_to_trash(path: Path) -> bool:
 
 def _safe(name: str) -> str:
     return re.sub(r"[^\w\- ]", "_", name).strip() or "character"
+
+
+@contextmanager
+def _waiting():
+    """The busy cursor over work that holds the window a moment (a backup of
+    many characters), put back whatever happens."""
+    QApplication.setOverrideCursor(Qt.WaitCursor)
+    try:
+        yield
+    finally:
+        QApplication.restoreOverrideCursor()
 
 
 class CollectionWindow:
@@ -267,6 +289,142 @@ class CollectionWindow:
         untouched folder stays untouched."""
         if self._collection_save.isActive():
             self._save_collection()
+
+    # --- all of them at once: a backup, and putting one back -------------------------------
+
+    def _backup_collection(self) -> None:
+        """Every character, versions, pictures and files, into one file
+        (Backup → Back up all your characters…): their ids kept, so a story's
+        links to them hold once it is put back, here or on another computer."""
+        session = self._collection_session()
+        if self._collection_problem:
+            self._warn_plain("Not backed up", self._collection_problem)
+            return
+        if not session.cast:
+            return
+        self._flush_collection()
+        chosen, _ = QFileDialog.getSaveFileName(
+            self._dialog_parent(),
+            "Back up all your characters",
+            str(Path.home() / f"Your characters{BACKUP_SUFFIX}"),
+            f"Backups of your characters (*{BACKUP_SUFFIX});;All files (*)",
+        )
+        if not chosen:
+            return
+        path = Path(chosen)
+        if path.suffix.lower() != ".zip":
+            path = path.with_name(path.name + BACKUP_SUFFIX)
+        try:
+            with _waiting():
+                written = write_backup(
+                    path,
+                    session.cast,
+                    session.pictures,
+                    images=session.pictures.images(),
+                    log=read_api_log(COLLECTION_ID, root=self.root),
+                )
+        except OSError as exc:
+            self._warn_plain("Couldn't back up your characters", str(exc))
+            return
+        count = len(session.cast)
+        self.statusBar().showMessage(
+            f"Backed up {count} character{'s' if count != 1 else ''} with {written} "
+            f"file{'s' if written != 1 else ''} to {path.name}.",
+            10000,
+        )
+
+    def restore_collection(self, path: Path | None = None) -> None:
+        """A backup of characters put back (Backup → Restore from a backup…,
+        or File → Import… of one): those not here come back under their own
+        ids; those here already are kept, or replaced, as the author says."""
+        if path is None:
+            chosen, _ = QFileDialog.getOpenFileName(
+                self._dialog_parent(),
+                "Restore your characters",
+                str(Path.home()),
+                f"Backups of your characters (*{BACKUP_SUFFIX} *.zip);;All files (*)",
+            )
+            if not chosen:
+                return
+            path = Path(chosen)
+        if self._collection_unwritable():
+            return
+        session = self._collection_session()
+        self._flush_collection()
+        try:
+            with open_backup(path) as backup:
+                here = {character.id for character in session.cast}
+                again = [c.name for c in backup.characters if c.id in here]
+                replace = self._ask_replace_kept(again) if again else False
+                if replace is None:
+                    return
+                with _waiting():
+                    done = restore(
+                        backup,
+                        session.bundle,
+                        session.pictures,
+                        replace=replace,
+                        clean=self._clean_picture,
+                    )
+                    log = read_api_log(COLLECTION_ID, root=self.root)
+                    entries = new_log_entries(backup, log)
+        except BackupError as exc:
+            self._warn_plain("Couldn't restore your characters", str(exc))
+            return
+        # What drawing them cost comes back with them (the log is append-only).
+        for entry in entries:
+            append_api_log(COLLECTION_ID, entry, root=self.root)
+        self._save_collection()
+        self.collection_page.forget_pictures()
+        self.collection_page.forget_forms()
+        self.show_collection(True)
+        self._refresh_collection()
+        lead = (
+            f"Restored from {path.name}: {len(done.added)} added"
+            + (f", {len(done.replaced)} replaced" if done.replaced else "")
+            + (f", {len(done.kept)} kept as you had them" if done.kept else "")
+            + "."
+        )
+        if done.missing:
+            self._say_left_out(
+                PAGE_LABEL,
+                lead,
+                [
+                    f"{done.missing} file{'s' if done.missing != 1 else ''} the backup names "
+                    "weren't in it, or couldn't be cleaned of their hidden data, so they were "
+                    "left out."
+                ],
+            )
+        else:
+            self.statusBar().showMessage(lead, 10000)
+
+    def _ask_replace_kept(self, names: list[str]) -> bool | None:
+        """Characters the backup has that are here already: keep yours (the
+        default), use the backup's, or Cancel (None)."""
+        shown = ", ".join(names[:6]) + (f" and {len(names) - 6} more" if len(names) > 6 else "")
+        box = QMessageBox(self._dialog_parent())
+        box.setIcon(QMessageBox.Question)
+        box.setWindowTitle("Restore your characters")
+        box.setText(
+            f"{len(names)} of the characters in this backup are in Your characters already: "
+            f"{shown}."
+        )
+        box.setInformativeText(
+            "Keep yours as they are, or put the backup's in their place? The others in the "
+            "backup are added either way."
+        )
+        box.setTextFormat(Qt.PlainText)
+        mine = box.addButton("Keep mine", QMessageBox.AcceptRole)
+        theirs = box.addButton("Use the backup's", QMessageBox.DestructiveRole)
+        box.addButton(QMessageBox.Cancel)
+        box.setDefaultButton(mine)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is mine:
+            return False
+        if clicked is theirs:
+            return True
+        return None
 
     def _close_collection(self) -> None:
         """When the window closes: kept, and its client let go."""
@@ -434,6 +592,8 @@ class CollectionWindow:
             ADD_TO_STORY: lambda: self._add_shown_to_story(card_id),
             CHAT: lambda: self.chat_with_kept(card_id),
             DRAFT: lambda: self.draft_with_kept(card_id),
+            BACKUP: lambda: self._backup_collection(),
+            RESTORE: lambda: self.restore_collection(),
         }
         action = actions.get(what)
         if action is not None:

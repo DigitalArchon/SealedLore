@@ -167,6 +167,7 @@ from sealedlore.storage.archive import (
     restore_archive,
     write_archive,
 )
+from sealedlore.storage.collection_backup import BACKUP_SUFFIX, is_backup
 from sealedlore.storage.images import is_video_file, reference_files, without_videos
 from sealedlore.storage.paths import data_home, samples_dir, story_dir
 from sealedlore.storage.prompt_sets import PROMPT_SET_SUFFIX
@@ -1316,10 +1317,10 @@ class MainWindow(
 
     def import_file(self) -> None:
         """A new story from a scenario, a story backup, a plot file; a
-        SillyTavern character card into Your characters; a SillyTavern
-        lorebook into the open story's lore; or a prompt set, into the prompt
-        editor. Only what opens another story asks about a memory-only scene
-        or chat (`_import_path`)."""
+        SillyTavern character card, or a backup of characters, into Your
+        characters; a SillyTavern lorebook into the open story's lore; or a
+        prompt set, into the prompt editor. Only what opens another story
+        asks about a memory-only scene or chat (`_import_path`)."""
         if self._busy:
             self._say_wait("Import")
             return
@@ -1328,9 +1329,10 @@ class MainWindow(
             # Every kind, shown together by default: split by kind, a plot
             # file once needed "All files" to be seen at all.
             f"SealedLore files and SillyTavern cards (*{SCENARIO_SUFFIX} *{ARCHIVE_SUFFIX} "
-            f"*{PLOT_SUFFIX} *{PROMPT_SET_SUFFIX} *.png *.json *.charx);;"
+            f"*{BACKUP_SUFFIX} *{PLOT_SUFFIX} *{PROMPT_SET_SUFFIX} *.png *.json *.charx);;"
             f"Scenarios (*{SCENARIO_SUFFIX});;"
             f"Story backups (*{ARCHIVE_SUFFIX});;"
+            f"Backups of your characters (*{BACKUP_SUFFIX});;"
             f"Plot files (*{PLOT_SUFFIX});;"
             f"Prompt sets (*{PROMPT_SET_SUFFIX});;"
             "SillyTavern cards and lorebooks (*.png *.json *.charx);;"
@@ -1360,14 +1362,19 @@ class MainWindow(
         if not path:
             return
         suffix = Path(path).suffix.lower()
-        # A picture or a zip is never one of SealedLore's own files.
-        kind = None if suffix in (PLOT_SUFFIX, ".png", ".charx") else file_format(Path(path))
+        # A picture or a zip is never one of SealedLore's own JSON files.
+        kind = (
+            None if suffix in (PLOT_SUFFIX, ".png", ".charx", ".zip") else file_format(Path(path))
+        )
         # A card, a lorebook or a prompt set leaves the story open. What opens
         # another asks about a memory-only scene or chat once the file is read
         # and the new story certain (`_leave_for_new`): asked first, a file
         # with errors, or notes answered Cancel, still cost the scene.
         if suffix == PLOT_SUFFIX:
             self._import_plot_file(Path(path))
+        elif suffix == ".zip" and is_backup(Path(path)):
+            # Your characters, put back: no story opens, nothing is asked.
+            self.restore_collection(Path(path))
         elif suffix in (".png", ".charx"):
             self._import_card(Path(path))
         elif kind == ARCHIVE_FORMAT:

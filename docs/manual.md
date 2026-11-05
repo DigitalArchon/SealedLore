@@ -1043,6 +1043,17 @@ Pictures drawn here are paid for as a story's are, and what they have cost so
 far is said under the character's name. While a story's private scene is open
 they wait, as the story's cards' pictures do.
 
+**Backing them all up.** **Backup → Back up all your characters…** (beside
+Import) puts every character in one file: their versions, every picture and
+file on their cards, the pictures drawn for them and what those cost. Unlike a
+card file each, it keeps their versions and the ids stories link them by, so a
+story backup and this one, put back on another computer, are still linked.
+**Backup → Restore from a backup…**, or **File → Import…** of the file, puts
+it back: characters you don't have come back as they were, and if some are
+here already you choose whether to keep yours (the default) or put the
+backup's in their place. Like a story backup, it holds the prompts their
+pictures were drawn from, so keep it as you keep your stories.
+
 **Chat with them…** starts a simple chat (see "Simple chat") from their card.
 Before it starts you see, and can change, everything it is made of:
 

@@ -545,3 +545,56 @@ def test_the_trash_takes_a_card_whose_picture_an_export_would_refuse(
     with pytest.raises(CardError):
         window._charx_of(elena)
     assert window._charx_of(elena, shared=False)
+
+
+# --- a backup of all of them ---------------------------------------------------------------
+
+
+def test_all_your_characters_backed_up_come_back_on_another_computer(
+    app, window, tmp_path: Path, monkeypatch
+):
+    """One card file each lost their versions and their ids (a story's links
+    to them); the backup keeps both, and File → Import… puts it back."""
+    from PySide6.QtWidgets import QFileDialog
+
+    elena = kept_elena(window, tmp_path, monkeypatch)
+    page = window.collection_page
+    backup = tmp_path / "all.sealedlore-characters.zip"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(backup), ""))
+    page.backup_action.trigger()
+    assert backup.exists() and "Backed up 1 character" in window.statusBar().currentMessage()
+    portrait = window._collection_store().read(elena.reference_images[0].file)
+
+    other = MainWindow(root=tmp_path / "elsewhere", use_mock=True)
+    try:
+        monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(backup), ""))
+        other.import_file()
+        kept = other._kept()
+        assert [c.id for c in kept] == [elena.id], "her id, so a story's link to her holds"
+        assert other._collection_store().read(kept[0].reference_images[0].file) == portrait
+        assert other.collection_shown()
+    finally:
+        other.close()
+
+
+def test_restoring_characters_you_have_asks_and_keeps_yours_by_default(
+    app, window, tmp_path: Path, monkeypatch
+):
+    from PySide6.QtWidgets import QFileDialog
+
+    elena = kept_elena(window, tmp_path, monkeypatch)
+    backup = tmp_path / "all.sealedlore-characters.zip"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(backup), ""))
+    window.collection_page.backup_action.trigger()
+    elena.full_description = "Changed since the backup."
+    asked: list = []
+
+    def exec_(box) -> int:
+        asked.append((box.windowTitle(), box.defaultButton().text()))
+        return 0  # Enter: the default
+
+    monkeypatch.setattr(QMessageBox, "exec", exec_)
+    monkeypatch.setattr(QMessageBox, "clickedButton", lambda box: box.defaultButton())
+    window.restore_collection(backup)
+    assert asked == [("Restore your characters", "Keep mine")]
+    assert window._kept_card(elena.id).full_description == "Changed since the backup."
