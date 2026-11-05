@@ -8,6 +8,7 @@ shape RisuAI writes, from the spec: never one from a card site."""
 from __future__ import annotations
 
 import base64
+import errno
 import io
 import json
 import time
@@ -616,3 +617,64 @@ def test_the_portrait_keeps_its_labels_beside_a_picture_labelled_main(tmp_path: 
         ("winter coat", "", "portrait", ""),
         ("", "main", "", "torso"),
     ]
+
+
+# --- their files on the disk ------------------------------------------------------------------
+
+
+class FullDisk(DiskPictures):
+    """Their store, its disk full from the `full`th write on."""
+
+    def __init__(self, root: Path, full: int = 1) -> None:
+        super().__init__(COLLECTION_ID, root)
+        self.writes, self.full = 0, full
+
+    def write(self, relative: str, data: bytes) -> None:
+        self.writes += 1
+        if self.writes >= self.full:
+            raise OSError(errno.ENOSPC, "No space left on device")
+        super().write(relative, data)
+
+
+def test_a_file_the_disk_wont_take_keeps_its_record_where_it_was(tmp_path: Path):
+    """The record named the new place before the file was written there:
+    refused, it named nothing, and the next save kept it so."""
+    root, elena, _notes = kept_elena(tmp_path)
+    farm = next(a for a in elena.tavern.assets if a.name == "Farmhouse")
+    before, farm.name = farm.file, "The farmhouse"
+    with pytest.raises(OSError):
+        collection.rename_file(elena, farm, FullDisk(root))
+    assert farm.file == before and store(root).read(farm.file) == FARMHOUSE
+    # 3.0.0b1's files, moved into their folder: the one refused stays put.
+    held = [a for a in elena.tavern.assets if a.held][:3]
+    for number, asset in enumerate(held):
+        data = store(root).read(asset.file)
+        asset.file = f"{collection.FILES_DIR}/old{number}.{asset.ext}"
+        store(root).write(asset.file, data)
+    old = [asset.file for asset in held]
+    gone = collection.settle_files([elena], FullDisk(root, full=2))
+    assert gone == [old[0]], "the refused one and those after it are left for next time"
+    assert held[1].file == old[1] and store(root).read(held[1].file) is not None
+    assert held[0].file.startswith(collection.files_folder(elena) + "/")
+
+
+def test_a_files_name_fits_any_file_system_in_bytes(tmp_path: Path):
+    """Eighty characters of a script taking four bytes each are 320 bytes:
+    past what a file system names a file."""
+    jane = collection.kept("Jane Moss")
+    taken: set[str] = set()
+    path = collection.file_path(jane, CardAsset(name="𝓙" * 80, ext="png"), taken)
+    name = path.rsplit("/", 1)[-1]
+    assert len(name.encode()) <= collection.NAME_BYTES + len(".png")
+    store(tmp_path).write(path, TINY)  # the disk takes it
+    again = collection.file_path(jane, CardAsset(name="𝓙" * 80, ext="png"), taken)
+    assert again != path and again.endswith("-2.png")
+    for reserved in ("COM¹", "lpt³", "CON"):
+        place = collection.file_path(jane, CardAsset(name=reserved, ext="txt"), set())
+        assert place.rsplit("/", 1)[-1] == f"_{reserved}.txt"
+
+
+def test_one_file_on_a_card_is_said_as_one():
+    wind = CardAsset(type="x-risu-asset", name="wind", ext="mp3", file="images/a/wind.mp3")
+    said = collection.files_said([wind])
+    assert "is kept with the card, and goes out with it in a CHARX export" in said

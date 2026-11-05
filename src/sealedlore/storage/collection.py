@@ -161,8 +161,16 @@ def copied(
 # right when they are renamed), each under the name the card gave it (the
 # author, Nov 4 2026: one folder for every character's files gets messy).
 FILES_DIR = "images/assets"
-# Names Windows won't give a file, whatever its extension.
-_RESERVED = {"con", "prn", "aux", "nul"} | {f"{p}{n}" for p in ("com", "lpt") for n in range(10)}
+# Names Windows won't give a file, whatever its extension: the superscript
+# digits too, which it reads as COM1 to COM3 and LPT1 to LPT3.
+_RESERVED = {"con", "prn", "aux", "nul"} | {
+    f"{port}{number}" for port in ("com", "lpt") for number in (*map(str, range(10)), "¹", "²", "³")
+}
+# A file's name before its number and extension, at most this long in UTF-8:
+# file systems count a name's bytes, not its characters (255 on most, 143
+# in an encrypted home folder), and 80 characters of a script that takes four
+# bytes a character ran past them.
+NAME_BYTES = 100
 
 
 def files_folder(character: Character) -> str:
@@ -173,7 +181,9 @@ def file_path(character: Character, asset: CardAsset, taken: set[str]) -> str:
     """A new place for one of `character`'s files: in their folder, under the
     card's name for it made safe for any file system, numbered when `taken`
     (casefolded paths, added to) already has it."""
-    stem = re.sub(r"[^\w\- ]+", "_", asset.name).strip(" _-")[:80].strip() or "file"
+    stem = re.sub(r"[^\w\- ]+", "_", asset.name).strip(" _-")[:80]
+    # Cut at a character, never inside one.
+    stem = stem.encode()[:NAME_BYTES].decode("utf-8", "ignore").strip() or "file"
     if stem.casefold() in _RESERVED:
         stem = f"_{stem}"
     ext = re.sub(r"[^A-Za-z0-9]+", "", asset.ext)[:10] or "bin"
@@ -238,10 +248,11 @@ def add_link(character: Character, address: str, kind: str) -> CardAsset:
 
 
 def rename_file(character: Character, asset: CardAsset, store: PictureStore) -> str | None:
-    """A renamed file kept under its new name too: written there, its record
-    pointed there, and the old place returned for the window to remove once
-    the record is saved. None when nothing needed moving or it couldn't be
-    read."""
+    """A renamed file kept under its new name too: written there, then its
+    record pointed there, and the old place returned for the window to
+    remove once the record is saved. None when nothing needed moving or it
+    couldn't be read. A write that fails (OSError: a full disk) leaves the
+    record as it was, naming the file where it still is."""
     if not asset.held:
         return None
     wanted = file_path(character, asset, _taken(character, but=asset))
@@ -250,18 +261,18 @@ def rename_file(character: Character, asset: CardAsset, store: PictureStore) -> 
     data = store.read(asset.file)
     if data is None:
         return None
+    store.write(wanted, data)
     old, asset.file = asset.file, wanted
-    store.write(asset.file, data)
     return old
 
 
 def settle_files(characters: Sequence[Character], store: PictureStore) -> list[str]:
     """Card files kept before each character had a folder (3.0.0b1 kept them
     all in one) moved into their own character's: each written in its new
-    place and its record pointed there. The old files no one names any more
-    are returned, for the window to remove once the new records are saved,
-    so nothing is lost if it stops in between. A file that can't be read
-    stays where it is."""
+    place, then its record pointed there. The old files no one names any
+    more are returned, for the window to remove once the new records are
+    saved, so nothing is lost if it stops in between. A file that can't be
+    read, or written in its new place, stays where it is, for next time."""
     moved: list[str] = []
     for character in characters:
         if character.tavern is None:
@@ -275,9 +286,13 @@ def settle_files(characters: Sequence[Character], store: PictureStore) -> list[s
             data = store.read(asset.file)
             if data is None:
                 continue
-            old, asset.file = asset.file, file_path(character, asset, taken)
-            store.write(asset.file, data)
-            moved.append(old)
+            new = file_path(character, asset, taken)
+            try:
+                store.write(new, data)
+            except OSError:
+                continue
+            moved.append(asset.file)
+            asset.file = new
     used = {file for character in characters for file in files_of(character)}
     return [file for file in dict.fromkeys(moved) if file not in used]
 
@@ -383,10 +398,12 @@ def files_said(assets: Sequence[CardAsset]) -> str:
         parts.append(_count(others, "other file") + " (sound, video, fonts…)")
     words = ""
     if parts:
+        several = len(held) > 1
         words = (
-            f"Its {_listed(parts)} {'are' if len(held) > 1 else 'is'} kept with the card, and "
-            "go out with it in a CHARX export. A background goes behind a chat or a story made "
-            "from the card, and the pictures a greeting shows appear with that greeting."
+            f"Its {_listed(parts)} {'are' if several else 'is'} kept with the card, and "
+            f"{'go' if several else 'goes'} out with it in a CHARX export. A background goes "
+            "behind a chat or a story made from the card, and the pictures a greeting shows "
+            "appear with that greeting."
         )
     if links:
         words += (" " if words else "") + (
