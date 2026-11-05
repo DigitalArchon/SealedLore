@@ -35,7 +35,14 @@ from PySide6.QtWidgets import (  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent
 GUI = ROOT / "src" / "sealedlore" / "gui"
 # The user-facing docs whose labels are checked; most of them are in the manual.
-DOCS = (ROOT / "README.md", ROOT / "docs" / "manual.md")
+# The guides beside the samples open from Help, so their paths are checked
+# too (PLOT_FORMAT.md named an Import scenario… and an Import plot… long gone).
+DOCS = (
+    ROOT / "README.md",
+    ROOT / "docs" / "manual.md",
+    ROOT / "SampleStories" / "PLOT_FORMAT.md",
+    ROOT / "SampleStories" / "WRITING_PLOTS.md",
+)
 
 
 def _docs() -> str:

@@ -325,7 +325,7 @@ Paste this to start SealedLore:
 .venv\Scripts\pythonw -m sealedlore.gui.app
 ```
 
-The SealedLore window opens. To connect it to a model, see step 2 of
+The SealedLore window opens. To connect it to a model, see step 1 of
 [First five minutes](../README.md#first-five-minutes).
 
 To put a **SealedLore** shortcut on your desktop, paste this line (it is
@@ -403,7 +403,11 @@ at its top what it is for. Options most people never change are put away
 under a heading that opens them, such as **Sampling (advanced)** under
 Generation, **Prompt caching (advanced)** under Endpoints, **Chapters and
 recall (advanced)** under Context, and, under Images, the picture endpoint
-for pictures drawn somewhere other than the chat endpoint.
+for pictures drawn somewhere other than the chat endpoint. Prompt caching's
+**Cache lifetime** is how long a Claude model keeps the story's cached prompt
+between turns: an hour (the default) costs a little more a turn and outlasts
+the pauses of real play; after five minutes, a longer pause rewrites the whole
+prompt at full price.
 
 ![Settings, open on Models: the pages down the left in their groups, and every model by the job it does, with Route…, Recommended and Browse… beside each](screenshots/settings.png)
 
@@ -477,8 +481,8 @@ the models it may move to.
 **The start page.** With no story open, the window shows every way to begin,
 each with a line on what it does: the stories you played last, to pick up
 where you left off; **Draft a story from an idea**, **Write a story from
-scratch**, **Have a simple chat** and **Import a file**; and the sample
-stories, each with its picture. **File → New…** (Ctrl+N), and **New…** under
+scratch**, **Have a simple chat**, **Import a file** and **Your characters**;
+and the sample stories, each with its picture. **File → New…** (Ctrl+N), and **New…** under
 the Stories list, show the same choices. A story saves itself as you go
 (Ctrl+S saves at once).
 
@@ -488,7 +492,9 @@ the Stories list, show the same choices. A story saves itself as you go
 **Standard** or **With Plot**), how many messages it has, when it was started
 and when it was last played, and **own models** when it is on models other than
 those in Settings (the tooltip says which). **Sort by** puts them in order of
-when they were last played, or by title.
+when they were last played, or by title. A Visual Story from a version before
+2.5 is listed greyed, as one not played here (Visual Stories moved to a game
+of their own); it can still be deleted.
 
 **Searching every story.** The box at the top of the list searches everything:
 every message on every branch, the chapters, your Questions, the world, the
@@ -622,7 +628,7 @@ archiving, rebuilding summaries.
 
 ## Models
 
-Eighteen settings name a model; the text models are together on Settings →
+Fourteen settings name a model; the text models are together on Settings →
 Models, the picture models on Settings → Images. Blank ones fall back as
 shown; the defaults marked ★ are NanoGPT model ids, so on another endpoint
 set them to one it lists (Browse…).
@@ -650,6 +656,7 @@ model, chosen when it was made; a TEE or encrypted chat's calls all go to it.
 | Portrait model ★ | Settings → Images | portraits and the cards' pictures | starts as FLUX.3 Klein |
 | Video model ★ | Settings → Video | videos | starts as Seedance 2.5 |
 | Private model | Settings → Private | private scenes | — |
+| Model for looks | Settings → Private | choosing the pictures a private scene's characters are shown with | the scene's own model |
 | Embeddings model | Settings → Lore | lore vectors | `BAAI/bge-m3` |
 
 A model's reasoning is kept with its passage for you to read, and is never
@@ -683,8 +690,8 @@ possible**, which is also the fastest:
 nearest level the model offers; the note under each setting says what the
 story model will be sent.
 
-**Recommended models.** Left blank, the scene and plot models fall back to the
-story model, the most expensive place to run a small call on every turn. On
+**Recommended models.** Left blank, the scene and plot models fall back, by way
+of the summarisation model, to the story model, the most expensive place to run a small call on every turn. On
 NanoGPT a new setup starts with the ones that measured best, and Settings →
 Models has **Use recommended models** to fill them in on a setup you already
 have (nothing changes until you press Save). **Recommended** beside the story,
@@ -740,8 +747,8 @@ lower precision, or whose precision isn't listed (they are hidden from the
 table while it is ticked).
 
 **Was the route followed?** NanoGPT's replies don't name their host, so each
-routed call's bill is the evidence, and the status bar shows it at the
-bottom left once a routed call has come back: **⚡ routes** when they were
+routed call's bill is the evidence, and the status bar shows it at its
+right end once a routed call has come back: **⚡ routes** when they were
 followed, **⚠ route not followed** when not. Its tooltip gives each route's
 roles, model, last call and why. Nothing billed means NanoGPT served the call
 on its own subscription routing instead (it does this without a word when a
@@ -841,6 +848,9 @@ Everything else keeps its default and is in Setup and on the Cast page;
 (not begun, in your Stories) or discard it to the Trash.
 
 **Story → Setup…** holds what a story is built on:
+- **About**: the story's title and description, how outcomes are decided
+  (see [Outcomes and dice](#outcomes-and-dice)), how much the world does on
+  its own, and the story's picture style;
 - **World**: the setting and its rules, sent with every turn and cached;
 - **Characters**: the Cast page itself, with every card's fields, portraits
   and **Fill with lore characters…**. Cards are kept as you make them, as on
@@ -857,6 +867,11 @@ Everything else keeps its default and is in Setup and on the Cast page;
   (the people at their posts, whoever the place would have); set someone to
   **Present** or **Not present** to decide it yourself. Anyone not there can
   still come in later;
+- **Private scenes**: how the private model is told to write: compact rules
+  (the default, for smaller models), the story's full rules, or your own, and
+  notes added to them in any mode. Whichever you choose, it is always given
+  the story's world, cast, lore, scene and history, and told each turn who
+  you play, who is present and how long to write;
 - **Models**: the models this story uses in place of those in Settings (see
   [Models](#models)).
 
@@ -949,18 +964,24 @@ to or taken off:
   story never sends these.
 - **Lorebook**: the card's own lore, offered to a story's lore when they join
   one. **Add an entry**, **Copy** or **Remove** one; the one chosen shows its
-  name, keywords, text, whether it is on or always sent, SillyTavern's second
-  keywords and how its keywords match. Everything else on an entry (its order
-  and place in the prompt, its chance, groups and timing, other apps'
-  settings) is under **Everything else on this entry (JSON)**, and the book's
-  own settings likewise. A story uses an entry's keywords, its text and its
-  switches; the rest goes out with the card for SillyTavern and other apps.
-  **Import a lorebook…** puts another in its place, and **Export…** saves it as
-  a SillyTavern lorebook file; both keep every setting, converting as
-  SillyTavern itself does between a card's lorebook and its lorebook files.
-  **Remove the lorebook** takes it off. (SillyTavern marks every entry of a
-  card it makes as regular expressions; a plain keyword is still a keyword
-  in a story here.)
+  name, keywords, text, whether it is on or always sent, its order,
+  SillyTavern's second keywords and how its keywords match. Everything else
+  on an entry (its place in the prompt, its chance, groups and timing, other
+  apps' settings) is under **Everything else on this entry (JSON)**, and the
+  book's own settings likewise. A story uses an entry's keywords, its text and
+  its switches; the rest goes out with the card for SillyTavern and other
+  apps. **Import a lorebook…** puts another in its place, and **Export…** saves
+  it as a SillyTavern lorebook file, both converting exactly as SillyTavern
+  itself does between a card's lorebook and its lorebook files. As there, a
+  lorebook file has no place for a few of a card's settings (the book's
+  description, scan depth, budget and recursion, and an entry's priority), so
+  a book exported and imported again loses those. **Remove the lorebook**
+  takes it off. As in SillyTavern, a keyword written `/like this/` is a
+  regular expression and any other is matched as written, whatever the
+  entry's **Keywords are regular expressions** says; a story uses the plain
+  ones. An entry whose text begins with SillyTavern's `@@activate` is always
+  sent in a story, one with `@@dont_activate` never, and those lines are
+  left out of what the storyteller reads.
 - **Files**: every other file on the card (below).
 - **About**: who made the card, its version, its tags, its maker's notes, its
   sources, and where it came from; and, each under a heading that opens it,
@@ -976,8 +997,9 @@ becomes the end of the description.)
 **Every file on the card is kept too.** Besides the portrait and expression
 pictures, a card can carry a background, pictures its greetings show (RisuAI
 cards often have dozens), a second icon, sounds and fonts. They are kept with
-the character, listed on the **Files** tab (a picture as a thumbnail; click it
-to see it full size), and go out with them in a CHARX export. Each
+the character, listed on the **Files** tab (a picture as a thumbnail;
+double-click it, or press Enter, to see it full size), and go out with them in
+a CHARX export. Each
 character's files are in a folder of their own, under the names the card
 gave them. **Add files…** puts files from your computer on the card and
 **Add a link…** a file it only points to (an `https://` address, never
@@ -1158,14 +1180,14 @@ Import a lorebook from a link…** on the Lore page. It takes:
 - a character's page on **RisuRealm**, fetched as its own Download button
   gives it: an older card as a PNG card, a newer one only as a CHARX, which
   carries every picture the card has for RisuAI (a set of expressions can
-  run to tens of megabytes) though only the card and its main picture are
-  read;
+  run to tens of megabytes), all of them kept in Your characters;
 - a link straight to a card's file (PNG, JSON or CHARX) or a lorebook's
   (JSON), wherever it is kept.
 
 A card's file over 20 MB is asked about before it is downloaded, with its
-size: a card is its text and a picture, a few megabytes at most, and the
-rest is pictures SealedLore doesn't keep. It goes on as for a file.
+size: a card is usually its text and a picture, a few megabytes at most, and
+the rest is files for other apps, such as a set of expression pictures, which
+Your characters keeps with the card. It goes on as for a file.
 SealedLore downloads it from that site, which sees
 your address as a browser would; nothing else of yours is sent, and only over
 https. A link the site turns down says why in the site's own words (some
@@ -1432,7 +1454,7 @@ spoilers** shows the characters it hasn't brought in yet too (it is the Plot
 page's Show plot); their pictures can be drawn as well, and no model in the
 story hears of them early.
 
-![The cast board in Doomsville: John's sheet, his winter coat, combat armour and indoor clothes down the side and expressions across, two gaps chosen in the armour row, one the story asked for, and the other characters in the list on the left](screenshots/cast-board.webp)
+![The cast board in Doomsville: John's sheet, his winter coat, combat armour and indoor clothes down the side and expressions across, two gaps chosen in the armour row and, beside them, one the story asked for, and the other characters in the list on the left](screenshots/cast-board.webp)
 
 An empty place shows, faded, the picture it would be drawn from. Choose the
 ones you want (drag across them, Ctrl-click them, or click a row's or column's
@@ -1465,8 +1487,9 @@ dialog offers to add them (ticked; untick it for the template as it comes).
 Keep them again to replace them, or forget them from the same button.
 
 Pictures of other expressions can come with a character: a CHARX card's
-expression pictures (File → Import… asks whether to keep them, and gives
-their size), or a SillyTavern expression pack, a zip of pictures named by
+expression pictures (kept with them in Your characters when the card is
+imported; More → A story from their card's own scenario… asks whether the
+story keeps them, and gives their size), or a SillyTavern expression pack, a zip of pictures named by
 expression ("joy.png", "anger-2.png"), added with **SillyTavern cards → Add
 expression pictures from a zip…** on the Cast page. Each is labelled by its
 name.
@@ -1602,7 +1625,7 @@ with its name, length and the opening words of the message it began with.
 Summarised chapters are shaded, and a dot marks where you are. Hovering shows
 a card with the branch, how it begins and ends, and the message under the
 pointer; it stays while you read it. Click a lane or its name to move to that
-branch (the map stays, with it highlighted); double-click to open the story
+branch (the diagram stays, with it highlighted); double-click to open the story
 there; right-click to rename or delete it. Scroll or drag to move; **−**,
 **+** and **Fit** (or the - and + keys, or Ctrl+wheel) zoom along the
 timeline. Esc or **Back to the story** returns.
@@ -1635,7 +1658,8 @@ doesn't), it's estimated from the model's listed prices and marked `~`.
 ## Outcomes and dice
 
 **Story → Setup… → About → Outcomes** sets how the result of your character's actions is
-decided; **Outcome** in the bottom bar overrides it for one turn.
+decided; **Outcome**, under **More** in the bottom bar, sets it for your turns
+from then on, until you change it again.
 
 | Mode | What happens |
 |---|---|
@@ -2161,8 +2185,8 @@ verifier:
 Replies are marked "end-to-end encrypted", and the attestation is redone
 every five minutes. Wherever you choose a model, the model list's Privacy
 column and the label beside the model field say which kind a model is: "🔐
-End-to-end encrypted", or "TEE" (and, for a TEE model with an encrypted
-version, its name).
+Encrypted" in the list and "🔐 E2EE" beside the field, or "TEE" (and, for a
+TEE model with an encrypted version, "TEE · 🔐 version").
 
 NanoGPT retires Private Mode models from time to time. If the model you
 chose is no longer offered, the app says so when the scene or chat begins
@@ -2317,9 +2341,9 @@ both at once. Under the box are **Speaking as**, the length, and behind
 everything else (who you play, who the model may voice) is the desktop's
 composer's. Send becomes Stop while a passage is written, and a turn sent
 while the reads after a passage finish waits to go (Queue). Under a passage
-are ‹ › for its takes, **Regenerate** and **Roll again**, and under the latest
-**Continue**, which writes more of it onto its end (the length under the box
-says how much). With the desktop's View → Characters above the box you type
+are ‹ › for its takes, and under the latest **Regenerate**, **Roll again** (when
+it was rolled) and **Continue**, which writes more of it onto its end (the
+length under the box says how much). With the desktop's View → Characters above the box you type
 in, the phone shows who is in the scene at the top of its box, and with
 Characters on each passage, small pictures over each passage (in a private
 scene, only once you choose to see it). The ☰ menu lists the
@@ -2379,6 +2403,22 @@ next few turns crossed it again and each of those paid for another summary and
 another full re-send of the cached prompt. On a 216-turn test story at a 35,000
 budget, stopping at the line bought 6 quiet turns; going down to half buys 31.
 The same prose is summarised either way — just in fewer, larger runs.
+
+The rest of **Settings → Context** applies to every story:
+- **Archive automatically when the budget is reached** (on): chapters are
+  written in the background as the story nears its budget, so no turn waits
+  for them. Off, a banner offers to archive once the prompt is over budget,
+  and the oldest turns are left out until you do.
+- **Keep a story ledger beside the chapters** (off): a point-form record,
+  updated with each chapter, of how people stand with each other, who knows
+  what, open promises and where things stand. It keeps quiet facts that
+  summaries lose, for about 1,200 more prompt tokens and one more call a
+  chapter.
+- **Head a plot story's chapters with their days** (on): each chapter of a
+  story with a plot is headed with the story days it covers.
+- Under **Chapters and recall (advanced)**: **Turns per chapter** (10),
+  **Archive down to** (50%), **Summary length (words)** (250), and the recall
+  settings below.
 
 An archival run summarises several chapters in a row, and the status bar names
 each one as it lands. If the budget is too small to hold the story even fully
@@ -2462,7 +2502,9 @@ no telemetry, no update check and no crash reporting.
   the model picker needs one. Each call goes to the endpoint its model
   names, with that endpoint's key alone.
 - **The embeddings endpoint** (Settings → Lore, off by default) gets the lore
-  entries and a query built from the last few passages. Its key is only
+  entries and a query built from the last few passages, and, for recall, the
+  chapters merged into parts (and the archived passages, if recall is set to
+  search them) and your Question or turn when recall searches for it. Its key is only
   filled in from the chat key when it is the same host. A large lorebook's
   picks also go to the chat endpoint (the lore model), or, with "Jev before
   each turn", to its `/decisions` route with the lore and recent story.

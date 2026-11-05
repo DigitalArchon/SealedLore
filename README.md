@@ -20,8 +20,8 @@ branching, easy creation of pictures and videos, swapping mid chat to private
 AI models with TEE and E2EE models with Tinfoil, and in memory only chat modes.
 All those are working properly and I don't expect many changes to this mode.
 
-Starting a full story from scratch or from a premise is also fully function
-and works well. Most updates to this mode will improve improved prompting,
+Starting a full story from scratch or from a premise is also fully functional
+and works well. Most updates to this mode will be improved prompting,
 tweaks to features to get better responses and so on. Nothing is broken,
 but improvements will come regularly.
 
@@ -64,7 +64,7 @@ fun to play. This app will remain focused on text based roleplay.
   the whole window, the missing ones drawn in a few clicks. Doomsville's John
   and Jane come in four expressions and three looks.
 
-![The cast board in Doomsville: John's sheet, his winter coat, combat armour and indoor clothes down the side and expressions across, two gaps chosen in the armour row, one the story asked for, and the other characters in the list on the left](docs/screenshots/cast-board.webp)
+![The cast board in Doomsville: John's sheet, his winter coat, combat armour and indoor clothes down the side and expressions across, two gaps chosen in the armour row and, beside them, one the story asked for, and the other characters in the list on the left](docs/screenshots/cast-board.webp)
 
 - **A picture style for each story** (3.0.0b1). Gritty and realistic, clean
   and polished sci-fi, glamorous, anime, painted fantasy and more, your own
@@ -79,8 +79,8 @@ fun to play. This app will remain focused on text based roleplay.
   characters, a card's lorebook can be edited entry by entry, its files added,
   renamed, retyped or taken off, and every other field it carries changed,
   down to other apps' settings. Export it as changed, for others to use, or
-  change a copy and keep the original. A lorebook goes out and comes in as
-  SillyTavern itself converts one, every setting kept.
+  change a copy and keep the original. A lorebook goes out and comes in
+  exactly as SillyTavern itself converts one.
 
 ### New in version 2
 
@@ -491,7 +491,8 @@ what each feature does.
 ## Your data and privacy
 
 There is no telemetry, no update check and no crash reporting. Every endpoint
-must be `https://` (plain `http://` is accepted only for `localhost`). Phone
+must be `https://` (plain `http://` is accepted only for a server on this
+computer or your local network). Phone
 access, below, answers phones over `http://` on an onion address, which tor
 encrypts the whole way.
 
@@ -584,7 +585,7 @@ follow its terms. Contributions are accepted under the terms in
 
 **Third-party software.** SealedLore's dependencies keep their own licences,
 all of them compatible with the AGPL. Qt for Python (PySide6) is under the
-LGPL-3.0; httpx, pydantic, tiktoken, numpy, tinfoil and the packages they use
+LGPL-3.0; httpx, pydantic, tiktoken, numpy, tinfoil, keyring and the packages they use
 are under permissive licences (MIT, BSD, Apache-2.0, and MPL-2.0 for
 certifi). The AppImage lists everything it bundles, with versions, sources
 and licence texts, in `usr/share/licenses/sealedlore/THIRD-PARTY-NOTICES.md`

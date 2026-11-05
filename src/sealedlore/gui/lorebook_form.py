@@ -153,7 +153,7 @@ class LorebookForm(QWidget):
         self.selective.toggled.connect(lambda _on: self._entry_edited("selective"))
         self.entry_rest = JsonField(
             "Everything else on this entry (JSON)",
-            tip="Its order and place in the prompt, its chance, groups, timing: SillyTavern's "
+            tip="Its place in the prompt, its chance, groups, timing: SillyTavern's "
             "own settings, kept for it",
         )
         self.entry_rest.edited.connect(self._entry_rest_edited)

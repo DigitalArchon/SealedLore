@@ -4,6 +4,7 @@ description: A living knight who descended into the burning underworld and the d
 start: day 1, 12:00
 agency: contested
 world activity: normal
+picture style: Dark fantasy painting, deep reds and oranges, glowing lava light, smoke and drifting embers
 background: pictures/furnace-background.jpg
 ---
 

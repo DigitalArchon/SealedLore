@@ -10,8 +10,9 @@ you meant (triggers the director can judge, fact meanings the reader can't
 misread, lead-ins and aftermaths that hold) is in `WRITING_PLOTS.md` beside
 it, also under Help → Writing a plot that plays well.
 
-Import one with **File → Import scenario…** to start a new story, or with
-**Story → Import plot…** to give an existing story just its facts and events.
+Import one with **File → Import…** to start a new story, or with
+**Story → Add a plot from a file…** to give an existing story just its facts
+and events.
 Anything the importer can't read is listed with its line number. Errors stop
 the import; notes don't.
 
@@ -81,15 +82,15 @@ These settings go straight after the heading:
 
 ```markdown
 ## John
-- role: player          # player | storyteller (default) | supporting | author
-- choose: start         # play one of the "choose: start" characters (also "at start", "one", "yes"); the others never appear
-- present: yes          # in the opening scene
+- role: player          <!-- player | storyteller (default) | supporting | author -->
+- choose: start         <!-- play one of the "choose: start" characters (also "at start", "one", "yes"); the others never appear -->
+- present: yes          <!-- in the opening scene -->
 - aliases: Johnny, the soldier
-- canon: Night of the Living Dead (1968)   # an established character from a known work; blank if invented
+- canon: Night of the Living Dead (1968)   <!-- an established character from a known work; blank if invented -->
 - voice: Clipped, few words.
 - summary: One line; otherwise the first sentence of the description is used.
-- hidden: yes           # kept out of the story until an event brings them in
-- picture: pictures/john.png | front view | look: winter coat   # a reference picture, one line each; labels optional (see Pictures)
+- hidden: yes           <!-- kept out of the story until an event brings them in -->
+- picture: pictures/john.png | front view | look: winter coat   <!-- a reference picture, one line each; labels optional (see Pictures) -->
 The description.
 ```
 
@@ -101,7 +102,7 @@ The description.
   continuity and shown to the storyteller only when the character comes up.
 
 **Hidden characters** (`hidden: yes`) are kept from every model, and from your
-Cast tab, until an event brings them in (`brings:`, below). Until then the
+Cast page, until an event brings them in (`brings:`, below). Until then the
 storyteller doesn't know they exist, so it can't reach for them early. Once
 the event happens they join the cast for the rest of that branch. Keep a
 character's description to who they are; when and how they turn up belongs to
@@ -213,17 +214,17 @@ section holds optional events, which have conditions but no dates.
 
 ```markdown
 ## The fall of Hellsville
-- when: day 30–50         # a day is chosen at random within it (see below for optional events)
-- pacing: quiet moment    # quiet moment (default; also "lull") | any time (also "anytime", "immediately")
-- lead-in: yes            # the storyteller may be told ahead of time, so it can foreshadow
+- when: day 30–50         <!-- a day is chosen at random within it (see below for optional events) -->
+- pacing: quiet moment    <!-- quiet moment (default; also "lull") | any time (also "anytime", "immediately") -->
+- lead-in: yes            <!-- the storyteller may be told ahead of time, so it can foreshadow -->
 - requires: hellsville = standing
 - trigger: In plain words, what has to be happening. The director judges it.
 - aftermath: What is left afterwards, and what people say. Passed on when it becomes relevant.
 - sets: hellsville = fallen
-- brings: Marcus Webb     # hidden characters it brings into the story
-- reveals: The Old Mill   # hidden places it reveals
-- must happen: yes        # timeline events: see "Every timeline event resolves" below
-- at: Hellsville          # where it happens: once seen, the player's character is there
+- brings: Marcus Webb     <!-- hidden characters it brings into the story -->
+- reveals: The Old Mill   <!-- hidden places it reveals -->
+- must happen: yes        <!-- timeline events: see "Every timeline event resolves" below -->
+- at: Hellsville          <!-- where it happens: once seen, the player's character is there -->
 What the storyteller is told should happen. It can also be given as `- tell:`.
 
 ### The player's character is in town
@@ -233,7 +234,7 @@ What the storyteller is told should happen. It can also be given as `- tell:`.
 
 ### Never visited
 - requires: not visited Hellsville
-- offscreen: yes          # happens without the player's character: no prose, only the facts
+- offscreen: yes          <!-- happens without the player's character: no prose, only the facts -->
 ```
 
 `when:` takes a range (`day 30–50`, `day 30 to 50`) or one day (`day 12`).
@@ -276,8 +277,9 @@ applies to every variant; a variant's own value for the same fact wins.
    and a question your character asks gets its answer first: the event waits
    that turn, though never two turns running.
 2. The director tells the storyteller what should happen. You don't see this
-   instruction unless you look at the prompt in the Inspector. The storyteller
-   still writes the scene, and never decides what your character does.
+   instruction unless you open View → Prompt page (advanced) and read the
+   prompt. The storyteller still writes the scene, and never decides what your
+   character does.
    When the event starts, the storyteller is also given the full cards of
    whoever it `brings:` and whatever it `reveals:`.
 3. Once the prose shows the event happened, its `sets:` apply, and what it
@@ -330,7 +332,7 @@ You can write an event yourself: a Director or Narration turn that tells it
 ("The next day, the Dominion attack again.") counts it as happened, with what
 it sets and brings, so it isn't scheduled again later. It has to be told in
 your own turn, not only in the storyteller's passage. If the program misses one,
-mark it happened in the Plot tab.
+mark it happened on the Plot page.
 
 Each event happens at most once per playthrough. Every branch keeps its own
 clock, facts and events.

@@ -84,7 +84,7 @@ Commands
   /quit                  leave (everything is already saved)
   /cast                  list the cast
   /cast add <name> | <summary>
-  /hold <name>           take control of a character (the model may not write them)
+  /hold <name>           play a character (the model may not write them)
   /present <name,...>    set who is in the scene (cast or anyone else)
   /scene <situation>     set the scene's situation line
   /where <location>      set the location
@@ -94,17 +94,18 @@ Commands
   /ooc <text>            attach an out-of-character addendum to the next turn
   /mode <fiat|plausible|contested|dice>
   /dice [skill|general] [trivial|easy|standard|hard|desperate]
-                         what the next dice roll uses (skill = one of the held
-                         character's tiers)
+                         what the next dice roll uses (skill = one of the tiers of
+                         the character you play)
   /reroll                roll again for the last dice turn and write a new take
   /npc <all|choice|name,...>
+                         who the model voices: everyone here, its choice, or these
   /len <preset|text>     length for the next turn: adaptive, brief, standard,
                          descriptive, literary — or your own wording
   /style <preset|text>   the story's default length (same choices)
-  /regen                 another take on the last turn (a sibling, not a replacement)
+  /regen                 another take on the last passage (kept beside it, not over it)
   /begin [name]          start an unplayed story from its opening, playing <name>
   /undo                  delete the last exchange (your turn and its reply)
-  /ask <question>        ask the model something out of character; saved as an aside
+  /ask <question>        a Question: ask the model something out of character
   /review <complaint>    have the model propose changes to the story's settings
                          (shown only; to apply, run the review in the app)
   /path                  the active path
@@ -353,7 +354,7 @@ def cmd_list(args: argparse.Namespace) -> int:
         except (FileNotFoundError, ValueError):
             continue
         story = bundle.story
-        what = f"chat, {len(bundle.nodes)} messages" if story.chat else f"{len(bundle.nodes)} nodes"
+        what = f"{'chat, ' if story.chat else ''}{len(bundle.nodes)} messages"
         print(f"{story.id}  {story.title}  ({what})")
     return 0
 
@@ -434,7 +435,7 @@ class Repl:
 
     def run(self) -> int:
         story = self.session.story
-        print(f"{story.title}  ({len(self.session.nodes)} nodes) — /help for commands")
+        print(f"{story.title}  ({len(self.session.nodes)} messages) — /help for commands")
         while True:
             try:
                 line = input(self.prompt_label())

@@ -4,6 +4,7 @@ description: An elven ranger and a sellsword come home must carry word of a waki
 start: day 1, 08:00
 agency: plausible
 world activity: normal
+picture style: Classic high fantasy illustration, rich painterly detail
 background: pictures/silverwood-background.jpg
 ---
 

@@ -65,7 +65,8 @@ the app sees them in `Config` as before, since only `repository.load_config`
 and `save_config` know. Tests run on an in-memory keychain (conftest), never
 the real one. These are decisions, not oversights. Every
 httpx client comes from `providers/http.py:make_client`, which refuses
-redirects off HTTPS and keeps a proxy from carrying loopback traffic: never
+redirects off HTTPS (and from the internet into the local network) and keeps a
+proxy from carrying traffic to this computer or the local network: never
 construct `httpx.Client` directly.
 
 ## What bites
@@ -85,8 +86,9 @@ came from a failure in real use.
   `test_nothing_from_a_private_scene_reaches_another_model` checks every side
   call.
 - **Dependencies stay as they are** (`PySide6`, `httpx`, `tiktoken`, `numpy`,
-  `pydantic`, `tinfoil`, and `pytest`/`ruff` for development). Open an issue
-  before adding one.
+  `pydantic`, `tinfoil` with `tinfoil-ehbp` and `pyhpke` pinned beside it,
+  `keyring`, and `pytest`/`ruff` for development). Open an issue before adding
+  one.
 
 ### Prompt caching
 
@@ -141,8 +143,8 @@ every turn pay full price.
   add a new one to every theme (`test_every_theme_has_every_colour_and_no_other`).
 - **Keep the window narrow.** A combo box asks for the width of its widest
   item; use `Composer._compact` and `_fit_popup` so it sizes to its
-  selection. The window's minimum width should stay under a laptop's 1,366
-  pixels at 100% text size.
+  selection. The window must fit a 1920×1080 screen at 100% text size, and
+  larger text sizes wrap rather than widen it.
 - In offscreen tests: `deleteLater` leaves old widgets until deferred deletes
   are flushed; `QProgressDialog.cancel()` from code does not emit `canceled`
   (click its button); scroll positions need the app's stylesheet loaded.

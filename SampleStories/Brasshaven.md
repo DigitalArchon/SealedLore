@@ -4,6 +4,7 @@ description: In a smog-choked city of airships and clockwork, an inventor and a 
 start: day 1, 19:00
 agency: contested
 world activity: eventful
+picture style: Victorian steampunk illustration, detailed painterly style, warm brass and sepia tones
 background: pictures/brasshaven-background.jpg
 ---
 
