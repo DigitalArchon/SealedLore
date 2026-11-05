@@ -384,17 +384,17 @@ _CHAR_MACRO = re.compile(r"\{\{\s*char\s*\}\}|<BOT>", re.I)
 _USER_MACRO = re.compile(r"\{\{\s*user\s*\}\}|<USER>", re.I)
 
 
-def unfilled(value: Any, raw: Any, name: str, user: str) -> Any:
+def unfilled(value: Any, raw: Any, name: str | Sequence[str], user: str) -> Any:
     """A story's text going back to a card that writes `{{char}}` or
     `{{user}}` (or `{{Char}}`, `<BOT>`…) in `raw`, the card's own text it
     came from: the names put back as macros where the card wrote them, the
     longer name first, so "Jane" never eats "Jane Moss", and a name the card
-    doesn't write as a macro is kept as written."""
+    doesn't write as a macro is kept as written. `name` may be several: every
+    name the character's text was written with (renamed on either side)."""
     if isinstance(value, str) and isinstance(raw, str):
-        names = []
-        if name:
-            names.append((name, "{{char}}", bool(_CHAR_MACRO.search(raw))))
-        if user and user != name:
+        char_names = [name] if isinstance(name, str) else list(name)
+        names = [(who, "{{char}}", bool(_CHAR_MACRO.search(raw))) for who in char_names if who]
+        if user and user not in char_names:
             names.append((user, "{{user}}", bool(_USER_MACRO.search(raw))))
         held: dict[str, str] = {}
         for index, (who, macro, put_back) in enumerate(sorted(names, key=lambda n: -len(n[0]))):
@@ -443,11 +443,20 @@ def name_the_user(character: Character, user: str) -> bool:
     return True
 
 
-def _back(card: Character, key: str, value: Any, user: str) -> None:
+def _back(card: Character, key: str, value: Any, user: str, names: Sequence[str] = ()) -> None:
     """A story's value of `key` onto the card, names back as the card has
-    them; a field the card left blank looks to the text it was given from."""
+    them; a field the card left blank looks to the text it was given from.
+    `names`: what else the character was called where the text was written."""
     raw = fields_of(card)[key] or _derived_from(card, key)
-    set_fields(card, {key: unfilled(value, raw, card.name, user)})
+    every = list(dict.fromkeys(n for n in (*names, card.name) if n))
+    set_fields(card, {key: unfilled(value, raw, every, user)})
+
+
+def _names(character: Character, link: CardLink | None) -> tuple[str, ...]:
+    """Every name a story's text about the character may hold: theirs in the
+    story now, and the card's when the story was given it."""
+    given_name = link.fields.get("name") if link is not None else None
+    return tuple(n for n in (character.name, given_name) if isinstance(n, str) and n)
 
 
 # --- either way --------------------------------------------------------------------------
@@ -498,9 +507,10 @@ def save_to_card(
         return
     story_order = list(story_refs)
     before = given(card, link.user)
+    names = _names(character, link)
     for change in chosen:
         if change.field:
-            _back(card, change.key, change.story, link.user)
+            _back(card, change.key, change.story, link.user, names)
             link.fields[change.key] = change.story
         elif change.key.startswith("picture:"):
             sha = change.sha
@@ -603,7 +613,7 @@ def version_from_story(
     theirs = given(card, user)
     for key, value in _mine(character, card, theirs).items():
         if value != theirs[key]:
-            _back(version, key, value, user)
+            _back(version, key, value, user, _names(character, link))
     version.reference_images = []
     main = collection.main_of(card, characters)
     version.collection = CollectionInfo(family=main.id, version=name, came_from="a story")

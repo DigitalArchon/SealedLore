@@ -547,6 +547,17 @@ class CollectionPage(QWidget):
         self.card_form.refresh_pictures()
         self._fill()
 
+    def card_changed(self, card_id: str) -> None:
+        """The card shown was changed from outside the page (a story saved its
+        changes to it): the forms read it again, or the next keystroke in one
+        would write their old text back over the change."""
+        card = self._card(self._current)
+        if card is None or card.id != card_id:
+            return
+        for form in self._forms():
+            form.load(card)
+        self._show()
+
     def forget_forms(self) -> None:
         """The forms loaded afresh the next time a card shows: its fields
         may have changed while the page was put away."""
@@ -556,6 +567,9 @@ class CollectionPage(QWidget):
 
     def forget_pictures(self) -> None:
         self._thumbs.forget()
+
+    def forget_file(self, file: str) -> None:
+        self._thumbs.forget_file(file)
 
     # --- the list -------------------------------------------------------------------------
 
@@ -801,8 +815,21 @@ class CollectionPage(QWidget):
             self.changed.emit(self._current)
 
     def _about_changed(self) -> None:
-        if self._current is not None:
-            # The list and the tiles show the tags, and filter by them.
+        card = self._card(self._current)
+        if card is None:
+            return
+        # The list and the tiles show the tags, and filter by them: filled
+        # again when the tags changed, not at every key typed in the maker's
+        # notes (each fill goes through every card: slow with hundreds).
+        listed = [self.tag.itemText(row) for row in range(1, self.tag.count())]
+        main = collection.main_of(card, self._characters)
+        line = self._line(main)
+        item = self.people.currentItem()
+        shown = item.text() if item is not None else None
+        if list(collection.tags_of(self._characters)) != listed or shown not in (
+            None,
+            f"{main.name}\n{line}" if line else main.name,
+        ):
             self._fill_tags()
             self._fill()
-            self.changed.emit(self._current)
+        self.changed.emit(card.id)

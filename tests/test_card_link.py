@@ -213,6 +213,27 @@ def test_names_go_back_however_the_card_spells_them():
     assert card.full_description == "{{char}} keeps the farmhouse. She trusts {{user}} at last."
 
 
+def test_names_go_back_after_either_side_renamed_them():
+    """The story's text holds the name it was given, or the story's own name
+    for them: either goes back as {{char}}, whatever the card is called now."""
+    card = elena()
+    copy = linked(card)
+    card.name = "Elena Ruiz"  # renamed on the card after the story took her
+    copy.full_description = "Elena keeps the farmhouse. She trusts John at last."
+    found = changes(copy, card, [MARK_P], [MARK_P])
+    card_link.save_to_card(copy, card, found, story_refs={}, card_refs={}, copy=lambda r: None)
+    assert card.full_description == "{{char}} keeps the farmhouse. She trusts {{user}} at last."
+
+    card = elena()
+    copy = linked(card)
+    copy.name = "Mara"  # renamed in the story; only the description is saved
+    copy.full_description = "Mara keeps the farmhouse. She trusts John at last."
+    found = [c for c in changes(copy, card, [MARK_P], [MARK_P]) if c.key == "full_description"]
+    card_link.save_to_card(copy, card, found, story_refs={}, card_refs={}, copy=lambda r: None)
+    assert card.name == "Elena"
+    assert card.full_description == "{{char}} keeps the farmhouse. She trusts {{user}} at last."
+
+
 def test_a_shorter_name_never_eats_a_longer_one():
     raw = "{{char}} trusts {{user}}."
     assert card_link.unfilled("Jane Moss trusts Jane.", raw, "Jane Moss", "Jane") == (

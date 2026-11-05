@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QPixmap
-from PySide6.QtWidgets import QDialog, QInputDialog
+from PySide6.QtWidgets import QDialog, QInputDialog, QMessageBox
 
 from sealedlore.engine import card_link
 from sealedlore.engine.card_link import changes, picture_mark
@@ -179,14 +179,43 @@ class CardLinkWindow:
         accepted = picker.exec() == QDialog.Accepted
         chosen, (to_cast, with_lore) = picker.chosen(), picker.options()
         picker.deleteLater()
-        if not accepted or not chosen:
+        chosen = self._not_twice(chosen) if accepted else []
+        if not chosen:
             return
-        added = [self._kept_into_story(card, to_cast, with_lore) for card in chosen]
-        self._after_cards_added(added, to_cast)
+        notes: list[str] = []
+        added = [self._kept_into_story(card, to_cast, with_lore, notes) for card in chosen]
+        self._after_cards_added(added, to_cast, notes)
 
-    def _kept_into_story(self, card: Character, to_cast: bool, with_lore: bool) -> Character:
+    def _not_twice(self, cards: list[Character]) -> list[Character]:
+        """`cards`, less any the story already has from the same card unless the
+        author wants them again (they used to come in twice without a word)."""
+        session = self.session
+        linked = {
+            character.linked.card_id
+            for character in (*session.cast, *session.supporting)
+            if character.linked is not None
+        }
+        again = [card for card in cards if card.id in linked]
+        if not again:
+            return cards
+        names = ", ".join(card.name for card in again)
+        answer = QMessageBox.question(
+            self._dialog_parent(),
+            "Already in this story",
+            f"This story already has {names} from the same card. Add them again as well?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer == QMessageBox.Yes:
+            return cards
+        return [card for card in cards if card.id not in linked]
+
+    def _kept_into_story(
+        self, card: Character, to_cast: bool, with_lore: bool, notes: list[str] | None = None
+    ) -> Character:
         """One of the author's characters as the open story's: a linked copy,
-        their pictures copied in, their own lorebook as lore if wanted."""
+        their pictures copied in, their own lorebook as lore if wanted (what
+        it held that a story doesn't use is added to `notes`)."""
         session = self.session
         user = self._story_user()
         copy = card_link.story_copy(card, self._kept(), user)
@@ -202,7 +231,10 @@ class CardLinkWindow:
         lore = []
         book = card.tavern.character_book if card.tavern else None
         if with_lore and book:
-            lore = lore_from_book(book, macro_filler(card.name, user)).entries
+            imported = lore_from_book(book, macro_filler(card.name, user))
+            lore = imported.entries
+            if notes is not None:
+                notes += [f"{card.name}'s lorebook: left out {note}." for note in imported.notes()]
         session.add_card(copy, to_cast=to_cast, lore=lore)
         return copy
 
@@ -230,10 +262,22 @@ class CardLinkWindow:
             for character in (*session.cast, *session.supporting)
             if card_link.name_the_user(character, held.name)
         ]
+        # Their lore too, and any lore a lorebook brought in before anyone was
+        # played: left as {{user}}, it read so to the storyteller, and a
+        # keyword written so could never match.
+        fill = macro_filler("{{char}}", held.name)
+        for entry in session.bundle.lore:
+            title, content = fill(entry.title), fill(entry.content)
+            keywords = [fill(keyword) for keyword in entry.keywords]
+            if (title, content, keywords) != (entry.title, entry.content, entry.keywords):
+                entry.title, entry.content, entry.keywords = title, content, keywords
+                named.append(entry)
         if named:
             session.save()
 
-    def _after_cards_added(self, added: list[Character], to_cast: bool) -> None:
+    def _after_cards_added(
+        self, added: list[Character], to_cast: bool, notes: list[str] | None = None
+    ) -> None:
         session = self.session
         session.forget_review_undo()
         self.refresh_panels()
@@ -251,18 +295,23 @@ class CardLinkWindow:
             if any(c.linked is not None and not c.linked.user for c in added)
             else ""
         )
-        self.statusBar().showMessage(f"{names} joined {where}.{later}", 12000)
+        if notes:
+            self._say_left_out("Into the story", f"{names} joined {where}.{later}", notes)
+        else:
+            self.statusBar().showMessage(f"{names} joined {where}.{later}", 12000)
 
     def _add_shown_to_story(self, card_id: str) -> None:
         """Your characters' page: the character shown into the open story."""
         card = self._kept_card(card_id)
-        if card is None or self._link_refused():
+        if card is None or self._link_refused() or not self._not_twice([card]):
             return
         where = self._ask_where_card_goes(card, card.tavern.book_entries if card.tavern else 0)
         if where is None:
             return
         to_cast, with_lore = where
-        self._after_cards_added([self._kept_into_story(card, to_cast, with_lore)], to_cast)
+        notes: list[str] = []
+        added = self._kept_into_story(card, to_cast, with_lore, notes)
+        self._after_cards_added([added], to_cast, notes)
 
     # --- the Cast page's line ----------------------------------------------------------------
 
@@ -367,6 +416,12 @@ class CardLinkWindow:
             collection.touch(card)
             self._save_collection()
             session.save()
+            # Both sides changed: the story's character too, when a summary it
+            # never touched follows the description saved (`_follow_derived`).
+            self.refresh_panels()
+            self.cast_panel.select_character(character.id)
+            if self.collection_shown():
+                self.collection_page.card_changed(card.id)
             self.statusBar().showMessage(f"Saved to {card.name}'s card.", 8000)
         elif choice == VERSION:
             self._version_from_story(character, card, story_marks)
@@ -435,7 +490,7 @@ class CardLinkWindow:
         """A story's character kept among the author's own, and linked to the
         card made (the Cast page's Keep in Your characters…)."""
         session = self.session
-        if session is None or self._link_refused():
+        if session is None or self._link_refused() or self._collection_unwritable():
             return
         kept = card_link.kept_from_story(character, f"the story {session.story.title}")
         kept.name = character.name
@@ -456,6 +511,8 @@ class CardLinkWindow:
         self._save_collection()
         session.save()
         self._sync_card_link()
+        # Listed at once, if the page is showing (Setup's Characters tab).
+        self._refresh_collection()
         self.statusBar().showMessage(
             f"{character.name} is kept in Your characters, and linked to this story's.", 8000
         )

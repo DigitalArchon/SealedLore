@@ -167,7 +167,9 @@ class TavernWindow:
         accepted = dialog.exec() == QDialog.Accepted
         options = dialog.options()
         dialog.deleteLater()
-        if not accepted:
+        # Asked now, before the story is saved: asked as it opened, a Cancel
+        # kept the memory-only chat or scene and left the new story behind.
+        if not accepted or not self._leave_for_new():
             return
         imported = scenario_from_card(card, **options)
         bundle = bundle_from_scenario(imported.scenario)
@@ -292,10 +294,12 @@ class TavernWindow:
         greetings show, sounds): kept whole in Your characters, and its
         character into the story linked to it, as From Your characters… does,
         so nothing on the card is lost."""
+        if self._collection_unwritable():
+            return
         kept, notes = self._kept_from_card(card, f"the story {self.session.story.title}")
         self._collection_session().cast.append(kept)
         self._save_collection()
-        added = self._kept_into_story(kept, to_cast, with_lore)
+        added = self._kept_into_story(kept, to_cast, with_lore, notes)
         self._after_cards_added([added], to_cast)
         notes.insert(
             0,
@@ -650,10 +654,9 @@ class TavernWindow:
             else f"This card's file is over {ASK_BYTES // (1024 * 1024)} MB."
         )
         box.setInformativeText(
-            "A card is its text and a picture, a few megabytes at most: the rest is "
-            "pictures for other apps, such as a set of expressions. SealedLore keeps only "
-            "the card's text and its main picture, but has to download the whole file "
-            "to get them."
+            "A card is usually its text and a picture, a few megabytes at most: the rest "
+            "is files for other apps, such as a set of expression pictures. Your characters "
+            "keeps everything on the card, so the whole file is downloaded."
         )
         download = box.addButton(
             f"Download {megabytes}" if megabytes else "Download it", QMessageBox.AcceptRole
@@ -686,7 +689,7 @@ class TavernWindow:
             self._warn_plain(
                 "A lorebook, not a character",
                 "That link is a SillyTavern lorebook. A character's own lorebook is imported "
-                "from a file on their About tab; a story's, from its Lore page.",
+                "from a file on their Lorebook tab; a story's, from its Lore page.",
             )
         else:
             self._lorebook_from_link(found, result.name)

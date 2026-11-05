@@ -346,3 +346,137 @@ def test_a_story_job_running_says_why_the_page_waits(app, window, tmp_path: Path
     window.chat_with_kept(elena.id)
     assert "current job" in window.statusBar().currentMessage()
     window._busy = False
+
+
+# --- what the review of 3.0.0b2 found (Nov 5 2026) -----------------------------------------
+
+
+def coloured_png(colour: str) -> bytes:
+    from PySide6.QtCore import QBuffer, QByteArray, QIODevice
+    from PySide6.QtGui import QColor, QImage
+
+    image = QImage(8, 8, QImage.Format_RGB32)
+    image.fill(QColor(colour))
+    data = QByteArray()
+    buffer = QBuffer(data)
+    buffer.open(QIODevice.WriteOnly)
+    image.save(buffer, "PNG")
+    return bytes(data)
+
+
+def test_an_unreadable_folder_gets_no_pictures_and_no_link(app, tmp_path: Path, monkeypatch):
+    """Saves were held back, but pictures went in all the same, and a story's
+    character was linked to a card never kept."""
+    from sealedlore.models.character import Character
+    from sealedlore.models.story import Story
+
+    root = tmp_path / "data"
+    folder = root / "characters"
+    folder.mkdir(parents=True)
+    (folder / "story.json").write_text('{"id": "your-characters", "title": "Your characters"}')
+    (folder / "cast.json").write_text('[{"name": ')  # cut off
+    story = Story(id="story-1", title="Doomsville", held_character_id="john")
+    save_story_bundle(StoryBundle(story=story, cast=[Character(id="john", name="John")]), root=root)
+    window = MainWindow(root=root, use_mock=True)
+    window.open_story("story-1")
+    warned: list[str] = []
+    monkeypatch.setattr(window, "_warn_plain", lambda title, text: warned.append(title))
+    window.keep_in_collection(window.session.cast[0])
+    assert warned == ["Not kept"] and window.session.cast[0].linked is None
+    window._import_to_collection([str(png_card(tmp_path, {"chara": v2()}))])
+    assert warned == ["Not kept", "Not kept"]
+    assert not (folder / "images").exists(), "no picture written into it"
+    assert (folder / "cast.json").read_text() == '[{"name": '
+    window._private_allows_close = lambda: True
+    window.close()
+
+
+def test_a_cancelled_import_makes_no_folder(app, window, monkeypatch):
+    monkeypatch.setattr(
+        "sealedlore.gui.window_collection.QFileDialog.getOpenFileNames",
+        lambda *args, **kwargs: ([], ""),
+    )
+    window._import_to_collection()
+    assert not (window.root / "characters").exists()
+
+
+def test_a_picture_taken_off_before_any_other_change_leaves_the_disk(
+    app, window, tmp_path: Path, monkeypatch
+):
+    """Only files named at the last look were removed: one that came in
+    since (an import, a picture landing) and went again stayed for good."""
+    elena = kept_elena(window, tmp_path, monkeypatch)
+    portrait = window.root / "characters" / elena.reference_images[0].file
+    assert portrait.exists()
+    elena.reference_images.clear()
+    window._save_collection()
+    assert not portrait.exists()
+
+
+def test_a_deleted_cards_files_stay_while_the_folder_still_names_them(
+    app, window, tmp_path: Path, monkeypatch
+):
+    elena = kept_elena(window, tmp_path, monkeypatch)
+    portrait = window.root / "characters" / elena.reference_images[0].file
+    monkeypatch.setattr(window_collection, "move_to_trash", lambda path: True)
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+    monkeypatch.setattr(window, "_warn_plain", lambda *a: None)
+
+    def full(*_args):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(window._collection, "save", full)
+    window.collection_page.action_requested.emit("delete", elena.id)
+    assert portrait.exists(), "the save failed: cast.json on disk still names it"
+
+
+def test_a_file_under_a_name_used_before_shows_its_own_picture(
+    app, window, tmp_path: Path, monkeypatch
+):
+    elena = kept_elena(window, tmp_path, monkeypatch)
+    red, blue = tmp_path / "red" / "bg.png", tmp_path / "blue" / "bg.png"
+    for path, colour in ((red, "red"), (blue, "blue")):
+        path.parent.mkdir()
+        path.write_bytes(coloured_png(colour))
+    window._add_card_files(elena, [str(red)])
+    asset = elena.tavern.assets[-1]
+    thumbs = window.collection_page._thumbs
+    assert thumbs.now(asset.file, 8, 8).toImage().pixelColor(4, 4).name() == "#ff0000"
+    window._remove_card_file = lambda card, a: None  # (asks first; taken off by hand here)
+    elena.tavern.assets.remove(asset)
+    window._collection_store().remove(asset.file)
+    window._add_card_files(elena, [str(blue)])
+    again = elena.tavern.assets[-1]
+    assert again.file == asset.file, "the same name, as the card gave it"
+    assert thumbs.now(again.file, 8, 8).toImage().pixelColor(4, 4).name() == "#0000ff"
+
+
+def test_typing_in_the_makers_notes_doesnt_refill_the_list(
+    app, window, tmp_path: Path, monkeypatch
+):
+    kept_elena(window, tmp_path, monkeypatch)
+    page = window.collection_page
+    fills: list[int] = []
+    monkeypatch.setattr(page, "_fill", lambda: fills.append(1))
+    form = page.about_form
+    notes = next(
+        box for name, box in vars(form).items() if "note" in name and hasattr(box, "setPlainText")
+    )
+    notes.setPlainText("Written for a long winter.")
+    assert fills == [], "the list shows nothing the notes change"
+
+
+def test_a_story_from_their_cards_scenario_asks_to_leave_before_it_is_saved(
+    app, window, tmp_path: Path, monkeypatch
+):
+    from PySide6.QtWidgets import QDialog
+
+    from sealedlore.gui.tavern_dialog import CardImportDialog
+
+    elena = kept_elena(window, tmp_path, monkeypatch)
+    monkeypatch.setattr(CardImportDialog, "exec", lambda dialog: QDialog.Accepted)
+    monkeypatch.setattr(window, "_leave_for_new", lambda: False)  # Cancel: stay
+    monkeypatch.setattr(window, "open_setup", lambda: False)
+    window._story_from_kept(elena.id)
+    window.stories.refresh()
+    assert window.stories.list.count() == 0, "no story left behind"

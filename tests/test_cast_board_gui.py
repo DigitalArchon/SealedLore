@@ -314,6 +314,31 @@ def test_a_new_looks_row_is_let_go_when_its_first_picture_fails(app, window, mon
     assert "didn't come" in window.statusBar().currentMessage()
 
 
+def test_a_new_looks_row_waits_while_pictures_cant_be_drawn(app, window, monkeypatch):
+    """Refused (a private scene open), the rest of an approved row was neither
+    started nor kept, though the notice said the pictures would wait."""
+    from sealedlore.gui.fill_gaps import Waiting
+
+    card = serrik(window)
+    card.sheet_looks = ["formal clothes"]
+    window.session.pictures.write("images/refs/f.png", b"picture")
+    card.reference_images.append(
+        ImageRef(id="f", file="images/refs/f.png", look="formal clothes", expression="neutral")
+    )
+    row = (window.session.story.id, Waiting("char-serrik", "formal clothes", "happy", "H.", "m"))
+    window._board_waiting = [row]
+    started: list = []
+    monkeypatch.setattr(
+        window, "_start_card_pictures", lambda requests, session=None: started.extend(requests)
+    )
+    monkeypatch.setattr(window, "_card_pictures_refused", lambda session: True)
+    window._start_waiting()
+    assert started == [] and window._board_waiting == [row]
+    monkeypatch.setattr(window, "_card_pictures_refused", lambda session: False)
+    window._start_waiting()
+    assert [r.card_expression for r in started] == ["happy"] and window._board_waiting == []
+
+
 def test_pictures_dropped_on_a_place_take_its_labels(app, window, monkeypatch):
     window.show_cast_board(True, "char-serrik")
     board = window.cast_board

@@ -351,6 +351,7 @@ class CastBoardWindow:
         keep: list[tuple[str, Waiting]] = []
         started: dict[str, list] = {}
         let_go = []
+        refused: dict[str, bool] = {}
         listing = self.image_catalog.models
         for story_id, waiting in self._board_waiting:
             session = sessions.get(story_id)
@@ -364,6 +365,13 @@ class CastBoardWindow:
             if gap is None:
                 continue  # filled meanwhile
             if gap.source is not None:
+                if story_id not in refused:
+                    refused[story_id] = self._card_pictures_refused(session)
+                if refused[story_id]:
+                    # Not now (a private scene is open): it waits on, as the
+                    # notice says, rather than being dropped.
+                    keep.append((story_id, waiting))
+                    continue
                 info = next((m for m in listing if m.id == waiting.model), None)
                 started.setdefault(story_id, []).append(
                     session.card_request(
@@ -384,9 +392,7 @@ class CastBoardWindow:
                 let_go.append(waiting)
         self._board_waiting = keep
         for story_id, requests in started.items():
-            session = sessions[story_id]
-            if not self._card_pictures_refused(session):
-                self._start_card_pictures(requests, session)
+            self._start_card_pictures(requests, sessions[story_id])
         if let_go:
             looks = sorted({w.look for w in let_go})
             self.statusBar().showMessage(

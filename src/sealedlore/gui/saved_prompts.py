@@ -114,19 +114,33 @@ class SavedPromptsButton(QToolButton):
                 "This chat is kept in memory only, and nothing of it is written to disk. "
                 "Saving its system prompt keeps it in SealedLore's settings on this computer. "
                 "Save it anyway?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
             )
             != QMessageBox.Yes
         ):
             return
         taken = any(p.name.casefold() == name.strip().casefold() for p in self._saved.prompts)
         if taken and (
-            QMessageBox.question(self, KEEP_PROMPT_LABEL, f"Replace the one named “{name}”?")
+            QMessageBox.question(
+                self,
+                KEEP_PROMPT_LABEL,
+                f"Replace the one named “{name}”?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
             != QMessageBox.Yes
         ):
             return
         self._saved.keep(name, text)
 
     def _forget(self, name: str) -> None:
-        answer = QMessageBox.question(self, "Forget a saved prompt", f"Forget “{name}”?")
+        answer = QMessageBox.question(
+            self,
+            "Forget a saved prompt",
+            f"Forget “{name}”?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
         if answer == QMessageBox.Yes:
             self._saved.forget(name)

@@ -527,6 +527,64 @@ def test_a_card_added_before_anyone_is_played_names_them_at_the_start(app, windo
     assert "In step with their card" in window.cast_panel.link_words.text()
 
 
+def test_a_cards_lore_added_before_anyone_is_played_is_named_at_the_start(app, window, monkeypatch):
+    """Their lore kept {{user}} for good: the storyteller read it so, and a
+    keyword written so could never match."""
+    window.session.story.held_character_id = None
+    added_elena(window, monkeypatch)
+    entry = window.session.bundle.lore[0]
+    assert "{{user}}" in entry.content
+    window.session.story.held_character_id = "john"
+    window.name_kept_users()
+    assert entry.content == "Hellsville is walled; John is not welcome there."
+    assert "John is not welcome" in load_story_bundle("story-1", window.root).lore[0].content
+
+
+def test_the_same_card_twice_is_asked_about_and_no_is_the_default(app, window, monkeypatch):
+    added_elena(window, monkeypatch)
+    asked: list = []
+
+    def question(_parent, title, _text, _buttons, default):
+        asked.append((title, default))
+        return QMessageBox.No
+
+    monkeypatch.setattr(QMessageBox, "question", question)
+    window.cast_panel.collection_button.click()
+    assert asked == [("Already in this story", QMessageBox.No)]
+    assert [c.name for c in window.session.cast].count("Elena") == 1
+    assert len(window.session.bundle.lore) == 1, "her lore isn't added twice either"
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+    window.cast_panel.collection_button.click()
+    assert [c.name for c in window.session.cast].count("Elena") == 2
+
+
+def test_what_a_cards_lorebook_leaves_out_is_said_when_they_join(app, window, monkeypatch):
+    card = window._kept()[0]
+    book_entry = card.tavern.character_book["entries"][0]
+    book_entry.update({"secondary_keys": ["the walls"], "selective": True})
+    said: list = []
+    monkeypatch.setattr(window, "_say_left_out", lambda *args: said.append(args))
+    added_elena(window, monkeypatch)
+    assert said and "Elena joined the cast." in said[0][1]
+    assert any("Elena's lorebook: left out second keywords" in note for note in said[0][2])
+
+
+def test_saved_to_the_card_the_page_shows_it_and_typing_keeps_it(app, window, monkeypatch):
+    """The page's forms held the card's old text, and the next keystroke in
+    one wrote it back over what the story had just saved."""
+    elena = added_elena(window, monkeypatch)
+    card_id = elena.linked.card_id
+    window.show_collection(True, card_id)
+    form = window.collection_page.card_form
+    elena.full_description = elena.full_description.replace("slowly", "now")
+    answer_changes(monkeypatch, SAVE)
+    window.cast_panel.link_button.click()
+    assert "She trusts {{user}} now." in form.full_description.toPlainText()
+    form.aliases.setText("Ellie")  # a keystroke in another field: every field is applied
+    card = window._kept_card(card_id)
+    assert "She trusts {{user}} now." in card.full_description and card.aliases == ["Ellie"]
+
+
 def test_the_story_suggests_whom_a_card_talks_to_before_anyone_plays(app, window, monkeypatch):
     window.session.story.held_character_id = None
     window.session.story.setup.suggested_character_id = "john"

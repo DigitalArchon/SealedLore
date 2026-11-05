@@ -122,6 +122,12 @@ class Thumbs:
         self._queue.clear()
         self._timer.stop()
 
+    def forget_file(self, file: str) -> None:
+        """One file read afresh next time: a card's file can come back under
+        the name of one taken off (a picture's name is its own for good)."""
+        for key in [key for key in self._cache if key[0] == file]:
+            del self._cache[key]
+
     def get(self, file: str, width: int, height: int) -> QPixmap | None:
         key = (file, width, height)
         pixmap = self._cache.get(key)

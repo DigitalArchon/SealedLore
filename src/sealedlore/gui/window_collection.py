@@ -224,7 +224,9 @@ class CollectionWindow:
         is the Cast page's, and nothing had opened them before it."""
         return self._collection_session().pictures
 
-    def _save_collection(self) -> None:
+    def _save_collection(self) -> bool:
+        """Kept on disk; whether it was. A picture no card names any more goes
+        with the save that drops it (`_forget_unused_pictures`)."""
         self._collection_save.stop()
         if self._collection_problem:
             # Said once a run, not at every pause in typing; the page's line
@@ -232,12 +234,26 @@ class CollectionWindow:
             if not getattr(self, "_collection_problem_said", False):
                 self._collection_problem_said = True
                 self._warn_plain("Your characters weren't kept", self._collection_problem)
-            return
-        if self._collection is not None:
-            try:
-                self._collection.save()
-            except OSError as exc:
-                self._warn_plain("Couldn't keep your characters", str(exc))
+            return False
+        if self._collection is None:
+            return False
+        try:
+            self._collection.save()
+        except OSError as exc:
+            self._warn_plain("Couldn't keep your characters", str(exc))
+            return False
+        self._forget_unused_pictures()
+        return True
+
+    def _collection_unwritable(self) -> bool:
+        """Your characters couldn't be read: nothing goes into the folder,
+        pictures included, and no story is linked to a card never kept;
+        said each time it is tried."""
+        self._collection_session()
+        if self._collection_problem:
+            self._warn_plain("Not kept", self._collection_problem)
+            return True
+        return False
 
     def _flush_collection(self) -> None:
         """An edit still waiting to be kept, kept now. Nothing else is
@@ -442,7 +458,8 @@ class CollectionWindow:
         character of theirs has it (the review before 3.0.0b2: kept "for an
         Undo of the card" that Your characters doesn't have, the folder only
         grew). Only files the cards were seen to name before are removed: a
-        picture still landing was never one of them."""
+        picture still landing was never one of them. Run after every save, so
+        a picture added and taken off between two of them is seen too."""
         session = self._collection
         if session is None or self._collection_problem:
             return
@@ -495,6 +512,8 @@ class CollectionWindow:
     def _card_into_collection(self, card: TavernCard, came_from: str) -> None:
         """A SillyTavern card read in (File → Import…, a link): kept among the
         author's characters, its page shown."""
+        if self._collection_unwritable():
+            return
         character, notes = self._kept_from_card(card, came_from)
         self._added_to_collection([character], notes, f"{character.name} is kept in {PAGE_LABEL}.")
 
@@ -504,6 +523,8 @@ class CollectionWindow:
             paths, _ = QFileDialog.getOpenFileNames(
                 self._dialog_parent(), "Import character cards", str(Path.home()), CARD_FILTER
             )
+        if not paths or self._collection_unwritable():
+            return
         added: list[Character] = []
         notes: list[str] = []
         for path in map(Path, paths):
@@ -612,9 +633,12 @@ class CollectionWindow:
             )
             if answer != QMessageBox.Yes:
                 return
-        for file in collection.forget(self._collection_session().bundle, card):
-            store.remove(file)
-        self._save_collection()
+        files = collection.forget(self._collection_session().bundle, card)
+        # Their files go only once the folder no longer names them: a save
+        # that failed left a card on disk with its pictures gone.
+        if self._save_collection():
+            for file in files:
+                store.remove(file)
         # A main card's heir, or a version's main card: never back to everyone.
         if main:
             self.collection_page.show_character(family[1].id if len(family) > 1 else None)
@@ -810,6 +834,8 @@ class CollectionWindow:
                 collection.touch(card)
                 self._save_collection()
                 store.remove(old)
+                for file in (old, assets[index].file):
+                    self.collection_page.forget_file(file)
             return
         if not assets[index].held:
             return
@@ -863,6 +889,11 @@ class CollectionWindow:
     def _files_changed(self, card: Character, chosen: int | None = None) -> None:
         collection.touch(card)
         self._save_collection()
+        # Read again before they show: one added under the name of a file
+        # taken off showed the old one's picture.
+        for asset in card.tavern.assets if card.tavern else ():
+            if asset.file:
+                self.collection_page.forget_file(asset.file)
         self.collection_page.show_files(chosen)
         self._refresh_collection()
 

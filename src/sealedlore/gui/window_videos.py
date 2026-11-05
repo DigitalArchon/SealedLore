@@ -432,7 +432,10 @@ class VideosWindow:
                 if pending
                 else "Delete this video? Its file is removed."
             )
-            if QMessageBox.question(self, "Delete video", text) != QMessageBox.Yes:
+            answer = QMessageBox.question(
+                self, "Delete video", text, QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+            )
+            if answer != QMessageBox.Yes:
                 return
             self.video_jobs.stop(video_id)
             stop_playback()
@@ -452,6 +455,8 @@ class VideosWindow:
                 "A video is being sent",
                 "A video is being sent right now. If you close, it may still be accepted and "
                 "charged, and the app won't know to fetch it. Close anyway?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
             )
             if answer != QMessageBox.Yes:
                 return False
