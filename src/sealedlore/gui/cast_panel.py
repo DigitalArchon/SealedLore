@@ -35,7 +35,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.gui import theme
-from sealedlore.gui.cast_board import BOARD_LABEL
+from sealedlore.gui.cast_board import BOARD_LABEL, SAVE_LABEL
 from sealedlore.gui.fields import FormScroll, set_field_text
 from sealedlore.gui.lore_cast_dialog import FILL_LABEL
 from sealedlore.gui.portrait_view import PortraitView
@@ -97,8 +97,10 @@ class CastPanel(QWidget):
     board_requested = Signal(str)
     card_export_requested = Signal(str)
     # From the author's own characters (gui/window_card_link.py): add some,
-    # and a character's line about their card (its button, by character id).
+    # save some of this story's there (the one shown ticked, "" for none), and
+    # a character's line about their card (its button, by character id).
     collection_add_requested = Signal()
+    collection_save_requested = Signal(str)
     link_requested = Signal(str)
     # Another character is shown ("" for none).
     current_changed = Signal(str)
@@ -175,12 +177,22 @@ class CastPanel(QWidget):
             "with their pictures, and what this story changes of them can go back to their card"
         )
         self.collection_button.clicked.connect(self.collection_add_requested)
+        # The other way: this story's characters kept there, one or everyone.
+        # Before, only an unexplained button over one character's name did it.
+        self.save_button = QPushButton(SAVE_LABEL)
+        self.save_button.setToolTip(
+            "Keep any of this story's characters, or all of them, in Your characters with "
+            "their pictures, to join any story; each stays linked to this story's"
+        )
+        self.save_button.clicked.connect(
+            lambda: self.collection_save_requested.emit(self._current.id if self._current else "")
+        )
         # One line while the panel has the room, wrapping when it is narrow:
         # a line of its own took the list's room for names.
         fill_row = WrapRow(spacing=6, group_spacing=6)
-        fill_row.add_group([self.collection_button])
-        fill_row.add_group([self.fill_button])
-        fill_row.add_group([self.tavern_button])
+        # Your characters' two ways together, the other two together.
+        fill_row.add_group([self.collection_button, self.save_button])
+        fill_row.add_group([self.fill_button, self.tavern_button])
 
         # The page grown to the whole window: every picture of everyone, as
         # sheets of looks and expressions (gui/cast_board.py).
@@ -485,6 +497,9 @@ class CastPanel(QWidget):
                 if character.id == selected:
                     self.list.setCurrentItem(item)
         self._loading = False
+        self.save_button.setEnabled(
+            any(c.id not in self._hidden for c in (*self._cast, *self._supporting))
+        )
         self._show_suggestions()
         self._fit_list()
         if self.list.currentItem() is None and self._cast:
@@ -707,12 +722,13 @@ class CastPanel(QWidget):
     def current(self) -> Character | None:
         return self._current
 
-    def set_link(self, words: str, button: str) -> None:
+    def set_link(self, words: str, button: str, tip: str = "") -> None:
         """The line about the shown character's card ("" hides it) and what
-        its button does."""
+        its button does (`tip`, said in its tooltip)."""
         self.link_words.setText(words)
         self.link_words.setVisible(bool(words))
         self.link_button.setText(button)
+        self.link_button.setToolTip(tip)
         self.link_button.setVisible(bool(button))
         self.link_box.setVisible(bool(words or button) and self._current is not None)
 

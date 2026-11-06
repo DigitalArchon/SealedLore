@@ -20,7 +20,7 @@ from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from sealedlore.engine.look_sheet import label_key, sheet_for, wanted_along
 from sealedlore.engine.looks import look_words
-from sealedlore.gui.cast_board import BOARD_LABEL, CastBoard
+from sealedlore.gui.cast_board import BOARD_LABEL, SAVE_LABEL, CastBoard
 from sealedlore.gui.fill_gaps import Waiting, ask_fill_gaps
 from sealedlore.gui.picture_labels import edit_labels
 from sealedlore.gui.ref_images import PICTURE_FILTER, store_reference
@@ -55,6 +55,7 @@ class CastBoardWindow:
         )
         board.spoilers_toggled.connect(self._board_spoilers)
         board.keep_requested.connect(self._board_keep)
+        board.save_requested.connect(self._board_save)
         board.restyle_requested.connect(self._board_restyle)
         self.image_jobs.changed.connect(self._refresh_board)
         # A new look's first picture failed: the rest of its row is let go
@@ -168,6 +169,7 @@ class CastBoardWindow:
         template = template_of(session.story)
         kept = read_kept(template, self.root) if template else None
         self.cast_board.set_template(template, kept.count if kept else 0)
+        self.cast_board.set_savable(True)
         self.cast_board.set_cards(
             self._board_cards(),
             shown=session.looks_now(),
@@ -191,6 +193,12 @@ class CastBoardWindow:
             cards = list(board._cards)
         if self.restyle_pictures(cards):
             self._refresh_board()
+
+    def _board_save(self, card_id: str) -> None:
+        """Save to Your characters… on the board: the character shown ticked,
+        or everyone shown when the board shows everyone."""
+        ids = [card_id] if card_id else [c.id for c in self._board_cards()]
+        self.save_to_collection(ids)
 
     def _board_keep(self) -> None:
         """Every character's pictures, labels and sheets kept for new stories
@@ -225,8 +233,10 @@ class CastBoardWindow:
         box.setWindowTitle(f"Keep these pictures for {template}")
         box.setText(
             f"Keep every character's pictures, with their labels and sheets ({count} pictures), "
-            f"for new stories from {template}?\n\nStarting {template} again, you can add them or "
-            f"leave them out. {template} itself stays as it is."
+            f"for new stories from {template}?\n\nThe next time you start {template}, it offers "
+            f"to put them on its own characters of the same names (or leave them out). "
+            f"{template} itself stays as it is.\n\nThis keeps pictures only. To keep the "
+            f"characters themselves, for any story, use {SAVE_LABEL} instead."
             + (
                 f"\n\nKept for it now: {kept.count} pictures from “{kept.kept_from}”. These "
                 "replace them."

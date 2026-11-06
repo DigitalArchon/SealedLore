@@ -26,6 +26,7 @@ from sealedlore.engine.card_link import changes, picture_mark
 from sealedlore.gui.card_changes import KEEP, SAVE, TAKE, VERSION, CardChangesDialog
 from sealedlore.gui.collection_picker import CollectionPicker
 from sealedlore.gui.ref_images import thumbnail_of
+from sealedlore.gui.save_characters import SaveCharactersDialog
 from sealedlore.ids import new_id
 from sealedlore.models.character import Character
 from sealedlore.models.collection import PictureMark
@@ -39,7 +40,14 @@ from sealedlore.storage.picture_store import PictureStore
 from sealedlore.storage.tavern_cards import macro_filler
 from sealedlore.storage.tavern_lore import lore_from_book
 
-KEEP_LABEL = "Keep in Your characters…"
+# A character's own line, for one only in the story: saved at once. The
+# Cast page's Save to Your characters… (gui/save_characters.py) chooses any.
+KEEP_LABEL = "Save them to Your characters"
+KEEP_TIP = (
+    "A copy of them, with their pictures, kept in Your characters to join any story, "
+    "linked to this story's: what either side changes later can go to the other"
+)
+ONLY_HERE = "Only in this story, not in Your characters."
 CHANGES_LABEL = "Changes…"
 CARD_LABEL = "Their card…"
 # The Cast page's line, again a moment after the last edit (it reads pictures).
@@ -99,6 +107,9 @@ class CardLinkWindow:
     def _init_card_link(self) -> None:
         panel = self.cast_panel
         panel.collection_add_requested.connect(self.add_from_collection)
+        panel.collection_save_requested.connect(
+            lambda card_id: self.save_to_collection([card_id] if card_id else [])
+        )
         panel.link_requested.connect(self._card_link_action)
         panel.current_changed.connect(lambda _card_id: self._sync_card_link())
         self._link_timer = QTimer(self)
@@ -373,13 +384,14 @@ class CardLinkWindow:
             return
         link = character.linked
         if link is None:
-            panel.set_link("", KEEP_LABEL)
+            panel.set_link(ONLY_HERE, KEEP_LABEL, KEEP_TIP)
             return
         card = self._kept_card(link.card_id)
         if card is None:
             panel.set_link(
                 "Their card is no longer in Your characters (or came from another computer).",
                 KEEP_LABEL,
+                KEEP_TIP,
             )
             return
         found = self._sides(character, card).changes(character, card)
@@ -537,32 +549,95 @@ class CardLinkWindow:
         )
 
     def keep_in_collection(self, character: Character) -> None:
-        """A story's character kept among the author's own, and linked to the
-        card made (the Cast page's Keep in Your characters…)."""
-        session = self.session
-        if session is None or self._link_refused() or self._collection_unwritable():
+        """One of the story's characters kept among the author's own, and
+        linked to the card made (their line's Save them to Your characters)."""
+        if self.session is None or self._link_refused() or self._collection_unwritable():
             return
-        kept = card_link.kept_from_story(character, f"the story {session.story.title}")
-        kept.name = character.name
-        store = self._collection_store()
-        for ref in character.reference_images:
-            new = copy_picture(ref, session.pictures, store)
-            if new is not None:
-                kept.reference_images.append(new)
-        if any(c.name.casefold() == kept.name.casefold() for c in self._kept()):
-            self.statusBar().showMessage(
-                f"You already had a character named {kept.name}: both are kept.", 8000
-            )
-        self._collection_session().cast.append(kept)
-        story_marks, _refs, _unknown = self._marks(
-            character.reference_images, session.pictures, session.story.id
+        self._save_characters([character])
+
+    def save_to_collection(self, ticked: Sequence[str] = ()) -> list[Character]:
+        """Save to Your characters… (the Cast page's, the board's, and Your
+        characters' Import → Characters from the open story…): any of the
+        story's characters as the Cast page shows them, or all of them, kept
+        among the author's own; `ticked`, ticked to begin with. The cards
+        made."""
+        if self._link_refused() or self._collection_unwritable():
+            return []
+        session = self.session
+        # As the Cast page shows them: one the plot hasn't brought in only
+        # with spoilers on (nothing here reaches a model, but the list would
+        # name them).
+        hidden = set() if self.config.show_plot_spoilers else session.hidden_ids()
+        cast = [c for c in session.cast if c.id not in hidden]
+        supporting = [c for c in session.supporting if c.id not in hidden]
+        already = {
+            c.id
+            for c in (*cast, *supporting)
+            if c.linked is not None and self._kept_card(c.linked.card_id) is not None
+        }
+        dialog = SaveCharactersDialog(
+            [*cast, *supporting],
+            lambda: session.pictures,
+            supporting={c.id for c in supporting},
+            already=already,
+            ticked=ticked,
+            parent=self._dialog_parent(),
         )
-        card_link.relink(character, kept, story_marks, main_id=kept.id)
-        self._save_collection()
+        accepted = dialog.exec() == QDialog.Accepted
+        chosen = dialog.chosen()
+        dialog.deleteLater()
+        return self._save_characters(chosen) if accepted and chosen else []
+
+    def _save_characters(self, characters: Sequence[Character]) -> list[Character]:
+        """The story's `characters` kept among the author's own, each a whole
+        copy with their pictures, and linked to the card made; the cards.
+        Linked only once Your characters were kept on disk: a story linked
+        to a card never kept would say they were."""
+        session = self.session
+        store = self._collection_store()
+        kept_session = self._collection_session()
+        came_from = f"the story {session.story.title}"
+        names = {c.name.casefold() for c in self._kept()}
+        made: list[Character] = []
+        clashes: list[str] = []
+        for character in characters:
+            kept = card_link.kept_from_story(character, came_from)
+            for ref in character.reference_images:
+                new = copy_picture(ref, session.pictures, store)
+                if new is not None:
+                    kept.reference_images.append(new)
+            if kept.name.casefold() in names:
+                clashes.append(kept.name)
+            names.add(kept.name.casefold())
+            kept_session.cast.append(kept)
+            made.append(kept)
+        if not self._save_collection():
+            for kept in made:
+                kept_session.cast.remove(kept)
+                for ref in kept.reference_images:
+                    store.remove(ref.file)
+            return []
+        for character, kept in zip(characters, made, strict=True):
+            story_marks, _refs, _unknown = self._marks(
+                character.reference_images, session.pictures, session.story.id
+            )
+            card_link.relink(character, kept, story_marks, main_id=kept.id)
         session.save()
         self._sync_card_link()
         # Listed at once, if the page is showing (Setup's Characters tab).
         self._refresh_collection()
-        self.statusBar().showMessage(
-            f"{character.name} is kept in Your characters, and linked to this story's.", 8000
-        )
+        if len(made) == 1:
+            words = f"{made[0].name} is saved to Your characters, and linked to this story's."
+        else:
+            words = (
+                f"Saved to Your characters: {', '.join(c.name for c in made)}. Each is linked "
+                "to this story's."
+            )
+        if clashes:
+            which = "a character" if len(clashes) == 1 else "characters"
+            words += (
+                f" You already had {which} named {', '.join(clashes)}: the new ones are kept "
+                "beside them."
+            )
+        self.statusBar().showMessage(words, 12000)
+        return made

@@ -81,6 +81,9 @@ STORY_FROM_CARD = "story_from_card"
 ADD_TO_STORY = "add_to_story"
 CHAT, DRAFT = "chat", "draft"
 BACKUP, RESTORE = "backup", "restore"
+# The open story's characters saved here (gui/save_characters.py).
+FROM_STORY = "from_story"
+FROM_STORY_LABEL = "Characters from the open story…"
 # On several chosen at once (`chosen_requested`), besides delete, export and
 # add to the story.
 TAG, UNTAG = "tag", "untag"
@@ -252,6 +255,14 @@ class CollectionPage(QWidget):
         self.expressions_action.triggered.connect(
             lambda: self.action_requested.emit(EXPRESSIONS, self._current or "")
         )
+        # Only while a story is open (`set_story_open`).
+        self.from_story_action = import_menu.addAction(FROM_STORY_LABEL)
+        self.from_story_action.setToolTip(
+            "Any of the open story's characters, or all of them, kept here with their "
+            "pictures, each linked to the story's"
+        )
+        self.from_story_action.triggered.connect(lambda: self.action_requested.emit(FROM_STORY, ""))
+        self.from_story_action.setVisible(False)
         import_menu.setToolTipsVisible(True)
         self.import_button.setMenu(import_menu)
         self.import_button.setToolTip(
@@ -517,6 +528,7 @@ class CollectionPage(QWidget):
 
     def set_story_open(self, story_open: bool) -> None:
         self._story_open = story_open
+        self.from_story_action.setVisible(story_open)
         card = self._card(self._current)
         self.add_button.setVisible(card is not None and story_open)
 

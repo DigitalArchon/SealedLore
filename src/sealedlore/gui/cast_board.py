@@ -73,7 +73,11 @@ from sealedlore.models.image import ImageRef
 
 BOARD_LABEL = "Cast board"
 SPOILERS_LABEL = "Show spoilers"
-KEEP_LABEL = "Keep for new stories…"
+# Pictures only, for the template the story came from (window_board.py):
+# "Keep for new stories…" read as keeping the characters themselves.
+KEEP_LABEL = "Keep pictures for new stories…"
+# The characters themselves, for any story (gui/save_characters.py).
+SAVE_LABEL = "Save to Your characters…"
 EVERYONE = "Everyone"
 NO_LOOK = "No look named"
 NO_EXPRESSION = "No expression named"
@@ -639,6 +643,8 @@ class CastBoard(QWidget):
     spoilers_toggled = Signal(bool)
     # Keep everyone's pictures for new stories from the story's template.
     keep_requested = Signal()
+    # (card id, "" for everyone shown): saved to Your characters.
+    save_requested = Signal(str)
     # (card id, "" for everyone shown): pictures redrawn in a style.
     restyle_requested = Signal(str)
 
@@ -720,6 +726,15 @@ class CastBoard(QWidget):
         self.keep_button = QPushButton(KEEP_LABEL)
         self.keep_button.clicked.connect(self.keep_requested)
         self.keep_button.hide()
+        # Shown by the story's window only: the board in Your characters'
+        # page is of a character kept there already.
+        self.save_button = QPushButton(SAVE_LABEL)
+        self.save_button.setToolTip(
+            "The character shown (or everyone) kept in Your characters with their pictures, "
+            "to join any story"
+        )
+        self.save_button.clicked.connect(lambda: self.save_requested.emit(self._current or ""))
+        self.save_button.hide()
 
         # A row that wraps: on a narrower window the buttons go onto a second
         # line rather than squeeze their words (the lab's 1280px desktops).
@@ -736,7 +751,7 @@ class CastBoard(QWidget):
             ]
         )
         header.add_group([self.fill_button])
-        header.add_group([self.keep_button, self.back_button], right=True)
+        header.add_group([self.save_button, self.keep_button, self.back_button], right=True)
 
         self.asked = QWidget()
         self._asked_row = QHBoxLayout(self.asked)
@@ -883,10 +898,15 @@ class CastBoard(QWidget):
         self.keep_button.setVisible(bool(template))
         already = f" {kept} are kept for it now." if kept else ""
         self.keep_button.setToolTip(
-            f"Keep everyone's pictures, labels and sheets for new stories from {template}: "
-            f"starting it again, you can add them or leave them out, and {template} itself "
-            f"stays as it is.{already}"
+            f"Pictures only: everyone's pictures, labels and sheets, kept for the next story "
+            f"started from {template}, which then offers to put them on its own characters "
+            f"of the same names. {template} itself stays as it is.{already} To keep the "
+            f"characters themselves for any story, use {SAVE_LABEL}"
         )
+
+    def set_savable(self, savable: bool) -> None:
+        """Whether Save to Your characters… is offered (the story's board)."""
+        self.save_button.setVisible(savable)
 
     def aim(self, card_id: str | None) -> None:
         """Whose sheet the next `set_cards` shows (None: everyone), without

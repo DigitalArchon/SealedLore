@@ -44,10 +44,11 @@ fun to play. This app will remain focused on text based roleplay.
   their greetings show, sounds), or make your own; give them
   pictures on the cast board's sheet of looks and expressions; keep versions
   of one. Put any of them into a story as you set it up or while you play
-  (Cast page → From Your characters…). When a story changes them (a new
-  picture, a changed description), the Cast page says so, and **Changes…**
-  saves the change to their card, makes a new version of it, or keeps it in
-  that story only. **Chat with them…** starts a simple chat from their card
+  (Cast page → From Your characters…), and keep any or all of a story's
+  characters there (Cast page → Save to Your characters…). When a story
+  changes them (a new picture, a changed description), the Cast page says
+  so, and **Changes…** saves the change to their card, makes a new version
+  of it, or keeps it in that story only. **Chat with them…** starts a simple chat from their card
   and a greeting of theirs, and **Draft a story with them…** has a story
   drafted around them from your premise. Simple chats keep your favourite
   system prompts (**Saved prompts**). A SillyTavern card imported from File

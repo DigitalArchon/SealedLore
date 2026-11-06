@@ -38,6 +38,7 @@ from sealedlore.gui.collection_page import (
     EXPORT_JSON,
     EXPORT_PNG,
     EXPRESSIONS,
+    FROM_STORY,
     IMPORT,
     LINK,
     NEW,
@@ -585,6 +586,7 @@ class CollectionWindow:
             IMPORT: lambda: self._import_to_collection(),
             LINK: lambda: self.import_from_link("collection"),
             EXPRESSIONS: lambda: self._collection_expressions(card_id),
+            FROM_STORY: lambda: self._collection_from_story(),
             EXPORT_PNG: lambda: self._export_kept(card_id, "png"),
             EXPORT_CHARX: lambda: self._export_kept(card_id, "charx"),
             EXPORT_JSON: lambda: self._export_kept(card_id, "json"),
@@ -602,6 +604,13 @@ class CollectionWindow:
         action = actions.get(what)
         if action is not None:
             action()
+
+    def _collection_from_story(self) -> None:
+        """Import → Characters from the open story…: the story's characters
+        saved here (gui/window_card_link.py), the first of them shown."""
+        made = self.save_to_collection()
+        if made and self.collection_shown():
+            self.collection_page.show_character(made[0].id)
 
     def _collection_changed(self, card_id: str) -> None:
         """A card's fields changed on the page: kept a moment after the last

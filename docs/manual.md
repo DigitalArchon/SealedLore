@@ -1124,10 +1124,19 @@ side, ticked, and offers:
   says so quietly until there are other changes;
 - **Take the ticked into this story**: changes made to their card since.
 
-A character the story made, or brought in some other way, has **Keep in Your
-characters…**: a copy goes into Your characters, linked to the story's as if
-it had come from there. **Their card…** opens Your characters on a character
-whose story copy is in step with their card.
+**Out of a story.** Any character a story made, or brought in some other
+way, can be kept in Your characters, to join other stories. **Save to Your
+characters…** on the Cast page (beside From Your characters…) lists the
+story's characters, the one shown ticked: tick any of them, or **All**, and
+each goes into Your characters with their pictures, linked to the story's as
+if they had come from there, so what either side changes later can go to the
+other (Changes…, above). The same is on the cast board, and in Your
+characters' own **Import → Characters from the open story…**. A character
+already there is listed but can't be ticked again: Changes… is how their card
+takes what this story changed. The Cast page says which a character is: "Only
+in this story, not in Your characters." with **Save them to Your characters**
+for that one alone, or where their card is. **Their card…** opens Your
+characters on a character whose story copy is in step with their card.
 
 ## SillyTavern cards and lorebooks
 
@@ -1528,10 +1537,14 @@ back as it was.
 **Keeping them for new stories.** Every picture, label and sheet goes with a
 story wherever it goes: a scenario file (Story → Export → Scenario…), Restart,
 Duplicate settings and a backup. For a story started from a sample or a plot
-file, **Keep for new stories…** on the board keeps everyone's pictures for
-that template too, without changing it: the next time you start it, the Start
-dialog offers to add them (ticked; untick it for the template as it comes).
-Keep them again to replace them, or forget them from the same button.
+file, **Keep pictures for new stories…** on the board keeps everyone's
+pictures for that template too, without changing it: the next time you start
+it, the Start dialog offers to put them on its own characters of the same
+names (ticked; untick it for the template as it comes). Keep them again to
+replace them, or forget them from the same button. It keeps pictures only:
+to keep the characters themselves, for any story, **Save to Your
+characters…** beside it keeps the one shown, or everyone (see "Your
+characters").
 
 Pictures of other expressions can come with a character: a CHARX card's
 expression pictures (kept with them in Your characters when the card is
