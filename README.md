@@ -37,7 +37,7 @@ fun to play. This app will remain focused on text based roleplay.
 
 ### New in version 3
 
-- **A plot without writing one** (3.0.0b3). The model can write a story's
+- **A plot without writing one** (3.1.0b1). The model can write a story's
   plot: made up from the story's world and characters, or from what you
   describe (how many events, how often, how big, how disruptive, what kinds).
   Offered as the last step of Write a story from scratch, when drafting from
@@ -46,22 +46,22 @@ fun to play. This app will remain focused on text based roleplay.
   already have in the plot editor with everything filled in: write its plot,
   change anything else, and save it as a new story, the old one left as it
   is. The editor now shows which parts are the story's and which the plot's.
-- **Ask for changes** (3.0.0b3). Once a story is drafted for you, or a plot
+- **Ask for changes** (3.1.0b1). Once a story is drafted for you, or a plot
   written, say what you'd like different: "I like the world, but I'd prefer
   the characters were more badass", "the world isn't hostile enough". The
   model changes just that, the rest stays as it is, and **Undo the last
   change** takes any request back. A plot stays hidden while it is changed.
-- **As much as you want set up** (3.0.0b3). Drafting from an idea asks how
+- **As much as you want set up** (3.1.0b1). Drafting from an idea asks how
   much world to write (basic, standard or detailed), how many people (a
   handful, standard or lots) and how much about each of them (briefly,
   standard or in depth), and a plot the model writes can bring in a few
   newcomers or many, written briefly or in depth. The draft also sets how
   lively the world is and, when the premise says, how its pictures look.
-- **Cast cards that fit** (3.0.0b3). The cast's cards get room in proportion
+- **Cast cards that fit** (3.1.0b1). The cast's cards get room in proportion
   to the story's context budget (Settings → Context), and a card past it is
   condensed to about a third of its length instead of being cut to a line.
   The Cast page shows each condensed card, to edit or have written again.
-- **A story's characters, kept** (3.0.0b3). Cast page → Save to Your
+- **A story's characters, kept** (3.1.0b1). Cast page → Save to Your
   characters… (on the cast board too) keeps any or all of a story's
   characters in Your characters, linked to the story.
 - **Your characters** (3.0.0b1). Every character you keep, in one place
