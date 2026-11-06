@@ -300,6 +300,10 @@ class _KeyedAction(QAction):
             self.by_key = False
 
 
+WRITE_PLOT_TIP = (
+    "The model writes this story's plot, from the story alone or from what you describe; "
+    "you choose whether to read it"
+)
 EDIT_PLOT_TIP = (
     "This story's plot in the plot editor, its world and cast filled in: write one, or "
     "change it (it shows the whole plot)"
@@ -849,6 +853,11 @@ class MainWindow(
         story_menu.addAction(self.undo_review_action)
 
         story_menu.addSeparator()
+        # The author (Nov 2026): a plot without writing one by hand.
+        self.write_plot_action = QAction("&Write a plot with the model…", self)
+        self.write_plot_action.setStatusTip(WRITE_PLOT_TIP)
+        self.write_plot_action.triggered.connect(self.write_plot)
+        story_menu.addAction(self.write_plot_action)
         # "Import plot…" beside File → Import… read as the same thing.
         self.import_plot_action = QAction("Add a &plot from a file…", self)
         self.import_plot_action.setStatusTip(
@@ -1250,6 +1259,7 @@ class MainWindow(
             self._guide = None
             self.return_cast_panel()
         made, full_setup = guide.made and not guide.discarded, guide.full_setup
+        wishes = guide.plot_wishes if made and accepted else None
         guide.deleteLater()  # read; nothing else holds it
         if not made or self.session is None:
             return
@@ -1269,9 +1279,9 @@ class MainWindow(
                     "Next: add the cast on the Cast page, then Story → Start story…", 12000
                 )
                 return
-        # Start: who to play, and pictures for the cards, before the opening
-        # is written.
-        self.start_story()
+        # Its plot, if the last step asked for one; then Start: who to play,
+        # and pictures for the cards, before the opening is written.
+        self._then_plot(wishes, self.start_story)
 
     def _open_new_bundle(self, bundle: StoryBundle, *, review: bool = False) -> None:
         """Save and open a story made from a file or a setup, and begin it.
@@ -3615,6 +3625,7 @@ class MainWindow(
         job: str | None = None,
         sent: _Sent | None = None,
         continuing: str | None = None,
+        progress: bool = False,
     ) -> None:
         """Run a job on the worker thread.
 
@@ -3623,9 +3634,12 @@ class MainWindow(
         looked as if they had failed, so a progress dialog says what's running
         and offers Stop. `job` names it in a failure ("Review failed"); `sent`
         is the turn or Question it answers; `continuing` the passage the job
-        writes more of, which streams onto its end.
+        writes more of, which streams onto its end. `progress`: the job's
+        notices say how far it has got, in its progress dialog (a plot being
+        written).
         """
         self._job_name = job or ("Question" if question is not None else "Generation")
+        self._progress_in_dialog = progress
         self._sent = sent
         self._failed = None
         if question is not None:
@@ -3713,6 +3727,8 @@ class MainWindow(
     def _on_notice(self, text: str) -> None:
         self._waits.stop()
         self.statusBar().showMessage(text, 12000)
+        if getattr(self, "_progress_in_dialog", False) and self._busy_dialog is not None:
+            self._busy_dialog.setLabelText(text)
 
     def _on_failed(self, message: str) -> None:
         # Said once the job has let go of the story (`_say_failed`): the
@@ -4121,6 +4137,7 @@ class MainWindow(
         self._remember_authoring_model(dialog.model_text())
         if not accepted or dialog.draft is None:
             return
+        wishes = dialog.plot_wishes()
         try:
             if getattr(dialog.draft, "characters", None):
                 bundle, warnings = dialog.draft.build(
@@ -4146,14 +4163,17 @@ class MainWindow(
             )
             box.setTextFormat(Qt.PlainText)  # names and text from the model
             box.exec()
-        # Read it before playing it: Setup first (the style too), then the Start
-        # dialog. Cancel leaves the draft saved but not begun: before, the
-        # opening was written anyway, in whatever style the draft had chosen.
+        # Read it before playing it: Setup first (the style too), then its plot
+        # if one was asked for, then the Start dialog. Cancel leaves the draft
+        # saved but not begun: before, the opening was written anyway, in
+        # whatever style the draft had chosen.
         if self.open_setup():
-            self.start_story()
+            self._then_plot(wishes, self.start_story)
         else:
             self.statusBar().showMessage(
-                "The draft is saved but not begun: Story → Start story… when it's ready", 8000
+                "The draft is saved but not begun: Story → Start story… when it's ready"
+                + (", and Story → Write a plot with the model… for its plot" if wishes else ""),
+                10000,
             )
 
     def _toggle_review_mark(self, node_id: str) -> None:
@@ -5277,6 +5297,7 @@ class MainWindow(
             self.setup_action,
             self.review_action,
             self.import_plot_action,
+            self.write_plot_action,
             self.edit_plot_action,
             self.restart_action,
             self.export_action,
@@ -5289,7 +5310,12 @@ class MainWindow(
         # A private scene freezes the plot and the setup (session
         # `_refuse_in_private`): offered, they only refused.
         if self.in_private:
-            for action in (self.setup_action, self.import_plot_action, self.edit_plot_action):
+            for action in (
+                self.setup_action,
+                self.import_plot_action,
+                self.write_plot_action,
+                self.edit_plot_action,
+            ):
                 action.setEnabled(False)
                 action.setStatusTip("Paused while the private scene is open: end it first")
         else:
@@ -5298,6 +5324,7 @@ class MainWindow(
                 "Give this story the facts and events from a plot file (.md)"
             )
             self.edit_plot_action.setStatusTip(EDIT_PLOT_TIP)
+            self.write_plot_action.setStatusTip(WRITE_PLOT_TIP)
         unstarted = has_story and not (self.session and self.session.nodes)
         self.start_action.setEnabled(unstarted and not busy)
         # Once the story has begun it can only restart: greyed for good, it
@@ -5311,6 +5338,7 @@ class MainWindow(
         for action in (
             self.review_action,
             self.import_plot_action,
+            self.write_plot_action,
             self.edit_plot_action,
             self.last_review_action,
             self.undo_review_action,
@@ -5324,6 +5352,7 @@ class MainWindow(
                 self.start_action,
                 self.review_action,
                 self.import_plot_action,
+                self.write_plot_action,
                 self.edit_plot_action,
                 self.last_review_action,
                 self.undo_review_action,

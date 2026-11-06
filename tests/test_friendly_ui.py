@@ -402,7 +402,7 @@ def test_the_guide_makes_the_story_and_its_characters_on_the_cast_page(app, wind
     guide.location.setText("The farmhouse kitchen")
     guide.opening.setPlainText("A knock at the door at dusk.")
     guide.next_button.click()
-    assert guide.next_button.text() == "Create the story"
+    assert guide.next_button.text() == "Next", "a plot comes last"
     guide.person.setCurrentIndex(guide.person.findData("first"))
     guide.tense.setCurrentIndex(guide.tense.findData("present"))
     # A length of one's own is offered here too (the author, Oct 2026).
@@ -414,6 +414,10 @@ def test_the_guide_makes_the_story_and_its_characters_on_the_cast_page(app, wind
     assert not guide.custom_length.isEnabled()
     guide.length.setCurrentIndex(guide.length.findData("custom"))
     assert guide.skip_button.text() == "Advanced setup…"
+    guide.next_button.click()
+    # The last step: a plot the model writes, or none (tests/test_plot_writing_gui.py).
+    assert guide.next_button.text() == "Create the story"
+    assert guide.plot_wishes is None, "no plot unless one is asked for"
     guide.next_button.click()
     assert guide.result() == NewStoryGuide.Accepted and not guide.full_setup
     story = window.session.story

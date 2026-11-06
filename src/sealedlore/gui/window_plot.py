@@ -1,5 +1,12 @@
-"""The main window's side of a story's plot: the plot editor working on a
-story (it is the editor's host, gui/plot_editor.py). A mixin for `MainWindow`.
+"""The main window's side of a story's plot: a plot written by the model, and
+the plot editor working on a story (it is the editor's host,
+gui/plot_editor.py). A mixin for `MainWindow`.
+
+A plot is written on the worker, like any job that changes the story
+(`StorySession.draft_plot`), from Story → Write a plot with the model…, the
+new story guide's last step, or New story from a premise (`_then_plot`, run
+once the story is set up and before Start). Once in, it is kept hidden unless
+the author asks to see it (gui/plot_dialog.py).
 
 The editor is its own window, kept while the app runs, but the story it works
 on is the open story's session's: the session is the story's one writer, so
@@ -9,16 +16,172 @@ a job holds the story.
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QMessageBox, QWidget
+from collections.abc import Callable
 
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QDialog, QMessageBox, QWidget
+
+from sealedlore.engine.plot_draft import PlotDraft, PlotWishes
+from sealedlore.engine.session import SessionNotice
+from sealedlore.gui.plot_dialog import EDIT, PlotDialog, PlotReadyDialog, plot_preview
 from sealedlore.gui.plot_editor import PlotEditorWindow
 from sealedlore.models.plot_file import PlotDocument
+from sealedlore.providers.base import ProviderError, StreamCancelled, error_detail
 from sealedlore.storage.library import story_listings
 from sealedlore.storage.repository import StoryBundle
+
+WRITING = "Writing the plot… it takes a minute or two."
 
 
 class PlotWindow:
     _plot_editor: PlotEditorWindow | None
+
+    # --- a plot written by the model -------------------------------------------
+
+    def write_plot(self) -> None:
+        """Story → Write a plot with the model…: what the author wants of it,
+        then the plot, in place of any the story has."""
+        session = self.session
+        if session is None or session.story.chat:
+            return
+        if self._busy:
+            self._say_wait("Writing a plot")
+            return
+        if session.in_private:
+            self.statusBar().showMessage("Not in a private scene: end it first.", 6000)
+            return
+        if self._needs_provider():
+            return
+        dialog = PlotDialog(
+            self._dialog_parent(),
+            model=session.authoring_model,
+            replacing=session.story.plot is not None,
+            begun=bool(session.path()),
+        )
+        try:
+            if dialog.exec() != QDialog.Accepted:
+                return
+            wishes = dialog.wishes()
+        finally:
+            dialog.deleteLater()
+        if wishes is not None and self.session is session:
+            self._draft_plot(wishes)
+
+    def _then_plot(self, wishes: PlotWishes | None, then: Callable[[], None]) -> None:
+        """A new story's plot, when one was asked for (the guide's last step,
+        a premise draft's), then `then` (its Start), plot or none."""
+        session = self.session
+        if wishes is None or session is None:
+            then()
+            return
+        if self.config.active_provider() is None and not self.use_mock:
+            self.statusBar().showMessage(
+                "No plot: set up an endpoint in Settings, then Story → Write a plot with the "
+                "model… writes one.",
+                12000,
+            )
+            then()
+            return
+        self._draft_plot(wishes, then=then)
+
+    def _draft_plot(self, wishes: PlotWishes, *, then: Callable[[], None] | None = None) -> None:
+        """The plot, written on the worker. A failure or a Stop leaves the
+        story as it was, and `then` still follows."""
+        session = self.session
+        if session is None:
+            return
+        session.provider = self._current_provider()
+        made: dict[str, object] = {}
+
+        def job():
+            try:
+                made["draft"] = yield from session.draft_plot(wishes)
+            except StreamCancelled:
+                raise  # Stop: the worker ends the job quietly, and nothing changed
+            except (ProviderError, ValueError) as exc:
+                made["error"] = error_detail(exc)
+            yield SessionNotice("The plot is written." if "draft" in made else "No plot.")
+
+        def after() -> None:
+            if self.session is not session:
+                return
+            draft = made.get("draft")
+            if isinstance(draft, PlotDraft):
+                self._after_plot_changed()
+                self._plot_written(draft, then)
+            elif "error" in made:
+                self._plot_failed(str(made["error"]), wishes, then)
+            else:
+                self.statusBar().showMessage(
+                    "No plot was written: Story → Write a plot with the model… writes one.",
+                    10000,
+                )
+                if then is not None:
+                    then()
+
+        self._after_job = after
+        self._start(job, streaming=False, busy_text=WRITING, job="Writing the plot", progress=True)
+
+    def _plot_written(self, draft: PlotDraft, then: Callable[[], None] | None) -> None:
+        """The plot is in: kept hidden unless the author asks to see it, then
+        on to `then`, or to the plot editor (and the author starts the story
+        when they are ready)."""
+        session = self.session
+        dialog = PlotReadyDialog(
+            self._dialog_parent(),
+            title=session.story.title,
+            plot=plot_preview(draft.document),
+            notes=draft.notes,
+            go_on="Start the story…" if then is not None else "Close",
+            spoilers_on=self.config.show_plot_spoilers,
+        )
+        try:
+            dialog.exec()
+            choice, spoilers_off = dialog.choice, dialog.keep_spoilers_off
+        finally:
+            dialog.deleteLater()
+        if spoilers_off:
+            self._on_spoilers_toggled(False)
+            self._refresh_plot_panel()
+        if choice == EDIT:
+            self.edit_story_plot()
+            if then is not None:
+                self.statusBar().showMessage(
+                    "When the plot is as you want it, start the story with Story → Start story….",
+                    15000,
+                )
+            return
+        if then is not None:
+            then()
+            return
+        self.statusBar().showMessage(
+            "The plot is written. Story → Edit the plot in the plot editor… shows it whole.",
+            10000,
+        )
+
+    def _plot_failed(
+        self, message: str, wishes: PlotWishes, then: Callable[[], None] | None
+    ) -> None:
+        """Nothing usable came back: try again, or go on without a plot."""
+        box = QMessageBox(self._dialog_parent())
+        box.setIcon(QMessageBox.Warning)
+        # The endpoint's own words may be in it: never rendered as HTML.
+        box.setTextFormat(Qt.PlainText)
+        box.setWindowTitle("No plot")
+        box.setText("The plot couldn't be written.")
+        box.setInformativeText(message)
+        again = box.addButton("Try again", QMessageBox.AcceptRole)
+        box.addButton(
+            "Start without a plot" if then is not None else "Close", QMessageBox.RejectRole
+        )
+        box.setDefaultButton(again)
+        box.exec()
+        if box.clickedButton() is again:
+            self._draft_plot(wishes, then=then)
+        elif then is not None:
+            then()
+
+    # --- the plot editor ---------------------------------------------------------
 
     def _plot_editor_window(self) -> PlotEditorWindow:
         """The plot editor, one window, made on first use."""

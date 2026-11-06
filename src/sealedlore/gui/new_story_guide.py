@@ -3,8 +3,9 @@
 It used to be a bare "Title" box and then the whole of Setup, six tabs
 deep, with the cast to be added afterwards on the Cast page (the author,
 Oct 18 2026: the window looked confusing to a new user). The guide asks for
-what a story needs to begin, in four short steps: the story and its world,
-its characters, where and how it begins, and how it reads. Everything else
+what a story needs to begin, in short steps: the story and its world, its
+characters, where and how it begins, how it reads, and whether it has a plot
+the model writes (Nov 2026). Everything else
 keeps its default, and is in Setup and on the Cast page as before; "Skip to
 the full setup" (Advanced setup… since Oct 2026) opens Setup instead.
 
@@ -42,11 +43,13 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.response_style import PRESET_ORDER, PRESETS
 from sealedlore.gui.picture_style import PictureStyleField
+from sealedlore.gui.plot_wishes import ABOUT as PLOT_ABOUT
+from sealedlore.gui.plot_wishes import PlotWishesForm
 from sealedlore.gui.sizing import GrowingText, size_to_screen
 from sealedlore.models.story import DEFAULT_RESPONSE_STYLE, Story
 from sealedlore.storage.repository import StoryBundle
 
-STEPS = ("The story", "Characters", "How it begins", "How it reads")
+STEPS = ("The story", "Characters", "How it begins", "How it reads", "A plot")
 CHARACTERS_STEP = 1
 PERSONS = (
     ("Second person: “you walk in”", "second"),
@@ -109,7 +112,7 @@ def _text(placeholder: str, *, lines: int = 3, fill: bool = False) -> GrowingTex
 
 
 class NewStoryGuide(QDialog):
-    """Four steps to a story ready to start (see the module). After exec:
+    """Five steps to a story ready to start (see the module). After exec:
     `made` whether the story was made, `full_setup` whether the author asked
     for the full Setup instead of starting, `discarded` whether a story made
     was moved to the trash on Cancel."""
@@ -135,6 +138,7 @@ class NewStoryGuide(QDialog):
         self.stack.addWidget(self._characters_page())
         self.stack.addWidget(self._opening_page())
         self.stack.addWidget(self._style_page())
+        self.stack.addWidget(self._plot_page())
 
         # "Skip to the full setup…" read as if the full setup came later
         # (the author, Oct 2026); it is the other way to set a story up.
@@ -277,6 +281,30 @@ class NewStoryGuide(QDialog):
             ),
         )
         return page
+
+    def _plot_page(self) -> QWidget:
+        """The author (Nov 2026): a story from scratch had no plot unless they
+        wrote one by hand. Written once the story is made, before it begins
+        (`MainWindow._then_plot`)."""
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.addWidget(_hint(PLOT_ABOUT))
+        self.plot = PlotWishesForm(offer_none=True)
+        layout.addWidget(self.plot)
+        layout.addWidget(
+            _hint(
+                "The model writes it from everything the steps before hold, when you "
+                "create the story, before it begins. A plot can also be added or changed "
+                "later: Story → Write a plot with the model…, or the plot editor."
+            )
+        )
+        layout.addStretch(1)
+        return page
+
+    @property
+    def plot_wishes(self):
+        """What the author wants of a plot (engine/plot_draft.py), or None."""
+        return self.plot.wishes()
 
     # --- moving between them --------------------------------------------------
 

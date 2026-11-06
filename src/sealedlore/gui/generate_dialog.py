@@ -28,6 +28,7 @@ from sealedlore.engine.authoring import parse_generated
 from sealedlore.engine.drafting import StoryDraft
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.gui.model_picker import Browse, ModelField
+from sealedlore.gui.plot_wishes import PlotWishesForm
 from sealedlore.gui.sizing import may_discard, size_to_screen
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.character import Character
@@ -112,9 +113,9 @@ class GenerateDialog(QDialog):
 
         intro = QLabel(
             "Describe the story you want: the setting, who you'll play, the tone. The model "
-            "drafts the world, cast, lore, opening and style in one go. You can read and "
-            "edit it all in Setup before you start, or use Story → Review settings… to "
-            "have it changed."
+            "drafts the world, cast, lore, opening and style in one go, and a plot too if "
+            "you like. You can read and edit it all in Setup before you start, or use "
+            "Story → Review settings… to have it changed."
         )
         intro.setWordWrap(True)
 
@@ -171,6 +172,18 @@ class GenerateDialog(QDialog):
         form.addRow("", voice_hint)
         form.addRow("Model", self.model)
         form.addRow("", model_hint)
+        # The author (Nov 2026): a drafted story had no plot unless they wrote
+        # one by hand. Written by the same model once the story is set up
+        # (Setup, then the plot, then Start: `MainWindow._then_plot`).
+        self.plot = PlotWishesForm(offer_none=True)
+        plot_hint = QLabel(
+            "Written once you have looked the drafted story over in Setup, before it "
+            "begins. Its world and characters come first; the plot is built from them."
+        )
+        plot_hint.setObjectName("hintLabel")
+        plot_hint.setWordWrap(True)
+        form.addRow("A plot", self.plot)
+        form.addRow("", plot_hint)
 
         self.buttons = QDialogButtonBox(QDialogButtonBox.Cancel)
         self.generate_button = QPushButton("Draft the story")
@@ -262,6 +275,7 @@ class GenerateDialog(QDialog):
         self.tense.setEnabled(not running)
         self.model.setReadOnly(running)
         self.choose_button.setEnabled(not running)
+        self.plot.set_read_only(running)
         self.generate_button.setEnabled(not running)
 
     def _show_progress(self, text: str) -> None:
@@ -306,8 +320,12 @@ class GenerateDialog(QDialog):
         self.accept()
 
     def _as_typed(self) -> list[str]:
-        # By name, not `typed_texts`: both boxes are read-only while drafting.
-        return [self.premise.toPlainText(), self.model.text()]
+        # By name, not `typed_texts`: the boxes are read-only while drafting.
+        return [self.premise.toPlainText(), self.model.text(), self.plot.typed()]
+
+    def plot_wishes(self):
+        """What the author wants of the story's plot (engine/plot_draft.py), or None."""
+        return self.plot.wishes()
 
     def reject(self) -> None:
         """Cancel or Esc: a premise typed here is asked about before it is

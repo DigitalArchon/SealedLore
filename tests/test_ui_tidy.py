@@ -1372,6 +1372,9 @@ def test_a_premise_draft_begins_only_once_setup_is_saved(app, window: MainWindow
         def model_text(self):
             return ""
 
+        def plot_wishes(self):
+            return None  # no plot: Start follows Setup at once
+
     monkeypatch.setattr(mw, "GenerateDialog", Generate)
     monkeypatch.setattr(window, "open_story", lambda _id: None)
     monkeypatch.setattr(window, "open_setup", lambda: False)
