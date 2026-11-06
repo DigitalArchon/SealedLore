@@ -26,6 +26,8 @@ from sealedlore.engine.chronicle import chronicle_at, format_clock
 from sealedlore.engine.dice import BAND_SHORT
 from sealedlore.engine.draft_detail import STANDARD_DETAIL, DraftDetail, render_detail
 from sealedlore.engine.jsonreply import extract_json
+from sealedlore.engine.picture_styles import STYLES as PICTURE_STYLES
+from sealedlore.engine.picture_styles import read_style
 from sealedlore.engine.prompt_edits import missing_slots, set_text, texts_in_force
 from sealedlore.engine.prompt_texts import (
     CHAPTERS,
@@ -56,6 +58,7 @@ from sealedlore.models.node import AgencyMode, Node, NpcScope, ResponseStyle
 from sealedlore.models.scenario import Scenario
 from sealedlore.models.scene import OffstageCharacter, SceneState
 from sealedlore.models.story import (
+    DEFAULT_WORLD_ACTIVITY,
     NarrativePerson,
     NarrativeTense,
     OpeningMode,
@@ -169,12 +172,16 @@ CHARACTER_FIELDS = (
     "canon",
     "summary",
     "description",
+    "personality",
     "voice",
     "competence",
     "skills",
     "playable",
     "author_only",
+    "keep_whole",
 )
+# An alias longer than this is a note about someone, not a name for them.
+ALIAS_MOST_WORDS = 5
 LORE_FIELDS = ("title", "content", "keywords", "always_on", "enabled", "until_mentioned")
 # The text fields a change replaces whole, checked for silent loss.
 WHOLE_TEXT_FIELDS = {
@@ -236,6 +243,8 @@ def draft_system(texts: PromptTexts = DEFAULT_TEXTS) -> str:
         tiers=slots["tiers"],
         style_guide=slots["style_guide"],
         character_shape=slots["character_shape"],
+        world_activities=slots["world_activities"],
+        picture_styles=_choices([style.label for style in PICTURE_STYLES]),
     )
 
 
@@ -346,8 +355,25 @@ def _skills(value: object, who: str, warnings: list[str]) -> dict[str, Competenc
     return skills
 
 
+def generic_alias(alias: str) -> bool:
+    """An alias that would fit others too: "the king", "the spirit", "my
+    lord". Aliases find people on the rosters and bring their cards into a
+    turn, so one like these names whoever the story calls by it. Live, GLM
+    5.3 gave Claudius "the king" and the ghost "the spirit" against the
+    prompt's word; "the Grey Wolf" names one person, and stays."""
+    words = alias.split()
+    if len(words) > ALIAS_MOST_WORDS:
+        # "the Lady of the Lake in some traditions" (Sonnet 4.6, for Morgan
+        # le Fay): a note, not a name.
+        return True
+    if words and words[0].lower() in ("the", "a", "an", "my", "our"):
+        words = words[1:]
+    return len(words) <= 1 and (not words or words[0].islower()) or alias.islower()
+
+
 def character_from(item: dict[str, Any], warnings: list[str], *, playable: bool) -> Character:
-    """A card from the model's character object. Raises ValueError without a name."""
+    """A card from the model's character object, without an alias that would
+    fit others too (`generic_alias`). Raises ValueError without a name."""
     name = _text(item.get("name"))
     if not name:
         raise ValueError("a character had no name")
@@ -359,7 +385,7 @@ def character_from(item: dict[str, Any], warnings: list[str], *, playable: bool)
         aliases=[
             alias
             for alias in _strings(item.get("aliases"), commas=True)
-            if alias.lower() != name.lower()
+            if alias.lower() != name.lower() and not generic_alias(alias)
         ],
         canon=_text(item.get("canon")),
         summary=_text(item.get("summary")),
@@ -445,6 +471,7 @@ def parse_generated(text: str) -> tuple[Scenario, list[str]]:
         supporting.append(card)
 
     by_name = _name_index(cast)
+    supporting_by_name = _name_index(supporting)
 
     def cast_id(name: object, where: str) -> str | None:
         wanted = _text(name)
@@ -458,12 +485,25 @@ def parse_generated(text: str) -> tuple[Scenario, list[str]]:
     scene_data = data.get("starting_scene")
     scene_data = scene_data if isinstance(scene_data, dict) else {}
     present: list[str] = []
+    # A supporting character is on the roster by name (`present_others`),
+    # as the scene read puts one there.
+    present_others: list[str] = []
     for name in _strings(scene_data.get("present"), commas=True):
+        card = supporting_by_name.get(name.strip().lower())
+        if card is not None and name.strip().lower() not in by_name:
+            if card.name not in present_others:
+                present_others.append(card.name)
+            continue
         found = cast_id(name, "starting scene")
         if found and found not in present:
             present.append(found)
     nearby = []
     for entry in _list(scene_data.get("nearby")):
+        name = (_text(entry.get("name")) or "").lower()
+        if name in supporting_by_name and name not in by_name:
+            # "nearby" is the cast's: a supporting character close at hand is
+            # the opening's to place, as anyone else in neither list is.
+            continue
         found = cast_id(entry.get("name"), "nearby")
         if found and found not in present:
             nearby.append(
@@ -476,18 +516,9 @@ def parse_generated(text: str) -> tuple[Scenario, list[str]]:
         present.insert(0, play_as)
         nearby = [entry for entry in nearby if entry.character_id != play_as]
 
-    # The roster beats the narrative: a cast member the opening puts in the
-    # scene but the roster calls elsewhere gets written back out. Mentioning
-    # someone isn't proof they're present ("her master, back at the Temple"),
-    # so say so rather than guess.
+    # A cast member neither present nor nearby is the opening's to place
+    # (`prompt.not_placed_at_start`): no longer a contradiction to warn of.
     opening = _text(data.get("opening")) or ""
-    placed = set(present) | {entry.character_id for entry in nearby}
-    for character in cast:
-        if character.id not in placed and mentions(opening, character):
-            warnings.append(
-                f"the opening mentions {character.name}, who isn't in the starting scene — "
-                "if they're there, tick them as present in Setup"
-            )
 
     lore = []
     for item in _list(data.get("lore")):
@@ -503,6 +534,10 @@ def parse_generated(text: str) -> tuple[Scenario, list[str]]:
             )
 
     agency = _choice(data.get("agency_mode"), AGENCY_MODES, "agency mode", warnings)
+    activity = _choice(data.get("world_activity"), WORLD_ACTIVITIES, "world activity", warnings)
+    # How its pictures look: a ready-made style by its name, else the
+    # model's own words for one (engine/picture_styles.py).
+    picture_style, image_style = read_style(_text(data.get("picture_style")) or "")
     scenario = Scenario(
         title=_text(data.get("title")) or "Untitled story",
         description=_text(data.get("description")),
@@ -514,11 +549,15 @@ def parse_generated(text: str) -> tuple[Scenario, list[str]]:
             time_of_day=_text(scene_data.get("time_of_day")),
             situation=_text(scene_data.get("situation")),
             present_character_ids=present,
+            present_others=present_others,
             offstage_but_nearby=nearby,
         ),
         suggested_character_id=play_as,
         style=_style(data.get("style"), warnings),
         agency_mode=agency or "contested",  # type: ignore[arg-type]
+        world_activity=activity or DEFAULT_WORLD_ACTIVITY,  # type: ignore[arg-type]
+        picture_style=picture_style,
+        image_style=image_style,
         cast=cast,
         supporting=supporting,
         lore=lore,
@@ -546,6 +585,9 @@ def character_view(character: Character) -> dict[str, Any]:
         # A SillyTavern card's own field, told with the description: shown
         # only where there is one, so no other story's review changes.
         view["personality"] = character.personality
+    if character.keep_whole:
+        # "Always send the whole card" (engine/cast_fit.py), likewise.
+        view["keep_whole"] = True
     return view
 
 
@@ -1104,7 +1146,15 @@ def _apply_style(bundle: StoryBundle, field: str | None, value: object) -> None:
     setattr(style, field, _text(value))
 
 
-SUPPORTING_ONLY_FIELDS = ("name", "aliases", "canon", "summary", "voice", "description")
+SUPPORTING_ONLY_FIELDS = (
+    "name",
+    "aliases",
+    "canon",
+    "summary",
+    "voice",
+    "description",
+    "personality",
+)
 
 
 def _apply_character(bundle: StoryBundle, change: SettingsChange) -> None:
@@ -1117,7 +1167,8 @@ def _apply_character(bundle: StoryBundle, change: SettingsChange) -> None:
         # Applying the rest changed nothing the storyteller could see.
         raise ValueError(
             f"{character.name} is a supporting card: it carries only a name, aliases, "
-            "canon, summary, voice and description (move them to the cast for the rest)"
+            "canon, summary, voice, description and personality (move them to the cast for "
+            "the rest)"
         )
     if field == "name":
         new_name = _required_text(value, "a name")
@@ -1139,6 +1190,8 @@ def _apply_character(bundle: StoryBundle, change: SettingsChange) -> None:
         character.summary = _text(value)
     elif field == "description":
         character.full_description = _text(value)
+    elif field == "personality":
+        character.personality = _text(value)
     elif field == "voice":
         character.voice_notes = _text(value)
     elif field == "competence":
@@ -1171,6 +1224,10 @@ def _apply_character(bundle: StoryBundle, change: SettingsChange) -> None:
                 "voices them; author_only would leave nobody to write them"
             )
         character.author_only = value
+    elif field == "keep_whole":
+        if not isinstance(value, bool):
+            raise ValueError("keep_whole must be true or false")
+        character.keep_whole = value
     else:
         raise ValueError(f"“{field}” isn't a character setting")
 
@@ -1436,6 +1493,7 @@ _FIELD_LABELS = {
     "until_mentioned": "held back until you mention it",
     "playable": "available to play",
     "author_only": "never voiced by the storyteller",
+    "keep_whole": "always sent whole",
     "context_token_budget": "context budget",
     "main_model": "storyteller",
     "summarization_model": "summariser",
@@ -1513,9 +1571,12 @@ def current_value(
         return story.setup.opening_text if change.field == "text" else story.setup.opening_mode
     if change.kind == "character":
         try:
-            return character_view(_find_character(bundle, change.target)).get(change.field or "")
+            character = _find_character(bundle, change.target)
         except ValueError:
             return None
+        if change.field == "keep_whole":
+            return character.keep_whole
+        return character_view(character).get(change.field or "")
     if change.kind == "character_move":
         try:
             character = _find_character(bundle, change.target)

@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 
+from sealedlore.engine.authoring import generic_alias
 from sealedlore.engine.lore_cast import (
     MOST_KEPT,
     build_lore_cast_messages,
-    generic_alias,
     parse_lore_cast,
 )
 from sealedlore.engine.session import StorySession

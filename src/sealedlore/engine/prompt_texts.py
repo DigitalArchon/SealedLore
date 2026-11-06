@@ -3457,7 +3457,7 @@ _text(
     """\
 {
   "name": "...",
-  "aliases": ["other names the story may use"],
+  "aliases": ["other names they go by: a nickname, an epithet; never a title others share"],
   "canon": "the published work they appear in, or null if invented for this story",
   "summary": "one or two lines",
   "description": "a fuller sheet; for a canon character, only what this story changes",
@@ -3606,6 +3606,18 @@ _text(
     ),
 )
 
+# Where a draft puts things, brought up to date (the author, Nov 6 2026: "make
+# sure it still knows all the right places to put info"): the starting scene
+# (supporting characters may be present; a cast member in neither list is the
+# opening's to place, `prompt.not_placed_at_start`), the world's pace
+# (`world_activity`), the pictures' look (`picture_style`), aliases that name
+# one person. Live on four invented premises (GLM 5.3 and Sonnet 4.6, 20
+# drafts): world activity eventful 3/3 for a busy harbour, quiet 3/3 for a
+# quiet cottage, normal 3/3 for an academy; a named look (watercolour, anime)
+# taken 4/4 and 4/4. Tone words first gave "Gritty and realistic" to 5 of 6
+# premises that named no look; saying tone is the prose's left the harbour at
+# the default 2/2, while "Gritty and tense" still gave it 2 of 3. Supporting
+# characters placed in the opening scene in 4 drafts of 20.
 _text(
     "authoring.draft",
     AUTHORING,
@@ -3665,18 +3677,27 @@ SealedLore's settings, and what each is for:
   anything that character says, does, thinks or feels. Only the "play_as"
   character belongs to the author: the storyteller voices everyone else, so
   others may speak and act in the opening.
-- "starting_scene": where the story begins. "present" names every cast member
-  the opening puts in the scene, including the "play_as" character — a cast
-  member left out is treated as elsewhere and cannot appear, even if the
-  opening has them there. "nearby" names cast members close at hand but not in
-  the scene, each with a short note. Cast names only, not supporting
-  characters.
+- "starting_scene": where the story begins. "present" names everyone the
+  opening puts in the scene: the "play_as" character always, and supporting
+  characters as well as the cast. "nearby" names cast members close at hand
+  but not in it, each with a short note. A cast member in neither is placed by
+  the first passage, as the opening has them.
 - "style": how passages should read. Set only what the premise implies and
   leave the rest null.
 {style_guide}
 - "agency_mode": how the author's actions resolve. "fiat": as written.
   "plausible": if they make sense. "contested" (the default): the world pushes
   back. "dice": rolled against skills.
+- "world_activity": how much happens that the author didn't start — people
+  acting on their own aims, someone arriving, an earlier choice catching up:
+  one of {world_activities} ("normal" when the premise doesn't say). A quiet,
+  close story is "quiet"; one whose world won't wait is "eventful".
+- "picture_style": how the story's pictures look (portraits, places), never
+  its prose: one of {picture_styles}, or a few words of your own for a look
+  none of those is. Set it only when the premise asks for a look in so many
+  words (an art style or a medium: "anime", "like a watercolour"); words for
+  the story's tone ("gritty", "elegant", "dark") are its prose's, and leave
+  it null, the default: realistic. A look asked for never goes in "style".
 
 Honour everything the premise specifies. Where it is silent, make choices that
 give the author a strong story to play in: people who want things that pull
@@ -3698,7 +3719,9 @@ Reply with one JSON object in exactly this shape, and nothing else:
     "present": ["cast names"], "nearby": [ {"name": "...", "note": "..."} ]
   },
   "style": {"response_style": "adaptive", "perspective": "whole_story", ...},
-  "agency_mode": "contested"
+  "agency_mode": "contested",
+  "world_activity": "normal",
+  "picture_style": null
 }
 
 where each <character> is:
@@ -3708,6 +3731,8 @@ where each <character> is:
         ("tiers", "the competence tiers"),
         ("style_guide", "The style fields"),
         ("character_shape", "A character, as JSON"),
+        ("world_activities", "the allowed values, quoted and comma-separated"),
+        ("picture_styles", "the ready-made picture styles' names, quoted and comma-separated"),
     ),
 )
 
@@ -4414,6 +4439,12 @@ else. Keep everything that had no problem as it was.""",
     (("problems", "what is wrong, a line each, as the importer says it"),),
 )
 
+# Brought up to date (the author, Nov 6 2026: "make sure it is also up to date
+# with all the latest changes"): a card's personality and "keep_whole" are the
+# review's to change, and a plot is changed in the plot editor or written
+# anew. Live, six reviews (GLM 5.3 twice, Sonnet 4.6 once a case): a jokey
+# card's personality changed 3/3; a condensed card that lost the fact the
+# complaint was about kept whole 3/3.
 _text(
     "authoring.review",
     AUTHORING,
@@ -4461,7 +4492,9 @@ You are given:
   content to copy into settings.
 - Some things in a story are not settings and you are not shown them, but
   they shape what you see: a plotted story has a clock, facts and events that
-  a director brings about (its state is in "playthrough"."plot"); a passage
+  a director brings about (its state is in "playthrough"."plot"; the plot
+  itself is changed in the plot editor or written anew by a model, so when it
+  is the cause, say which part in "cannot_fix"); a passage
   labelled a private-scene summary stands in for a scene played on another
   model; the scene card is kept by a read after every passage
   ("playthrough"."scene"."kept_by"); pictures have a style of their own.
@@ -4517,7 +4550,12 @@ What you can change. Each change is one setting:
   "playthrough"."stale_voicing_notes" lists sentences of the style notes that
   say who plays or voices whom, propose a "notes" change that removes those
   sentences and keeps the rest: they never change, so they contradict the
-  roster the moment the author switches character.
+  roster the moment the author switches character. "personality", shown only
+  on a card that has one (a SillyTavern card's own), is told after the
+  description, and changed as the description is. "keep_whole" true always
+  sends a cast member's card whole: the answer when a condensed card
+  ("playthrough"."cast_cards") lost what the story needs of them, at the cost
+  of other cards' room.
 - kind "character_add": "target" is "cast" or "supporting", and the value is a
   character object:
 {character_shape}

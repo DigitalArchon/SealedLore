@@ -57,8 +57,8 @@ part of the window, and what each feature does. The README's
 - **Your characters**: every character you keep, outside any story, with
   every field of a SillyTavern V3 card and their pictures; put into any story,
   with what the story changes of them saved to their card, as a new version,
-  or in that story only; a simple chat started from one, or a story drafted
-  around them.
+  or in that story only, and a story's own characters kept there; a simple
+  chat started from one, or a story drafted around them.
 - **Faces and places**: a portrait for every character and a picture for
   every lore entry, drawn from their cards; the People page shows who is here
   by their faces; pictures labelled by look and expression, the one that fits
@@ -68,9 +68,10 @@ part of the window, and what each feature does. The README's
 - **Sample stories**: Doomsville and four other worlds, each with a plot, a
   background and a picture of everyone and of every place, all on the start
   page.
-- **The world and the cast**: world bible, cast sheets with skills, supporting
-  characters the story introduces (suggested, never added by themselves), a
-  lorebook sent whole when small and selected per turn when large.
+- **The world and the cast**: world bible, cast sheets with skills (condensed
+  when the cast outgrows its room), supporting characters the story introduces
+  (suggested, never added by themselves), a lorebook sent whole when small and
+  selected per turn when large.
 - **The scene keeps itself**: after each passage a small model reads who came
   and went, where the scene moved and whether it is private; the Scene tab
   follows, with Undo. Recent scenes and who was in them stay with the story.
@@ -81,9 +82,10 @@ part of the window, and what each feature does. The README's
   it is attested (end-to-end encrypted on a `private/` model).
 - **Plots**: a Markdown plot file with facts, places and events; a director
   brings events about at the right moment and a clock keeps story time. A
-  form-based editor writes the file for you, or adds a plot to a story you
-  already have. A plot can also be written by the model, from the story alone
-  or from what you describe, and kept a surprise until you meet it.
+  form-based editor writes the file for you, or opens a story you already
+  have, everything filled in, and saves it with your changes as a new story.
+  A plot can also be written by the model, from the story alone or from what
+  you describe, and kept a surprise until you meet it.
 - **Outcomes and dice**: fiat, plausible, contested, or d100 rolls against the
   character's skills, per story and per turn.
 - **Length and style**: presets with measured word counts, a per-turn
@@ -106,9 +108,9 @@ part of the window, and what each feature does. The README's
 - **Private scenes**: a span of the story played on a local or TEE model
   alone, end-to-end encrypted on NanoGPT's `private/` models, kept on disk
   or in memory only, handed back as a summary you approve.
-- **Drafting and review**: a whole story from a premise, around characters of
-  your own if you like; a settings review that proposes typed changes you
-  tick.
+- **Drafting and review**: a whole story from a premise, as briefly or in as
+  much detail as you choose, around characters of your own if you like; a
+  settings review that proposes typed changes you tick.
 - **SillyTavern cards and lorebooks**: character cards kept in Your
   characters (a PNG, JSON or CHARX file, or a link to one on Chub or
   RisuRealm), a story from a card's own scenario, a card into a story, and
@@ -1372,12 +1374,15 @@ cards may be sent condensed (see
 [When the cast's cards don't fit](#when-the-casts-cards-dont-fit)).
 
 The model drafts everything in one go:
-- the world;
+- the world, and how much happens in it that you didn't start (its world
+  activity: quiet, normal or eventful);
 - a cast with sheets and skills, plus supporting cards (canon characters
   get a one-liner, since the model already knows them);
 - lore entries;
-- the opening and the starting scene;
-- the style;
+- the opening and the starting scene: who is there as it begins, supporting
+  characters included (anyone else, the opening places as it is written);
+- the style, and the picture style when the premise says how the story
+  should look;
 - a plot, if you ask for one under **A plot** (see
   [A plot written by the model](#a-plot-written-by-the-model)).
 
@@ -1386,13 +1391,20 @@ asks who you're playing once you save; a plot asked for is written between the
 two. Cancel keeps the draft without beginning it (Story → Start story… when
 it's ready). Anything
 the draft got wrong that couldn't be used (a made-up skill tier, a scene naming
-someone not in the cast) is listed rather than guessed at.
+someone it has no card for) is listed rather than guessed at, and a name any
+number of people could answer to ("the captain") is left off a character's
+other names.
 
 **Story → Review settings with the model…** Say what isn't working, for
 example "too much action, not enough dialogue". The model reviews the story's settings (world,
 style, cast and supporting characters, lore, outcome mode, world activity,
 the models and the budget, with your generation settings) and the instructions the
-storyteller actually receives. You choose how many exchanges
+storyteller actually receives. On a character it can change anything their
+card holds: a SillyTavern card's personality too, and **Always send the whole
+card** when a condensed card has lost what the story needs of them (see
+[When the cast's cards don't fit](#when-the-casts-cards-dont-fit)). When the
+cause is the plot itself, it says so, and where it is changed: Story → Open in
+the plot editor…, or Story → Write a plot with the model…. You choose how many exchanges
 from the story it sees as examples, from none to all of them: each is your turn
 and the reply to it. By default it sees the last three. The dialog shows about
 how many tokens that is, and a review too big for the model is refused before

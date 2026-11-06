@@ -107,8 +107,9 @@ def test_a_draft_resolves_names_to_ids_and_reports_what_it_dropped():
     assert john.is_player_available  # cast defaults to playable
     assert scenario.suggested_character_id == jane.id
     # The author's character is moved into the scene they start in; Barbra is
-    # supporting, not cast, so she can't be on the roster.
+    # supporting, so she is on the roster by name, as the scene read puts one.
     assert scenario.starting_scene.present_character_ids == [jane.id, john.id]
+    assert scenario.starting_scene.present_others == ["Barbra"]
     assert scenario.starting_scene.offstage_but_nearby == []
     barbra = scenario.supporting[0]
     assert barbra.canon == "Night of the Living Dead (1968)"
@@ -119,18 +120,53 @@ def test_a_draft_resolves_names_to_ids_and_reports_what_it_dropped():
     assert scenario.world_bible.startswith("The dead rose")
     assert scenario.opening_mode == "generate"
     joined = " | ".join(warnings)
-    assert "godlike" in joined and "sideways" in joined and "“Barbra” isn't in the cast" in joined
+    assert "godlike" in joined and "sideways" in joined and "Barbra" not in joined
     assert "no name" in joined
 
 
-def test_an_opening_that_names_someone_off_the_roster_is_flagged():
+def test_an_opening_may_leave_the_cast_to_be_placed_by_the_first_passage():
+    """A cast member neither present nor nearby is the opening's to place
+    (`prompt.not_placed_at_start`): no contradiction, so nothing is said."""
     draft = dict(DRAFT, opening="John Carver speaks first.", play_as="Jane Moss")
     draft["starting_scene"] = {"present": ["Jane Moss"]}
-    _, warnings = parse_generated(json.dumps(draft))
-    assert any("mentions John Carver" in warning for warning in warnings)
-    draft["starting_scene"] = {"present": ["Jane Moss", "John Carver"]}
-    _, warnings = parse_generated(json.dumps(draft))
-    assert not any("mentions" in warning for warning in warnings)
+    scenario, warnings = parse_generated(json.dumps(draft))
+    assert not any("John Carver" in warning for warning in warnings)
+    jane = scenario.cast[0]
+    assert scenario.starting_scene.present_character_ids == [jane.id]
+
+
+def test_a_supporting_character_nearby_is_left_to_the_opening_unremarked():
+    draft = dict(DRAFT)
+    draft["starting_scene"] = {
+        "present": ["Jane Moss"],
+        "nearby": [{"name": "Barbra", "note": "at her desk"}, {"name": "Nobody", "note": "x"}],
+    }
+    scenario, warnings = parse_generated(json.dumps(draft))
+    assert scenario.starting_scene.offstage_but_nearby == []
+    assert not any("Barbra" in warning for warning in warnings)
+    assert any("“Nobody” isn't in the cast" in warning for warning in warnings)
+
+
+def test_a_draft_sets_how_lively_the_world_is_and_how_its_pictures_look():
+    draft = dict(DRAFT, world_activity="Eventful", picture_style="storybook watercolour")
+    scenario, warnings = parse_generated(json.dumps(draft))
+    assert scenario.world_activity == "eventful" and not warnings[3:]
+    assert (scenario.picture_style, scenario.image_style) == ("watercolour", "")
+    draft = dict(DRAFT, world_activity="frantic", picture_style="ink and wash, muted greens")
+    scenario, warnings = parse_generated(json.dumps(draft))
+    assert scenario.world_activity == "normal"
+    assert any("frantic" in warning for warning in warnings)
+    assert (scenario.picture_style, scenario.image_style) == ("", "ink and wash, muted greens")
+    scenario, _ = parse_generated(json.dumps(DRAFT))
+    assert scenario.world_activity == "normal" and not scenario.picture_style
+    assert not scenario.image_style, "none said: the default, realistic"
+
+
+def test_a_draft_s_aliases_name_one_person_only():
+    draft = json.loads(json.dumps(DRAFT))
+    draft["cast"][0]["aliases"] = ["Corporal Moss", "the medic", "the Grey Doctor", "medic"]
+    scenario, _ = parse_generated(json.dumps(draft))
+    assert scenario.cast[0].aliases == ["Corporal Moss", "the Grey Doctor"]
 
 
 def test_a_draft_without_a_cast_is_refused():
@@ -222,6 +258,45 @@ def test_every_kind_of_change_applies(bundle: StoryBundle):
     keep, bells = bundle.lore
     assert keep.content == "Older stones." and keep.embedding_hash is None
     assert bells.keywords == ["bell"] and not bells.enabled
+
+
+def test_a_review_can_change_a_card_s_personality_and_keep_it_whole(bundle: StoryBundle):
+    """A SillyTavern card's personality is told after its description, and a
+    cast card can be kept whole past the cast's room (engine/cast_fit.py):
+    both are the review's to change, shown where they are set."""
+    serrik = bundle.cast[0]
+    serrik.personality = "Cheerful, sunny, always joking."
+    bundle.supporting.characters.append(
+        serrik.model_copy(update={"id": "char-old", "name": "Old Tobin", "personality": "Dour."})
+    )
+    view = settings_view(bundle)
+    assert view["cast"][0]["personality"] == "Cheerful, sunny, always joking."
+    assert "keep_whole" not in view["cast"][0] and "personality" not in view["cast"][1]
+    grim = change("character", target="Serrik Vaun", field="personality", value="Grim.")
+    whole = change("character", target="Serrik Vaun", field="keep_whole", value=True)
+    assert current_value(bundle, grim) == "Cheerful, sunny, always joking."
+    assert current_value(bundle, whole) is False
+    assert describe(whole) == "Serrik Vaun › always sent whole"
+    apply_change(bundle, grim)
+    apply_change(bundle, whole)
+    apply_change(
+        bundle, change("character", target="Old Tobin", field="personality", value="Kindly.")
+    )
+    assert serrik.personality == "Grim." and serrik.keep_whole
+    assert bundle.supporting.characters[0].personality == "Kindly."
+    assert settings_view(bundle)["cast"][0]["keep_whole"] is True
+    with pytest.raises(ValueError, match="supporting card"):
+        apply_change(
+            bundle, change("character", target="Old Tobin", field="keep_whole", value=True)
+        )
+    with pytest.raises(ValueError, match="true or false"):
+        apply_change(bundle, change("character", target="Serrik Vaun", field="keep_whole", value=1))
+
+
+def test_the_reviewer_is_told_the_card_fields_and_where_a_plot_is_changed():
+    system = review_system()
+    assert '"personality"' in system and '"keep_whole"' in system
+    assert "plot editor" in system
 
 
 @pytest.mark.parametrize(

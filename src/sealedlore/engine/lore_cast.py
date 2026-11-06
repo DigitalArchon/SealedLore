@@ -26,8 +26,6 @@ from sealedlore.models.character import Character
 # rest are dropped and the author can ask again.
 MOST_PER_CALL = 16
 MOST_KEPT = 24
-# An alias longer than this is a note, not a name.
-ALIAS_MOST_WORDS = 5
 # Room for that many cards, and a model that reasons first.
 LORE_CAST_MAX_TOKENS = 16_000
 
@@ -81,20 +79,6 @@ def build_lore_cast_messages(
     ]
 
 
-def generic_alias(alias: str) -> bool:
-    """An alias that would fit others too: "the king", "the spirit", "my
-    lord". Live, GLM 5.3 gave Claudius "the king" and the ghost "the spirit"
-    against the prompt's word; "the Grey Wolf" names one person, and stays."""
-    words = alias.split()
-    if len(words) > ALIAS_MOST_WORDS:
-        # "the Lady of the Lake in some traditions" (Sonnet 4.6, for Morgan
-        # le Fay): a note, not a name.
-        return True
-    if words and words[0].lower() in ("the", "a", "an", "my", "our"):
-        words = words[1:]
-    return len(words) <= 1 and (not words or words[0].islower()) or alias.islower()
-
-
 def _names(character: Character) -> set[str]:
     return {name.casefold() for name in (character.name, *character.aliases) if name.strip()}
 
@@ -131,7 +115,6 @@ def parse_lore_cast(text: str, existing: Sequence[Character] = ()) -> LoreCast:
             except ValueError as exc:
                 result.warnings.append(str(exc))
                 continue
-            card.aliases = [alias for alias in card.aliases if not generic_alias(alias)]
             if _names(card) & taken or card.name.casefold() in new_names:
                 result.skipped.append(card.name)
                 continue
