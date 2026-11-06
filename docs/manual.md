@@ -958,14 +958,14 @@ Choose:
   each, or world-changing), how disruptive (gentle, steady or upending), the
   kinds of event you want most (danger and fights, mysteries and secrets, new
   people arriving, bonds and rivalries, power and betrayal, exploration and
-  discovery, disasters, hard choices), how many **New people and places** it
-  may bring in (none, a few, several or many) and how much it writes **About
-  each** of them (briefly, or in depth). Anything you leave alone, the model
-  decides.
+  discovery, disasters, hard choices), how many **Newcomers** it may bring
+  in (people, places and lore the story doesn't have yet: none, a few,
+  several or many) and how much it writes **About each** of them (briefly, or
+  in depth). Anything you leave alone, the model decides.
 
-A plot asked for in **Draft a story from an idea** writes its new people and
-places as fully as the story's own characters were drafted (briefly or in
-depth, under **How much**), unless the plot's own **About each** says
+A plot asked for in **Draft a story from an idea** writes its newcomers as
+fully as the story's own characters were drafted (briefly or in depth, the
+draft's **About each**), unless the plot's own **About each** says
 otherwise.
 
 The authoring model writes it (see [Models](#models)), in a minute or a few:
@@ -1350,8 +1350,8 @@ Describe the story you want: the setting,
 who you'll play, the tone, and choose the **Person** and **Tense** it is told
 in (or leave them to the premise), so the opening is written that way.
 
-Under **How much**, choose how much it sets up. Each list says what it asks
-the model for:
+Choose how much it sets up with **World**, **People** and **About each**.
+Each list says what it asks the model for:
 - **World**: basic (a short world of 100 to 300 words, and at most four lore
   entries), standard (300 to 900 words, and 3 to 10 entries), or detailed
   (900 to 1,600 words, and 10 to 20 entries on the setting's places, peoples,

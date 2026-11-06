@@ -167,9 +167,7 @@ class PlotWishesForm(QWidget):
             "to 60 a place or lore entry. In depth: 200 to 400 words a person, 100 to 250 a "
             "place or lore entry"
         )
-        # On two lines: on one it widened the labels' column, and with it the
-        # premise dialog, by 80px.
-        grid.addWidget(QLabel("New people\nand places"), 4, 0)
+        grid.addWidget(QLabel("Newcomers"), 4, 0)
         grid.addWidget(self.newcomers, 4, 1)
         grid.addWidget(QLabel("About each"), 4, 2)
         grid.addWidget(self.depth, 4, 3)

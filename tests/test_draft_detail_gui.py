@@ -175,10 +175,11 @@ def test_each_choice_names_the_numbers_its_words_ask_for():
             assert numbers(label) and all(n in numbers(words) for n in numbers(label)), label
 
 
-def test_with_the_plot_closed_the_dialog_needs_no_more_than_it_opens_at(app):
+def test_the_dialog_needs_no_more_than_it_opens_at_even_with_the_plot_s_choices(app):
     """It opens at three quarters of the screen's height, 810px at 1080p;
     the choices' room comes out of the premise's spare height, never past
-    the premise's own minimum."""
+    the premise's own minimum, with the plot's own choices open too (they
+    used to grow it past 900px)."""
     from sealedlore.gui.app import load_stylesheet
     from tests.test_ui_tidy import needs_real_fonts
 
@@ -193,6 +194,10 @@ def test_with_the_plot_closed_the_dialog_needs_no_more_than_it_opens_at(app):
         assert dialog.minimumSizeHint().height() <= 810
         assert dialog.minimumSizeHint().width() <= 864
         assert dialog.premise.height() >= dialog.premise.minimumHeight()
+        dialog.plot.set_choice(DESCRIBED)
+        app.processEvents()
+        assert dialog.minimumSizeHint().height() <= 810
+        assert dialog.minimumSizeHint().width() <= 864
         dialog.close()
     finally:
         app.setStyleSheet(before)

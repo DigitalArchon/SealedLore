@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -52,20 +53,23 @@ WITH_CHARACTERS_EXAMPLE = (
 # each level with the numbers its words ask the model for, standard (the
 # draft as it always was) in the middle.
 WORLD_CHOICES = (
-    ("basic", "Basic (100 to 300 words)"),
-    (STANDARD, "Standard (300 to 900 words)"),
-    ("detailed", "Detailed (900 to 1,600 words)"),
+    ("basic", "Basic (100–300 words)"),
+    (STANDARD, "Standard (300–900 words)"),
+    ("detailed", "Detailed (900–1,600 words)"),
 )
 PEOPLE_CHOICES = (
-    ("handful", "A handful (2 or 3, up to 3 more)"),
-    (STANDARD, "Standard (2 to 6, and a few more)"),
-    ("lots", "Lots (5 to 8, and 10 to 20 more)"),
+    ("handful", "A handful (2–3, up to 3 more)"),
+    (STANDARD, "Standard (2–6, a few more)"),
+    ("lots", "Lots (5–8, 10–20 more)"),
 )
 DEPTH_CHOICES = (
     ("sketch", "Briefly (30 to 80 words)"),
     (STANDARD, "Standard (a fuller sheet)"),
     ("deep", "In depth (up to 500 words)"),
 )
+# How many characters of its choice each of those shows before the dialog
+# would have to widen for it.
+LEVEL_CHARACTERS = 14
 
 
 class GenerateDialog(QDialog):
@@ -116,7 +120,7 @@ class GenerateDialog(QDialog):
             if self.characters
             else PREMISE_EXAMPLE
         )
-        self.premise.setMinimumHeight(180)
+        self.premise.setMinimumHeight(150)
         # Whom the story is built around, from Your characters.
         self.with_label = QLabel()
         self.with_label.setWordWrap(True)
@@ -183,8 +187,8 @@ class GenerateDialog(QDialog):
         voice_hint.setObjectName("hintLabel")
         voice_hint.setWordWrap(True)
 
-        # How much to set up: two to a row, like the plot's choices, so the
-        # dialog keeps to a 1080p screen.
+        # How much to set up: the three on one row across the form, so that
+        # with the plot's choices open too the dialog keeps to its 810px.
         self.world = self._level(
             WORLD_CHOICES,
             "How long the world text is, and its lore: basic, up to 4 entries of 40 to 100 "
@@ -194,7 +198,8 @@ class GenerateDialog(QDialog):
         self.people = self._level(
             PEOPLE_CHOICES,
             "How many main characters (the ones you can play, and those the story turns on), "
-            "and how many others with a card of their own",
+            "and how many others with a card of their own. Every main character's card is "
+            "sent with every turn, and more takes longer to draft",
         )
         self.depth = self._level(
             DEPTH_CHOICES,
@@ -206,21 +211,14 @@ class GenerateDialog(QDialog):
         detail = QWidget()
         detail_grid = QGridLayout(detail)
         detail_grid.setContentsMargins(0, 0, 0, 0)
-        for row, column, label, combo in (
-            (0, 0, "World", self.world),
-            (0, 2, "People", self.people),
-            (1, 0, "About each", self.depth),
+        for column, label, combo in (
+            (0, "World", self.world),
+            (2, "People", self.people),
+            (4, "About each", self.depth),
         ):
-            detail_grid.addWidget(QLabel(label), row, column)
-            detail_grid.addWidget(combo, row, column + 1)
-        detail_grid.setColumnStretch(1, 1)
-        detail_grid.setColumnStretch(3, 1)
-        # One line, unwrapped: the form gives a wrapped label the height of its
-        # size hint, two lines for this one, out of the premise's room.
-        detail_hint = QLabel(
-            "More takes longer to draft, and every main character's card is sent with every turn."
-        )
-        detail_hint.setObjectName("hintLabel")
+            detail_grid.addWidget(QLabel(label), 0, column)
+            detail_grid.addWidget(combo, 0, column + 1)
+            detail_grid.setColumnStretch(column + 1, 1)
 
         form = QFormLayout()
         if self.characters or choose is not None:
@@ -229,11 +227,16 @@ class GenerateDialog(QDialog):
             with_row.addWidget(self.choose_button)
             form.addRow("Built around", with_row)
             self._show_characters()
-        form.addRow("Person", self.person)
-        form.addRow("Tense", self.tense)
+        # Person and tense share a row, and what more detail costs is in the
+        # choices' tooltips: with the plot's own choices open the dialog keeps
+        # to the 810px it opens at on a 1080p screen.
+        voice = QHBoxLayout()
+        voice.addWidget(self.person, 1)
+        voice.addWidget(QLabel("Tense"))
+        voice.addWidget(self.tense, 1)
+        form.addRow("Person", voice)
         form.addRow("", voice_hint)
-        form.addRow("How much", detail)
-        form.addRow("", detail_hint)
+        form.addRow(detail)
         form.addRow("Model", self.model)
         form.addRow("", model_hint)
         # The author (Nov 2026): a drafted story had no plot unless they wrote
@@ -275,6 +278,12 @@ class GenerateDialog(QDialog):
             combo.addItem(label, value)
         combo.setCurrentIndex(combo.findData(STANDARD))
         combo.setToolTip(tip)
+        # Three to a row: each asks for room for its choice, not its longest
+        # label, and takes any spare width; the list shows every label whole.
+        combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        combo.setMinimumContentsLength(LEVEL_CHARACTERS)
+        combo.view().setTextElideMode(Qt.ElideNone)
+        combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         return combo
 
     def model_text(self) -> str:
