@@ -25,11 +25,15 @@ runs no code from nano-gpt (Sept 2026):
    no one else, nano-gpt included, can time our prompt cache (measured: a
    fresh secret gets 0 cached tokens on a prompt another secret had cached).
 3. **Seal** the body with EHBP (`ehbp.EHBPTransport`: HPKE X25519, AES-GCM)
-   to the attested key, and decrypt the reply. A 2xx reply that isn't sealed
-   is refused by the transport, so is one nano-gpt doesn't mark as Private
-   Mode, and a stream that ends without its final chunk. Nothing is ever sent
-   unsealed and nothing falls back to the plain endpoint: `OpenAICompatible
-   Provider` refuses a `private/*` model outright.
+   to the attested key, and decrypt the reply. Only a success the transport
+   opened is taken (`_accept`): EHBP refuses a 2xx that isn't sealed but
+   passes any other status through as it came, so a reply the relay made
+   itself (a 302 with an answer in it) is refused here, as is one nano-gpt
+   doesn't mark as Private Mode, and a stream that ends without its final
+   chunk. What the relay writes in an error is never sealed, so it is said as
+   the relay's (`_http_error`). Nothing is ever sent unsealed and nothing
+   falls back to the plain endpoint: `OpenAICompatibleProvider` refuses a
+   `private/*` model outright.
 
 The attestation is redone before a request once it is `MAX_AGE_SECONDS` old
 (the proxy's five minutes: laptop sleep, a key rotated underneath us), and
@@ -40,6 +44,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import secrets
 import threading
 import time
@@ -64,6 +69,10 @@ ROUTER_REPO = "tinfoilsh/confidential-model-router"
 MAX_AGE_SECONDS = 5 * 60
 PREFLIGHT_TIMEOUT_SECONDS = 30.0
 ENCLAVE_URL_HEADER = "X-Tinfoil-Enclave-Url"
+# What the relay writes in an error, as much as is said of it, and what it
+# may not carry into the message.
+RELAY_SAID_CHARS = 200
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 
 # The request fields Tinfoil's router takes (the proxy's
 # PRIVATE_TINFOIL_CHAT_COMPLETION_BODY_FIELDS, less tools and search, which
@@ -449,10 +458,37 @@ class PrivateModeProvider(OpenAICompatibleProvider):
         return self.endpoint, body, headers
 
     def _accept(self, response: httpx.Response) -> None:
-        # The EHBP transport has refused a success that wasn't sealed; this is
-        # nano-gpt saying the request went the private way at all.
+        from ehbp.protocol import RESPONSE_NONCE_HEADER
+
+        # EHBP opens a sealed reply and refuses an unsealed success, but passes
+        # any other status through as it came: one the relay made itself (a
+        # 302 or a 304 with an answer in it) would pass for the enclave's, and
+        # be marked as sealed. Only a success EHBP opened counts, and it keeps
+        # the enclave's nonce header (DA Toolkit 27af7c7, DA Vibe Manager).
+        if not 200 <= response.status_code < 300 or RESPONSE_NONCE_HEADER not in response.headers:
+            raise ProviderError(
+                f"the reply wasn't sealed by the enclave (HTTP {response.status_code}); refused",
+                status_code=response.status_code,
+            )
+        # And nano-gpt saying the request went the private way at all.
         if response.headers.get("x-nanogpt-private-mode") != "tinfoil":
             raise ProviderError("the reply didn't come back through Private Mode; refused")
+
+    def _http_error(self, url: str, response: httpx.Response) -> ProviderError:
+        """What the relay wrote in refusing: never sealed, so never taken for
+        the model's words (an instruction to the reader in it, say). Said as
+        the relay's, on one line, without control characters, and short; the
+        words themselves are kept only for `_missing_seal`."""
+        error = super()._http_error(url, response)
+        written = error.body or ""
+        said = " ".join(_CONTROL.sub(" ", written).split())[:RELAY_SAID_CHARS]
+        labelled = ProviderError(
+            f"{error}; NanoGPT's relay said (unauthenticated): {said}" if said else str(error),
+            status_code=error.status_code,
+        )
+        labelled.retry_after = error.retry_after
+        labelled.relay_body = written
+        return labelled
 
     def _finish(self, finish_reason: str | None, saw_done: bool) -> None:
         if not (finish_reason and saw_done):
@@ -483,7 +519,8 @@ class PrivateModeProvider(OpenAICompatibleProvider):
 def _missing_seal(error: ProviderError) -> bool:
     """nano-gpt refused the request as unsealed before sending it anywhere: the
     proxy's one safe retry (after attesting again)."""
-    return error.status_code == 400 and "missing_encrypted_body_header" in (error.body or "")
+    written = getattr(error, "relay_body", None) or error.body or ""
+    return error.status_code == 400 and "missing_encrypted_body_header" in written
 
 
 # --- the request body ------------------------------------------------------------------
