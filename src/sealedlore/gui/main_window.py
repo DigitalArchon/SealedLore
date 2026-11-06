@@ -305,8 +305,8 @@ WRITE_PLOT_TIP = (
     "you choose whether to read it"
 )
 EDIT_PLOT_TIP = (
-    "This story's plot in the plot editor, its world and cast filled in: write one, or "
-    "change it (it shows the whole plot)"
+    "This story in the plot editor, everything filled in: change anything, its plot above "
+    "all. Saving there makes a new story; this one stays as it is"
 )
 
 
@@ -867,7 +867,7 @@ class MainWindow(
         story_menu.addAction(self.import_plot_action)
         # The story's own world and cast filled in, so only the plot is written
         # (the author, Nov 2026: the editor could only start from nothing).
-        self.edit_plot_action = QAction("&Edit the plot in the plot editor…", self)
+        self.edit_plot_action = QAction("&Open in the plot editor…", self)
         self.edit_plot_action.setStatusTip(EDIT_PLOT_TIP)
         self.edit_plot_action.triggered.connect(self.edit_story_plot)
         story_menu.addAction(self.edit_plot_action)

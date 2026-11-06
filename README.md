@@ -42,10 +42,10 @@ fun to play. This app will remain focused on text based roleplay.
   describe (how many events, how often, how big, how disruptive, what kinds).
   Offered as the last step of Write a story from scratch, when drafting from
   an idea, and in Story → Write a plot with the model…. It stays hidden unless
-  you ask to see it. Story → Edit the plot in the plot editor… opens a story
-  you already have in the plot editor, its world and cast filled in, to write
-  just its plot; the editor now shows which parts are the story's and which
-  the plot's.
+  you ask to see it. Story → Open in the plot editor… opens a story you
+  already have in the plot editor with everything filled in: write its plot,
+  change anything else, and save it as a new story, the old one left as it
+  is. The editor now shows which parts are the story's and which the plot's.
 - **Cast cards that fit** (3.0.0b3). The cast's cards get room in proportion
   to the story's context budget (Settings → Context), and a card past it is
   condensed to about a third of its length instead of being cut to a line.
@@ -244,8 +244,9 @@ with it.
 The plot file editor (File → Plot file editor…) lets you write your own
 plots and share them, with reference pictures for their characters, places
 and lore if you like (kept in a folder beside the file). It also opens a
-story you already have (Story → Edit the plot in the plot editor…), its
-world and cast filled in, so you write only the plot.
+story you already have (Story → Open in the plot editor…), everything filled
+in, to write its plot or change anything else; saving makes a new story, and
+the one you opened stays as it was.
 
 If you'd rather not write one at all, the model can (Story → Write a plot
 with the model…, or the last step of a new story): from the story alone, or

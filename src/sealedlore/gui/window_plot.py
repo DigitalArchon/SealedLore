@@ -8,10 +8,13 @@ new story guide's last step, or New story from a premise (`_then_plot`, run
 once the story is set up and before Start). Once in, it is kept hidden unless
 the author asks to see it (gui/plot_dialog.py).
 
-The editor is its own window, kept while the app runs, but the story it works
-on is the open story's session's: the session is the story's one writer, so
-the editor reads the story and gives it a plot through here, and never while
-a job holds the story.
+The editor is its own window, kept while the app runs, and reads and makes
+stories through here. It never writes the story it was opened on (the author,
+Nov 6 2026): its Save makes a new story, a fresh playthrough of that one's
+setup with the editor's changes (engine/story_plot.py `apply_document`), and
+saves again to that new story only while it hasn't begun. A story open in the
+window is read and written through its session, its one writer, and never
+while a job holds it; any other is read and written on disk.
 """
 
 from __future__ import annotations
@@ -23,12 +26,16 @@ from PySide6.QtWidgets import QDialog, QMessageBox, QWidget
 
 from sealedlore.engine.plot_draft import PlotDraft, PlotWishes
 from sealedlore.engine.session import SessionNotice
+from sealedlore.engine.story_plot import PictureReader, PlotDocumentError, apply_document
 from sealedlore.gui.plot_dialog import EDIT, PlotDialog, PlotReadyDialog, plot_preview
 from sealedlore.gui.plot_editor import PlotEditorWindow
 from sealedlore.models.plot_file import PlotDocument
 from sealedlore.providers.base import ProviderError, StreamCancelled, error_detail
+from sealedlore.storage.images import reference_files
 from sealedlore.storage.library import story_listings
-from sealedlore.storage.repository import StoryBundle
+from sealedlore.storage.paths import story_dir
+from sealedlore.storage.repository import StoryBundle, load_story_bundle, save_story_bundle
+from sealedlore.storage.scenario import fresh_playthrough
 
 WRITING = "Writing the plot… it takes a minute or two."
 
@@ -144,10 +151,13 @@ class PlotWindow:
             self._on_spoilers_toggled(False)
             self._refresh_plot_panel()
         if choice == EDIT:
-            self.edit_story_plot()
+            # A story being set up has never begun: the editor saves to it.
+            # Any other is saved as a new story, never over this one.
+            self.edit_story_plot(own=then is not None)
             if then is not None:
                 self.statusBar().showMessage(
-                    "When the plot is as you want it, start the story with Story → Start story….",
+                    "When the plot is as you want it, start the story from the plot editor's "
+                    "File menu, or with Story → Start story….",
                     15000,
                 )
             return
@@ -155,8 +165,7 @@ class PlotWindow:
             then()
             return
         self.statusBar().showMessage(
-            "The plot is written. Story → Edit the plot in the plot editor… shows it whole.",
-            10000,
+            "The plot is written. Story → Open in the plot editor… shows it whole.", 10000
         )
 
     def _plot_failed(
@@ -196,16 +205,17 @@ class PlotWindow:
         editor.raise_()
         editor.activateWindow()
 
-    def edit_story_plot(self) -> None:
-        """Story → Edit the plot in the plot editor…: the open story's plot,
-        or a plot to give it, its world and cast filled in."""
+    def edit_story_plot(self, *, own: bool = False) -> None:
+        """Story → Open in the plot editor…: the open story, everything filled
+        in, saved as a new story. `own`: a story being set up, which the
+        editor saves to until it begins."""
         session = self.session
         if session is None or session.story.chat:
             return
         if self._busy:
             self._say_wait("The plot editor")
             return
-        if self._plot_editor_window().open_story(session.story.id):
+        if self._plot_editor_window().open_story(session.story.id, own=own):
             self._show_plot_editor()
 
     def _plot_editor_parent(self) -> QWidget:
@@ -233,37 +243,104 @@ class PlotWindow:
         return choices
 
     def plot_editor_bundle(self, story_id: str) -> StoryBundle | None:
-        """The story, opened here if another is open (asking what opening a
-        story asks, a memory-only chat left behind among it)."""
+        """The story: the open one's live bundle (never while a job holds
+        it), any other as it is on disk. Nothing is opened for it."""
+        session = self.session
+        if session is not None and session.story.id == story_id:
+            if self._busy:
+                self._tell_plot_editor(
+                    "The story is busy",
+                    "SealedLore is working on the story. Try again once the current job is done.",
+                )
+                return None
+            if session.story.chat:
+                self._tell_plot_editor("A simple chat", "A simple chat has no plot.")
+                return None
+            return session.bundle
+        try:
+            bundle = load_story_bundle(story_id, root=self.root)
+        except (FileNotFoundError, ValueError) as exc:
+            self._tell_plot_editor("The story can't be read", str(exc))
+            return None
+        if bundle.story.chat:
+            self._tell_plot_editor("A simple chat", "A simple chat has no plot.")
+            return None
+        return bundle
+
+    def plot_editor_folder(self, story_id: str):
+        return story_dir(story_id, self.root)
+
+    def plot_editor_new_story(
+        self,
+        source_id: str,
+        document: PlotDocument,
+        before: PlotDocument,
+        read: PictureReader,
+    ) -> tuple[str, list[str]] | None:
+        """The editor's Save on a story it didn't make: a new story, the same
+        setup unplayed (as Duplicate settings makes one), made what the
+        document holds. The story it came from is never written."""
+        source = self.plot_editor_bundle(source_id)
+        if source is None:
+            return None
+        if self.session is not None and self.session.bundle is source and self.in_private:
+            self._tell_plot_editor(
+                "Not saved yet", "Not while a private scene is open: end it first."
+            )
+            return None
+        # A picture the open story hasn't written yet comes along too.
+        files = {**reference_files(source, self.root), **source.pending_files}
+        bundle = fresh_playthrough(source, document.title.strip() or source.story.title, files)
+        try:
+            notes = apply_document(document, bundle, before=before, read=read)
+        except (PlotDocumentError, ValueError) as exc:
+            self._tell_plot_editor("Not saved", str(exc))
+            return None
+        save_story_bundle(bundle, root=self.root)
+        self.stories.refresh(selected_id=self.session.story.id if self.session else None)
+        return bundle.story.id, notes
+
+    def plot_editor_update(
+        self, story_id: str, document: PlotDocument, before: PlotDocument, read: PictureReader
+    ) -> list[str] | None:
+        """The editor's Save on the story it made, which hasn't begun: through
+        its session when it is open here, else on disk."""
+        bundle = self.plot_editor_bundle(story_id)
+        if bundle is None:
+            return None
+        session = self.session
+        try:
+            if session is not None and session.bundle is bundle:
+                notes = session.set_story_document(document, before=before, read=read)
+                self._after_plot_changed()
+                self._refresh_scene_panel()
+                return notes
+            notes = apply_document(document, bundle, before=before, read=read)
+        except (PlotDocumentError, ValueError) as exc:
+            self._tell_plot_editor("Not saved", str(exc))
+            return None
+        save_story_bundle(bundle, root=self.root)
+        self.stories.refresh(selected_id=session.story.id if session else None)
+        return notes
+
+    def plot_editor_start(self, story_id: str) -> None:
+        """The editor's Start: the story opened here and, if it hasn't begun,
+        started (the Start dialog: whom to play, their pictures)."""
         if self._busy:
             self._tell_plot_editor(
                 "The story is busy",
                 "SealedLore is working on the story. Try again once the current job is done.",
             )
-            return None
+            return
         if self.session is None or self.session.story.id != story_id:
             self.open_story(story_id)
         session = self.session
         if session is None or session.story.id != story_id:
-            return None
-        if session.story.chat:
-            self._tell_plot_editor("A simple chat", "A simple chat has no plot.")
-            return None
-        return session.bundle
-
-    def plot_editor_save(self, story_id: str, document: PlotDocument) -> list[str] | None:
-        """The editor's Save to the story: the document's plot given to the
-        story (StorySession.set_plot_document)."""
-        if self.plot_editor_bundle(story_id) is None:
-            return None
-        session = self.session
-        try:
-            notes = session.set_plot_document(document)
-        except ValueError as exc:
-            self._tell_plot_editor("Not saved", str(exc))
-            return None
-        self._after_plot_changed()
-        return notes
+            return
+        self.raise_()
+        self.activateWindow()
+        if not session.nodes:
+            self.start_story()
 
     def _after_plot_changed(self) -> None:
         """A plot given or changed: everything that shows the story's cards
@@ -289,4 +366,4 @@ class PlotWindow:
             # Open on this story with nothing of its own unsaved: it follows
             # the story (a plot the model just wrote, say), or its next Save
             # would put the old plot back.
-            editor.load_story(session.bundle, select=editor.current_ref())
+            editor.load_story(session.bundle, own=editor.story.own, select=editor.current_ref())

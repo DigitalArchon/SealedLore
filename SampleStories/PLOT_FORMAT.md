@@ -21,9 +21,9 @@ a form for everything below, picks conditions, `brings:`, `reveals:`, `sets:`
 and `at:` from what the file already holds, and runs the importer over the
 file as you go, so its problems list is what an import would say. It opens
 hand-written files too, and keeps what it can't make sense of as written so
-the importer can point at it. **Story → Edit the plot in the plot editor…**
-opens it on a story you already have, its world, characters, places and lore
-filled in, to write just the plot.
+the importer can point at it. **Story → Open in the plot editor…** opens it
+on a story you already have, everything filled in, to write its plot or
+change anything, and saves it all as a new story.
 
 Nor do you have to write a plot at all: **Story → Write a plot with the
 model…** (also the last step of a new story) has the model write one in this

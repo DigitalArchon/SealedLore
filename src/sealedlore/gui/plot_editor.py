@@ -21,14 +21,15 @@ It is its own window and needs no story open. Saving writes the `.md`;
 import, which is the same path a hand-written file takes.
 
 It also opens a story (File → Open a story…, or the main window's Story →
-Edit the plot in the plot editor…) to add a plot to it or change its plot,
-filled in with the story's own world, cast and lore (engine/story_plot.py).
-The story's parts are shown as the story has them and are changed where
-they always are (Setup, the Cast and Lore pages); what is the plot's is
-edited here: its facts and events, which entries are its places, and the
-people, places and lore it keeps hidden until an event brings them in. Save
-gives the plot to the story through the main window (`PlotEditorHost`), the
-story's one writer.
+Open in the plot editor…), filled in with everything a plot file can hold of
+it: its settings, world, opening, cast, places, lore, pictures and plot
+(engine/story_plot.py). Anything is editable, and Save never writes over the
+story it was made from (the author, Nov 6 2026): it makes a new story, the
+same setup unplayed with the editor's changes, and the editor goes on with
+that one, saving to it until it begins. The main window (`PlotEditorHost`)
+reads and makes the stories, so a story open there is written by its session,
+its one writer. The story's pictures are shown from a copy of them
+(`mirror_story_pictures`), so one added here reaches a story only when saved.
 """
 
 from __future__ import annotations
@@ -79,7 +80,7 @@ from sealedlore.engine.plot_file import (
     render_plot_markdown,
 )
 from sealedlore.engine.plot_md import PLOT_SUFFIX
-from sealedlore.engine.story_plot import document_from_story
+from sealedlore.engine.story_plot import PictureReader, document_from_story
 from sealedlore.gui import theme
 from sealedlore.gui.guides import (
     FORMAT_LABEL,
@@ -101,7 +102,8 @@ from sealedlore.gui.plot_editor_pages import (
     WayPage,
     WorldPage,
 )
-from sealedlore.gui.plot_pictures import copy_pictures
+from sealedlore.gui.plot_pictures import copy_pictures, forget_folder, mirror_story_pictures
+from sealedlore.gui.ref_images import inside
 from sealedlore.gui.sizing import size_to_screen
 from sealedlore.models.plot_file import (
     CharacterDoc,
@@ -191,11 +193,33 @@ class PlotEditorHost(Protocol):
         ...
 
     def plot_editor_bundle(self, story_id: str) -> StoryBundle | None:
-        """The story, open in the main window, or None."""
+        """The story, as the main window has it (open there or on disk), or None."""
         ...
 
-    def plot_editor_save(self, story_id: str, document: PlotDocument) -> list[str] | None:
-        """The document's plot given to the story: what couldn't be done, or None."""
+    def plot_editor_folder(self, story_id: str) -> Path | None:
+        """The story's folder, its pictures in it."""
+        ...
+
+    def plot_editor_new_story(
+        self,
+        source_id: str,
+        document: PlotDocument,
+        before: PlotDocument,
+        read: PictureReader,
+    ) -> tuple[str, list[str]] | None:
+        """A new story: `source_id`'s setup, unplayed, made what the document
+        holds. Its id and what couldn't be done, or None."""
+        ...
+
+    def plot_editor_update(
+        self, story_id: str, document: PlotDocument, before: PlotDocument, read: PictureReader
+    ) -> list[str] | None:
+        """A story the editor made, not begun, made what the document holds:
+        what couldn't be done, or None."""
+        ...
+
+    def plot_editor_start(self, story_id: str) -> None:
+        """Open the story in the main window and start it."""
         ...
 
 
@@ -205,11 +229,9 @@ class EditedStory:
 
     id: str
     title: str
-    # Begun: someone it has shown can't be hidden any more.
-    begun: bool
-    # Whom it begins with: hidden, the opening would have them and not.
-    starts_with: frozenset[str]
-    had_plot: bool
+    # Made by this editor's Save and not begun when last read: saving goes to
+    # it. Any other story is never written: saving makes a new one.
+    own: bool = False
 
 
 class PlotEditorWindow(QMainWindow):
@@ -226,8 +248,12 @@ class PlotEditorWindow(QMainWindow):
         self.host = host
         self.document = PlotDocument()
         self.path: Path | None = None
-        # The story being worked on, in place of a file (story mode).
+        # The story being worked on, in place of a file (story mode); the
+        # document as it was read from it, so a save writes only what changed
+        # here; and the copy of its pictures the pages show and add to.
         self.story: EditedStory | None = None
+        self._loaded: PlotDocument | None = None
+        self._story_pictures: Path | None = None
         self.modified = False
         self.rendered: RenderedPlot | None = None
         self.problems: list[DocProblem] = []
@@ -275,7 +301,7 @@ class PlotEditorWindow(QMainWindow):
 
         self.pages = QStackedWidget()
         self._pages: dict[str, Page] = {
-            FRONT: StoryPage(),
+            FRONT: StoryPage(self._folder, self.save),
             WORLD: WorldPage(),
             OPENING: OpeningPage(),
             PLOT: PlotPage(),
@@ -361,8 +387,8 @@ class PlotEditorWindow(QMainWindow):
         self.open_story_action = action(
             "Open a &story…",
             self.open_story_chosen,
-            tip="A story of yours, its world and cast filled in: add a plot to it, or change "
-            "its plot",
+            tip="A story of yours, everything filled in: change anything, its plot above all, "
+            "and save it as a new story",
         )
         self.open_story_action.setVisible(self.host is not None)
         self.save_action = action("&Save", self.save, QKeySequence.Save)
@@ -392,25 +418,56 @@ class PlotEditorWindow(QMainWindow):
     def _sync_mode(self) -> None:
         """The menu and the line above the tree for a file, or for a story."""
         story = self.story
-        self.save_action.setText("&Save to the story" if story else "&Save")
-        self.save_action.setStatusTip(
-            f"Give “{story.title}” this plot" if story else "Save the plot file"
-        )
-        self.save_as_action.setText("Save a copy as a plot &file…" if story else "Save &as…")
-        self.start_action.setVisible(story is None)
         self.story_label.setVisible(story is not None)
-        if story is not None:
+        story_page = self._pages[FRONT]
+        assert isinstance(story_page, StoryPage)
+        story_page.set_story_mode(story is not None)
+        for page in (self._pages[CHARACTER], self._pages[PLACE], self._pages[LORE]):
+            page.pictures.set_story(story is not None)
+        if story is None:
+            self.save_action.setText("&Save")
+            self.save_action.setStatusTip("Save the plot file")
+            self.save_as_action.setText("Save &as…")
+            self.start_action.setText("Start a s&tory from this file")
+            self.start_action.setStatusTip("Save, then import it as a new story")
+            return
+        self.save_as_action.setText("Save a copy as a plot &file…")
+        if story.own:
+            self.save_action.setText("&Save")
+            self.save_action.setStatusTip(f"Save to “{story.title}”, the story made here")
+            self.start_action.setText("S&tart the story")
+            self.start_action.setStatusTip(f"Save, then start “{story.title}”")
             self.story_label.setText(
-                f"The plot of your story “{story.title}”. Its world, opening and cast are "
-                "filled in from the story and changed there (Story → Setup…, the Cast and "
-                "Lore pages); here you write the plot, and the people, places and lore it "
-                "keeps hidden. Save to the story when it is ready."
+                f"“{story.title}”, made here and not begun yet: saving changes it. Once it "
+                "has begun, saving makes a new story instead."
             )
+            return
+        self.save_action.setText("&Save as a new story…")
+        self.save_action.setStatusTip(
+            f"A new story with your changes; “{story.title}” stays as it is"
+        )
+        self.start_action.setText("S&tart a new story from this")
+        self.start_action.setStatusTip("Save as a new story, then start it")
+        self.story_label.setText(
+            f"Made from your story “{story.title}”: change anything. Saving makes a new "
+            f"story with your changes, unplayed, and leaves “{story.title}” as it is."
+        )
 
     def _folder(self) -> Path | None:
-        """Where the file's pictures are kept from: None until it is saved,
-        and for a story (its pictures are its own, on the Cast page)."""
-        return self.path.parent if self.path is not None and self.story is None else None
+        """Where the pictures are kept from: beside the file, None until it
+        is saved; for a story, the copy of its pictures."""
+        if self.story is not None:
+            return self._story_pictures
+        return self.path.parent if self.path is not None else None
+
+    def _read_picture(self, file: str) -> bytes | None:
+        """A picture the document names, from the copy of the story's."""
+        folder = self._story_pictures
+        path = inside(folder, file) if folder is not None else None
+        try:
+            return path.read_bytes() if path is not None and path.is_file() else None
+        except OSError:
+            return None
 
     def _pictures(self) -> list[PictureDoc]:
         """Every picture the file names: its cards' and its background."""
@@ -424,7 +481,7 @@ class PlotEditorWindow(QMainWindow):
     def _refresh_title(self) -> None:
         mark = "*" if self.modified else ""
         if self.story is not None:
-            self.setWindowTitle(f"{self.story.title}{mark} — its plot — Plot file editor")
+            self.setWindowTitle(f"{self.story.title}{mark} — Plot file editor")
             return
         name = self.path.name if self.path else "Untitled"
         self.setWindowTitle(f"{name}{mark} — Plot file editor")
@@ -537,7 +594,7 @@ class PlotEditorWindow(QMainWindow):
             if index in (FRONT, WORLD, OPENING, PLOT):
                 page = self._pages[index]
                 page.load(self.document, self.document)
-                self._dress(page, index, None)
+                self._dress(page, index)
                 self.pages.setCurrentWidget(page)
             else:
                 half = PLOT_HALF if index in _PLOT_SECTIONS else STORY_HALF
@@ -562,12 +619,11 @@ class PlotEditorWindow(QMainWindow):
         else:
             page = self._pages[kind]
             page.load(item, self.document)
-        self._dress(page, kind, item)
+        self._dress(page, kind)
         self.pages.setCurrentWidget(page)
 
-    def _dress(self, page: Page, kind: str, item) -> None:
-        """The page's heading, and in story mode what of it is the plot's to
-        change here (the rest is read only, and says where it is changed)."""
+    def _dress(self, page: Page, kind: str) -> None:
+        """The page's heading: which half it is in, and what it is."""
         what = {
             FRONT: "Title and settings",
             WORLD: "World",
@@ -582,111 +638,7 @@ class PlotEditorWindow(QMainWindow):
         if kind == EVENT and page is self._pages["variant"]:
             what = "A way the event can go"
         half = PLOT_HALF if kind in _PLOT_SECTIONS else STORY_HALF
-        for strip in (getattr(page, "pictures", None), getattr(page, "pictures_label", None)):
-            if strip is not None:
-                # A story's pictures are its own, on the Cast and Lore pages.
-                strip.setVisible(self.story is None)
-        story = self.story
-        if story is None or kind in _PLOT_SECTIONS:
-            page.set_context(f"{half} · {what}")
-            page.set_locked(False)
-            return
-        if kind in (FRONT, WORLD, OPENING):
-            where = "Story → Setup… and on the Style page" if kind == FRONT else "Story → Setup…"
-            page.set_context(
-                f"{half} · {what}",
-                f"From the story “{story.title}”: changed in {where}, not here.",
-            )
-            page.set_locked(True)
-            return
-        if kind == CHARACTER:
-            assert isinstance(page, CharacterPage)
-            self._dress_character(page, item, story, f"{half} · {what}")
-        else:
-            assert isinstance(page, EntryPage)
-            self._dress_entry(page, item, story, f"{half} · {what}")
-
-    def _dress_character(
-        self, page: CharacterPage, item: CharacterDoc, story: EditedStory, scope: str
-    ) -> None:
-        if not item.story_id:
-            page.set_context(
-                scope,
-                f"New: added to “{story.title}” when you save. Once saved, someone the plot "
-                "doesn't keep hidden is the story's, changed on the Cast page.",
-            )
-            page.set_locked(
-                True,
-                open_=(
-                    page.name,
-                    page.role,
-                    page.hidden,
-                    page.aliases,
-                    page.voice,
-                    page.canon,
-                    page.summary,
-                    page.description,
-                ),
-            )
-            return
-        if item.hidden:
-            page.set_context(
-                scope,
-                "Kept hidden by the plot until an event brings them in, so theirs to change "
-                "here. Their pictures and skills are on the Cast page.",
-            )
-            page.set_locked(
-                True,
-                open_=(
-                    page.name,
-                    page.role,
-                    page.hidden,
-                    page.aliases,
-                    page.voice,
-                    page.canon,
-                    page.summary,
-                    page.description,
-                ),
-            )
-            return
-        if story.begun:
-            why = "The story has begun, so the plot can't hide them now."
-        elif item.story_id in story.starts_with:
-            why = "The story begins with them, so the plot can't hide them."
-        else:
-            why = "Here the plot can keep them hidden until an event brings them in."
-        page.set_context(
-            scope, f"From the story “{story.title}”: changed on the Cast page, not here. {why}"
-        )
-        hideable = not story.begun and item.story_id not in story.starts_with
-        page.set_locked(True, open_=(page.hidden,) if hideable else ())
-
-    def _dress_entry(self, page: EntryPage, item: EntryDoc, story: EditedStory, scope: str) -> None:
-        if not item.story_id or item.hidden:
-            page.set_context(
-                scope,
-                f"New: added to “{story.title}” when you save."
-                if not item.story_id
-                else "Kept hidden by the plot until an event reveals it, so the plot's to "
-                "change here.",
-            )
-            page.set_locked(False)
-            return
-        hideable = not story.begun
-        page.set_context(
-            scope,
-            f"From the story “{story.title}”: changed on the Lore page, not here. Here: "
-            "whether it is one of the plot's places"
-            + (", and whether the plot hides it until an event reveals it." if hideable else "."),
-        )
-        page.set_locked(True, open_=(page.hidden,) if hideable else ())
-
-    def _story_item(self, ref: tuple | None) -> bool:
-        """Whether the row is one of the story's own cards or entries (story mode)."""
-        if self.story is None or ref is None or ref[0] not in (CHARACTER, PLACE, LORE):
-            return False
-        items = self._items(ref[0])
-        return 0 <= ref[1] < len(items) and bool(items[ref[1]].story_id)
+        page.set_context(f"{half} · {what}")
 
     def _sync_buttons(self, ref: tuple | None) -> None:
         kind = ref[0] if ref else None
@@ -694,15 +646,10 @@ class PlotEditorWindow(QMainWindow):
         in_list = section in _LISTS or section == EVENT
         self.add_button.setEnabled(in_list)
         self.variant_button.setEnabled(kind == EVENT)
-        # The story's own cards are removed and ordered on its pages.
-        own = self._story_item(ref)
         is_item = kind != HEADER and kind is not None
-        self.remove_button.setEnabled(is_item and not own)
-        self.remove_button.setToolTip(
-            "The story's own are removed on its Cast and Lore pages" if own else ""
-        )
-        self.up_button.setEnabled(is_item and not own)
-        self.down_button.setEnabled(is_item and not own)
+        self.remove_button.setEnabled(is_item)
+        self.up_button.setEnabled(is_item)
+        self.down_button.setEnabled(is_item)
 
     # --- editing -------------------------------------------------------------------
 
@@ -728,12 +675,6 @@ class PlotEditorWindow(QMainWindow):
                 wanted = TIMELINE if target.timeline else OPTIONAL
                 if listed_under != wanted:
                     self._rebuild_tree(select=ref)
-            elif self.story is not None and kind in (CHARACTER, PLACE, LORE):
-                # Hidden or shown, a story's card is the plot's or the story's:
-                # what may change on its page follows.
-                page = self.pages.currentWidget()
-                if isinstance(page, Page):
-                    self._dress(page, kind, target)
         self._touch()
 
     def _on_renamed(self, old: str, new: str) -> None:
@@ -751,8 +692,8 @@ class PlotEditorWindow(QMainWindow):
             self.document.rename_character(old, new)
 
     def _on_place_toggled(self, place: bool) -> None:
-        """An entry moved between Places and Lore: a story's own entry becomes
-        one of the plot's places this way, or stops being one."""
+        """An entry moved between Places and Lore: a story's lore entry
+        becomes one of the plot's places this way, or stops being one."""
         ref = self.current_ref()
         if ref is None or ref[0] not in (PLACE, LORE) or (ref[0] == PLACE) == place:
             return
@@ -776,10 +717,7 @@ class PlotEditorWindow(QMainWindow):
                 parent = parent.parent()
             section = parent.data(0, REF_ROLE)[1]
         if section == CHARACTER:
-            # Someone a story's plot adds is most often someone it brings in.
-            self.document.characters.append(
-                CharacterDoc(name="New character", hidden=self.story is not None)
-            )
+            self.document.characters.append(CharacterDoc(name="New character"))
             select: ItemRef = (CHARACTER, len(self.document.characters) - 1, -1)
         elif section == PLACE:
             self.document.places.append(EntryDoc(name="New place"))
@@ -812,7 +750,7 @@ class PlotEditorWindow(QMainWindow):
 
     def _remove(self) -> None:
         ref = self.current_ref()
-        if ref is None or ref[0] == HEADER or self._story_item(ref):
+        if ref is None or ref[0] == HEADER:
             return
         kind, index, variant = ref
         if kind == EVENT and variant >= 0:
@@ -829,7 +767,7 @@ class PlotEditorWindow(QMainWindow):
 
     def _move(self, step: int) -> None:
         ref = self.current_ref()
-        if ref is None or ref[0] == HEADER or self._story_item(ref):
+        if ref is None or ref[0] == HEADER:
             return
         kind, index, variant = ref
         if kind == EVENT and variant >= 0:
@@ -870,18 +808,18 @@ class PlotEditorWindow(QMainWindow):
             self.problem_list.addItem(row)
         errors = sum(1 for p in self.problems if p.error)
         notes = len(self.problems) - errors
-        reads = "The story takes this plot" if self.story else "The importer reads this file"
+        reads = "This saves as a story" if self.story else "The importer reads this file"
         if not self.problems:
             self.summary.setText(f"{reads} with nothing to say.")
         elif errors:
-            stops = "this plot reaching the story" if self.story else "this file importing"
+            stops = "this saving as a story" if self.story else "this file importing"
             self.summary.setText(
                 f"{errors} error{'s stop' if errors != 1 else ' stops'} {stops}"
                 + (f", and {notes} note{'s' if notes != 1 else ''}." if notes else ".")
             )
         else:
             self.summary.setText(
-                f"{'Saves to the story' if self.story else 'Imports'}, with {notes} "
+                f"{'Saves' if self.story else 'Imports'}, with {notes} "
                 f"note{'s' if notes != 1 else ''}."
             )
         self._mark_problems()
@@ -920,11 +858,19 @@ class PlotEditorWindow(QMainWindow):
     def _confirm_discard(self) -> bool:
         if not self.modified:
             return True
-        where = f"“{self.story.title}”" if self.story else "this plot file"
+        story = self.story
+        if story is None:
+            question = "Save the changes to this plot file first?"
+        elif story.own:
+            question = f"Save the changes to “{story.title}” first?"
+        else:
+            question = (
+                f"Save your changes as a new story first? “{story.title}” itself stays as it is."
+            )
         answer = QMessageBox.question(
             self,
             "Unsaved changes",
-            f"Save the changes to {where} first?",
+            question,
             QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
             QMessageBox.Save,
         )
@@ -938,40 +884,52 @@ class PlotEditorWindow(QMainWindow):
         self.load_document(PlotDocument(), path=None)
 
     def load_document(
-        self, document: PlotDocument, *, path: Path | None, story: EditedStory | None = None
+        self,
+        document: PlotDocument,
+        *,
+        path: Path | None,
+        story: EditedStory | None = None,
+        pictures: Path | None = None,
     ) -> None:
+        """`pictures`: for a story, the copy of its pictures (the editor
+        removes it when it leaves the story)."""
+        if self._story_pictures is not None and self._story_pictures != pictures:
+            forget_folder(self._story_pictures)
+        self._story_pictures = pictures
         self.document = document
         self.path = path
         self.story = story
+        if story is None:
+            self._loaded = None
         self._sync_mode()
         self._rebuild_tree(select=(HEADER, FRONT, -1))
         self.check_now()
         self._set_modified(False)
 
-    def load_story(self, bundle: StoryBundle, *, select: ItemRef | None = None) -> None:
-        """Work on a story's plot (story mode): the document filled in from
-        the story (engine/story_plot.py)."""
+    def load_story(
+        self, bundle: StoryBundle, *, own: bool = False, select: ItemRef | None = None
+    ) -> None:
+        """Work on a story (story mode): the document filled in from all of
+        it a plot file can hold (engine/story_plot.py). `own`: a story this
+        editor made, or one being set up that has never begun, which Save
+        goes on writing to; any other is saved as a new story."""
         story = bundle.story
-        document = document_from_story(bundle)
+        document = document_from_story(bundle, whole=True)
+        folder = self.host.plot_editor_folder(story.id) if self.host is not None else None
+        pictures = mirror_story_pictures(bundle, folder)
         self.load_document(
             document,
             path=None,
-            story=EditedStory(
-                id=story.id,
-                title=story.title,
-                begun=bool(bundle.nodes),
-                starts_with=frozenset(
-                    c.story_id for c in document.characters if c.present or c.choose
-                ),
-                had_plot=story.plot is not None,
-            ),
+            story=EditedStory(id=story.id, title=story.title, own=own and not bundle.nodes),
+            pictures=pictures,
         )
+        self._loaded = document.model_copy(deep=True)
         if select is not None:
             self._select(select)
 
-    def open_story(self, story_id: str) -> bool:
-        """The story's plot, from the main window (Story → Edit the plot in
-        the plot editor…, File → Open a story…)."""
+    def open_story(self, story_id: str, *, own: bool = False) -> bool:
+        """A story, from the main window (Story → Open in the plot editor…,
+        File → Open a story…, or a plot the model has just written)."""
         if self.host is None:
             return False
         if self.story is not None and self.story.id == story_id and self.modified:
@@ -981,7 +939,7 @@ class PlotEditorWindow(QMainWindow):
         bundle = self.host.plot_editor_bundle(story_id)
         if bundle is None:
             return False
-        self.load_story(bundle)
+        self.load_story(bundle, own=own)
         return True
 
     def open_story_chosen(self) -> None:
@@ -990,9 +948,7 @@ class PlotEditorWindow(QMainWindow):
             return
         choices = self.host.plot_editor_stories()
         if not choices:
-            QMessageBox.information(
-                self, "No stories", "There are no stories to give a plot to yet."
-            )
+            QMessageBox.information(self, "No stories", "There are no stories to open yet.")
             return
         labels = [label for _, label in choices]
         current = next(
@@ -1006,7 +962,7 @@ class PlotEditorWindow(QMainWindow):
         label, chosen = QInputDialog.getItem(
             self,
             "Open a story",
-            "Which story's plot? Its world and cast come filled in:",
+            "Which story? Everything comes filled in, and saving makes a new story:",
             labels,
             current,
             False,
@@ -1048,14 +1004,14 @@ class PlotEditorWindow(QMainWindow):
 
     def save(self) -> bool:
         if self.story is not None:
-            return self._save_to_story()
+            return self._save_own() if self.story.own else self._save_new()
         if self.path is None:
             return self.save_as()
         return self._write(self.path)
 
     def save_as(self) -> bool:
-        """A plot file. For a story, a copy of it all, the story's world and
-        cast with its plot, and the editor stays on the story."""
+        """A plot file. For a story, a copy of it all as a file, its pictures
+        beside it, and the editor stays on the story."""
         start = str(self.path) if self.path else str(Path.home() / self._suggested_name())
         chosen, _ = QFileDialog.getSaveFileName(
             self, "Save plot file", start, f"Plot files (*{PLOT_SUFFIX});;All files (*)"
@@ -1096,7 +1052,15 @@ class PlotEditorWindow(QMainWindow):
             return False
         if self.story is not None:
             # A copy: the story is still the one being written for.
+            left = copy_pictures(self._pictures(), self._story_pictures, path.parent)
             self.statusBar().showMessage(f"A copy saved as {path.name}.", 8000)
+            if left:
+                QMessageBox.warning(
+                    self,
+                    "Some pictures stayed behind",
+                    "The file was saved, but these pictures couldn't be copied beside it:\n\n"
+                    + "\n".join(left),
+                )
             return True
         old = self._folder()
         self.path = path
@@ -1115,51 +1079,98 @@ class PlotEditorWindow(QMainWindow):
         self._show(self.current_ref())  # a picture's thumbnail follows the folder
         return True
 
-    def _save_to_story(self) -> bool:
-        """The plot given to the story, through the main window. A plot the
-        importer refuses can't reach a story, so its errors come first."""
-        story = self.story
-        if story is None or self.host is None:
-            return False
+    def _ready_for_a_story(self) -> bool:
+        """A document the importer refuses can't be a story: its errors first."""
         self.check_now()
         errors = sum(1 for p in self.problems if p.error)
         if errors:
             QMessageBox.warning(
                 self,
                 "Not saved yet",
-                f"{errors} error{'s' if errors != 1 else ''} in the plot must be fixed before "
-                f"“{story.title}” can take it. They are listed at the bottom.",
+                f"{errors} error{'s' if errors != 1 else ''} must be fixed before this can be "
+                "saved as a story. They are listed at the bottom.",
             )
+        return not errors
+
+    def _save_new(self) -> bool:
+        """A new story: the one the editor was opened on, its setup unplayed,
+        with the changes made here (the author, Nov 6 2026: never written
+        over the story it is based on). The editor goes on with the new one."""
+        story, before = self.story, self._loaded
+        if story is None or before is None or self.host is None:
             return False
-        if story.had_plot and not self.document.facts and not self.document.events:
-            answer = QMessageBox.question(
-                self,
-                "Take the plot away",
-                f"This plot has no facts and no events. Take “{story.title}”'s plot away?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No,
-            )
-            if answer != QMessageBox.Yes:
-                return False
-        ref = self.current_ref()
-        notes = self.host.plot_editor_save(story.id, self.document)
-        if notes is None:
+        if not self._ready_for_a_story():
+            return False
+        suggested = self.document.title.strip() or story.title
+        if suggested == before.title.strip():
+            suggested = f"{suggested} (copy)"
+        title, chosen = QInputDialog.getText(
+            self,
+            "Save as a new story",
+            f"The new story's title (“{story.title}” stays as it is):",
+            text=suggested,
+        )
+        if not chosen or not title.strip():
+            return False
+        document = self.document.model_copy(update={"title": title.strip()}, deep=True)
+        made = self.host.plot_editor_new_story(story.id, document, before, self._read_picture)
+        if made is None:
+            return False
+        story_id, notes = made
+        self._read_back(story_id)
+        self.statusBar().showMessage(
+            f"Saved as a new story, “{title.strip()}”. “{story.title}” is as it was.", 10000
+        )
+        self._tell_notes(title.strip(), notes)
+        return True
+
+    def _save_own(self) -> bool:
+        """Again to the story the editor made, while it hasn't begun; once it
+        has, a new story is made from it instead."""
+        story, before = self.story, self._loaded
+        if story is None or before is None or self.host is None:
             return False
         bundle = self.host.plot_editor_bundle(story.id)
+        if bundle is None:
+            return False
+        if bundle.nodes:
+            story.own = False
+            self._sync_mode()
+            QMessageBox.information(
+                self,
+                "Saved as a new story",
+                f"“{story.title}” has begun since, so it stays as it is: your changes go into "
+                "a new story.",
+            )
+            return self._save_new()
+        if not self._ready_for_a_story():
+            return False
+        notes = self.host.plot_editor_update(story.id, self.document, before, self._read_picture)
+        if notes is None:
+            return False
+        self._read_back(story.id)
+        self.statusBar().showMessage(f"Saved to “{self.story.title}”.", 8000)
+        self._tell_notes(self.story.title, notes)
+        return True
+
+    def _read_back(self, story_id: str) -> None:
+        """The story as saved, read again, with the story's own ids for what
+        was new, the row being worked on still chosen."""
+        ref = self.current_ref()
+        bundle = self.host.plot_editor_bundle(story_id) if self.host is not None else None
         if bundle is not None:
-            # What is new is the story's now: read back, with the story's ids.
-            self.load_story(bundle, select=ref)
+            self.load_story(bundle, own=True, select=ref)
         else:
             self._set_modified(False)
-        self.statusBar().showMessage(f"Saved to “{story.title}”.", 8000)
+
+    def _tell_notes(self, title: str, notes: list[str]) -> None:
         if notes:
             QMessageBox.information(
                 self,
                 "Saved, with notes",
-                f"“{story.title}” has the plot. Some of it couldn't be done:\n\n"
+                f"“{title}” is saved. Some of it couldn't be done:\n\n"
                 + "\n".join(f"• {note}" for note in notes),
             )
-        return True
 
     def preview(self) -> None:
         dialog = QDialog(self)
@@ -1179,6 +1190,15 @@ class PlotEditorWindow(QMainWindow):
         dialog.exec()
 
     def start_story(self) -> None:
+        story = self.story
+        if story is not None:
+            # A story: saved first (as a new one, unless it is the editor's
+            # own and nothing changed), then started in the main window.
+            if (self.modified or not story.own) and not self.save():
+                return
+            if self.host is not None and self.story is not None:
+                self.host.plot_editor_start(self.story.id)
+            return
         self.check_now()
         if any(p.error for p in self.problems):
             QMessageBox.warning(
@@ -1198,7 +1218,8 @@ class PlotEditorWindow(QMainWindow):
         The window is kept while the app runs (MainWindow.open_plot_editor),
         so a close that discarded changes left them in the document: opened
         again, the editor showed what the author had just thrown away. A
-        story's is read from the story again when it is next opened.
+        story is read from the story again when it is next opened, and the
+        copy of its pictures goes.
         """
         document = PlotDocument()
         path = self.path if self.story is None else None

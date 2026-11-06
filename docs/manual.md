@@ -981,33 +981,38 @@ scene), and the plot starts from there.
 Once it is written it stays hidden, as a plot file's does: the storyteller
 learns of each event only as it begins, and so do you. **Show me the plot
 (spoilers)** shows it whole, with anything that had to be left out of it;
-**Edit in the plot editor…** opens it there to read and change. Otherwise,
-keep it a surprise: if the Plot page shows spoilers, that is turned off too.
+**Edit in the plot editor…** opens it there to read and change. For a story
+you are setting up, saving in the editor changes that story until it begins;
+for one you already had, it makes a new story (below). Otherwise, keep it a
+surprise: if the Plot page shows spoilers, that is turned off too.
 
 ### The plot editor on a story
 
-**Story → Edit the plot in the plot editor…** opens the plot editor on the
-open story, its world, opening, characters, places and lore filled in, so you
-write only the plot; **Open a story…** in the editor's File menu does the same
-for any of your stories. The editor's tree is in two halves: **The story**,
-what every story has (its title and settings, world, opening, characters,
-places and lore), and **The plot**, what a plot adds (its clock, facts,
-timeline and optional events). Every page says which half it is in.
+**Story → Open in the plot editor…** opens the plot editor on the open
+story with everything a plot file can hold of it filled in: its title and
+settings, world, opening, characters, places, lore, their pictures and its
+plot. **Open a story…** in the editor's File menu does the same for any of
+your stories. The editor's tree is in two halves: **The story**, what every
+story has (its title and settings, world, opening, characters, places and
+lore), and **The plot**, what a plot adds (its clock, facts, timeline and
+optional events). Every page says which half it is in.
 
-On a story, its own parts are shown as the story has them, and are changed
-where they always are: Setup, and the Cast and Lore pages. The editor changes
-what is the plot's:
-- its facts and events;
-- which of the story's lore entries are places the plot follows your
-  character between (tick **The plot's: a place…** on the entry);
-- the people, places and lore it keeps hidden until an event brings them in:
-  add them under Characters, Places or Lore, or hide one of the story's own
-  who hasn't appeared yet.
+Anything there can be changed: write the plot, rewrite a character, add or
+remove people, places and lore, hide someone until an event brings them in,
+make one of the story's lore entries a place the plot follows your character
+between (tick **The plot's: a place…** on the entry).
 
-**Save to the story** gives the story the plot, and **Save a copy as a plot
-file…** writes the whole story with its plot as a plot file, to keep or share.
-Pictures stay with the story's cards. The editor shows the whole plot, so it is
-a spoiler of its own.
+Saving never changes the story you opened. **Save as a new story…** asks for
+a title and makes a new story: the same setup, unplayed, with your changes,
+as Duplicate settings would make it plus what you changed. Everything the
+editor doesn't show comes with it as it was: skills, looks, the models, a
+card's SillyTavern fields, its link to Your characters. The editor then goes
+on with the new story, and saving again changes it, until it begins; once it
+has, saving makes another. **Start a new story from this** (or **Start the
+story**, on the new one) saves and starts it in the main window. **Save a
+copy as a plot file…** writes it all as a plot file, its pictures beside it,
+to keep or share. The editor shows the whole plot, so it is a spoiler of its
+own.
 
 ## Your characters
 

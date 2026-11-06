@@ -10,14 +10,21 @@ The strip edits an item's list in place, as the story's own strip does
 (`ref_images.RefImageStrip`), and says when it has changed. A character's
 pictures carry labels too (`| look: armour | expression: angry`, for looks:
 engine/looks.py), edited with the caption in the story's own dialog.
+
+On a story, the editor's folder is a copy of the story's pictures
+(`mirror_story_pictures`), each where the story's folder has it: a picture
+added goes there, never into the story's own folder, and reaches a story only
+when the editor saves one (engine/story_plot.py `apply_document`).
 """
 
 from __future__ import annotations
 
+import atexit
 import inspect
 import os
 import re
 import shutil
+import tempfile
 import weakref
 from collections.abc import Callable, Iterable
 from pathlib import Path
@@ -45,6 +52,8 @@ from sealedlore.gui.ref_images import PICTURE_FILTER, THUMB, inside, picture_byt
 from sealedlore.ids import new_id
 from sealedlore.models.image import ImageRef
 from sealedlore.models.plot_file import PictureDoc
+from sealedlore.storage.images import bundle_refs, is_safe_relative
+from sealedlore.storage.repository import StoryBundle
 
 PICTURES_DIR = "pictures"
 # The folder the plot file is in; None until the file has been saved.
@@ -101,6 +110,80 @@ def copy_pictures(pictures: Iterable[PictureDoc], old: Path, new: Path) -> list[
     return failed
 
 
+def mirror_story_pictures(bundle: StoryBundle, story_folder: Path | None) -> Path:
+    """A folder of the story's own pictures, for the editor to show and add
+    to, each at the place the story's folder has it: hard-linked where the
+    file system allows (nothing is copied), else copied. Removed when the
+    editor leaves the story (`forget_folder`), or at the latest when the app
+    quits."""
+    target = Path(tempfile.mkdtemp(prefix="sealedlore-plot-"))
+    atexit.register(shutil.rmtree, target, True)
+    story = bundle.story
+    files = {ref.file for ref in bundle_refs(bundle)}
+    if story.background_image:
+        files.add(story.background_image)
+    for relative in sorted(files):
+        if not is_safe_relative(relative):
+            continue
+        destination = target / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if relative in bundle.pending_files:
+            destination.write_bytes(bundle.pending_files[relative])
+            continue
+        source = inside(story_folder, relative) if story_folder is not None else None
+        if source is None or not source.is_file():
+            continue  # shown as missing, as a plot file's would be
+        try:
+            os.link(source, destination)
+        except OSError:
+            shutil.copyfile(source, destination)
+    return target
+
+
+def forget_folder(folder: Path | None) -> None:
+    if folder is not None:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+def saved_folder(parent: QWidget, folder: Folder | None, save_first: SaveFirst | None):
+    """The folder pictures are kept in, saving the plot file first (asked)
+    if it has none yet: None if there is still none."""
+    found = folder() if folder is not None else None
+    if found is not None or save_first is None:
+        return found
+    answer = QMessageBox.question(
+        parent,
+        "Save the plot file first",
+        "Pictures are kept in a folder beside the plot file, so the file needs a place "
+        "of its own first. Save it now?",
+        QMessageBox.Save | QMessageBox.Cancel,
+        QMessageBox.Save,
+    )
+    if answer != QMessageBox.Save or not save_first():
+        return None
+    return folder() if folder is not None else None
+
+
+def choose_picture(
+    parent: QWidget, folder: Folder | None, save_first: SaveFirst | None, *, crop: str, owner: str
+) -> PictureDoc | None:
+    """One picture from disk, offered for cropping first, kept in the folder."""
+    target = saved_folder(parent, folder, save_first)
+    if target is None:
+        return None
+    path, _ = QFileDialog.getOpenFileName(
+        parent, "Choose a picture", str(Path.home()), PICTURE_FILTER
+    )
+    if not path:
+        return None
+    try:
+        picture = cropped_picture(parent, Path(path), crop)
+        return keep_picture(*picture, target, owner) if picture is not None else None
+    except (OSError, ValueError) as exc:
+        QMessageBox.warning(parent, "Couldn't add", str(exc))
+        return None
+
+
 def _as_ref(picture: PictureDoc) -> ImageRef:
     """A picture of the file as the story's labels dialog reads one."""
     return ImageRef(
@@ -112,7 +195,7 @@ def _as_ref(picture: PictureDoc) -> ImageRef:
     )
 
 
-def _weak(method):
+def weakly(method):
     """A callable that returns the method, or None once its owner has gone."""
     if method is None:
         return lambda: None
@@ -142,8 +225,8 @@ class PlotPictureStrip(QWidget):
         # Weakly: both are usually methods of the window this strip sits in,
         # and a widget holding its own window makes a cycle whose collection
         # has crashed PySide before (gui/attest_check.py).
-        self._folder_ref = _weak(folder)
-        self._save_ref = _weak(save_first)
+        self._folder_ref = weakly(folder)
+        self._save_ref = weakly(save_first)
         self._pictures: list[PictureDoc] | None = None
         self._owner = ""
 
@@ -241,21 +324,27 @@ class PlotPictureStrip(QWidget):
 
     def _saved_folder(self) -> Path | None:
         """The plot file's folder, saving the file first if it has none."""
-        folder = self._folder()
-        save = self._save_ref()
-        if folder is not None or save is None:
-            return folder
-        answer = QMessageBox.question(
-            self,
-            "Save the plot file first",
-            "Pictures are kept in a folder beside the plot file, so the file needs a place "
-            "of its own first. Save it now?",
-            QMessageBox.Save | QMessageBox.Cancel,
-            QMessageBox.Save,
+        return saved_folder(self, self._folder_ref(), self._save_ref())
+
+    def set_story(self, story: bool) -> None:
+        """On a story rather than a file: where an added picture goes, said
+        as it is."""
+        self.add_button.setToolTip(
+            "Pictures for this card: kept with the story when the editor saves it"
+            if story
+            else "Pictures that come with the story: copied into a “pictures” folder beside "
+            "the plot file, and put on this card when the file is imported"
         )
-        if answer != QMessageBox.Save or not save():
-            return None
-        return self._folder()
+        self.remove_button.setToolTip(
+            "Take it off this card when the editor saves the story"
+            if story
+            else "Take it off this item. Its file stays in the folder."
+        )
+        self.hint.setText(
+            "No pictures."
+            if story
+            else "No pictures. Share the “pictures” folder along with the file."
+        )
 
     def _add(self) -> None:
         if self._pictures is None:

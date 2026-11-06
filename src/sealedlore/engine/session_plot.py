@@ -91,7 +91,7 @@ from sealedlore.engine.scene_state import (
 from sealedlore.engine.scene_update import (
     render_card,
 )
-from sealedlore.engine.story_plot import plot_changes
+from sealedlore.engine.story_plot import PictureReader, apply_document, plot_changes
 from sealedlore.engine.validators import (
     mentions,
 )
@@ -323,10 +323,10 @@ class PlotRuntime:
         what it changes of the cards it keeps hidden. A document with no facts
         and no events takes the story's plot away.
 
-        The plot editor's Save to the story and a plot written by the model
-        (session_plot_draft.py) both come through here. Raises
-        PlotDocumentError for a document the importer refuses; returns what
-        couldn't be done, for the author.
+        A plot written by the model (session_plot_draft.py) comes through
+        here; the plot editor saves with `set_story_document`, or as a new
+        story. Raises PlotDocumentError for a document the importer refuses;
+        returns what couldn't be done, for the author.
         """
         self._refuse_in_chat("A plot")
         self._refuse_in_private("Changing the plot")
@@ -369,6 +369,26 @@ class PlotRuntime:
             self.save()
             return notes
         return notes + self.attach_plot(changes.plot)
+
+    def set_story_document(
+        self,
+        document: PlotDocument,
+        *,
+        before: PlotDocument | None = None,
+        read: PictureReader | None = None,
+    ) -> list[str]:
+        """Make this story what a document holds, its own parts as well as
+        its plot (engine/story_plot.py `apply_document`): the plot editor
+        saving again to a story it made, which hasn't begun. Any other story
+        the editor saves as a new one, never over it (the author, Nov 6
+        2026). Raises PlotDocumentError, and ValueError in a simple chat, in
+        a private scene, or once the story has begun."""
+        self._refuse_in_chat("A plot")
+        self._refuse_in_private("Changing the story")
+        notes = apply_document(document, self.bundle, before=before, read=read)
+        self.sync_unstarted_scene()
+        self.save()
+        return notes
 
     @property
     def chronicle(self) -> Chronicle | None:

@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.engine.picture_shapes import BACKGROUND
 from sealedlore.engine.picture_styles import read_style, write_style
 from sealedlore.engine.response_style import PRESETS
 from sealedlore.gui.composer import (
@@ -44,7 +45,13 @@ from sealedlore.gui.composer import (
 )
 from sealedlore.gui.fields import set_field_text
 from sealedlore.gui.picture_style import PictureStyleField
-from sealedlore.gui.plot_pictures import Folder, PlotPictureStrip, SaveFirst
+from sealedlore.gui.plot_pictures import (
+    Folder,
+    PlotPictureStrip,
+    SaveFirst,
+    choose_picture,
+    weakly,
+)
 from sealedlore.gui.sizing import GrowingText
 from sealedlore.gui.style_panel import PERSPECTIVE_SUMMARIES
 from sealedlore.models.plot_file import (
@@ -160,8 +167,6 @@ class Page(QWidget):
         self._loading = False
         self.item = None
         self.document = PlotDocument()
-        # Every field `_watch` was given, to lock the story's own (`set_locked`).
-        self._inputs: list[QWidget] = []
         inner = QWidget()
         self._form = QFormLayout(inner)
         self._form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
@@ -169,7 +174,7 @@ class Page(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setWidget(inner)
         self.scope = scope_label()
-        # What the page is when the editor works on a story (plot_editor.py).
+        # A line under the heading, when the page has something to say.
         self.banner = hint("")
         self.banner.hide()
         layout = QVBoxLayout(self)
@@ -182,22 +187,6 @@ class Page(QWidget):
         self.scope.setText(scope)
         self.banner.setText(banner)
         self.banner.setVisible(bool(banner))
-
-    def set_locked(self, locked: bool, *, open_: Iterable[QWidget] = ()) -> None:
-        """A story's own fields, read only in the editor (they are changed on
-        the Cast and Lore pages and in Setup); `open_` stay as they are."""
-        kept = {id(widget) for widget in open_}
-        for widget in self._inputs:
-            fixed = locked and id(widget) not in kept
-            if isinstance(widget, (QLineEdit, QPlainTextEdit)):
-                widget.setReadOnly(fixed)
-                # Dimmed by the stylesheet, so it reads as shown, not editable.
-                if bool(widget.property("storyLocked")) != fixed:
-                    widget.setProperty("storyLocked", fixed)
-                    widget.style().unpolish(widget)
-                    widget.style().polish(widget)
-            else:
-                widget.setEnabled(not fixed)
 
     def load(self, item, document: PlotDocument) -> None:
         self._loading = True
@@ -221,7 +210,6 @@ class Page(QWidget):
 
     def _watch(self, *widgets: QWidget) -> None:
         for widget in widgets:
-            self._inputs.append(widget)
             if isinstance(widget, QLineEdit):
                 widget.textChanged.connect(self._on_change)
             elif isinstance(widget, QPlainTextEdit):
@@ -248,8 +236,11 @@ class Page(QWidget):
 
 
 class StoryPage(Page):
-    def __init__(self) -> None:
+    def __init__(self, folder: Folder | None = None, save_first: SaveFirst | None = None) -> None:
         super().__init__()
+        # Weakly, as the strip holds them: they are the window's own methods.
+        self._folder_ref = weakly(folder)
+        self._save_ref = weakly(save_first)
         self.title = QLineEdit()
         self.description = QLineEdit()
         self.description.setPlaceholderText("One line for the story list.")
@@ -282,6 +273,13 @@ class StoryPage(Page):
         self.background.setToolTip(
             "A picture beside the plot file, shown behind the story when it is imported."
         )
+        self.background_button = QPushButton("Choose…")
+        self.background_button.setToolTip("A picture to show behind the story")
+        self.background_button.clicked.connect(self._choose_background)
+        background = QHBoxLayout()
+        background.setContentsMargins(0, 0, 0, 0)
+        background.addWidget(self.background, 1)
+        background.addWidget(self.background_button)
         self.notes = GrowingText(lines=4)
         self.notes.setPlaceholderText(
             "Notes to yourself. Kept in the file; the app never reads them."
@@ -295,7 +293,7 @@ class StoryPage(Page):
         form.addRow("Perspective", self.perspective)
         form.addRow("Length", self.length)
         form.addRow("Picture style", self.picture_style)
-        form.addRow("Background", self.background)
+        form.addRow("Background", background)
         form.addRow(
             hint("Each is a setting the story starts with; the author can change it in the app.")
         )
@@ -311,7 +309,25 @@ class StoryPage(Page):
             self.notes,
         )
         self.picture_style.changed.connect(self._on_change)
-        self._inputs.append(self.picture_style)
+
+    def set_story_mode(self, story: bool) -> None:
+        """For a story, not a file: a story keeps no notes to oneself (they
+        go only into a plot file), and its background is one of its own."""
+        self._form.setRowVisible(self.notes, not story)
+        self.background.setToolTip(
+            "The picture shown behind the story"
+            if story
+            else "A picture beside the plot file, shown behind the story when it is imported."
+        )
+
+    def _choose_background(self) -> None:
+        if self.item is None:
+            return
+        picture = choose_picture(
+            self, self._folder_ref(), self._save_ref(), crop=BACKGROUND, owner="background"
+        )
+        if picture is not None:
+            self.background.setText(picture.file)
 
     def _fill(self) -> None:
         document: PlotDocument = self.item
@@ -521,16 +537,9 @@ class CharacterPage(Page):
             self.pictures,
         )
 
-    def set_locked(self, locked: bool, *, open_: Iterable[QWidget] = ()) -> None:
-        open_ = tuple(open_)
-        super().set_locked(locked, open_=open_)
-        # Whom the author chooses between is the story's: kept so whatever the role.
-        self._choose_fixed = locked and not any(widget is self.choose for widget in open_)
-        self._sync_choose()
-
     def _sync_choose(self) -> None:
         playable = self.role.currentData() in ("player", "author")
-        self.choose.setEnabled(playable and not getattr(self, "_choose_fixed", False))
+        self.choose.setEnabled(playable)
         if not playable and self.choose.isChecked():
             self.choose.setChecked(False)
 

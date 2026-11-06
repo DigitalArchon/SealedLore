@@ -1,32 +1,40 @@
-"""A story as a plot document, and a document's plot given to the story.
+"""A story as a plot document, and a document given back to a story.
 
-The plot editor opens a story to add a plot to it, and the model writes a plot
-for one (engine/plot_draft.py). Both need the story as a plot file would hold
-it, so that the plot names its people and places as a file names them, and
-both end by giving the story what the document's plot holds.
+The plot editor opens a story, and the model writes a plot for one
+(engine/plot_draft.py). Both need the story as a plot file would hold it, so
+that the plot names its people and places as a file names them.
 
-Only the plot is the document's to change: its facts and events, which of the
-story's lore entries are places the program follows the character between,
-and the people, places and lore it keeps hidden until an event brings them in.
-A hidden card is the plot's, so what the document says of it is written back;
-every other card is the story's, changed where cards are changed (the Cast and
-Lore pages, Setup), and a document leaves it as it is. So nothing a document
-can't hold (skills, pictures, looks, a card's SillyTavern fields, lore that
-waits to be mentioned) is lost by passing through one.
+A plot the model writes is given to the story itself (`plot_changes`), and
+only the plot is the document's to change there: its facts and events, which
+of the story's lore entries are places the program follows the character
+between, and the people, places and lore it keeps hidden until an event
+brings them in. A hidden card is the plot's, so what the document says of it
+is written back; every other card is left as it is.
+
+The plot editor saves anything it holds, but never over the story it was
+made from (the author, Nov 6 2026): a new story is made, the same setup
+unplayed, and the document applied to it (`apply_document`). Only what the
+author changed in the editor is written, so nothing a document can't hold
+(skills, looks, a card's SillyTavern fields, lore that waits to be mentioned)
+is lost by passing through one.
 
 Pure: a bundle in, a document out; a document and a bundle in, the changes
-out. `StorySession.set_plot_document` applies them.
+out (or, for a story not yet begun, made). `StorySession.set_plot_document`
+and `set_story_document` apply them to an open story.
 """
 
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from sealedlore.engine.picture_styles import write_style
 from sealedlore.engine.plot_file import UNNAMED, render_plot_markdown
 from sealedlore.engine.plot_md import _ALL_FIELDS, _key, _norm, parse_plot_markdown
+from sealedlore.ids import new_id
 from sealedlore.models.character import Character
+from sealedlore.models.image import ImageRef
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.plot import MINUTES_PER_DAY, Condition, EventDef, EventVariant, Plot
 from sealedlore.models.plot_file import (
@@ -37,11 +45,14 @@ from sealedlore.models.plot_file import (
     EventDoc,
     FactDoc,
     OpeningDoc,
+    PictureDoc,
     PlotDocument,
     VariantDoc,
 )
 from sealedlore.models.scenario import Scenario
 from sealedlore.models.scene import SceneState
+from sealedlore.storage.image_meta import picture_kind
+from sealedlore.storage.images import IMAGES_DIR, REFS_DIR
 from sealedlore.storage.repository import StoryBundle
 
 _HEADING = re.compile(r"^(#{1,3})(\s+\S.*)$")
@@ -93,6 +104,22 @@ def _role(character: Character, *, supporting: bool) -> str:
     return "player" if character.is_player_available else "storyteller"
 
 
+def picture_docs(refs: list[ImageRef]) -> list[PictureDoc]:
+    """A card's pictures as a document's, each by its file in the story's
+    folder (the editor shows them from a copy of the folder). A caption is
+    one line, and never holds a picture line's `|`."""
+    return [
+        PictureDoc(
+            file=ref.file,
+            caption=_line(ref.caption).replace("|", "/"),
+            look=_line(ref.look).replace("|", "/"),
+            expression=_line(ref.expression).replace("|", "/"),
+        )
+        for ref in refs
+        if ref.file
+    ]
+
+
 def character_doc(
     character: Character,
     *,
@@ -100,10 +127,12 @@ def character_doc(
     present: bool = False,
     choose: bool = False,
     personality: bool = False,
+    pictures: bool = False,
 ) -> CharacterDoc:
     """A story's card as a plot file's character. `personality`: a card's
     own (a SillyTavern card's) after its description, as the storyteller is
-    told it (`rules.full_description_text`), for a model's eyes only."""
+    told it (`rules.full_description_text`), for a model's eyes only.
+    `pictures`: theirs, for the editor."""
     role = _role(character, supporting=supporting)
     description = character.full_description or ""
     if personality and (character.personality or "").strip():
@@ -123,12 +152,13 @@ def character_doc(
         summary=_line(character.summary),
         canon=_line(character.canon),
         hidden=hidden,
+        pictures=picture_docs(character.reference_images) if pictures else [],
         description=safe_prose(description, under=2),
         story_id=character.id,
     )
 
 
-def entry_doc(entry: LoreEntry) -> EntryDoc:
+def entry_doc(entry: LoreEntry, *, pictures: bool = False) -> EntryDoc:
     """A story's lore entry as a plot file's place or lore entry. The file's
     keywords leave out the title: the importer makes it one of them."""
     return EntryDoc(
@@ -140,6 +170,7 @@ def entry_doc(entry: LoreEntry) -> EntryDoc:
         ],
         always=entry.always_on,
         hidden=entry.plot_hidden,
+        pictures=picture_docs(entry.reference_images) if pictures else [],
         description=safe_prose(entry.content, under=2),
         story_id=entry.id,
     )
@@ -242,12 +273,17 @@ def plot_parts(plot: Plot, names: dict[str, str], titles: dict[str, str]) -> Plo
     return document
 
 
-def document_from_story(bundle: StoryBundle, *, for_model: bool = False) -> PlotDocument:
+def document_from_story(
+    bundle: StoryBundle, *, for_model: bool = False, whole: bool = False
+) -> PlotDocument:
     """The story as a plot file would hold it, its plot (if it has one)
     included.
 
     `for_model`: for a model writing the plot: lore that is switched off is
-    left out, and a card's personality joins its description.
+    left out, and a card's personality joins its description. `whole`: for
+    the editor, the setup as a new playthrough of it has it: the cards'
+    pictures and the background, and whoever a "play one of these" set aside
+    back among the cast.
     """
     story = bundle.story
     setup = story.setup
@@ -264,6 +300,7 @@ def document_from_story(bundle: StoryBundle, *, for_model: bool = False) -> Plot
         # A length of the author's own words is set in the app, never in a file.
         length=None if style.response_style == "custom" else style.response_style,
         picture_style=write_style(story.picture_style, story.image_style),
+        background=(story.background_image or "") if whole else "",
         world=safe_prose(story.world_bible or "", under=1),
         opening=OpeningDoc(
             mode=setup.opening_mode,
@@ -276,7 +313,7 @@ def document_from_story(bundle: StoryBundle, *, for_model: bool = False) -> Plot
     present = set(scene.present_character_ids)
     present_names = {_norm(name) for name in scene.present_others}
     chosen = set(setup.choose_one_of)
-    for character in bundle.cast:
+    for character in [*bundle.cast, *(setup.set_aside if whole else [])]:
         if not character.name.strip():
             continue  # nothing can name them, and a file can't hold them
         document.characters.append(
@@ -286,6 +323,7 @@ def document_from_story(bundle: StoryBundle, *, for_model: bool = False) -> Plot
                 present=character.id in present,
                 choose=character.id in chosen,
                 personality=for_model,
+                pictures=whole,
             )
         )
     for character in bundle.supporting.characters:
@@ -297,6 +335,7 @@ def document_from_story(bundle: StoryBundle, *, for_model: bool = False) -> Plot
                 supporting=True,
                 present=_norm(character.name) in present_names,
                 personality=for_model,
+                pictures=whole,
             )
         )
 
@@ -311,14 +350,16 @@ def document_from_story(bundle: StoryBundle, *, for_model: bool = False) -> Plot
             continue
         seen.add(_norm(place.name))
         # A place whose entry is gone is one the document adds back.
-        document.places.append(entry_doc(entry) if entry is not None else EntryDoc(name=place.name))
+        document.places.append(
+            entry_doc(entry, pictures=whole) if entry is not None else EntryDoc(name=place.name)
+        )
     for entry in bundle.lore:
         if not entry.title.strip() or _norm(entry.title) in seen:
             continue
         if for_model and not entry.enabled:
             continue
         seen.add(_norm(entry.title))
-        document.lore.append(entry_doc(entry))
+        document.lore.append(entry_doc(entry, pictures=whole))
 
     if plot is not None:
         names = {c.id: c.name for c in (*bundle.cast, *bundle.supporting.characters)}
@@ -570,3 +611,402 @@ def plot_changes(document: PlotDocument, bundle: StoryBundle, *, begun: bool) ->
     if scenario.plot is not None:
         changes.plot = _rekeyed(scenario.plot, ids, changes.notes)
     return changes
+
+
+# --- a document made a story ---------------------------------------------------------
+
+# The bytes of a picture a document adds, by its file (the editor's copy of
+# the story's folder, gui/plot_editor.py); None when it can't be read.
+PictureReader = Callable[[str], "bytes | None"]
+
+
+def _index(items: list, item) -> int | None:
+    """Where `item` itself is in `items`: never an equal copy of it."""
+    return next((i for i, other in enumerate(items) if other is item), None)
+
+
+def _pictures(
+    docs: list[PictureDoc],
+    old: list[PictureDoc],
+    refs: list[ImageRef],
+    bundle: StoryBundle,
+    read: PictureReader,
+    owner: str,
+    notes: list[str],
+) -> list[ImageRef]:
+    """A card's pictures as the document lists them. One the card has keeps
+    its record (how it was drawn, its framing, its style), with a caption or
+    label the author changed; one the document adds is written in beside the
+    story's own pictures."""
+    by_file = {ref.file: ref for ref in refs}
+    was = {picture.file: picture for picture in old}
+    out: list[ImageRef] = []
+    for picture in docs:
+        ref = by_file.pop(picture.file, None)
+        if ref is not None:
+            before = was.get(picture.file, PictureDoc(file=picture.file))
+            update = {
+                name: getattr(picture, name)
+                for name in ("caption", "look", "expression")
+                if getattr(picture, name) != getattr(before, name)
+            }
+            out.append(ref.model_copy(update=update, deep=True))
+            continue
+        data = read(picture.file)
+        suffix = picture_kind(data) if data else None
+        if data is None or suffix is None:
+            notes.append(f"{owner}'s picture {picture.file} couldn't be read, so it was left out.")
+            continue
+        ref_id = new_id()
+        file = f"{REFS_DIR}/{ref_id}{suffix}"
+        bundle.pending_files[file] = data
+        out.append(
+            ImageRef(
+                id=ref_id,
+                file=file,
+                caption=picture.caption,
+                look=picture.look,
+                expression=picture.expression,
+            )
+        )
+    return out
+
+
+def _take_out(bundle: StoryBundle, card: Character) -> None:
+    """A character the document no longer has, out of the story: its lists,
+    whom it begins with, and either scene (an unplayed story's live scene is
+    its starting scene)."""
+    setup = bundle.story.setup
+    for tier in (bundle.cast, bundle.supporting.characters, setup.set_aside):
+        index = _index(tier, card)
+        if index is not None:
+            del tier[index]
+    setup.choose_one_of = [i for i in setup.choose_one_of if i != card.id]
+    setup.absent_at_start = [i for i in setup.absent_at_start if i != card.id]
+    if setup.suggested_character_id == card.id:
+        setup.suggested_character_id = None
+    if bundle.story.held_character_id == card.id:
+        bundle.story.held_character_id = None
+    for scene in (setup.starting_scene, bundle.story.scene):
+        scene.present_character_ids = [i for i in scene.present_character_ids if i != card.id]
+        scene.offstage_but_nearby = [
+            e for e in scene.offstage_but_nearby if e.character_id != card.id
+        ]
+        scene.present_others = [
+            name for name in scene.present_others if _norm(name) != _norm(card.name)
+        ]
+
+
+def _apply_character(
+    card: Character,
+    doc: CharacterDoc,
+    old: CharacterDoc,
+    made: Character,
+    bundle: StoryBundle,
+    read: PictureReader,
+    notes: list[str],
+) -> None:
+    """What the document changed of one of the story's own characters, in
+    the words the importer read it as."""
+    if doc.name != old.name and doc.name.strip():
+        card.name = made.name
+    if doc.aliases != old.aliases:
+        card.aliases = list(made.aliases)
+    for name, attribute in (
+        ("summary", "summary"),
+        ("voice", "voice_notes"),
+        ("canon", "canon"),
+        ("description", "full_description"),
+    ):
+        if getattr(doc, name) != getattr(old, name):
+            setattr(card, attribute, getattr(made, attribute))
+    if doc.hidden != old.hidden:
+        card.plot_hidden = doc.hidden
+    if doc.role != old.role:
+        card.is_player_available = made.is_player_available
+        card.author_only = made.author_only
+        cast, supporting = bundle.cast, bundle.supporting.characters
+        if doc.role == "supporting" and (index := _index(cast, card)) is not None:
+            # As a review moves one (authoring.apply_change): supporting cards
+            # have no skills and are never played.
+            del cast[index]
+            card.competence.tiers = {}
+            supporting.append(card)
+        elif doc.role != "supporting" and (index := _index(supporting, card)) is not None:
+            del supporting[index]
+            cast.append(card)
+    if doc.pictures != old.pictures:
+        card.reference_images = _pictures(
+            doc.pictures, old.pictures, card.reference_images, bundle, read, card.name, notes
+        )
+
+
+def _apply_entry(
+    entry: LoreEntry,
+    doc: EntryDoc,
+    old: EntryDoc,
+    made: LoreEntry,
+    bundle: StoryBundle,
+    read: PictureReader,
+    notes: list[str],
+) -> None:
+    if doc.name != old.name and doc.name.strip():
+        entry.title = made.title
+    if doc.keywords != old.keywords or doc.name != old.name:
+        entry.keywords = list(made.keywords)
+    if doc.always != old.always:
+        entry.always_on = made.always_on
+    if doc.hidden != old.hidden:
+        entry.plot_hidden = made.plot_hidden
+    if doc.description != old.description:
+        entry.content = made.content
+    if doc.pictures != old.pictures:
+        entry.reference_images = _pictures(
+            doc.pictures, old.pictures, entry.reference_images, bundle, read, entry.title, notes
+        )
+
+
+def _in_order(items: list, ordered: list) -> None:
+    """`items` in place, those in `ordered` in its order, the rest (cards a
+    document can't hold) after them as they were."""
+    keep = [item for item in items if _index(ordered, item) is None]
+    items[:] = [*ordered, *keep]
+
+
+def _entry_order(document: PlotDocument) -> list[str]:
+    """The story's own entries in the document's order (its places, then its
+    lore): whether the author moved any."""
+    return [doc.story_id for doc in (*document.places, *document.lore) if doc.story_id]
+
+
+def _presence(document: PlotDocument) -> list[tuple]:
+    """Whom the document begins with, and whom the author chooses between:
+    what the opening's people come from."""
+    return [
+        (doc.story_id or doc.name, doc.name, doc.role, doc.present, doc.choose)
+        for doc in document.characters
+    ]
+
+
+def _apply_presence(
+    people: list[tuple[CharacterDoc, Character]], bundle: StoryBundle, known: set[str]
+) -> None:
+    """Whom the story begins with, as the document has them. `people`: each
+    document character beside the story's card they are now; `known`: the
+    names the cards had before (a renamed one's old name is theirs, not
+    someone else's)."""
+    setup = bundle.story.setup
+    scene = setup.starting_scene
+    cast_ids = {card.id for card in bundle.cast}
+    card_names = known | {
+        _norm(card.name) for card in (*bundle.cast, *bundle.supporting.characters)
+    }
+    choose = [card.id for doc, card in people if doc.choose and card.id in cast_ids]
+    present = [
+        card.id for doc, card in people if doc.present and not doc.choose and card.id in cast_ids
+    ]
+    setup.choose_one_of = choose if len(choose) > 1 else []
+    scene.present_character_ids = present
+    # A name the scene has with no card stays: the document can't say it.
+    scene.present_others = [
+        *(name for name in scene.present_others if _norm(name) not in card_names),
+        *(card.name for doc, card in people if doc.present and doc.role == "supporting"),
+    ]
+    scene.offstage_but_nearby = [
+        entry
+        for entry in scene.offstage_but_nearby
+        if entry.character_id in cast_ids and entry.character_id not in present
+    ]
+    setup.absent_at_start = [i for i in setup.absent_at_start if i in cast_ids and i not in present]
+    playable = [card.id for card in bundle.cast if card.is_player_available]
+    if choose:
+        setup.suggested_character_id = choose[0]
+    elif setup.suggested_character_id not in playable:
+        setup.suggested_character_id = playable[0] if playable else None
+
+
+def _apply_background(chosen: str, bundle: StoryBundle, read: PictureReader, notes: list[str]):
+    """The picture behind the story, as the document names it: none, or a
+    file of the editor's, copied in where a background always goes."""
+    story = bundle.story
+    if not chosen:
+        story.background_image = None
+        story.background_drawn_as = ""
+        return
+    data = read(chosen)
+    suffix = picture_kind(data) if data else None
+    if data is None or suffix is None:
+        notes.append(f"The background {chosen} couldn't be read, so it stays as it was.")
+        return
+    file = f"{IMAGES_DIR}/background{suffix}"
+    bundle.pending_files[file] = data
+    story.background_image = file
+    story.background_drawn_as = ""
+
+
+def _drop_unused_files(bundle: StoryBundle) -> None:
+    """Pictures waiting to be written that nothing names any more: a card
+    the document took out, or a picture it took off a card."""
+    story = bundle.story
+    used = {
+        ref.file
+        for owner in (
+            *bundle.cast,
+            *bundle.supporting.characters,
+            *story.setup.set_aside,
+            *bundle.lore,
+        )
+        for ref in owner.reference_images
+    }
+    used.update(ref.file for ref in story.reference_images)
+    used.update(picture.file for picture in story.setup.opening_pictures)
+    used.update(file for file in (story.background_image, story.style_picture) if file)
+    bundle.pending_files = {
+        relative: data for relative, data in bundle.pending_files.items() if relative in used
+    }
+
+
+def apply_document(
+    document: PlotDocument,
+    bundle: StoryBundle,
+    *,
+    before: PlotDocument | None = None,
+    read: PictureReader | None = None,
+) -> list[str]:
+    """Make a story that hasn't begun what the document holds, its own parts
+    as well as its plot: the plot editor's Save (the author, Nov 6 2026:
+    anything in the editor is editable, and it saves as a new story, never
+    over the story it was made from).
+
+    The document is rendered and read by the importer, the one judge, and
+    each item paired with what it made (`made_of`) and with the story's card
+    by its `story_id`. Only what the document changed since `before` (the
+    document as it was made from the story, `document_from_story(whole=True)`)
+    is written, in the words the importer read it as: a card's "## Appearance",
+    kept a level down in the file, stays as the story had it unless the author
+    changed that card's text, and a change made on the Cast page meanwhile
+    stays unless the editor changed the same thing. Nothing a plot file can't
+    hold (skills, looks, a card's SillyTavern fields, its link to Your
+    characters, how a picture was drawn) is touched. A card or entry the
+    document no longer has is taken out of the story; one it adds is the
+    importer's, with its pictures, whose bytes `read` gives.
+
+    Raises PlotDocumentError for a document the importer refuses, and
+    ValueError for a story that has begun. Returns what couldn't be done,
+    for the author.
+    """
+    if bundle.nodes:
+        raise ValueError(
+            f"“{bundle.story.title}” has begun, so the editor saves as a new story instead"
+        )
+    read = read or (lambda _file: None)
+    before = before or document_from_story(bundle, whole=True)
+    rendered = render_plot_markdown(document)
+    parsed = parse_plot_markdown(rendered.text, fallback_title=document.title or "Untitled")
+    errors = [problem.describe() for problem in parsed.problems if problem.error]
+    if errors:
+        raise PlotDocumentError(errors)
+    scenario = parsed.scenario
+    story, setup = bundle.story, bundle.story.setup
+    notes: list[str] = []
+    if setup.starting_scene == SceneState():
+        # As the document was read: a story whose starting scene was never
+        # set begins where it is.
+        setup.starting_scene = story.scene.model_copy(deep=True)
+
+    # Its title and settings, world and opening.
+    if document.title != before.title and document.title.strip():
+        story.title = scenario.title
+    if document.description != before.description:
+        setup.description = scenario.description
+    if document.agency != before.agency:
+        story.defaults.agency_mode = scenario.agency_mode
+    if document.world_activity != before.world_activity:
+        story.defaults.world_activity = scenario.world_activity
+    if document.perspective != before.perspective:
+        story.style.perspective = scenario.style.perspective
+    if document.length != before.length:
+        story.style.response_style = scenario.style.response_style
+    if document.picture_style != before.picture_style:
+        story.picture_style, story.image_style = scenario.picture_style, scenario.image_style
+    if document.world != before.world:
+        story.world_bible = scenario.world_bible
+    if document.background != before.background:
+        _apply_background(document.background.strip(), bundle, read, notes)
+    opening, was = document.opening, before.opening
+    if opening.mode != was.mode:
+        setup.opening_mode = scenario.opening_mode
+    if opening.notes != was.notes:
+        setup.opening_text = scenario.opening_text
+    for name, attribute in (
+        ("location", "location"),
+        ("time", "time_of_day"),
+        ("situation", "situation"),
+    ):
+        if getattr(opening, name) != getattr(was, name):
+            setattr(setup.starting_scene, attribute, getattr(scenario.starting_scene, attribute))
+
+    # Its characters, in the document's order.
+    people_pairs, entry_pairs = made_of(document, scenario)
+    cards = {c.id: c for c in (*bundle.cast, *bundle.supporting.characters, *setup.set_aside)}
+    old_cards = {doc.story_id: doc for doc in before.characters if doc.story_id}
+    ids: dict[str, str | None] = {}
+    people: list[tuple[CharacterDoc, Character]] = []
+    for doc, made in people_pairs:
+        card = cards.get(doc.story_id) if doc.story_id else None
+        if card is None:
+            made.reference_images = _pictures(
+                doc.pictures, [], [], bundle, read, made.name or UNNAMED, notes
+            )
+            card = made
+        else:
+            old = old_cards.get(card.id) or character_doc(
+                card, supporting=doc.role == "supporting", pictures=True
+            )
+            _apply_character(card, doc, old, made, bundle, read, notes)
+        ids[made.id] = card.id
+        people.append((doc, card))
+    for card_id in old_cards.keys() - {card.id for _, card in people}:
+        if card_id in cards:
+            _take_out(bundle, cards[card_id])
+    # Whoever a "play one of these" set aside is back among the cast, as a
+    # new playthrough has them.
+    setup.set_aside = [c for c in setup.set_aside if not any(c is o for _, o in people)]
+    _in_order(bundle.cast, [card for doc, card in people if doc.role != "supporting"])
+    _in_order(
+        bundle.supporting.characters, [card for doc, card in people if doc.role == "supporting"]
+    )
+    if _presence(document) != _presence(before):
+        known = {_norm(name) for doc in before.characters for name in (doc.name, *doc.aliases)}
+        _apply_presence(people, bundle, known)
+
+    # Its places and lore.
+    entries = {entry.id: entry for entry in bundle.lore}
+    old_entries = {doc.story_id: doc for doc in (*before.places, *before.lore) if doc.story_id}
+    listed: list[LoreEntry] = []
+    for doc, made in entry_pairs:
+        entry = entries.get(doc.story_id) if doc.story_id else None
+        if entry is None:
+            made.reference_images = _pictures(
+                doc.pictures, [], [], bundle, read, made.title or UNNAMED, notes
+            )
+            entry = made
+        else:
+            old = old_entries.get(entry.id) or entry_doc(entry, pictures=True)
+            _apply_entry(entry, doc, old, made, bundle, read, notes)
+        ids[made.id] = entry.id
+        listed.append(entry)
+    gone = old_entries.keys() - {entry.id for entry in listed}
+    bundle.lore[:] = [entry for entry in bundle.lore if entry.id not in gone]
+    if _entry_order(document) != _entry_order(before):
+        _in_order(bundle.lore, listed)
+    else:
+        bundle.lore.extend(entry for entry in listed if _index(bundle.lore, entry) is None)
+
+    # Its plot, keyed to the story's cards; its days drawn again when it plays.
+    story.plot = _rekeyed(scenario.plot, ids, notes) if scenario.plot is not None else None
+    story.plot_schedule = {}
+    if setup.starting_scene != SceneState():
+        story.scene = setup.starting_scene.model_copy(deep=True)
+    _drop_unused_files(bundle)
+    return notes
