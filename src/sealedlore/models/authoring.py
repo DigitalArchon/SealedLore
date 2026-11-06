@@ -29,6 +29,11 @@ ChangeKind = Literal[
     # One of SealedLore's own prompt texts, for this story only: target is its
     # key (engine/prompt_texts.py), value the whole new text.
     "prompt",
+    # A follow-up's alone, on a story not yet begun (engine/followup.py): a
+    # card or an entry out of the story, and the starting scene's fields.
+    "character_remove",
+    "lore_remove",
+    "scene",
 ]
 
 

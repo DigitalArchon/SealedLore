@@ -36,7 +36,7 @@ from sealedlore.models.config import model_label
 from sealedlore.models.plot_file import OpeningDoc, PlotDocument
 
 WRITE_LABEL = "Write a plot with the model…"
-EDIT, CONTINUE = "edit", "continue"
+EDIT, CONTINUE, FOLLOW_UP = "edit", "continue", "follow_up"
 
 
 def _hint(text: str) -> QLabel:
@@ -129,7 +129,8 @@ def preview_html(text: str) -> str:
 
 class PlotReadyDialog(QDialog):
     """The plot is written: hidden until the author asks to see it. After
-    exec: `choice` (EDIT for the plot editor, CONTINUE), `revealed`, and
+    exec: `choice` (EDIT for the plot editor, FOLLOW_UP to ask for changes,
+    CONTINUE), `revealed`, and
     `keep_spoilers_off` (only offered while the Plot page shows spoilers)."""
 
     def __init__(
@@ -189,6 +190,12 @@ class PlotReadyDialog(QDialog):
         layout.addWidget(self.keep_off)
         layout.addStretch(0)
         buttons = QDialogButtonBox()
+        self.follow_up_button = buttons.addButton("Ask for changes…", QDialogButtonBox.ActionRole)
+        self.follow_up_button.setToolTip(
+            "Say what you'd like different; the plot is written again, still hidden, and each "
+            "change can be undone"
+        )
+        self.follow_up_button.clicked.connect(self._follow_up)
         self.edit_button = buttons.addButton(
             "Edit in the plot editor…", QDialogButtonBox.ActionRole
         )
@@ -215,4 +222,8 @@ class PlotReadyDialog(QDialog):
 
     def _edit(self) -> None:
         self.choice = EDIT
+        self.accept()
+
+    def _follow_up(self) -> None:
+        self.choice = FOLLOW_UP
         self.accept()

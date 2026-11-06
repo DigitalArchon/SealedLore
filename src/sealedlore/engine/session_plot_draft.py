@@ -32,6 +32,7 @@ from sealedlore.engine.scene_update import render_card
 from sealedlore.engine.session_plot import SessionNotice
 from sealedlore.engine.story_plot import document_from_story, without_plot
 from sealedlore.messages import PromptMessage
+from sealedlore.models.plot_file import PlotDocument
 from sealedlore.providers.base import ChatRequest, ReasoningDelta, StreamCompleted, TextDelta
 
 # How often a long reply says how far it has got.
@@ -60,9 +61,30 @@ class PlotDraftRuntime:
             so_far=self._plot_so_far(),
             texts=self.texts,
         )
+        return (
+            yield from self._write_plot(
+                messages, base, newcomers=wishes.newcomers, details={"wishes": asdict(wishes)}
+            )
+        )
+
+    def _write_plot(
+        self,
+        messages: Sequence[PromptMessage],
+        base: PlotDocument,
+        *,
+        newcomers: str = "",
+        revise: bool = False,
+        details: dict,
+    ) -> Generator[SessionNotice, None, PlotDraft]:
+        """The call, at most one more to put it right, and the plot given to
+        the story: a first plot (`draft_plot`) or one written again at the
+        author's request (`revise`, engine/session_followup.py). `details`
+        go in the API log beside each request."""
         model = self.authoring_model
-        text, completed = yield from self._plot_call(messages, model, wishes, "first")
-        merged, notes = merge_reply(base, read_reply(text).document, newcomers=wishes.newcomers)
+        text, completed = yield from self._plot_call(messages, model, "first", details)
+        merged, notes = merge_reply(
+            base, read_reply(text).document, newcomers=newcomers, revise=revise
+        )
         problems = plot_problems(merged)
         if completed.finish_reason == "length":
             problems.insert(0, "The reply was cut off before its end: write the plot shorter.")
@@ -70,9 +92,9 @@ class PlotDraftRuntime:
         if problems:
             yield SessionNotice("Writing the plot: putting right what it can't use as written…")
             again = build_repair_messages(messages, text, problems, self.texts)
-            text, completed = yield from self._plot_call(again, model, wishes, "repair")
+            text, completed = yield from self._plot_call(again, model, "repair", details)
             fixed, fixed_notes = merge_reply(
-                base, read_reply(text).document, newcomers=wishes.newcomers
+                base, read_reply(text).document, newcomers=newcomers, revise=revise
             )
             if fixed.events:
                 merged, notes, repaired = fixed, fixed_notes, True
@@ -88,24 +110,33 @@ class PlotDraftRuntime:
         return PlotDraft(document=document_from_story(self.bundle), notes=notes, repaired=repaired)
 
     def _plot_call(
-        self, messages: Sequence[PromptMessage], model: str, wishes: PlotWishes, step: str
+        self, messages: Sequence[PromptMessage], model: str, step: str, details: dict
     ) -> Generator[SessionNotice, None, tuple[str, StreamCompleted]]:
-        """One call, streamed so a reply that takes minutes says how far it
-        has got. A reply left empty by a model that reasoned to the limit is
-        asked for once more, as `ChatProvider.complete` does."""
         request = ChatRequest(
             model=model,
             extra_body=self.route_for("authoring"),
             messages=list(messages),
             params=self.side_params(model, max_tokens=PLOT_MAX_TOKENS),
         )
+        return (
+            yield from self._authoring_stream(
+                request,
+                kind="plot_draft",
+                details={"step": step, **details},
+                writing="Writing the plot",
+                thinking="Thinking the plot through",
+            )
+        )
+
+    def _authoring_stream(
+        self, request: ChatRequest, *, kind: str, details: dict, writing: str, thinking: str
+    ) -> Generator[SessionNotice, None, tuple[str, StreamCompleted]]:
+        """One call on the authoring model, streamed so a reply that takes
+        minutes says how far it has got, and logged as `<kind>_request` and
+        `<kind>_response`. A reply left empty by a model that reasoned to
+        the limit is asked for once more, as `ChatProvider.complete` does."""
         log_ref = self._log(
-            "plot_draft_request",
-            {
-                "step": step,
-                "wishes": asdict(wishes),
-                "payload": self.provider.build_payload(request),
-            },
+            f"{kind}_request", {**details, "payload": self.provider.build_payload(request)}
         )
         text, completed = "", StreamCompleted()
         for _attempt in range(2):
@@ -128,15 +159,15 @@ class PlotDraftRuntime:
                     said = time.monotonic()
                     # About six characters to a word, the Markdown's marks included.
                     yield SessionNotice(
-                        f"Writing the plot… about {written // 6:,} words."
+                        f"{writing}… about {written // 6:,} words."
                         if written
-                        else f"Thinking the plot through… about {thought // 6:,} words so far."
+                        else f"{thinking}… about {thought // 6:,} words so far."
                     )
             text = "".join(chunks)
             if text.strip() or completed.finish_reason != "length":
                 break
         self._log(
-            "plot_draft_response",
+            f"{kind}_response",
             {
                 "request_log_ref": log_ref,
                 "text": text,
@@ -144,7 +175,7 @@ class PlotDraftRuntime:
                 "finish_reason": completed.finish_reason,
             },
         )
-        self.unreported_usage.append(self.priced(completed.usage, model))
+        self.unreported_usage.append(self.priced(completed.usage, request.model))
         return text, completed
 
     def _plot_plays(self) -> str:

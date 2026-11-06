@@ -46,6 +46,11 @@ fun to play. This app will remain focused on text based roleplay.
   already have in the plot editor with everything filled in: write its plot,
   change anything else, and save it as a new story, the old one left as it
   is. The editor now shows which parts are the story's and which the plot's.
+- **Ask for changes** (3.0.0b3). Once a story is drafted for you, or a plot
+  written, say what you'd like different: "I like the world, but I'd prefer
+  the characters were more badass", "the world isn't hostile enough". The
+  model changes just that, the rest stays as it is, and **Undo the last
+  change** takes any request back. A plot stays hidden while it is changed.
 - **As much as you want set up** (3.0.0b3). Drafting from an idea asks how
   much world to write (basic, standard or detailed), how many people (a
   handful, standard or lots) and how much about each of them (briefly,

@@ -82,4 +82,5 @@ select = ["E", "F", "I", "UP", "B"]
 testpaths = ["tests"]
 markers = [
     "real_crop: the crop dialog is driven by the test, not answered for it",
+    "real_follow_up: the follow-up dialog is driven by the test, not gone past for it",
 ]

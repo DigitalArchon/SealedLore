@@ -43,7 +43,7 @@ from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.story_plot import PlotDocumentError, made_of
 from sealedlore.engine.validators import name_forms
 from sealedlore.messages import ContentPart, PromptMessage
-from sealedlore.models.plot_file import PlotDocument
+from sealedlore.models.plot_file import OpeningDoc, PlotDocument
 
 # A plot of a dozen events with their variants passed 8k tokens in drafting
 # terms (Doomsville's is ~3k words); room for that, and a model that reasons
@@ -208,6 +208,71 @@ def build_plot_messages(
     ]
 
 
+def plot_reply_text(document: PlotDocument) -> str:
+    """A story's plot as a reply of the plot writer's holds it: the people,
+    places and lore it keeps hidden, its places (one of the story's own by
+    its title alone), its facts and its events. What a follow-up hands the
+    model as its own last reply."""
+    shown = document.model_copy(
+        update={
+            "title": "",
+            "description": "",
+            "world": "",
+            "notes": "",
+            "background": "",
+            "picture_style": "",
+            "agency": None,
+            "world_activity": None,
+            "perspective": None,
+            "length": None,
+            "start_day": 1,
+            "start_time": "00:00",
+            "opening": OpeningDoc(),
+            "characters": [c for c in document.characters if c.hidden],
+            "places": [
+                place
+                if place.hidden
+                else place.model_copy(
+                    update={"keywords": [], "description": "", "always": False, "pictures": []}
+                )
+                for place in document.places
+            ],
+            "lore": [entry for entry in document.lore if entry.hidden],
+        },
+        deep=True,
+    )
+    text = render_plot_markdown(shown).text
+    # A reply begins at its first section: the clock's front matter is the
+    # story's, as the plot writer's own replies have none.
+    return text[text.find("# ") :].strip() if "# " in text else text.strip()
+
+
+def build_plot_revision_messages(
+    story: str,
+    previous: str,
+    request: str,
+    *,
+    plays: str = "",
+    so_far: str = "",
+    texts: PromptTexts = DEFAULT_TEXTS,
+) -> list[PromptMessage]:
+    """A plot's follow-up: the story, the plot as it is now as the model's
+    own last reply (`plot_reply_text`), and the author's request after it
+    (`followup.plot_request_text`)."""
+    parts = [texts.fill("authoring.plot.story", story=story)]
+    if plays:
+        parts.append(plays)
+    if so_far:
+        parts.append(texts.fill("authoring.plot.so_far", so_far=so_far))
+    parts.append(texts["authoring.plot.revise"])
+    return [
+        PromptMessage(role="system", parts=(ContentPart(text=texts["authoring.plot"]),)),
+        PromptMessage(role="user", parts=(ContentPart(text="\n\n".join(parts)),)),
+        PromptMessage(role="assistant", parts=(ContentPart(text=previous),)),
+        PromptMessage(role="user", parts=(ContentPart(text=request),)),
+    ]
+
+
 def build_repair_messages(
     messages: Sequence[PromptMessage],
     reply: str,
@@ -254,7 +319,7 @@ def read_reply(text: str) -> ReadPlotDocument:
 
 
 def merge_reply(
-    story: PlotDocument, reply: PlotDocument, *, newcomers: str = ""
+    story: PlotDocument, reply: PlotDocument, *, newcomers: str = "", revise: bool = False
 ) -> tuple[PlotDocument, list[str]]:
     """The story's own parts with the reply's plot.
 
@@ -266,6 +331,11 @@ def merge_reply(
     story's. How many were asked for is the model's to keep to: a newcomer
     left out would take the events that bring them with it. Returns the
     document and what was left out.
+
+    `revise`: the reply is a plot written again at the author's request. The
+    people, places and lore the old plot kept hidden are the plot's, so the
+    reply's words for them stand (on the same cards), and those it no longer
+    has go with the old plot.
     """
     if newcomers not in ("", *NEWCOMERS):
         # Loud for the yes or no it once was, too.
@@ -275,6 +345,8 @@ def merge_reply(
     merged.facts = [fact.model_copy(deep=True) for fact in reply.facts]
     merged.events = [event.model_copy(deep=True) for event in reply.events]
     notes: list[str] = []
+    if revise:
+        _take_revised(merged, reply)
     names = {
         _norm(form)
         for character in merged.characters
@@ -312,6 +384,51 @@ def merge_reply(
                 continue
             target.append(entry.model_copy(update={"story_id": "", "pictures": []}, deep=True))
     return merged, notes
+
+
+def _take_revised(merged: PlotDocument, reply: PlotDocument) -> None:
+    """The old plot's hidden people, places and lore as the revised plot has
+    them: the reply's words on the story's own cards, and out of the
+    document if the reply no longer has them."""
+    people = {_norm(c.name): c for c in reply.characters if c.name.strip()}
+    kept = []
+    for character in merged.characters:
+        if not character.hidden or not character.story_id:
+            kept.append(character)
+            continue
+        written = people.get(_norm(character.name))
+        if written is None:
+            continue  # gone with the old plot
+        kept.append(
+            written.model_copy(
+                update={
+                    "story_id": character.story_id,
+                    "hidden": True,
+                    "present": False,
+                    "choose": False,
+                    "pictures": [],
+                },
+                deep=True,
+            )
+        )
+    merged.characters = kept
+    entries = {_norm(e.name): e for e in (*reply.places, *reply.lore) if e.name.strip()}
+    for target in (merged.places, merged.lore):
+        kept_entries = []
+        for entry in target:
+            if not entry.hidden or not entry.story_id:
+                kept_entries.append(entry)
+                continue
+            written = entries.get(_norm(entry.name))
+            if written is None:
+                continue
+            kept_entries.append(
+                written.model_copy(
+                    update={"story_id": entry.story_id, "hidden": True, "pictures": []},
+                    deep=True,
+                )
+            )
+        target[:] = kept_entries
 
 
 def _newcomer_clashes(document: PlotDocument, people) -> list[str]:

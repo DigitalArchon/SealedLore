@@ -3845,6 +3845,134 @@ for _key, _title, _words in (
         _words,
     )
 
+# The author's follow-ups on a story set up for them (the author, Nov 6 2026:
+# "they might reply, 'I like the world, but I'd prefer the characters were
+# more badass.' Or 'I like the characters, but the world isn't hostile
+# enough.' and it can update it, with the ability to undo"). The changes are
+# a review's kinds and fields, applied at once (engine/followup.py), so what
+# the author likes is never written again. Live (GLM 5.3, Sonnet 4.6, 9 story
+# requests on drafted stories): "more badass" rewrote 4 of 7 cards with the
+# world and lore untouched 3/3; "the world isn't hostile enough" the world and
+# 3-4 lore entries with the cards untouched 3/3; a swap took one card out, put
+# a stranger in and mended the lore that named the one gone; "start at night"
+# the opening and scene alone. 14-55 seconds; every undo exact.
+_text(
+    "authoring.followup",
+    AUTHORING,
+    "Changing a story at the author's request",
+    "The system prompt of a follow-up on a story not yet begun: after a draft, and from "
+    "Story → Change the story with the model…. The program reads its JSON reply: keep "
+    "the kinds and fields it asks for.",
+    """\
+You change the setup of a collaborative roleplay story in SealedLore at its
+author's request. It was set up for them, by a model from their premise or
+by their own hand, and has not begun. They have read it and say what they
+want different. You change exactly that, and whatever must change with it
+for the story to hold together, and leave everything else as it is.
+
+You are given the setup as JSON: its title and description; "world", the
+standing facts sent to the storyteller on every turn; "lore", detail it is
+given when it matters; "cast", the characters the author may play and the few
+the story turns on, every one sent on every turn; "supporting", everyone else
+with a card; "opening", the notes the first passage is written from, and
+"starting_scene"; "style", how the prose reads; "agency_mode";
+"world_activity", how much happens that the author didn't start; and
+"picture_style", how its pictures look. Then what the author asked before,
+if anything, and what they ask now.
+
+How to answer:
+- Do all of what they ask, wherever it applies: "the characters more
+  badass" means every character it fits, not one; "a more hostile world"
+  means the world text, and the lore, opening and cards the change makes
+  untrue.
+- What they like stays as it is, and so does whatever their request doesn't
+  touch. A change replaces a whole text, so keep every sentence of it that
+  isn't part of the request word for word.
+- Keep names unless they ask: they have read them.
+- Put each thing where it belongs: what must always hold in "world", detail
+  that matters sometimes in "lore", who someone is on their card, how the
+  prose reads in "style", how the pictures look in "picture_style" (never
+  "style"). Where one side knows nothing of something, name the gap without
+  the fact: the storyteller reads a fact inside a sentence about someone as
+  theirs.
+- The opening's notes are written in the story's person and tense, and end
+  where the author's character can act.
+
+What you can change. Each change is one setting:
+- kind "story": field "title", "description", "agency_mode" ({agency_modes}),
+  "world_activity" ({world_activities}), or "picture_style" (one of
+  {picture_styles}, a few words of your own for another look, or null for
+  the default, realistic).
+- kind "world": the value is the complete new world text.
+- kind "opening": field "text" (the notes the first passage is written from)
+  or "mode" ({opening_modes}).
+- kind "scene": the starting scene; field "location", "time_of_day",
+  "situation", or "present" (the names of everyone the opening puts in it,
+  the author's own character always; anyone else is placed by the first
+  passage).
+- kind "style": field one of {style_fields}.
+{style_guide}
+- kind "character": "target" is the character's name exactly as in the
+  setup; field one of {character_fields}. "skills" is the complete new
+  mapping of domain to tier ({tiers}).
+- kind "character_add": "target" is "cast" or "supporting", and the value is
+  a character object:
+{character_shape}
+- kind "character_move": "target" is a character's name, the value "cast"
+  or "supporting".
+- kind "character_remove": "target" is a character's name: out of the story.
+- kind "lore_add": the value is {"title": ..., "content": ..., "keywords":
+  [...], "until_mentioned": false}.
+- kind "lore_edit": "target" is the entry's title; field one of {lore_fields}.
+- kind "lore_remove": "target" is the entry's title: out of the story.
+For text fields the value is the complete new text; for lists, the complete
+new list; null clears a setting.
+
+Reply with one JSON object and nothing else:
+
+{
+  "summary": "one to three sentences, to the author: what you changed",
+  "changes": [
+    {"kind": "...", "target": null, "field": "...", "value": ..., "reason": "..."}
+  ],
+  "cannot_fix": ["anything they asked that these changes can't do, and why"]
+}""",
+    (
+        ("agency_modes", "the allowed values, quoted and comma-separated"),
+        ("world_activities", "the allowed values, quoted and comma-separated"),
+        ("picture_styles", "the ready-made picture styles' names, quoted and comma-separated"),
+        ("opening_modes", "the allowed values, quoted and comma-separated"),
+        ("style_fields", "the style fields"),
+        ("style_guide", "The style fields"),
+        ("character_fields", "the character fields"),
+        ("tiers", "the competence tiers"),
+        ("character_shape", "A character, as JSON"),
+        ("lore_fields", "the lore fields"),
+    ),
+)
+
+_text(
+    "authoring.followup.request",
+    AUTHORING,
+    "Changing a story: the request",
+    "The user message of a follow-up: the setup as it is now, and what the author asks.",
+    "The story's setup as it is now:\n\n{setup}\n\n{earlier}The author asks: {request}",
+    (
+        ("setup", "the setup, as JSON"),
+        ("earlier", "what the author asked before and what was done, or nothing"),
+        ("request", "the author's words"),
+    ),
+)
+
+_text(
+    "authoring.followup.earlier",
+    AUTHORING,
+    "Changing a story: what was asked before",
+    "In a follow-up's request, when the author has asked for changes before.",
+    "Asked before, and done (keep to it unless they now ask otherwise):\n{earlier}\n\n",
+    (("earlier", "each request and what was done, a line each"),),
+)
+
 # A person or tense the author chose comes before the draft, so the opening
 # is written in it (the author, Sept 2026: a second-person story drafted with
 # a third-person opening).
@@ -4423,6 +4551,38 @@ for _key, _words in (
         "entry the plot brings in.",
         _words,
     )
+
+# The author's follow-ups on a plot (the author, Nov 6 2026, as for a story):
+# the plot as it is now stands as the model's last reply, and the request
+# after it; the reply is the whole plot again, read as the first was. Live
+# (4 requests on Doomsville and Brasshaven): "more dangerous" 6 events to 7,
+# "fewer, and no betrayal" 8 to 6 and 5, nothing left out, 22-53 seconds.
+_text(
+    "authoring.plot.revise",
+    AUTHORING,
+    "Changing a plot: the plot as it is",
+    "After the story, when the author asks for changes to its plot: the reply that "
+    "follows is the plot as it is now.",
+    "The story already has a plot, written in this format: it follows. The author will "
+    "say what they want changed in it.",
+)
+
+_text(
+    "authoring.plot.followup",
+    AUTHORING,
+    "Changing a plot: the request",
+    "The author's request for changes to the plot, after the plot as it is now.",
+    """\
+{earlier}The author asks: {request}
+
+Write the whole plot again with that change: change what they ask and what
+must change with it, keep the rest as it is, word for word, and keep to every
+rule of the format and of a good plot. Reply with the plot alone, as before.""",
+    (
+        ("earlier", "what the author asked before and what was done, or nothing"),
+        ("request", "the author's words"),
+    ),
+)
 
 _text(
     "authoring.plot.repair",

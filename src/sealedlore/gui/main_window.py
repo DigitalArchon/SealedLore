@@ -130,6 +130,7 @@ from sealedlore.gui.window_cast import CastWindow
 from sealedlore.gui.window_chat import ChatWindow
 from sealedlore.gui.window_collection import CollectionWindow
 from sealedlore.gui.window_find import FindWindow
+from sealedlore.gui.window_followup import FollowUpWindow
 from sealedlore.gui.window_images import ImagesWindow
 from sealedlore.gui.window_layout import LayoutWindow, StoriesDock
 from sealedlore.gui.window_looks import LooksWindow
@@ -304,6 +305,14 @@ WRITE_PLOT_TIP = (
     "The model writes this story's plot, from the story alone or from what you describe; "
     "you choose whether to read it"
 )
+FOLLOW_UP_TIP = (
+    "Before the story begins: say what you'd like different, and the model changes just "
+    "that; each change can be undone"
+)
+FOLLOW_UP_PLOT_TIP = (
+    "Say what you'd like different in the plot; it is written again with that change, kept "
+    "hidden, and can be undone"
+)
 EDIT_PLOT_TIP = (
     "This story in the plot editor, everything filled in: change anything, its plot above "
     "all. Saving there makes a new story; this one stays as it is"
@@ -311,6 +320,7 @@ EDIT_PLOT_TIP = (
 
 
 class MainWindow(
+    FollowUpWindow,
     PlotWindow,
     CastWindow,
     CastBoardWindow,
@@ -832,6 +842,12 @@ class MainWindow(
         self._video_menu_actions(story_menu)
 
         story_menu.addSeparator()
+        # The author (Nov 6 2026): "I like the world, but I'd prefer the
+        # characters were more badass" after a story is made, with undo.
+        self.follow_up_action = QAction("&Change the story with the model…", self)
+        self.follow_up_action.setStatusTip(FOLLOW_UP_TIP)
+        self.follow_up_action.triggered.connect(lambda: self.change_story_with_model())
+        story_menu.addAction(self.follow_up_action)
         # "Review settings…" didn't say who reviews or what for.
         self.review_action = QAction("Re&view settings with the model…", self)
         self.review_action.setStatusTip(
@@ -858,6 +874,10 @@ class MainWindow(
         self.write_plot_action.setStatusTip(WRITE_PLOT_TIP)
         self.write_plot_action.triggered.connect(self.write_plot)
         story_menu.addAction(self.write_plot_action)
+        self.follow_up_plot_action = QAction("C&hange the plot with the model…", self)
+        self.follow_up_plot_action.setStatusTip(FOLLOW_UP_PLOT_TIP)
+        self.follow_up_plot_action.triggered.connect(lambda: self.change_plot_with_model())
+        story_menu.addAction(self.follow_up_plot_action)
         # "Import plot…" beside File → Import… read as the same thing.
         self.import_plot_action = QAction("Add a &plot from a file…", self)
         self.import_plot_action.setStatusTip(
@@ -2273,6 +2293,7 @@ class MainWindow(
             empty_actions = [
                 ("Start the story…", self.start_story),
                 ("Look over the setup…", self.open_setup),
+                ("Ask for changes…", lambda: self.change_story_with_model()),
             ]
         else:
             empty_text = (
@@ -4152,29 +4173,26 @@ class MainWindow(
         self.open_story(bundle.story.id)
         if self.session is None or self.session.story.id != bundle.story.id:
             return
-        if warnings:
-            listing = "\n".join(f"• {warning}" for warning in warnings[:12])
-            box = QMessageBox(
-                QMessageBox.Information,
-                "A few things were left out",
-                f"The draft is saved, but these parts of it couldn't be used:\n\n{listing}",
-                QMessageBox.Ok,
-                self,
-            )
-            box.setTextFormat(Qt.PlainText)  # names and text from the model
-            box.exec()
-        # Read it before playing it: Setup first (the style too), then its plot
-        # if one was asked for, then the Start dialog. Cancel leaves the draft
-        # saved but not begun: before, the opening was written anyway, in
-        # whatever style the draft had chosen.
-        if self.open_setup():
-            self._then_plot(wishes, self.start_story)
-        else:
-            self.statusBar().showMessage(
-                "The draft is saved but not begun: Story → Start story… when it's ready"
-                + (", and Story → Write a plot with the model… for its plot" if wishes else ""),
-                10000,
-            )
+
+        def look_it_over() -> None:
+            # Read it before playing it: Setup first (the style too), then
+            # its plot if one was asked for, then the Start dialog. Cancel
+            # leaves the draft saved but not begun: before, the opening was
+            # written anyway, in whatever style the draft had chosen.
+            if self.open_setup():
+                self._then_plot(wishes, self.start_story)
+            else:
+                self.statusBar().showMessage(
+                    "The draft is saved but not begun: Story → Start story… when it's ready"
+                    + (", and Story → Write a plot with the model… for its plot" if wishes else ""),
+                    10000,
+                )
+
+        # The author (Nov 6 2026): a reply to what was drafted ("I like the
+        # world, but…") first, with what the draft left out said there.
+        self.change_story_with_model(
+            then=look_it_over, go_on="Go on to Setup…", drafted=True, notes=warnings[:12]
+        )
 
     def _toggle_review_mark(self, node_id: str) -> None:
         if self.session is None:
@@ -5330,6 +5348,15 @@ class MainWindow(
         # Once the story has begun it can only restart: greyed for good, it
         # was one more item to read past.
         self.start_action.setVisible(unstarted and not self.in_chat)
+        # A follow-up changes a story before it begins (Review settings, one
+        # under way), and a plot whenever the story has one.
+        self.follow_up_action.setVisible(unstarted and not self.in_chat)
+        self.follow_up_action.setEnabled(unstarted and not busy and not self.in_private)
+        has_plot = bool(self.session and self.session.story.plot is not None)
+        self.follow_up_plot_action.setVisible(not self.in_chat)
+        self.follow_up_plot_action.setEnabled(
+            has_story and has_plot and not busy and not self.in_private and not self.in_chat
+        )
         self._update_image_controls()
         self._update_video_controls()
         self._update_private_controls()

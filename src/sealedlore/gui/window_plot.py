@@ -27,7 +27,7 @@ from PySide6.QtWidgets import QDialog, QMessageBox, QWidget
 from sealedlore.engine.plot_draft import PlotDraft, PlotWishes
 from sealedlore.engine.session import SessionNotice
 from sealedlore.engine.story_plot import PictureReader, PlotDocumentError, apply_document
-from sealedlore.gui.plot_dialog import EDIT, PlotDialog, PlotReadyDialog, plot_preview
+from sealedlore.gui.plot_dialog import EDIT, FOLLOW_UP, PlotDialog, PlotReadyDialog, plot_preview
 from sealedlore.gui.plot_editor import PlotEditorWindow
 from sealedlore.models.plot_file import PlotDocument
 from sealedlore.providers.base import ProviderError, StreamCancelled, error_detail
@@ -150,6 +150,13 @@ class PlotWindow:
         if spoilers_off:
             self._on_spoilers_toggled(False)
             self._refresh_plot_panel()
+        if choice == FOLLOW_UP:
+            # The author (Nov 6 2026): "I like…, but…", and the plot written
+            # again, still hidden, each change undoable.
+            self.change_plot_with_model(
+                then=then, go_on="Start the story…" if then is not None else "Close"
+            )
+            return
         if choice == EDIT:
             # A story being set up has never begun: the editor saves to it.
             # Any other is saved as a new story, never over this one.

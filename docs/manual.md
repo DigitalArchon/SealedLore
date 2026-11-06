@@ -995,6 +995,14 @@ you are setting up, saving in the editor changes that story until it begins;
 for one you already had, it makes a new story (below). Otherwise, keep it a
 surprise: if the Plot page shows spoilers, that is turned off too.
 
+**Ask for changes…** lets you say what you'd like different in your own words
+("more danger in the first week", "no betrayal"), without reading it if you'd
+rather not: the plot is written again with that change, checked as before,
+and still hidden, and the dialog says only that it was done unless you look.
+Ask again as often as you like; **Undo the last change** puts the plot back
+as it was before the last request. **Story → Change the plot with the
+model…** does the same for any story with a plot.
+
 ### The plot editor on a story
 
 **Story → Open in the plot editor…** opens the plot editor on the open
@@ -1386,14 +1394,31 @@ The model drafts everything in one go:
 - a plot, if you ask for one under **A plot** (see
   [A plot written by the model](#a-plot-written-by-the-model)).
 
-It opens in Setup for you to read and change, the style included, and Start
-asks who you're playing once you save; a plot asked for is written between the
-two. Cancel keeps the draft without beginning it (Story → Start story… when
-it's ready). Anything
-the draft got wrong that couldn't be used (a made-up skill tier, a scene naming
-someone it has no card for) is listed rather than guessed at, and a name any
-number of people could answer to ("the captain") is left off a character's
-other names.
+**Asking for changes.** Once it is drafted, a dialog shows what was left
+out of the draft, if anything, and lets you say what you'd like different in
+your own words: "I like the world, but I'd prefer the characters were more
+badass", or "I like the characters, but the world isn't hostile enough".
+**Show the story as it is now** puts it beside your request. The model changes
+just what you ask, and whatever must change with it for the story to hold
+together (a harsher world can change the lore and the opening too); the rest
+stays as it is, word for word, and the dialog says what it changed. It can
+rewrite, add or take out characters and lore entries, change the world, the
+opening and who is there at the start, the style, the title, how lively the
+world is and the picture style. Ask again as often as you like: each request
+builds on the last, and **Undo the last change** puts the story back as it
+was before it (if you changed the story some other way meanwhile, it asks
+first, since that goes too). The same dialog is **Story → Change the story with
+the model…**, and **Ask for changes…** under a story that hasn't begun, for any
+story until its first message; once it has begun, Review settings (below)
+changes it instead.
+
+**Go on to Setup…** opens it in Setup for you to read and change, the style
+included, and Start asks who you're playing once you save; a plot asked for is
+written between the two. Cancel keeps the draft without beginning it (Story →
+Start story… when it's ready). Anything the draft got wrong that couldn't be
+used (a made-up skill tier, a scene naming someone it has no card for) is
+listed rather than guessed at, and a name any number of people could answer to
+("the captain") is left off a character's other names.
 
 **Story → Review settings with the model…** Say what isn't working, for
 example "too much action, not enough dialogue". The model reviews the story's settings (world,
@@ -1443,8 +1468,9 @@ has to be one your endpoint actually lists. A custom length is always proposed
 as its wording, which selects Custom by itself. Changes that a hand-written
 style block would ignore aren't offered.
 
-Both work before the first turn, so the quickest way to refine a draft is to
-review it: "make the world darker", "add a rival".
+Both work before the first turn too, but the quickest way to refine a draft
+is to ask for changes (above): they are made at once, and can be undone. A
+review proposes changes for you to tick, and is the one for a story under way.
 
 Both use the **authoring model** (Settings → Models), which defaults to your
 chat model, and so does a plot written by the model. These are occasional calls the whole story rests on, so a stronger

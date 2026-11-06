@@ -331,7 +331,11 @@ class CastWindow:
     def _dialog_parent(self) -> QWidget:
         """A dialog opened from the guide or Setup (the Cast page lent to
         them) stands over it."""
-        for host in (getattr(self, "_setup_dialog", None), getattr(self, "_guide", None)):
+        for host in (
+            getattr(self, "_follow_up_dialog", None),
+            getattr(self, "_setup_dialog", None),
+            getattr(self, "_guide", None),
+        ):
             if host is not None and host.isVisible():
                 return host
         return self

@@ -95,6 +95,25 @@ class MemoryKeychain:
 
 
 @pytest.fixture(autouse=True)
+def _follow_ups_go_on(request, monkeypatch):
+    """A premise draft opens the follow-up dialog before Setup, and it is
+    modal: here it goes straight on, as if nothing was asked.
+    tests/test_followup_gui.py drives it itself (marked `real_follow_up`)."""
+    if request.node.get_closest_marker("real_follow_up"):
+        yield
+        return
+    try:
+        from PySide6.QtWidgets import QDialog
+
+        from sealedlore.gui.followup_dialog import FollowUpDialog
+    except ImportError:
+        yield
+        return
+    monkeypatch.setattr(FollowUpDialog, "exec", lambda dialog: QDialog.Accepted)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _crops_take_the_whole_picture(request, monkeypatch):
     """Every picture added from disk opens the crop dialog, which is modal:
     left alone it would wait for a click that never comes. Here it answers

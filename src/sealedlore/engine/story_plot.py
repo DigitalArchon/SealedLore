@@ -672,6 +672,25 @@ def _pictures(
     return out
 
 
+def plot_uses(plot: Plot | None, item_id: str) -> bool:
+    """Whether a plot names a card or an entry: an event brings or reveals
+    it, a condition tests where they are, or it is one of the plot's places."""
+    if plot is None:
+        return False
+    for event in plot.events:
+        for holder in (event, *event.variants):
+            if item_id in holder.brings or item_id in holder.reveals:
+                return True
+            if any(condition.who == item_id for condition in holder.requires):
+                return True
+    return any(place.lore_id == item_id for place in plot.places)
+
+
+def take_out_character(bundle: StoryBundle, card: Character) -> None:
+    """A character out of a story that hasn't begun: `_take_out`."""
+    _take_out(bundle, card)
+
+
 def _take_out(bundle: StoryBundle, card: Character) -> None:
     """A character the document no longer has, out of the story: its lists,
     whom it begins with, and either scene (an unplayed story's live scene is

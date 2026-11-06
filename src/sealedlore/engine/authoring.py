@@ -27,7 +27,7 @@ from sealedlore.engine.dice import BAND_SHORT
 from sealedlore.engine.draft_detail import STANDARD_DETAIL, DraftDetail, render_detail
 from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.picture_styles import STYLES as PICTURE_STYLES
-from sealedlore.engine.picture_styles import read_style
+from sealedlore.engine.picture_styles import read_style, write_style
 from sealedlore.engine.prompt_edits import missing_slots, set_text, texts_in_force
 from sealedlore.engine.prompt_texts import (
     CHAPTERS,
@@ -47,6 +47,7 @@ from sealedlore.engine.prompt_texts import (
 from sealedlore.engine.response_style import label_for
 from sealedlore.engine.rules import narration_reminder, render_history_node
 from sealedlore.engine.scene_state import move_into_cast, move_out_of_cast, rename_in_scene
+from sealedlore.engine.story_plot import plot_uses, take_out_character
 from sealedlore.engine.validators import mentions
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.authoring import AppFinding, SettingsChange, SettingsReview
@@ -183,6 +184,46 @@ CHARACTER_FIELDS = (
 # An alias longer than this is a note about someone, not a name for them.
 ALIAS_MOST_WORDS = 5
 LORE_FIELDS = ("title", "content", "keywords", "always_on", "enabled", "until_mentioned")
+# A starting scene's fields, for a follow-up (engine/followup.py).
+SCENE_FIELDS = ("location", "time_of_day", "situation", "present")
+# What a review may propose, and what a follow-up on a story not yet begun
+# may change: no generation, model or prompt, and cards, entries and the
+# starting scene besides.
+REVIEW_KINDS = frozenset(
+    {
+        "style",
+        "story",
+        "world",
+        "opening",
+        "character",
+        "character_add",
+        "character_move",
+        "lore_add",
+        "lore_edit",
+        "lore_disable",
+        "generation",
+        "model",
+        "prompt",
+    }
+)
+FOLLOW_UP_KINDS = frozenset(
+    {
+        "style",
+        "story",
+        "world",
+        "opening",
+        "scene",
+        "character",
+        "character_add",
+        "character_move",
+        "character_remove",
+        "lore_add",
+        "lore_edit",
+        "lore_disable",
+        "lore_remove",
+    }
+)
+REMOVALS = ("character_remove", "lore_remove")
 # The text fields a change replaces whole, checked for silent loss.
 WHOLE_TEXT_FIELDS = {
     "world": (None,),
@@ -1350,6 +1391,12 @@ def apply_change(
             "“selected” is chosen per turn in the composer, with the characters to voice; "
             "as a story setting it would voice no named character at all"
         )
+    elif kind == "story" and field == "title":
+        story.title = _required_text(value, "a title")
+    elif kind == "story" and field == "description":
+        story.setup.description = _text(value)
+    elif kind == "story" and field == "picture_style":
+        story.picture_style, story.image_style = read_style(_text(value) or "")
     elif kind == "story" and field == "context_token_budget":
         number = int(_number(value, "the context budget"))
         ceiling = facts.context_length if facts and facts.context_length else None
@@ -1457,8 +1504,72 @@ def apply_change(
         _apply_lore_edit(entry, field, value)
     elif kind == "lore_disable":
         _find_lore(bundle, change.target).enabled = False
+    elif kind == "scene":
+        _apply_scene(bundle, field, value)
+    elif kind == "character_remove":
+        _not_begun(bundle, "taking a character out")
+        character = _find_character(bundle, change.target)
+        if plot_uses(story.plot, character.id):
+            raise ValueError(f"the plot brings {character.name} in: change the plot first")
+        take_out_character(bundle, character)
+    elif kind == "lore_remove":
+        _not_begun(bundle, "taking a lore entry out")
+        entry = _find_lore(bundle, change.target)
+        if plot_uses(story.plot, entry.id):
+            raise ValueError(f"the plot uses “{entry.title}”: change the plot first")
+        bundle.lore[:] = [other for other in bundle.lore if other is not entry]
     else:  # pragma: no cover - the model's Literal rules this out
         raise ValueError(f"unknown kind of change “{kind}”")
+
+
+def _not_begun(bundle: StoryBundle, what: str) -> None:
+    if bundle.nodes:
+        raise ValueError(f"the story has begun, so {what} would leave its passages behind")
+
+
+def _apply_scene(bundle: StoryBundle, field: str | None, value: object) -> None:
+    """The starting scene, before the story begins (its live scene follows,
+    as `StorySession.sync_unstarted_scene` keeps it): where, when, what is
+    going on, and who is there by name, supporting characters too."""
+    _not_begun(bundle, "changing its starting scene")
+    setup, story = bundle.story.setup, bundle.story
+    if setup.starting_scene == SceneState():
+        # Never set: the story begins where it is.
+        setup.starting_scene = story.scene.model_copy(deep=True)
+    scene = setup.starting_scene
+    if field in ("location", "time_of_day", "situation"):
+        setattr(scene, field, _text(value))
+    elif field == "present":
+        cast_ids: list[str] = []
+        others: list[str] = []
+        for name in _strings(value, commas=True):
+            card = _find_character(bundle, name)
+            if any(card is member for member in bundle.cast):
+                if card.id not in cast_ids:
+                    cast_ids.append(card.id)
+            elif card.name not in others:
+                others.append(card.name)
+        played = setup.suggested_character_id
+        if played in scene.present_character_ids and played not in cast_ids:
+            # The author's own character is in the scene they start in.
+            cast_ids.insert(0, played)
+        cards = {
+            form.strip().lower()
+            for card in (*bundle.cast, *bundle.supporting.characters)
+            for form in (card.name, *card.aliases)
+        }
+        scene.present_character_ids = cast_ids
+        scene.present_others = [
+            *(name for name in scene.present_others if name.strip().lower() not in cards),
+            *others,
+        ]
+        scene.offstage_but_nearby = [
+            entry for entry in scene.offstage_but_nearby if entry.character_id not in cast_ids
+        ]
+        setup.absent_at_start = [i for i in setup.absent_at_start if i not in cast_ids]
+    else:
+        raise ValueError(f"“{field}” isn't a starting scene setting")
+    story.scene = scene.model_copy(deep=True)
 
 
 def _is_rename(change: SettingsChange) -> bool:
@@ -1474,7 +1585,13 @@ def ordered_for_apply(changes: Sequence[SettingsChange]) -> list[SettingsChange]
     card would look for a name that no longer exists. Applied after everything
     else, a rename can strand nothing.
     """
-    return [c for c in changes if not _is_rename(c)] + [c for c in changes if _is_rename(c)]
+    kept = [c for c in changes if c.kind not in REMOVALS]
+    # A card or entry taken out goes after every change made to it.
+    return (
+        [c for c in kept if not _is_rename(c)]
+        + [c for c in kept if _is_rename(c)]
+        + [c for c in changes if c.kind in REMOVALS]
+    )
 
 
 # The Style tab's own names for its fields, so a proposal reads like the form.
@@ -1494,6 +1611,8 @@ _FIELD_LABELS = {
     "playable": "available to play",
     "author_only": "never voiced by the storyteller",
     "keep_whole": "always sent whole",
+    "time_of_day": "time",
+    "picture_style": "picture style",
     "context_token_budget": "context budget",
     "main_model": "storyteller",
     "summarization_model": "summariser",
@@ -1519,6 +1638,9 @@ def describe(change: SettingsChange) -> str:
         "lore_add": "New lore entry",
         "lore_edit": f"Lore › {change.target} › {field}",
         "lore_disable": f"Lore › {change.target} › turn off",
+        "lore_remove": f"Lore › {change.target} › out of the story",
+        "character_remove": f"{change.target} › out of the story",
+        "scene": f"Starting scene › {field}",
         "generation": f"Generation › {field}",
         "model": f"Model › {field}",
         "prompt": "Prompt › "
@@ -1557,6 +1679,20 @@ def current_value(
         return (texts or texts_in_force({}, story.prompt_edits))[change.target]
     if change.kind == "style":
         return getattr(story.style, change.field or "", None)
+    if change.kind == "story" and change.field == "title":
+        return story.title
+    if change.kind == "story" and change.field == "description":
+        return story.setup.description
+    if change.kind == "story" and change.field == "picture_style":
+        return write_style(story.picture_style, story.image_style) or None
+    if change.kind == "scene":
+        scene = story.setup.starting_scene
+        if scene == SceneState():
+            scene = story.scene
+        if change.field == "present":
+            names = [_name_of(bundle, i) for i in scene.present_character_ids]
+            return [name for name in names if name] + list(scene.present_others)
+        return getattr(scene, change.field or "", None)
     if change.kind in ("story", "model"):
         return getattr(story.defaults, change.field or "", None)
     if change.kind == "generation":
@@ -1770,8 +1906,10 @@ def parse_review(
     prompt_keys: Collection[str] = (),
     texts: PromptTexts | None = None,
     config: Config | None = None,
+    kinds: Collection[str] = REVIEW_KINDS,
 ) -> SettingsReview:
     """The review from the model's reply, keeping only changes that apply.
+    `kinds`: what it may change (a follow-up's are `FOLLOW_UP_KINDS`).
 
     A prompt text may be changed only if the review was shown it
     (`prompt_keys`); `texts` are the texts in force, for its "before";
@@ -1811,6 +1949,9 @@ def parse_review(
             )
     # Renames go last, so an edit to the same card still finds it by name.
     for change in ordered_for_apply(proposed):
+        if change.kind not in kinds:
+            review.cannot_fix.append(f"Proposed {describe(change)}, which can't be changed here.")
+            continue
         if change.kind == "model" and models is None:
             review.cannot_fix.append(
                 f"Suggested {describe(change)} “{change.value}”"

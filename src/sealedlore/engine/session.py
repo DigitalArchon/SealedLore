@@ -161,6 +161,7 @@ from sealedlore.engine.scene_update import (
 )
 from sealedlore.engine.session_archival import LEDGER_MAX_TOKENS, ArchivalRuntime
 from sealedlore.engine.session_cast import CastRuntime
+from sealedlore.engine.session_followup import FollowUpRuntime, FollowUpUndo
 from sealedlore.engine.session_images import ImageRuntime
 from sealedlore.engine.session_looks import LooksRuntime
 from sealedlore.engine.session_merge import MergeRuntime, _close
@@ -465,6 +466,7 @@ class _SceneRead:
 class StorySession(
     PlotRuntime,
     PlotDraftRuntime,
+    FollowUpRuntime,
     MergeRuntime,
     ArchivalRuntime,
     RebuildRuntime,
@@ -539,6 +541,10 @@ class StorySession(
         # The settings before the last review was applied, until something
         # else changes them (see apply_review / undo_review).
         self.review_undo: ReviewSnapshot | None = None
+        # The author's follow-ups this session, by target, and what undoes
+        # them, newest last (engine/session_followup.py).
+        self.follow_ups: dict[str, list] = {}
+        self.follow_up_undo: list[FollowUpUndo] = []
         # Passages the author marked as evidence for the next review.
         self.review_marks: list[str] = []
         # A branch named before its first message exists (the review's
