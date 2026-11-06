@@ -111,8 +111,9 @@ every turn pay full price.
   tail-bearing message (`cache_exchanges_outside_prefix`), so regenerating a
   recent passage doesn't throw a cache write away. A segment below
   `min_cacheable_tokens` gets no breakpoint of its own.
-- **Whether the cast's full descriptions are sent depends on the cast's own
-  size** (`cast_token_cap`), never on how full this turn's budget is.
+- **Which cast cards are sent whole, condensed or short depends on the cast
+  and its room alone** (`engine/cast_fit.py`, `Config.cast_cap`), never on how
+  full this turn's budget is.
 - **The summary block changes only when a chunk is archived.** Archival takes
   whole chunks. Archiving a few messages at a time rewrites the cached prefix
   on consecutive turns.

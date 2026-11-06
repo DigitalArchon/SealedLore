@@ -1163,7 +1163,9 @@ story from it, and asks:
 The card's description and personality become the character's card, its
 example messages their voice, its scenario the story's world, its lorebook
 the story's lore, and its picture their portrait (a world's picture goes
-behind the story). The card's own background goes behind the story, and the
+behind the story). Cards from card sites are often long; if the cast's cards
+no longer fit their room in the prompt, the largest are sent condensed (see
+"When the cast's cards don't fit"). The card's own background goes behind the story, and the
 pictures the opening greeting shows appear under the opening once the story
 begins. The story's character is linked to their card in Your characters, as
 **Add to the story** links one, so **Changes…** on the Cast page works for
@@ -1421,6 +1423,46 @@ Two checkboxes on a cast sheet decide who writes that character:
   the roster tells the model that it now voices them.
 - **Never voiced by the storyteller** — yours on every turn, not only while you
   play them. The model is told never to write them.
+
+### When the cast's cards don't fit
+
+Every cast card is sent to the storyteller on every turn, so the cast has a
+room of its own in the prompt: **Cast cards may take** (Settings → Context),
+15% of the story's context budget by default (9,000 tokens of a 60,000
+budget), or a fixed number of tokens if you choose. A card you write by hand
+is usually a few hundred tokens; a character card imported from SillyTavern
+or a card site is often a thousand or more, and its example messages count
+too, so a few imported characters can fill the room.
+
+While the cards fit, they all go whole. When they don't, the largest are sent
+**condensed**: the authoring model (Settings → Models) writes the card again
+in fewer words, keeping who they are, how they look, act and talk, their
+history, the people in their life, what they can do, want and fear, and
+their secrets, and leaving out instructions meant for another app. Only as
+many cards are condensed as it takes, the largest first, and the cards of
+characters the storyteller voices outright are kept whole longest. The
+condensed cards are written in the background, a moment after the cast last
+changed; until one is ready, its card is sent whole.
+
+The Cast page says when the cast is over its room, and which cards are sent
+condensed. A selected card shows its **Condensed** text under its other
+fields: edit it, and your words are sent instead; **Write it again** has the
+model write it afresh from the card as it is now. Change a card, and its old
+condensed text is no longer sent until it is written again (or you edit it).
+Tick **Always send the whole card** for a main character the storyteller
+should always have in full: the others are condensed first. If even condensed
+the cast doesn't fit, the last cards go as their name, summary and voice
+alone, and the page says so: give the cast more room, or move some of them to
+supporting characters, whose cards are sent only when the story names them.
+
+A supporting character's card goes with its description on the turns that
+name them or find them present: whole when it is short (up to 150 words),
+condensed to about 150 words when it is longer. Their **Condensed** text is
+on the Cast page as a cast member's is.
+
+In a private scene the cast's room is its share of the private model's budget,
+and nothing is condensed while the scene is open: cards are condensed for it
+beforehand, as long as a private model is set up.
 
 ## The People page
 
@@ -2465,6 +2507,10 @@ budget, stopping at the line bought 6 quiet turns; going down to half buys 31.
 The same prose is summarised either way — just in fewer, larger runs.
 
 The rest of **Settings → Context** applies to every story:
+- **Cast cards may take** (15% of the budget): the room the cast's cards have in
+  every prompt, as a share of the story's budget or a fixed number of tokens.
+  Past it, the largest cards are sent condensed (see "When the cast's cards
+  don't fit").
 - **Archive automatically when the budget is reached** (on): chapters are
   written in the background as the story nears its budget, so no turn waits
   for them. Off, a banner offers to archive once the prompt is over budget,
