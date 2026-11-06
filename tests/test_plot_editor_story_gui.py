@@ -212,7 +212,9 @@ def test_a_story_under_way_keeps_whoever_it_has_shown(app, window, tmp_path):
 
 
 def test_file_open_a_story_lists_the_author_s_stories(app, window, monkeypatch, tmp_path):
-    other = StoryBundle(story=window.session.story.model_copy(update={"id": "story-2", "title": "Other"}))
+    other = StoryBundle(
+        story=window.session.story.model_copy(update={"id": "story-2", "title": "Other"})
+    )
     save_story_bundle(other, root=tmp_path)
     editor = window._plot_editor_window()
     assert editor.open_story_action.isVisible()
