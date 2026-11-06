@@ -37,14 +37,22 @@ fun to play. This app will remain focused on text based roleplay.
 
 ### New in version 3
 
-- **A plot without writing one.** The model can write a story's plot: made up
-  from the story's world and characters, or from what you describe (how many
-  events, how often, how big, how disruptive, what kinds). Offered as the last
-  step of Write a story from scratch, when drafting from an idea, and in
-  Story → Write a plot with the model…. It stays hidden unless you ask to see
-  it. Story → Edit the plot in the plot editor… opens a story you already have
-  in the plot editor, its world and cast filled in, to write just its plot;
-  the editor now shows which parts are the story's and which the plot's.
+- **A plot without writing one** (3.0.0b3). The model can write a story's
+  plot: made up from the story's world and characters, or from what you
+  describe (how many events, how often, how big, how disruptive, what kinds).
+  Offered as the last step of Write a story from scratch, when drafting from
+  an idea, and in Story → Write a plot with the model…. It stays hidden unless
+  you ask to see it. Story → Edit the plot in the plot editor… opens a story
+  you already have in the plot editor, its world and cast filled in, to write
+  just its plot; the editor now shows which parts are the story's and which
+  the plot's.
+- **Cast cards that fit** (3.0.0b3). The cast's cards get room in proportion
+  to the story's context budget (Settings → Context), and a card past it is
+  condensed to about a third of its length instead of being cut to a line.
+  The Cast page shows each condensed card, to edit or have written again.
+- **A story's characters, kept** (3.0.0b3). Cast page → Save to Your
+  characters… (on the cast board too) keeps any or all of a story's
+  characters in Your characters, linked to the story.
 - **Your characters** (3.0.0b1). Every character you keep, in one place
   outside any story (File → Your characters…, or the start page). Import
   SillyTavern cards (PNG, CHARX or JSON files, or a link to Chub or
