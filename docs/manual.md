@@ -18,6 +18,8 @@ part of the window, and what each feature does. The README's
 - [Models](#models)
 - [When a model misbehaves](#when-a-model-misbehaves)
 - [Setting up a story](#setting-up-a-story)
+  - [A plot written by the model](#a-plot-written-by-the-model)
+  - [The plot editor on a story](#the-plot-editor-on-a-story)
 - [Your characters](#your-characters)
 - [SillyTavern cards and lorebooks](#sillytavern-cards-and-lorebooks)
 - [Drafting a story, and reviewing its settings](#drafting-a-story-and-reviewing-its-settings)
@@ -79,7 +81,9 @@ part of the window, and what each feature does. The README's
   it is attested (end-to-end encrypted on a `private/` model).
 - **Plots**: a Markdown plot file with facts, places and events; a director
   brings events about at the right moment and a clock keeps story time. A
-  form-based editor writes the file for you.
+  form-based editor writes the file for you, or adds a plot to a story you
+  already have. A plot can also be written by the model, from the story alone
+  or from what you describe, and kept a surprise until you meet it.
 - **Outcomes and dice**: fiat, plausible, contested, or d100 rolls against the
   character's skills, per story and per turn.
 - **Length and style**: presets with measured word counts, a per-turn
@@ -652,7 +656,7 @@ model, chosen when it was made; a TEE or encrypted chat's calls all go to it.
 | Summarisation model | Settings → Models | chapters, merges | the story model |
 | Scene model | Settings → Models | the scene read after each passage, and a plot's clock and facts | the summarisation model |
 | Plot model | Settings → Models | the plot's director (the clock and facts are read by the scene model) | the scene model |
-| Authoring model | Settings → Models | drafting from a premise, settings reviews | the story model |
+| Authoring model | Settings → Models | drafting from a premise, plots written by the model, settings reviews | the story model |
 | Lore model ★ | Settings → Models | picking lore for a large lorebook | the scene model |
 | Image prompt writer | Settings → Models, or the Image dialog | writing the picture's prompt | the story model |
 | Jev model ★ | `config.json` only | "Jev before each turn" | — |
@@ -832,7 +836,8 @@ that trying other hosts would mean playing outside private mode.
 **Write a story from scratch** (on the start page, or File → New…) walks
 through what a story needs to begin, a step at a time: its title and world,
 its characters, where it begins and what
-happens first, and the person, tense and length it is told in.
+happens first, the person, tense and length it is told in, and whether the
+model writes it a plot (see [A plot written by the model](#a-plot-written-by-the-model)).
 
 The story is made, and listed in your Stories, once its first step is done,
 so its **Characters** step is the Cast page itself: every field a card has,
@@ -845,7 +850,8 @@ that already exists, **Fill with lore characters…** writes cards for its
 people (see Perspective and supporting characters).
 
 **Create the story** then goes to Start, which asks who you play and offers
-portraits for anyone still without one before the opening is written.
+portraits for anyone still without one before the opening is written. With a
+plot asked for on the last step, the model writes it first.
 Everything else keeps its default and is in Setup and on the Cast page;
 **Advanced setup…** opens Setup instead, characters included.
 **Cancel** after the first step asks whether to keep the story made so far
@@ -935,6 +941,73 @@ is told as fact after the other. **Help → Writing a plot that plays well**
 [`SampleStories/WRITING_PLOTS.md`](../SampleStories/WRITING_PLOTS.md): what
 each part of a plot is read by, and how to word it, with good and bad
 examples in the style of the samples.
+
+### A plot written by the model
+
+A story can have a plot without anyone writing one by hand. **Story → Write a
+plot with the model…** gives the open story one, the last step of **Write a
+story from scratch** offers one, and so does **Draft a story from an idea**.
+Choose:
+- **A plot the model makes up from the story's world and characters**: it
+  reads the story's world, opening, cast and lore, and builds the plot from
+  them;
+- **A plot from what I describe**: your own words (what should happen, to
+  whom, the twists you want), and, if you like, how many events (a few,
+  several or many), how often in the story's own days and weeks (close
+  together, now and then, far apart), how big (small and personal, some of
+  each, or world-changing), how disruptive (gentle, steady or upending), the
+  kinds of event you want most (danger and fights, mysteries and secrets, new
+  people arriving, bonds and rivalries, power and betrayal, exploration and
+  discovery, disasters, hard choices), and whether it may bring in new people
+  and places. Anything you leave alone, the model decides.
+
+The authoring model writes it (see [Models](#models)), in a minute or a few:
+a plot's facts, its events on the timeline and off it, and the people, places
+and lore its events bring in, kept hidden until they do. The call counts
+toward the story's cost (Plot writing, in Story → Usage and cost…). What
+comes back is checked as a plot file is: anything the importer can't read, a
+newcomer whose name another character's answers to, or someone hidden named
+before an event brings them in goes back to the model once to be put right,
+and whatever still can't be used is left out. The story's own world, opening
+and cards are never changed, though one of its lore entries may become one of
+the plot's places. A story with a plot has it replaced.
+
+From the guide, the plot is written when you create the story, before Start;
+from an idea, once you have looked the drafted story over in Setup. A story
+already under way can have one too: the model is shown where the story stands
+(the scene, the chapters so far and the latest messages, never a private
+scene), and the plot starts from there.
+
+Once it is written it stays hidden, as a plot file's does: the storyteller
+learns of each event only as it begins, and so do you. **Show me the plot
+(spoilers)** shows it whole, with anything that had to be left out of it;
+**Edit in the plot editor…** opens it there to read and change. Otherwise,
+keep it a surprise: if the Plot page shows spoilers, that is turned off too.
+
+### The plot editor on a story
+
+**Story → Edit the plot in the plot editor…** opens the plot editor on the
+open story, its world, opening, characters, places and lore filled in, so you
+write only the plot; **Open a story…** in the editor's File menu does the same
+for any of your stories. The editor's tree is in two halves: **The story**,
+what every story has (its title and settings, world, opening, characters,
+places and lore), and **The plot**, what a plot adds (its clock, facts,
+timeline and optional events). Every page says which half it is in.
+
+On a story, its own parts are shown as the story has them, and are changed
+where they always are: Setup, and the Cast and Lore pages. The editor changes
+what is the plot's:
+- its facts and events;
+- which of the story's lore entries are places the plot follows your
+  character between (tick **The plot's: a place…** on the entry);
+- the people, places and lore it keeps hidden until an event brings them in:
+  add them under Characters, Places or Lore, or hide one of the story's own
+  who hasn't appeared yet.
+
+**Save to the story** gives the story the plot, and **Save a copy as a plot
+file…** writes the whole story with its plot as a plot file, to keep or share.
+Pictures stay with the story's cards. The editor shows the whole plot, so it is
+a spoiler of its own.
 
 ## Your characters
 
@@ -1267,11 +1340,14 @@ model drafts everything in one go:
   get a one-liner, since the model already knows them);
 - lore entries;
 - the opening and the starting scene;
-- the style.
+- the style;
+- a plot, if you ask for one under **A plot** (see
+  [A plot written by the model](#a-plot-written-by-the-model)).
 
 It opens in Setup for you to read and change, the style included, and Start
-asks who you're playing once you save; Cancel keeps the draft without beginning
-it (Story → Start story… when it's ready). Anything
+asks who you're playing once you save; a plot asked for is written between the
+two. Cancel keeps the draft without beginning it (Story → Start story… when
+it's ready). Anything
 the draft got wrong that couldn't be used (a made-up skill tier, a scene naming
 someone not in the cast) is listed rather than guessed at.
 
@@ -1322,7 +1398,7 @@ Both work before the first turn, so the quickest way to refine a draft is to
 review it: "make the world darker", "add a rival".
 
 Both use the **authoring model** (Settings → Models), which defaults to your
-chat model. These are occasional calls the whole story rests on, so a stronger
+chat model, and so does a plot written by the model. These are occasional calls the whole story rests on, so a stronger
 model can be worth it here, such as Opus 5.5 (`anthropic/claude-opus-5.5`); you can also
 change it in each dialog. The story is still played with your chat model. Both
 calls count toward the story's cost. The Style tab's **Other notes** field is

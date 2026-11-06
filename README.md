@@ -37,6 +37,14 @@ fun to play. This app will remain focused on text based roleplay.
 
 ### New in version 3
 
+- **A plot without writing one.** The model can write a story's plot: made up
+  from the story's world and characters, or from what you describe (how many
+  events, how often, how big, how disruptive, what kinds). Offered as the last
+  step of Write a story from scratch, when drafting from an idea, and in
+  Story → Write a plot with the model…. It stays hidden unless you ask to see
+  it. Story → Edit the plot in the plot editor… opens a story you already have
+  in the plot editor, its world and cast filled in, to write just its plot;
+  the editor now shows which parts are the story's and which the plot's.
 - **Your characters** (3.0.0b1). Every character you keep, in one place
   outside any story (File → Your characters…, or the start page). Import
   SillyTavern cards (PNG, CHARX or JSON files, or a link to Chub or
@@ -227,7 +235,14 @@ with it.
 
 The plot file editor (File → Plot file editor…) lets you write your own
 plots and share them, with reference pictures for their characters, places
-and lore if you like (kept in a folder beside the file).
+and lore if you like (kept in a folder beside the file). It also opens a
+story you already have (Story → Edit the plot in the plot editor…), its
+world and cast filled in, so you write only the plot.
+
+If you'd rather not write one at all, the model can (Story → Write a plot
+with the model…, or the last step of a new story): from the story alone, or
+from what you tell it you want. The plot it writes is checked the way a plot
+file is, and kept hidden from you too unless you choose to look.
 
 ### Auto-fix your story
 
