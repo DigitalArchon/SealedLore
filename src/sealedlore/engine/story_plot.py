@@ -40,6 +40,7 @@ from sealedlore.models.plot_file import (
     PlotDocument,
     VariantDoc,
 )
+from sealedlore.models.scenario import Scenario
 from sealedlore.models.scene import SceneState
 from sealedlore.storage.repository import StoryBundle
 
@@ -276,6 +277,8 @@ def document_from_story(bundle: StoryBundle, *, for_model: bool = False) -> Plot
     present_names = {_norm(name) for name in scene.present_others}
     chosen = set(setup.choose_one_of)
     for character in bundle.cast:
+        if not character.name.strip():
+            continue  # nothing can name them, and a file can't hold them
         document.characters.append(
             character_doc(
                 character,
@@ -286,6 +289,8 @@ def document_from_story(bundle: StoryBundle, *, for_model: bool = False) -> Plot
             )
         )
     for character in bundle.supporting.characters:
+        if not character.name.strip():
+            continue
         document.characters.append(
             character_doc(
                 character,
@@ -308,7 +313,9 @@ def document_from_story(bundle: StoryBundle, *, for_model: bool = False) -> Plot
         # A place whose entry is gone is one the document adds back.
         document.places.append(entry_doc(entry) if entry is not None else EntryDoc(name=place.name))
     for entry in bundle.lore:
-        if _norm(entry.title) in seen or (for_model and not entry.enabled):
+        if not entry.title.strip() or _norm(entry.title) in seen:
+            continue
+        if for_model and not entry.enabled:
             continue
         seen.add(_norm(entry.title))
         document.lore.append(entry_doc(entry))
@@ -463,6 +470,31 @@ def _rekeyed(plot: Plot, ids: dict[str, str | None], notes: list[str]) -> Plot:
     return plot
 
 
+def made_of(
+    document: PlotDocument, scenario: Scenario
+) -> tuple[list[tuple[CharacterDoc, Character]], list[tuple[EntryDoc, LoreEntry]]]:
+    """Each item of a rendered document beside what the importer made of it.
+
+    The importer makes one card per character heading, into the cast or the
+    supporting cards by role, and one entry per place or lore heading, places
+    first, each in order: so order alone pairs them. A name that differs means
+    they were read out of step, which is a bug, never the author's.
+    """
+    cast, supporting = iter(scenario.cast), iter(scenario.supporting)
+    people = []
+    for doc in document.characters:
+        made = next(supporting if doc.role == "supporting" else cast)
+        if made.name != (doc.name.strip() or UNNAMED):
+            raise ValueError(f"the plot's characters were read out of order at {doc.name}")
+        people.append((doc, made))
+    entries = []
+    for doc, made in zip([*document.places, *document.lore], scenario.lore, strict=True):
+        if made.title != (doc.name.strip() or UNNAMED):
+            raise ValueError(f"the plot's places and lore were read out of order at {doc.name}")
+        entries.append((doc, made))
+    return people, entries
+
+
 def plot_changes(document: PlotDocument, bundle: StoryBundle, *, begun: bool) -> PlotChanges:
     """What giving the story this document's plot changes.
 
@@ -490,12 +522,9 @@ def plot_changes(document: PlotDocument, bundle: StoryBundle, *, begun: bool) ->
     before_entries = {doc.story_id: doc for doc in (*original.places, *original.lore)}
     changes = PlotChanges()
     ids: dict[str, str | None] = {}
+    people, lore = made_of(document, scenario)
 
-    cast, supporting = iter(scenario.cast), iter(scenario.supporting)
-    for doc in document.characters:
-        made = next(supporting if doc.role == "supporting" else cast)
-        if made.name != (doc.name.strip() or UNNAMED):
-            raise ValueError(f"the plot's characters were read out of order at {doc.name}")
+    for doc, made in people:
         card = cards.get(doc.story_id) if doc.story_id else None
         if doc.story_id and card is None:
             changes.notes.append(f"{doc.name} is no longer in the story.")
@@ -517,9 +546,7 @@ def plot_changes(document: PlotDocument, bundle: StoryBundle, *, begun: bool) ->
             if change is not None:
                 changes.characters.append(change)
 
-    for doc, made in zip([*document.places, *document.lore], scenario.lore, strict=True):
-        if made.title != (doc.name.strip() or UNNAMED):
-            raise ValueError(f"the plot's places and lore were read out of order at {doc.name}")
+    for doc, made in lore:
         entry = entries.get(doc.story_id) if doc.story_id else None
         if doc.story_id and entry is None:
             changes.notes.append(f"{doc.name} is no longer in the story's lore.")

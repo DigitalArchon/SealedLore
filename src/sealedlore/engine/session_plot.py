@@ -74,6 +74,7 @@ from sealedlore.engine.director import (
     render_direction_block,
     render_story_time_block,
 )
+from sealedlore.engine.plot_lint import without_names
 from sealedlore.engine.plot_md import rekey_plot
 from sealedlore.engine.prompt import (
     TurnRequest,
@@ -92,7 +93,6 @@ from sealedlore.engine.scene_update import (
 )
 from sealedlore.engine.story_plot import plot_changes
 from sealedlore.engine.validators import (
-    TITLES,
     mentions,
 )
 from sealedlore.models.character import Character
@@ -889,22 +889,8 @@ class PlotRuntime:
         if direction.kind != "lead_in" or event is None:
             return direction
         people = {c.id: c for c in [*self.cast, *self.supporting]}
-        forms = sorted(
-            {
-                form
-                for item_id in introduced(event, None)
-                if (person := people.get(item_id)) is not None
-                for form in (person.name, *person.aliases)
-                if form.strip()
-            },
-            key=len,
-            reverse=True,
-        )
-        text = direction.text
-        rank = r"(?:(?:" + "|".join(sorted(TITLES)) + r")\.?\s+)?"
-        for form in forms:
-            text = re.sub(rf"\b{rank}{re.escape(form)}\b", "someone", text, flags=re.IGNORECASE)
-        return direction.model_copy(update={"text": text})
+        arriving = [people[i] for i in introduced(event, None) if i in people]
+        return direction.model_copy(update={"text": without_names(direction.text, arriving)})
 
     def _introductions(self, directions: Sequence[Direction]) -> str:
         """The cards of whoever and wherever a beginning event brings in.

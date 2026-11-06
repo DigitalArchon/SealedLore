@@ -165,6 +165,7 @@ from sealedlore.engine.session_images import ImageRuntime
 from sealedlore.engine.session_looks import LooksRuntime
 from sealedlore.engine.session_merge import MergeRuntime, _close
 from sealedlore.engine.session_plot import NoticeSeverity, PlotRuntime, SessionNotice
+from sealedlore.engine.session_plot_draft import PlotDraftRuntime
 from sealedlore.engine.session_portraits import PortraitRuntime
 from sealedlore.engine.session_private import PrivateRuntime
 from sealedlore.engine.session_reasoning import ReasoningRuntime
@@ -463,6 +464,7 @@ class _SceneRead:
 
 class StorySession(
     PlotRuntime,
+    PlotDraftRuntime,
     MergeRuntime,
     ArchivalRuntime,
     RebuildRuntime,
