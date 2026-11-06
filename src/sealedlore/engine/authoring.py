@@ -95,7 +95,9 @@ LIVE_WHEN_DETACHED = ("response_style", "length_target", "perspective", "custom_
 # story's own max_tokens is tuned for a passage and would cut it off mid-JSON.
 # Measured: Sonnet 4.6 used ~5,000 output tokens, Opus 5 ~12,400 — too close to
 # an earlier 16,000 cap, and a cut-off draft is a paid failure. Only the tokens
-# actually used are billed.
+# actually used are billed. At the largest levels of engine/draft_detail.py
+# (Nov 6 2026), Sonnet 4.6 wrote 13,300-16,200 and GLM 5.3 up to 21,800 with
+# its reasoning: still inside.
 GENERATION_MAX_TOKENS = 32_000
 # The answer allowance when the reviewer's own output limit isn't known. A
 # review is sent with as many tokens as its model can write (the limit is a

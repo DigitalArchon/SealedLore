@@ -58,7 +58,7 @@ WORLD_CHOICES = (
 )
 PEOPLE_CHOICES = (
     ("handful", "A handful (2 or 3, up to 3 more)"),
-    (STANDARD, "Standard (2 to 6, and more)"),
+    (STANDARD, "Standard (2 to 6, and a few more)"),
     ("lots", "Lots (5 to 8, and 10 to 20 more)"),
 )
 DEPTH_CHOICES = (

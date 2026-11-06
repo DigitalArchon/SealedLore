@@ -3738,7 +3738,26 @@ is a suggestion only: the premise decides.
 # in detail, with lots of characters, each with lots of info about them";
 # engine/draft_detail.py). The standard levels are the drafting prompt's own
 # sizes and add nothing; another level is a line in the request, after the
-# premise, so the system prompt never changes. Not measured.
+# premise, so the system prompt never changes.
+#
+# Measured live (Nov 6 2026, three invented premises; GLM 5.3 at low
+# reasoning, Sonnet 4.6 on Anthropic's own API; every reply parsed, none cut
+# off, the largest 21,800 output tokens with GLM's reasoning):
+# - Basic, a handful, briefly (GLM, 3): world 160-203 words, 2-4 lore entries
+#   of 38-53, 3 in the cast at 44-58 words and 2-3 others at 21-34; 2,000
+#   output tokens, under a minute. Standard: 4-5 in the cast at 59-96 words
+#   and 2-5 others, 3,600-11,300 tokens.
+# - Detailed, lots, in depth (GLM 3, Sonnet 2): world 745-1,129 words (most
+#   just under 900; "at least 900" changed nothing, 873 against 895 words on
+#   average), 12-20 lore entries of 82-131, 6 in the cast and 10-15 others;
+#   four to six minutes, 10,500-16,200 output tokens.
+# - In depth as first worded, GLM's supporting characters had 63-134 words
+#   (two of three under 120) and one Sonnet draft gave its supporting
+#   characters no voice. Saying "the supporting ones too" and "for everyone,
+#   a voice": GLM's supporting 96-157 (two of three in), its cast 208-222
+#   where it had been 247-279, its whole output the same; Sonnet's cast
+#   315-322 and supporting 146-161 either way. Kept, for depth spread across
+#   everyone rather than the cast alone.
 _text(
     "authoring.draft.detail",
     AUTHORING,
@@ -3785,12 +3804,12 @@ for _key, _title, _words in (
     (
         "depth.deep",
         "each character in depth",
-        'Each character in depth: a "description" of 250 to 500 words for a cast member '
-        "and 120 to 250 for a supporting one (how they look, their history, what they "
-        "want and fear, their secrets and habits, and how they stand with the others), a "
-        '"voice" that says how they speak, with a line or two they might say, and 5 or 6 '
-        '"skills" for each cast member. A canon character still needs only what this '
-        "story changes.",
+        'Every character in depth, the supporting ones too: a "description" of 250 to 500 '
+        "words for each cast member and 120 to 250 for each supporting one (how they look, "
+        "their history, what they want and fear, their secrets and habits, and how they "
+        'stand with the others); for everyone, a "voice" that says how they speak, with a '
+        'line or two they might say; and 5 or 6 "skills" for each cast member. A canon '
+        "character still needs only what this story changes.",
     ),
 ):
     _text(
@@ -4338,7 +4357,13 @@ _text(
 # How many newcomers, and how fully they are written (the author, Nov 6 2026:
 # "a handful of characters ... or ... lots of characters, each with lots of
 # info about them", for plots as for drafts). Each is said only when chosen,
-# so a plot left to the model is asked for as before. Not measured.
+# so a plot left to the model is asked for as before. Measured live with many
+# and in depth only (GLM 5.3, Doomsville and Brasshaven with their plots taken
+# out): 10 and 11 newcomers, the people 235-276 words, the places and lore
+# entries 80-117 in one plot and 58-88 in the other (under the 100 asked);
+# both first replies were put right once, for the plot writer's usual faults
+# (a story's place left out of Places, a secret named early). A few, several
+# and briefly not measured.
 for _key, _words in (
     ("few", "A few new people, places and lore entries: 2 or 3 in all."),
     ("several", "Several new people, places and lore entries: 4 to 8 in all."),
