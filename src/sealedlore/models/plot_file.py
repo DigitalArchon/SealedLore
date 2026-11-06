@@ -10,6 +10,11 @@ condition that couldn't be read is kept as written rather than dropped.
 
 The editor never checks this itself. It renders the document to Markdown and
 runs the real importer over it, so what the editor passes is what imports.
+
+A document can also be made from a story (engine/story_plot.py), for the
+editor to add a plot to it and for the model to write one: then `story_id`
+says which story, and which of its cards an item stands for. Those ids are
+never written to the file.
 """
 
 from __future__ import annotations
@@ -63,6 +68,9 @@ class CharacterDoc(BaseModel):
     hidden: bool = False
     pictures: list[PictureDoc] = Field(default_factory=list)
     description: str = ""
+    # The story's card this is, in a document made from a story; blank for
+    # one the document adds.
+    story_id: str = ""
 
 
 class EntryDoc(BaseModel):
@@ -74,6 +82,8 @@ class EntryDoc(BaseModel):
     hidden: bool = False
     pictures: list[PictureDoc] = Field(default_factory=list)
     description: str = ""
+    # The story's lore entry this is, as for a character.
+    story_id: str = ""
 
 
 class FactDoc(BaseModel):
@@ -160,6 +170,9 @@ class PlotDocument(BaseModel):
     # Timeline and optional events together, each saying which it is, so the
     # author can move one between the two without it changing lists.
     events: list[EventDoc] = Field(default_factory=list)
+    # The story this document was made from (engine/story_plot.py); blank for
+    # a plot file.
+    story_id: str = ""
 
     # --- renaming: every reference follows -------------------------------------
 

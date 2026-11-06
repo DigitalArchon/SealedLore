@@ -83,11 +83,14 @@ from sealedlore.engine.retrieval import held_back
 from sealedlore.engine.rules import render_cast_sheet
 from sealedlore.engine.scene_state import (
     log_on_path,
+    move_into_cast,
+    move_out_of_cast,
     same_person,
 )
 from sealedlore.engine.scene_update import (
     render_card,
 )
+from sealedlore.engine.story_plot import plot_changes
 from sealedlore.engine.validators import (
     TITLES,
     mentions,
@@ -109,6 +112,7 @@ from sealedlore.models.plot import (
     EventVariant,
     Plot,
 )
+from sealedlore.models.plot_file import PlotDocument
 from sealedlore.providers.base import (
     ChatRequest,
     ProviderError,
@@ -312,6 +316,59 @@ class PlotRuntime:
             )
         self.save()
         return problems
+
+    def set_plot_document(self, document: PlotDocument) -> list[str]:
+        """Give the story the plot a document holds (engine/story_plot.py): its
+        facts and events, the places among its lore, the cards it adds, and
+        what it changes of the cards it keeps hidden. A document with no facts
+        and no events takes the story's plot away.
+
+        The plot editor's Save to the story and a plot written by the model
+        (session_plot_draft.py) both come through here. Raises
+        PlotDocumentError for a document the importer refuses; returns what
+        couldn't be done, for the author.
+        """
+        self._refuse_in_chat("A plot")
+        self._refuse_in_private("Changing the plot")
+        changes = plot_changes(document, self.bundle, begun=bool(self.nodes))
+        notes = list(changes.notes)
+        people = {c.id: c for c in (*self.cast, *self.supporting)}
+        for change in changes.characters:
+            card = people[change.card_id]
+            old = card.name
+            for name, value in change.fields.items():
+                setattr(card, name, value)
+            if change.to_supporting and card in self.cast:
+                if card.id == self.story.held_character_id:
+                    notes.append(f"{card.name} is the one you are playing, so stays in the cast.")
+                else:
+                    # As a review moves one (authoring.apply_change): they keep
+                    # their place in every scene, by name.
+                    self.cast.remove(card)
+                    for scene in self._all_scenes():
+                        move_out_of_cast(scene, card)
+                    card.competence.tiers = {}
+                    card.is_player_available = card.author_only = False
+                    self.supporting.append(card)
+            elif change.to_supporting is False and card in self.supporting:
+                self.supporting.remove(card)
+                self.cast.append(card)
+                for scene in self._all_scenes():
+                    move_into_cast(scene, card)
+            if card.name != old:
+                self.rename_on_rosters(card, old)
+        entries = {entry.id: entry for entry in self.bundle.lore}
+        for change in changes.entries:
+            for name, value in change.fields.items():
+                setattr(entries[change.card_id], name, value)
+        self.cast.extend(changes.new_cast)
+        self.supporting.extend(changes.new_supporting)
+        self.bundle.lore.extend(changes.new_lore)
+        if changes.plot is None:
+            self.story.plot = None
+            self.save()
+            return notes
+        return notes + self.attach_plot(changes.plot)
 
     @property
     def chronicle(self) -> Chronicle | None:
