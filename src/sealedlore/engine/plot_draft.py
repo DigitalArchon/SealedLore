@@ -4,7 +4,8 @@ The author asked (Nov 2026): a story written from scratch or drafted from a
 premise had no plot, since plots were written by hand. They wanted the model
 to write one, from the story alone or from what they describe (how many
 events, how often, how big, how disruptive, of what kinds), and to choose
-whether to read it or meet it in play.
+whether to read it or meet it in play. Since Nov 6 2026 also how many people,
+places and lore entries it brings in, and how fully each is written.
 
 The model is shown the story as a plot file holds it (engine/story_plot.py)
 and replies in that format: the plot sections alone. The reply is read by the
@@ -54,6 +55,12 @@ EVENT_COUNTS = ("few", "several", "many")
 SPACINGS = ("close", "steady", "spread")
 SCALES = ("personal", "mixed", "world")
 DISRUPTIONS = ("gentle", "steady", "upending")
+# Whether a plot may bring in people, places and lore the story doesn't have
+# ("none": only the story's own), and how many; and how fully each is written
+# (the author, Nov 6 2026, for plots as for premise drafts).
+NEWCOMERS = ("none", "few", "several", "many")
+NO_NEWCOMERS = "none"
+DEPTHS = ("sketch", "deep")
 KINDS = (
     "danger",
     "mystery",
@@ -79,8 +86,11 @@ class PlotWishes:
     scale: str = ""
     disruption: str = ""
     kinds: tuple[str, ...] = ()
-    # Whether it may bring in people, places and lore the story doesn't have.
-    newcomers: bool = True
+    # How many people, places and lore entries it may bring in that the story
+    # doesn't have: "none", or how many. It was a yes or no until Nov 2026.
+    newcomers: str = ""
+    # How fully each of them is written.
+    depth: str = ""
 
     def __post_init__(self) -> None:
         for value, allowed in (
@@ -88,8 +98,12 @@ class PlotWishes:
             (self.spacing, SPACINGS),
             (self.scale, SCALES),
             (self.disruption, DISRUPTIONS),
+            (self.newcomers, NEWCOMERS),
+            (self.depth, DEPTHS),
         ):
-            if value and value not in allowed:
+            # Strictly: `newcomers=False`, the yes or no it once was, is
+            # refused rather than read as "the model decides".
+            if value != "" and value not in allowed:
                 raise ValueError(f"“{value}” isn't one of {', '.join(allowed)}")
         unknown = [kind for kind in self.kinds if kind not in KINDS]
         if unknown:
@@ -161,8 +175,14 @@ def render_wishes(wishes: PlotWishes, texts: PromptTexts = DEFAULT_TEXTS) -> str
     if wishes.kinds:
         kinds = ", ".join(texts[f"authoring.plot.kind.{kind}"] for kind in wishes.kinds)
         lines.append(texts.fill("authoring.plot.kinds", kinds=kinds))
-    if not wishes.newcomers:
+    if wishes.newcomers == NO_NEWCOMERS:
         lines.append(texts["authoring.plot.no_newcomers"])
+    else:
+        if wishes.newcomers:
+            lines.append(texts[f"authoring.plot.newcomers.{wishes.newcomers}"])
+        # How fully newcomers are written means nothing with none wanted.
+        if wishes.depth:
+            lines.append(texts[f"authoring.plot.depth.{wishes.depth}"])
     return "\n".join(f"- {line}" for line in lines)
 
 
@@ -234,17 +254,23 @@ def read_reply(text: str) -> ReadPlotDocument:
 
 
 def merge_reply(
-    story: PlotDocument, reply: PlotDocument, *, newcomers: bool = True
+    story: PlotDocument, reply: PlotDocument, *, newcomers: str = ""
 ) -> tuple[PlotDocument, list[str]]:
     """The story's own parts with the reply's plot.
 
     Only the reply's facts and events are taken whole. Of its characters,
     places and lore, those the story has (by name, or a character's alias)
     stay the story's: a place it names is one of the story's entries made a
-    place. The rest are newcomers, unless none were wanted, and never in the
-    opening scene: that is the story's. Returns the document and what was
-    left out.
+    place. The rest are newcomers, unless none were wanted (`newcomers`, as
+    `PlotWishes` has it: "none"), and never in the opening scene: that is the
+    story's. How many were asked for is the model's to keep to: a newcomer
+    left out would take the events that bring them with it. Returns the
+    document and what was left out.
     """
+    if newcomers not in ("", *NEWCOMERS):
+        # Loud for the yes or no it once was, too.
+        raise ValueError(f"“{newcomers}” isn't one of {', '.join(NEWCOMERS)}")
+    nobody_new = newcomers == NO_NEWCOMERS
     merged = story.model_copy(deep=True)
     merged.facts = [fact.model_copy(deep=True) for fact in reply.facts]
     merged.events = [event.model_copy(deep=True) for event in reply.events]
@@ -258,7 +284,7 @@ def merge_reply(
     for character in reply.characters:
         if _norm(character.name) in names or not character.name.strip():
             continue
-        if not newcomers:
+        if nobody_new:
             notes.append(f"Left out {character.name}: nobody new was wanted.")
             continue
         names.add(_norm(character.name))
@@ -281,7 +307,7 @@ def merge_reply(
                     # One of the story's own entries, made one of the plot's places.
                     merged.places.append(merged.lore.pop(lore_at))
                 continue
-            if not newcomers:
+            if nobody_new:
                 notes.append(f"Left out {entry.name}: nowhere new was wanted.")
                 continue
             target.append(entry.model_copy(update={"story_id": "", "pictures": []}, deep=True))

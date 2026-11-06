@@ -4,8 +4,9 @@ One form, in the new story guide's last step, in New story from a premise,
 and in Story → Write a plot with the model…: no plot (where that is a
 choice), one made up from the story alone, or one from what the author
 describes. Described, the author's own words and a few choices: how many
-events, how often, how big, how disruptive, and of what kinds; each "the
-model decides" until chosen.
+events, how often, how big, how disruptive, of what kinds, how many new
+people and places, and how much about each; each "the model decides" until
+chosen.
 """
 
 from __future__ import annotations
@@ -49,6 +50,16 @@ DISRUPTIONS = (
     ("steady", "Steady: complications and turns"),
     ("upending", "Upending: they turn the story over"),
 )
+# The author (Nov 6 2026): how many newcomers, and how much about each, as a
+# premise draft offers for the story's own people. It was a tick box, "It may
+# bring in new people and places".
+NEWCOMER_CHOICES = (
+    ("none", "None: only the story's own"),
+    ("few", "A few (2 or 3)"),
+    ("several", "Several (4 to 8)"),
+    ("many", "Many (9 to 15)"),
+)
+DEPTH_CHOICES = (("sketch", "Briefly"), ("deep", "In depth"))
 KIND_LABELS = (
     ("danger", "Danger and fights"),
     ("mystery", "Mysteries and secrets"),
@@ -93,6 +104,7 @@ class PlotWishesForm(QWidget):
 
     def __init__(self, *, offer_none: bool, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._read_only = False
         self.group = QButtonGroup(self)
         self.choices: dict[str, QRadioButton] = {}
         layout = QVBoxLayout(self)
@@ -144,21 +156,39 @@ class PlotWishesForm(QWidget):
             box.toggled.connect(self.changed)
         grid.addWidget(QLabel("Kinds"), 3, 0, Qt.AlignTop)
         grid.addWidget(kinds, 3, 1, 1, 3)
-        self.newcomers = QCheckBox("It may bring in new people and places")
-        self.newcomers.setChecked(True)
+        self.newcomers = _choice(NEWCOMER_CHOICES)
         self.newcomers.setToolTip(
-            "Kept hidden from the story, and from your pages, until an event brings them in"
+            "People, places and lore entries the story doesn't have yet, in all. Kept "
+            "hidden from the story, and from your pages, until an event brings them in"
         )
-        grid.addWidget(self.newcomers, 4, 1, 1, 3)
+        self.depth = _choice(DEPTH_CHOICES)
+        self.depth.setToolTip(
+            "How much is written about each newcomer. Briefly: 30 to 80 words a person, 20 "
+            "to 60 a place or lore entry. In depth: 200 to 400 words a person, 100 to 250 a "
+            "place or lore entry"
+        )
+        # On two lines: on one it widened the labels' column, and with it the
+        # premise dialog, by 80px.
+        grid.addWidget(QLabel("New people\nand places"), 4, 0)
+        grid.addWidget(self.newcomers, 4, 1)
+        grid.addWidget(QLabel("About each"), 4, 2)
+        grid.addWidget(self.depth, 4, 3)
         grid.setColumnStretch(1, 1)
         grid.setColumnStretch(3, 1)
         layout.addWidget(self.details)
 
         self.group.buttonToggled.connect(lambda *_args: self._sync())
         self.premise.textChanged.connect(self.changed)
-        for combo in (self.events, self.spacing, self.scale, self.disruption):
+        for combo in (
+            self.events,
+            self.spacing,
+            self.scale,
+            self.disruption,
+            self.newcomers,
+            self.depth,
+        ):
             combo.currentIndexChanged.connect(self.changed)
-        self.newcomers.toggled.connect(self.changed)
+        self.newcomers.currentIndexChanged.connect(self._sync_depth)
         self._sync()
 
     def choice(self) -> str:
@@ -172,6 +202,10 @@ class PlotWishesForm(QWidget):
         self.details.setVisible(self.choice() == DESCRIBED)
         self.changed.emit()
 
+    def _sync_depth(self) -> None:
+        # Nothing to write about with nobody new wanted.
+        self.depth.setEnabled(not self._read_only and self.newcomers.currentData() != "none")
+
     def wishes(self) -> PlotWishes | None:
         """What was asked for; None for no plot."""
         choice = self.choice()
@@ -179,6 +213,7 @@ class PlotWishesForm(QWidget):
             return None
         if choice == MADE_UP:
             return PlotWishes()
+        newcomers = self.newcomers.currentData() or ""
         return PlotWishes(
             premise=self.premise.toPlainText().strip(),
             events=self.events.currentData() or "",
@@ -186,11 +221,13 @@ class PlotWishesForm(QWidget):
             scale=self.scale.currentData() or "",
             disruption=self.disruption.currentData() or "",
             kinds=tuple(key for key, box in self.kinds.items() if box.isChecked()),
-            newcomers=self.newcomers.isChecked(),
+            newcomers=newcomers,
+            depth="" if newcomers == "none" else self.depth.currentData() or "",
         )
 
     def set_read_only(self, read_only: bool) -> None:
         """While a draft is written: looked at, not changed."""
+        self._read_only = read_only
         for button in self.choices.values():
             button.setEnabled(not read_only)
         self.premise.setReadOnly(read_only)
@@ -203,6 +240,7 @@ class PlotWishesForm(QWidget):
             *self.kinds.values(),
         ):
             widget.setEnabled(not read_only)
+        self._sync_depth()
 
     def typed(self) -> str:
         """What the author wrote, to ask about before it is lost."""

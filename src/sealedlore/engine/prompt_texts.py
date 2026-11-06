@@ -4267,6 +4267,45 @@ _text(
     "Bring in nobody and nowhere new: the plot uses the story's own people, places and lore.",
 )
 
+# How many newcomers, and how fully they are written (the author, Nov 6 2026:
+# "a handful of characters ... or ... lots of characters, each with lots of
+# info about them", for plots as for drafts). Each is said only when chosen,
+# so a plot left to the model is asked for as before. Not measured.
+for _key, _words in (
+    ("few", "A few new people, places and lore entries: 2 or 3 in all."),
+    ("several", "Several new people, places and lore entries: 4 to 8 in all."),
+    ("many", "Many new people, places and lore entries: 9 to 15 in all."),
+):
+    _text(
+        f"authoring.plot.newcomers.{_key}",
+        AUTHORING,
+        f"Writing a plot: how many newcomers ({_key})",
+        "The author's choice of how many people, places and lore entries the plot brings in.",
+        _words,
+    )
+
+for _key, _words in (
+    (
+        "sketch",
+        "Each new person, place and lore entry in brief: a character's text 30 to 80 words, "
+        "a place's or a lore entry's 20 to 60.",
+    ),
+    (
+        "deep",
+        "Each new person, place and lore entry in depth: a character's text 200 to 400 "
+        "words (how they look, their history, what they want and fear, their habits, how "
+        "they stand with the story's own people), a place's or a lore entry's 100 to 250.",
+    ),
+):
+    _text(
+        f"authoring.plot.depth.{_key}",
+        AUTHORING,
+        f"Writing a plot: how fully newcomers are written ({_key})",
+        "The author's choice of how much is written about each person, place and lore "
+        "entry the plot brings in.",
+        _words,
+    )
+
 _text(
     "authoring.plot.repair",
     AUTHORING,

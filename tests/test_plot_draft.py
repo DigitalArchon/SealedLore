@@ -127,7 +127,7 @@ def test_the_rules_are_in_the_system_prompt_and_the_story_in_the_request():
         scale="personal",
         disruption="upending",
         kinds=("mystery", "relationships"),
-        newcomers=False,
+        newcomers="none",
     )
     messages = build_plot_messages(text, wishes, plays="The author plays Mara Quill.")
     system, user = messages[0].text, messages[1].text
@@ -156,6 +156,39 @@ def test_wishes_refuse_choices_there_are_no_words_for():
         PlotWishes(events="dozens")
     with pytest.raises(ValueError):
         PlotWishes(kinds=("romance",))
+    with pytest.raises(ValueError):
+        PlotWishes(newcomers="crowds")
+    with pytest.raises(ValueError):
+        PlotWishes(depth="exhaustive")
+    # The yes or no newcomers once was is refused, never read as "the model decides".
+    for old in (False, True):
+        with pytest.raises(ValueError):
+            PlotWishes(newcomers=old)
+
+
+def test_how_many_newcomers_and_how_fully_are_said_only_when_chosen():
+    """The author (Nov 6 2026): a handful of people or lots of them, each with
+    lots about them, for plots as for drafts. Nothing chosen asks for nothing:
+    the request is as it was."""
+    auto = f"- {DEFAULT_TEXTS['authoring.plot.auto']}"
+    assert render_wishes(PlotWishes(newcomers="", depth="")) == auto
+    for count in ("few", "several", "many"):
+        line = DEFAULT_TEXTS[f"authoring.plot.newcomers.{count}"]
+        assert render_wishes(PlotWishes(newcomers=count)) == f"{auto}\n- {line}"
+    for depth in ("sketch", "deep"):
+        line = DEFAULT_TEXTS[f"authoring.plot.depth.{depth}"]
+        assert render_wishes(PlotWishes(depth=depth)) == f"{auto}\n- {line}"
+    both = render_wishes(PlotWishes(newcomers="many", depth="deep", events="few")).splitlines()
+    assert both == [
+        auto,
+        f"- {DEFAULT_TEXTS['authoring.plot.events.few']}",
+        f"- {DEFAULT_TEXTS['authoring.plot.newcomers.many']}",
+        f"- {DEFAULT_TEXTS['authoring.plot.depth.deep']}",
+    ]
+    # Nobody new: as the tick box's "no" was, and nothing about how fully.
+    assert render_wishes(PlotWishes(newcomers="none", depth="deep")) == (
+        f"{auto}\n- {DEFAULT_TEXTS['authoring.plot.no_newcomers']}"
+    )
 
 
 def test_a_reply_in_a_fence_with_bold_settings_is_read_as_written():
@@ -194,10 +227,17 @@ def test_the_story_s_own_cards_stand_and_newcomers_join_them():
     assert market.story_id == "l-market" and "Written again" not in market.description
     assert notes == []
     # Nobody new wanted: the newcomers are left out, and said.
-    merged, notes = merge_reply(base, reply, newcomers=False)
+    merged, notes = merge_reply(base, reply, newcomers="none")
     assert "Vell" not in [c.name for c in merged.characters]
     assert "The Wreck" not in [p.name for p in merged.places]
     assert any("Vell" in note for note in notes) and any("The Wreck" in note for note in notes)
+    # How many were asked for is the model's to keep to: a count leaves out
+    # nobody, since a newcomer left out takes the events that bring them.
+    for count in ("few", "several", "many"):
+        merged, notes = merge_reply(base, reply, newcomers=count)
+        assert "Vell" in [c.name for c in merged.characters] and notes == []
+    with pytest.raises(ValueError):
+        merge_reply(base, reply, newcomers=False)
 
 
 def test_problems_are_the_importer_s_then_a_shared_name_and_a_secret_told_early():
@@ -285,6 +325,24 @@ def test_the_session_writes_the_plot_logs_it_and_gives_it_to_the_story(tmp_path:
     assert session.unreported_usage
     # The document it returns is the story's, with the story's ids.
     assert next(c for c in draft.document.characters if c.name == "Teodor Vask").story_id
+
+
+def test_nobody_new_leaves_the_plot_s_newcomers_out_and_logs_the_choice(tmp_path: Path):
+    reply = (
+        "# Characters\n\n## Vell\n- role: storyteller\n- hidden: yes\n\nA rival.\n\n"
+        "# Facts\n\n- alarm: no — whether the harbour is roused; set by events\n\n"
+        "# Events\n\n## The bell\n- pacing: any time\n- sets: alarm = yes\n"
+        "- trigger: Someone rings the harbour bell.\n\nThe harbour bell rings in the fog.\n"
+    )
+    session = session_for(harbour(), tmp_path, [reply])
+    draft, _ = run(session.draft_plot(PlotWishes(newcomers="none", events="few")))
+    assert [e.title for e in session.story.plot.events] == ["The bell"]
+    assert "Vell" not in [c.name for c in (*session.cast, *session.bundle.supporting.characters)]
+    assert draft.notes == ["Left out Vell: nobody new was wanted."]
+    user = session.provider.requests[0].messages[-1].text
+    assert DEFAULT_TEXTS["authoring.plot.no_newcomers"] in user
+    log = read_api_log(session.story.id, root=tmp_path)
+    assert (log[0]["wishes"]["newcomers"], log[0]["wishes"]["depth"]) == ("none", "")
 
 
 def test_a_long_reply_says_how_far_it_has_got_while_it_thinks_too(tmp_path: Path, monkeypatch):

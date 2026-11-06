@@ -18,6 +18,7 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox  # noqa: E402
 
+from sealedlore.engine.plot_draft import PlotWishes  # noqa: E402
 from sealedlore.gui.generate_dialog import GenerateDialog  # noqa: E402
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.gui.new_story_guide import NewStoryGuide  # noqa: E402
@@ -349,7 +350,7 @@ def test_the_wishes_form_says_only_what_was_chosen(app):
     form.spacing.setCurrentIndex(form.spacing.findData("spread"))
     form.disruption.setCurrentIndex(form.disruption.findData("upending"))
     form.kinds["danger"].setChecked(True)
-    form.newcomers.setChecked(False)
+    form.newcomers.setCurrentIndex(form.newcomers.findData("none"))
     wishes = form.wishes()
     assert (wishes.premise, wishes.spacing, wishes.disruption, wishes.kinds) == (
         "A heist goes wrong.",
@@ -357,5 +358,41 @@ def test_the_wishes_form_says_only_what_was_chosen(app):
         "upending",
         ("danger",),
     )
-    assert not wishes.newcomers and wishes.events == "" and wishes.scale == ""
+    assert wishes.newcomers == "none" and wishes.events == "" and wishes.scale == ""
+    form.deleteLater()
+
+
+def test_the_plot_form_asks_how_many_newcomers_and_how_much_about_each(app):
+    """The author (Nov 6 2026): a few new people or lots, briefly or in
+    depth. It was a tick box, "It may bring in new people and places"."""
+
+    def choose(combo, value: str) -> None:
+        combo.setCurrentIndex(combo.findData(value))
+        assert combo.currentData() == value
+
+    form = PlotWishesForm(offer_none=False)
+    form.show()
+    form.set_choice(DESCRIBED)
+    assert (form.wishes().newcomers, form.wishes().depth) == ("", "")
+    choose(form.newcomers, "several")
+    choose(form.depth, "deep")
+    assert (form.wishes().newcomers, form.wishes().depth) == ("several", "deep")
+    # Nobody new: how much about each means nothing, and is put away.
+    choose(form.newcomers, "none")
+    assert not form.depth.isEnabled()
+    assert (form.wishes().newcomers, form.wishes().depth) == ("none", "")
+    choose(form.newcomers, "many")
+    assert form.depth.isEnabled() and form.wishes().depth == "deep"
+    # Read only while a draft is written, and as it was after.
+    form.set_read_only(True)
+    assert not form.newcomers.isEnabled() and not form.depth.isEnabled()
+    form.set_read_only(False)
+    assert form.newcomers.isEnabled() and form.depth.isEnabled()
+    choose(form.newcomers, "none")
+    form.set_read_only(True)
+    form.set_read_only(False)
+    assert form.newcomers.isEnabled() and not form.depth.isEnabled()
+    # Made up from the story alone: nothing of the details is asked.
+    form.set_choice(MADE_UP)
+    assert form.wishes() == PlotWishes()
     form.deleteLater()
