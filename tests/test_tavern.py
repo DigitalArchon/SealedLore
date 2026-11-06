@@ -454,7 +454,7 @@ def test_a_card_becomes_a_cast_card(tmp_path: Path):
     # Its own field, told to the storyteller after the description as the
     # import once wrote it into the description.
     assert character.personality == "wary, dry, loyal once won"
-    sheet = render_cast_sheet(character, include_full_description=True)
+    sheet = render_cast_sheet(character)
     assert sheet.endswith("Elena never says her surname.\n\nPersonality: wary, dry, loyal once won")
     assert character.voice_notes == (
         "John: Hello?\nElena: Hands where I can see them.\n\nElena: Cellar's full of the dead."

@@ -1239,6 +1239,72 @@ _text(
     (("names", "the names declined, comma-separated"),),
 )
 
+# A card too large for the cast's share of the context is sent condensed
+# (engine/card_condense.py). Imported cards run to thousands of tokens, often
+# with instructions to the chat they came from ("never speak for {{user}}",
+# reply lengths), which SealedLore's own rules already cover.
+_text(
+    "characters.condense",
+    CHARACTERS,
+    "A condensed card",
+    "The system prompt that condenses a character's card when the cast's cards don't fit "
+    "their share of the context budget. Its reply is sent in place of the card's description "
+    "and voice notes.",
+    """\
+You condense a character's card for a storyteller model. The storyteller plays
+this character in a collaborative story; the author plays {player}. The
+story's cast is too large for every card to be sent whole, so the storyteller
+will read what you write in place of this card, and it must still be able to
+play them true to it.
+
+Keep what the storyteller needs, as the card states it:
+
+- who they are: age, what they are, their role or work, and how they look, in
+  a line or two (what others notice first);
+- their personality, and how it shows in what they do and say;
+- how they talk: their manner, habits of speech, words they favour. Quote at
+  most two short lines from the card's example messages, if it has any;
+- the history that shapes them now;
+- the people in their life, and how they stand with the author's character if
+  the card says;
+- what they can do, and what they carry or own that matters;
+- what they want, fear, like and dislike, and their habits;
+- their secrets, saying plainly that they are secret and from whom.
+
+Leave out:
+
+- instructions about writing or roleplaying: how long replies are, how to
+  narrate, who may speak or act for whom, staying in character, formatting;
+- anything about an AI, a chat, or the person reading;
+- repetition, decoration, and lists of near-synonyms.
+
+Write in the third person and the present tense, as plain prose or short
+labelled lines, in at most {words} words. Keep to the card's own facts and
+names and add none of your own. Reply with the condensed card only: no
+heading, no name line, no comment.""",
+    (
+        ("player", "the author's character's name, or another character when none is named"),
+        ("words", "the most words the condensed card may have"),
+    ),
+)
+
+_text(
+    "characters.condense.no_player",
+    CHARACTERS,
+    "A condensed card: no author's character",
+    "In the condensing prompt, when the story names no other character for the author.",
+    "another character",
+)
+
+_text(
+    "characters.condense.card",
+    CHARACTERS,
+    "A condensed card: the card",
+    "The condensing request: the card as it stands.",
+    "The card of {name}:\n\n{card}",
+    (("name", "the character's name"), ("card", "the card's fields, each under its label")),
+)
+
 _text(
     "ledger.names",
     CHAPTERS,
@@ -3790,17 +3856,20 @@ What you can change. Each change is one setting:
 - kind "character_add": "target" is "cast" or "supporting", and the value is a
   character object:
 {character_shape}
-  Every visible cast sheet is sent on every turn, but past
-  "app_settings"."cast_token_cap" tokens of cast the full descriptions are
-  left out of all of them ("playthrough"."cast_descriptions_sent" says
-  whether they fit now), so a large new sheet can cost every sheet its
-  description; use "supporting" for anyone secondary. A supporting card
-  carries only a name, aliases, canon, summary and voice: no skills, never
-  playable, no description reaches the storyteller.
+  Every visible cast sheet is sent on every turn. While the sheets fit their
+  room ("playthrough"."cast_cards"."room_tokens", set by
+  "app_settings"."cast_limit") they go whole; past it, the largest are sent
+  condensed by a model, and if even that is too much, as their name, summary,
+  voice and skills alone ("playthrough"."cast_cards" names which), so a large
+  new sheet can cost others their whole card; use "supporting" for anyone
+  secondary. A supporting card carries only a name, aliases, canon, summary,
+  voice and description (a long description condensed by a model): no
+  skills, never playable.
 - kind "character_move": "target" is a character's name, the value "cast" or
   "supporting". Cast members are on every turn's roster and can be played;
   supporting cards ride along in the turns after the story names them
-  ("app_settings"."supporting_recall_turns"), summary and voice only.
+  ("app_settings"."supporting_recall_turns"): summary, voice and
+  description.
 - kind "lore_add": the value is {"title": ..., "content": ..., "keywords": [...],
   "always_on": false, "until_mentioned": false}.
 - kind "lore_edit": "target" is the entry's title; field one of {lore_fields}.

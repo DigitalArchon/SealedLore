@@ -1196,7 +1196,7 @@ class PlotRuntime:
         blocks: list[str] = []
         for item_id in dict.fromkeys(ids):
             if (character := people.get(item_id)) is not None:
-                blocks.append(render_cast_sheet(character, include_full_description=True))
+                blocks.append(render_cast_sheet(character))
             elif (entry := places.get(item_id)) is not None:
                 blocks.append(f"{entry.title}: {entry.content}")
         return "\n\n".join(blocks)

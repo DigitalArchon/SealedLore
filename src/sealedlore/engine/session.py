@@ -160,6 +160,7 @@ from sealedlore.engine.scene_update import (
     strict_perspective,
 )
 from sealedlore.engine.session_archival import LEDGER_MAX_TOKENS, ArchivalRuntime
+from sealedlore.engine.session_cast import CastRuntime
 from sealedlore.engine.session_images import ImageRuntime
 from sealedlore.engine.session_looks import LooksRuntime
 from sealedlore.engine.session_merge import MergeRuntime, _close
@@ -471,6 +472,7 @@ class StorySession(
     PrivateRuntime,
     ReasoningRuntime,
     LooksRuntime,
+    CastRuntime,
 ):
     def __init__(
         self,
@@ -525,6 +527,8 @@ class StorySession(
         self._session_prices: dict[str, ModelPrice] = {}
         # Why the last archival's ledger update was refused, if it was.
         self.ledger_problem: str | None = None
+        # Cards whose condensed text couldn't be written (session_cast.py).
+        self._condense_failed: dict[str, tuple[str, str]] = {}
         # Models whose price couldn't be found this session: don't ask again.
         self._price_misses: set[str] = set()
         # The endpoint's model list, and when it was fetched (see endpoint_models).
@@ -816,7 +820,7 @@ class StorySession(
             token_budget=self.story.defaults.context_token_budget,
             min_cacheable_tokens=self.config.min_cacheable_tokens,
             cache_exchanges_outside_prefix=self.config.cache_exchanges_outside_prefix,
-            cast_token_cap=self.config.cast_token_cap,
+            cast_token_cap=self.config.cast_cap(self.story.defaults.context_token_budget),
             texts=self.texts,
             chapter_days=self.chapter_days(),
             model=self.model,
@@ -1469,8 +1473,9 @@ class StorySession(
         turn = replace(turn, turn_node_id=user_node.id)
 
         turn = yield from self.direct_turn(turn, user_node, history)
-        # A rebuild the author asked for goes in before this turn's prompt.
-        for text in self.adopt_rebuild():
+        # A rebuild the author asked for goes in before this turn's prompt,
+        # and so do cards condensed since the last.
+        for text in [*self.adopt_rebuild(), *self.adopt_condensed()]:
             yield SessionNotice(text)
         yield from self.archive_if_due(turn, history)
         lore = self._retrieve_for_turn(turn, history)
@@ -1483,9 +1488,11 @@ class StorySession(
         pick = self._start_lore_pick()
         yield from self.read_after_turn()
         yield from self._finish_lore_pick(pick)
-        # Off this thread entirely: adopted when archival is next due.
+        # Off this thread entirely: adopted when archival is next due, and the
+        # cards at the start of the next turn.
         self.prepare_archival()
         self.start_background_merge()
+        self.start_condensing()
 
     def begin(self, held_character_id: str | None) -> Iterator[StreamEvent | SessionNotice]:
         """Start an unplayed story from its setup, as the character the author picked.
@@ -1535,6 +1542,8 @@ class StorySession(
                 yield from self.read_after_turn()
             finally:
                 self.last_result = None
+            # Written while the author reads the opening, for the first turn.
+            self.start_condensing()
             return
         yield from self.send(
             TurnRequest(
@@ -1922,8 +1931,9 @@ class StorySession(
             yield from self._private_turn(turn, user_node, history=history)
             return
         turn = self._directed(turn, user_node.meta.direction, [*history, user_node])
-        # A rebuild the author asked for goes in before this turn's prompt.
-        for text in self.adopt_rebuild():
+        # A rebuild the author asked for goes in before this turn's prompt,
+        # and so do cards condensed since the last.
+        for text in [*self.adopt_rebuild(), *self.adopt_condensed()]:
             yield SessionNotice(text)
         yield from self.archive_if_due(turn, history)
         lore = self._retrieve_for_turn(turn, history)
@@ -1950,9 +1960,11 @@ class StorySession(
         pick = self._start_lore_pick()
         yield from self.read_after_turn()
         yield from self._finish_lore_pick(pick)
-        # Off this thread entirely: adopted when archival is next due.
+        # Off this thread entirely: adopted when archival is next due, and the
+        # cards at the start of the next turn.
         self.prepare_archival()
         self.start_background_merge()
+        self.start_condensing()
 
     def _turn_of(self, user_node: Node) -> TurnRequest:
         """The turn an author's message was sent as, for another take of its
@@ -3719,7 +3731,7 @@ class StorySession(
                 alternatives=self._alternatives(self._models),
                 hidden_ids=self.hidden_ids(),
                 path=path,
-                cast_fits=whole.include_cast_full_descriptions,
+                cast_fit=whole.cast_fit,
             ),
             ensure_ascii=False,
         )
@@ -3798,7 +3810,7 @@ class StorySession(
             alternatives=self._alternatives(models),
             hidden_ids=self.hidden_ids(),
             path=self.path(),
-            cast_fits=self._next_turn_prompt().include_cast_full_descriptions,
+            cast_fit=self._next_turn_prompt().cast_fit,
             texts=self.texts,
             prompt_catalogue=catalogue,
         )
@@ -4270,6 +4282,10 @@ class StorySession(
         if rebuild is not None:
             rebuild.done.wait(wait_seconds)
             self._drop_rebuild("not adopted: the story was closed")
+        condensing = self._condense_job
+        if condensing is not None:
+            condensing.done.wait(wait_seconds)
+            self._drop_condensing("not adopted: the story was closed")
         if self._memory_pictures is not None:
             # A memory-only chat's pictures go with it.
             self._memory_pictures.close()

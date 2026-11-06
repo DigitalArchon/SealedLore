@@ -163,7 +163,14 @@ def render_competence_line(character: Character) -> str:
     return "Competence: " + " — ".join(parts)
 
 
-def render_cast_sheet(character: Character, *, include_full_description: bool) -> str:
+# How a cast card is sent (engine/cast_fit.py): whole; condensed (the
+# card's condensed text in place of its description and voice notes); or
+# short, the name, summary, voice notes and skills alone (what every card was
+# sent as when the cast's cards were over their room, until Nov 2026).
+CardForm = Literal["whole", "condensed", "short"]
+
+
+def render_cast_sheet(character: Character, form: CardForm = "whole") -> str:
     heading = character.name
     if character.aliases:
         heading += " — also known as " + ", ".join(character.aliases)
@@ -173,13 +180,14 @@ def render_cast_sheet(character: Character, *, include_full_description: bool) -
         lines.append(f"  From: {character.canon.strip()}")
     if character.summary:
         lines.append(f"  {character.summary.strip()}")
-    if character.voice_notes:
+    if character.voice_notes and form != "condensed":
         lines.append(f"  Voice: {character.voice_notes.strip()}")
     competence = render_competence_line(character)
     if competence:
         lines.append(f"  {competence}")
-    description = full_description_text(character)
-    if include_full_description and description:
+    if form == "condensed" and character.condensed:
+        lines.append(f"  {character.condensed.strip()}")
+    elif form == "whole" and (description := full_description_text(character)):
         lines.append(f"  {description}")
     return "\n".join(lines)
 
@@ -196,14 +204,15 @@ def full_description_text(character: Character) -> str:
 
 def render_cast_block(
     characters: Sequence[Character],
+    forms: Mapping[str, CardForm] | None = None,
     *,
-    include_full_descriptions: bool,
     texts: PromptTexts = DEFAULT_TEXTS,
 ) -> str:
+    """`forms`: how each card is sent, by character id; whole if not said."""
     if not characters:
         return ""
     sheets = [
-        render_cast_sheet(character, include_full_description=include_full_descriptions)
+        render_cast_sheet(character, (forms or {}).get(character.id, "whole"))
         for character in characters
     ]
     return texts["storyteller.cast_header"] + "\n\n" + "\n\n".join(sheets)

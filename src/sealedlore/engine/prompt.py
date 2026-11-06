@@ -25,11 +25,13 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 
 from sealedlore.engine.budget import BudgetReport, HistoryItem, select_history_items
+from sealedlore.engine.cast_fit import CastFit, fit_cast
 from sealedlore.engine.characters import render_supporting_block
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.recall import RecallItem, render_recall_block
 from sealedlore.engine.response_style import for_turn
 from sealedlore.engine.rules import (
+    CardForm,
     render_author_turn,
     render_cast_block,
     render_history_node,
@@ -136,6 +138,10 @@ class AssemblyOptions:
     min_cacheable_tokens: int = 1024
     cache_exchanges_outside_prefix: int = 1
     cast_token_cap: int = 8_000
+    # How a card to be condensed is sent while its condensed text is still to
+    # be written (engine/cast_fit.py): whole in a story's turns, short in a
+    # private scene, where nothing is written.
+    cast_waiting_form: CardForm = "whole"
     enable_cache_breakpoints: bool = True
     # A private scene's rules in place of the usual four sections, as
     # (section name, text); None for the story's own (engine/private_prompt.py).
@@ -183,7 +189,9 @@ class AssembledPrompt:
     # against `full_total` so freeing space can't simply pull older prose back
     # into the window and leave the prompt just as full.
     excluded_tokens: int = 0
-    include_cast_full_descriptions: bool = True
+    # Which cast cards went whole, condensed or short (engine/cast_fit.py);
+    # None when the system block was given whole (`system_parts`).
+    cast_fit: CastFit | None = None
 
     @property
     def needs_archival(self) -> bool:
@@ -547,7 +555,7 @@ def _assemble(
         system.tokens.append(add_section(name, text))
         system_section_names.append(name)
 
-    include_full_descriptions = True
+    cast_fit: CastFit | None = None
     if system_parts is not None:
         for name, text in system_parts:
             add_system_part(name, text)
@@ -562,16 +570,18 @@ def _assemble(
         add_system_part(SECTION_WORLD, render_world_bible(story.world_bible))
         add_system_part(SECTION_STANDING_LORE, render_standing_lore(standing_lore, options.texts))
 
-        # Full descriptions are in or out based on the cast alone, never on how
-        # full the budget happens to be this turn: a system block that changes
-        # shape mid-story would throw away the cache prefix every time it flipped.
-        cast_text = render_cast_block(cast, include_full_descriptions=True, texts=options.texts)
-        include_full_descriptions = count(cast_text) <= options.cast_token_cap
-        if not include_full_descriptions:
-            cast_text = render_cast_block(
-                cast, include_full_descriptions=False, texts=options.texts
-            )
-        add_system_part(SECTION_CAST, cast_text)
+        # Which cards go whole, condensed or short depends on the cast and its
+        # room alone, never on how full the budget happens to be this turn: a
+        # system block that changes shape mid-story would throw away the cache
+        # prefix every time it flipped.
+        cast_fit = fit_cast(
+            cast,
+            options.cast_token_cap,
+            count,
+            waiting_form=options.cast_waiting_form,
+            texts=options.texts,
+        )
+        add_system_part(SECTION_CAST, render_cast_block(cast, cast_fit.forms, texts=options.texts))
 
     system_tokens = system.total_tokens
 
@@ -660,7 +670,7 @@ def _assemble(
         model=model,
         excluded_node_ids=tuple(item.node.id for item in dropped),
         excluded_tokens=sum(item.tokens for item in dropped),
-        include_cast_full_descriptions=include_full_descriptions,
+        cast_fit=cast_fit,
     )
 
 

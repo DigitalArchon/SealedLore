@@ -275,6 +275,7 @@ def recommended_models(base_url: str) -> dict[str, str]:
 
 
 CacheControlMode = Literal["auto", "on", "off"]
+CastLimit = Literal["share", "tokens"]
 CacheTtl = Literal["5m", "1h"]
 SceneLedger = Literal["every_turn", "manual"]
 LoreSelector = Literal["picker", "jev", "similarity"]
@@ -740,7 +741,15 @@ class Config(BaseModel):
     # How many trailing user+assistant exchanges stay outside the cached prefix
     # so that regenerating a recent take doesn't discard a fresh cache write.
     cache_exchanges_outside_prefix: int = 1
-    cast_token_cap: int = 8_000
+    # How much of the story's context budget the cast's cards may take: sent
+    # whole while they fit, and past it the largest are sent condensed
+    # (engine/cast_fit.py). "share" is `cast_share` of the budget, so the room
+    # grows and shrinks with it; "tokens" is `cast_token_cap` whatever the
+    # budget. A fixed 8,000 was the only limit until Nov 2026: half of a 16k
+    # budget, and an eighth of a 60k one.
+    cast_limit: CastLimit = "share"
+    cast_share: float = Field(default=0.15, ge=0.02, le=0.6)
+    cast_token_cap: int = Field(default=8_000, ge=0)
 
     # The model that writes chapters and merges them, for every story that
     # has none of its own (`Story.defaults.summarization_model`). Blank means
@@ -1007,6 +1016,13 @@ class Config(BaseModel):
             api=media_api(settings.base_url, settings.api),
             shared_key=settings.api_key in (others - {""}),
         )
+
+    def cast_cap(self, budget: int) -> int:
+        """The most tokens the cast's cards may take in a story with this
+        context budget."""
+        if self.cast_limit == "tokens":
+            return self.cast_token_cap
+        return round(budget * self.cast_share)
 
     def active_provider(self) -> ProviderConfig | None:
         """The default endpoint: where a bare model id is sent."""

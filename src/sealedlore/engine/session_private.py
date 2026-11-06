@@ -223,6 +223,11 @@ class PrivateRuntime:
             self.assembly_options(),
             token_budget=self.config.private_budget,
             rules_override=tuple(private_rules_sections(self.story, full, texts=self.texts)),
+            # The cast's room at the private budget; a card with no condensed
+            # text yet goes short, since nothing is written while a scene is
+            # open (CastRuntime condenses for this room beforehand).
+            cast_token_cap=self.config.cast_cap(self.config.private_budget),
+            cast_waiting_form="short",
         )
 
     def private_history(self, span: PrivateSpan) -> list[Node]:

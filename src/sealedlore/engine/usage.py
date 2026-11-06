@@ -42,6 +42,7 @@ KIND_LABELS: dict[str, str] = {
     "map_art_response": "Map art",
     "competence_response": "Skill suggestions",
     "lore_cast_response": "Lore characters",
+    "condense_response": "Condensed cards",
     "draft_response": "Story drafting",
     "review_response": "Settings reviews",
     "image_prompt_response": "Image prompts",

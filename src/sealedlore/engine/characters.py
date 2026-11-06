@@ -14,8 +14,10 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 
+from sealedlore.engine.cast_fit import has_condensed
 from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
+from sealedlore.engine.rules import CardForm, full_description_text
 from sealedlore.engine.validators import mentions, name_forms
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.character import Character
@@ -113,6 +115,35 @@ def mentioned(characters: Sequence[Character], text: str, *, limit: int) -> list
     return [character for character in characters if mentions(text, character)][:limit]
 
 
+# A supporting card's description goes with it up to this many words, and
+# condensed past it (engine/card_condense.py), to about as many. Its card
+# rides only the turns that name it or find them present, in the uncached
+# tail, so it is kept short. Until Nov 2026 no supporting card's
+# description reached the storyteller: an imported card became its first
+# sentence and example messages, and a character sent that way was played
+# worse than from the card or a condensed one (SealedLoreDocs design/cast.md).
+SUPPORTING_WHOLE_WORDS = 150
+
+
+def supporting_form(character: Character) -> CardForm:
+    """How a supporting card goes when it rides a turn: with its description
+    when that is short, condensed when longer and a condensed text is
+    written, else as its summary and voice alone."""
+    description = full_description_text(character)
+    if not description:
+        return "short"
+    if len(description.split()) <= SUPPORTING_WHOLE_WORDS:
+        return "whole"
+    return "condensed" if has_condensed(character) else "short"
+
+
+def needs_condensing(character: Character) -> bool:
+    """A supporting card whose description is too long to go whole and has
+    no condensed text up to date."""
+    description = full_description_text(character)
+    return len(description.split()) > SUPPORTING_WHOLE_WORDS and not has_condensed(character)
+
+
 def render_supporting_block(
     characters: Sequence[Character], texts: PromptTexts = DEFAULT_TEXTS
 ) -> str:
@@ -120,6 +151,7 @@ def render_supporting_block(
         return ""
     sheets = []
     for character in characters:
+        form = supporting_form(character)
         heading = character.name
         if character.aliases:
             heading += " — also known as " + ", ".join(character.aliases)
@@ -128,7 +160,9 @@ def render_supporting_block(
         lines = [heading]
         for text in (
             character.summary,
-            character.voice_notes and f"Voice: {character.voice_notes}",
+            form != "condensed" and character.voice_notes and f"Voice: {character.voice_notes}",
+            form == "whole" and full_description_text(character),
+            form == "condensed" and character.condensed,
         ):
             if text and text.strip():
                 lines.append(f"  {text.strip()}")

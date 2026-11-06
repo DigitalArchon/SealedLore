@@ -7,6 +7,7 @@ nothing turn-specific may leak into it.
 
 from __future__ import annotations
 
+from sealedlore.engine.card_condense import fingerprint
 from sealedlore.engine.prompt import (
     MAX_CACHE_BREAKPOINTS,
     SECTION_AUTHOR_TURN,
@@ -586,21 +587,50 @@ def test_a_roomy_budget_excludes_nothing(story, cast, estimator):
     assert prompt.needs_archival is False
 
 
-def test_cast_full_descriptions_are_dropped_when_the_cast_is_huge(story, estimator):
-    big_cast = [
-        Character(id=f"c{index}", name=f"Character {index}", full_description="x" * 4000)
-        for index in range(4)
-    ]
-    options = AssemblyOptions(cast_token_cap=500, min_cacheable_tokens=1)
-    prompt = assemble_prompt(
+def _huge_cast_prompt(story, estimator, big_cast, cap=1_200, **options):
+    return assemble_prompt(
         story=story,
         cast=big_cast,
         history_nodes=[],
         turn=TurnRequest(speaker_id="c0", user_text="hello"),
         estimator=estimator,
-        options=options,
+        options=AssemblyOptions(cast_token_cap=cap, min_cacheable_tokens=1, **options),
     )
-    assert prompt.include_cast_full_descriptions is False
+
+
+def test_a_huge_cast_goes_whole_until_its_condensed_cards_are_written(story, estimator):
+    big_cast = [
+        Character(id=f"c{index}", name=f"Character {index}", full_description="x" * 4000)
+        for index in range(4)
+    ]
+    prompt = _huge_cast_prompt(story, estimator, big_cast)
+    fit = prompt.cast_fit
+    assert fit is not None and fit.over
+    # In the cast's order when the cards are alike.
+    assert fit.waiting == tuple(c.id for c in big_cast)[: len(fit.waiting)]
+    assert fit.waiting
+    # Until they are written they go whole: never worse than before.
+    assert set(fit.ids("whole")) == {"c0", "c1", "c2", "c3"}
+    assert prompt.section(SECTION_CAST).text.count("x" * 4000) == 4
+
+    for character in big_cast:
+        character.condensed = f"{character.name}, condensed."
+        character.condensed_from = fingerprint(character)
+    prompt = _huge_cast_prompt(story, estimator, big_cast)
+    cast_text = prompt.section(SECTION_CAST).text
+    forms = prompt.cast_fit.forms
+    # Only as many as it takes, the rest whole.
+    assert forms["c0"] == "condensed" and forms["c3"] == "whole"
+    assert set(forms.values()) == {"condensed", "whole"}
+    assert "Character 0, condensed." in cast_text
+    assert prompt.cast_fit.waiting == ()
+    assert not prompt.cast_fit.still_over
+
+
+def test_a_private_scene_sends_a_waiting_card_short(story, estimator):
+    big_cast = [Character(id="c0", name="Character 0", full_description="x" * 4000)]
+    prompt = _huge_cast_prompt(story, estimator, big_cast, cap=300, cast_waiting_form="short")
+    assert prompt.cast_fit.waiting == ("c0",)
     assert "xxxx" not in prompt.section(SECTION_CAST).text
 
 

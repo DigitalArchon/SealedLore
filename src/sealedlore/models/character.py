@@ -70,3 +70,12 @@ class Character(BaseModel):
     # In a story, brought in from the author's own characters: which card,
     # and what the story was given from it (engine/card_link.py).
     linked: CardLink | None = None
+    # The card in fewer words, sent in its place when the cast's cards don't
+    # fit their share of the context (engine/card_condense.py), with the
+    # fingerprint of the card it was written from: a card edited since has an
+    # out-of-date one, which is never sent.
+    condensed: str | None = None
+    condensed_from: str | None = None
+    # Never sent condensed, however large the cast (engine/cast_fit.py): the
+    # author's own mark for a main character.
+    keep_whole: bool = False

@@ -238,7 +238,6 @@ def test_supporting_cards_take_only_what_their_block_sends(tmp_path: Path):
     for field, value in (
         ("playable", True),
         ("skills", {"brawling": "solid"}),
-        ("description", "x"),
     ):
         with pytest.raises(ValueError, match="supporting card"):
             apply_change(
@@ -249,6 +248,17 @@ def test_supporting_cards_take_only_what_their_block_sends(tmp_path: Path):
         session.bundle,
         SettingsChange(kind="character", target="Old Tom", field="voice", value="Slurred."),
     )
+    # The block sends a supporting card's description too (since Nov 2026).
+    apply_change(
+        session.bundle,
+        SettingsChange(
+            kind="character", target="Old Tom", field="description", value="Ferries the river."
+        ),
+    )
+    from sealedlore.engine.characters import render_supporting_block
+
+    tom = session.bundle.supporting.characters[-1]
+    assert "Ferries the river." in render_supporting_block([tom])
 
 
 def test_renames_never_collide_and_lists_split_on_commas(tmp_path: Path):

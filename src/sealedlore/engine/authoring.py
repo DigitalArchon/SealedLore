@@ -20,6 +20,7 @@ from typing import Any, get_args
 
 from pydantic import ValidationError
 
+from sealedlore.engine.cast_fit import CastFit
 from sealedlore.engine.catalog import ModelInfo
 from sealedlore.engine.chronicle import chronicle_at, format_clock
 from sealedlore.engine.dice import BAND_SHORT
@@ -129,6 +130,8 @@ APP_SETTINGS = (
     "plot_model",
     "story_ledger",
     "suggest_characters",
+    "cast_limit",
+    "cast_share",
     "cast_token_cap",
 )
 
@@ -576,11 +579,31 @@ def stale_voicing_notes(notes: str | None, cast: Sequence[Character]) -> list[st
     ]
 
 
+def cast_cards_view(bundle: StoryBundle, fit: CastFit | None) -> dict[str, Any] | None:
+    """How the cast's cards go on the next turn, by name: their room, their
+    size whole and as sent, and who is condensed, short, or waiting for a
+    condensed card to be written."""
+    if fit is None:
+        return None
+
+    def names(ids: Sequence[str]) -> list[str]:
+        return [name for name in (_name_of(bundle, i) for i in ids) if name]
+
+    return {
+        "room_tokens": fit.cap,
+        "whole_tokens": fit.whole_tokens,
+        "sent_tokens": fit.sent_tokens,
+        "condensed": names(fit.ids("condensed")),
+        "short": names(fit.ids("short")),
+        "waiting_for_condensed": names(fit.waiting),
+    }
+
+
 def playthrough_view(
     bundle: StoryBundle,
     *,
     path: Sequence[Node] | None = None,
-    cast_fits: bool | None = None,
+    cast_fit: CastFit | None = None,
 ) -> dict[str, Any]:
     """The state of the story, by name, for the reviewer: not settings, context.
 
@@ -588,8 +611,8 @@ def playthrough_view(
     lives on the nodes; without this a review with no exchanges couldn't tell
     which character was the author's, or that the silent one is listed as
     elsewhere. `path` is the story as models may see it (private scenes left
-    out); without it the count includes them. `cast_fits` is whether the cast's
-    full descriptions fit under the cap on the next turn.
+    out); without it the count includes them. `cast_fit` is how the cast's
+    cards go on the next turn: whole, condensed or short.
     """
     story = bundle.story
     scene = story.scene
@@ -614,7 +637,7 @@ def playthrough_view(
         "stale_voicing_notes": stale_voicing_notes(story.style.notes, bundle.cast) or None,
         "messages_so_far": len(path),
         "chapters_archived": len(bundle.summaries),
-        "cast_descriptions_sent": cast_fits,
+        "cast_cards": cast_cards_view(bundle, cast_fit),
         "plot": plot,
         "scene": {
             "location": scene.location,
@@ -650,7 +673,7 @@ def settings_view(
     alternatives: Sequence[ModelInfo] = (),
     hidden_ids: Collection[str] = frozenset(),
     path: Sequence[Node] | None = None,
-    cast_fits: bool | None = None,
+    cast_fit: CastFit | None = None,
 ) -> dict[str, Any]:
     """The settings as the reviewer sees them: by name, no ids. Cards and
     lore in `hidden_ids` (a plot's, not yet brought in) are left out: the
@@ -714,7 +737,7 @@ def settings_view(
             for entry in bundle.lore
             if entry.id not in hidden_ids
         ],
-        "playthrough": playthrough_view(bundle, path=path, cast_fits=cast_fits),
+        "playthrough": playthrough_view(bundle, path=path, cast_fit=cast_fit),
         "app_settings": app_settings_view(config) if config is not None else None,
     }
 
@@ -887,7 +910,7 @@ def build_review_messages(
     alternatives: Sequence[ModelInfo] = (),
     hidden_ids: Collection[str] = frozenset(),
     path: Sequence[Node] | None = None,
-    cast_fits: bool | None = None,
+    cast_fit: CastFit | None = None,
     texts: PromptTexts = DEFAULT_TEXTS,
     prompt_catalogue: str = "",
 ) -> list[PromptMessage]:
@@ -909,7 +932,7 @@ def build_review_messages(
         alternatives=alternatives,
         hidden_ids=hidden_ids,
         path=path,
-        cast_fits=cast_fits,
+        cast_fit=cast_fit,
     )
     sections: list[str] = []
     if whole_prompt.strip():
@@ -1072,7 +1095,7 @@ def _apply_style(bundle: StoryBundle, field: str | None, value: object) -> None:
     setattr(style, field, _text(value))
 
 
-SUPPORTING_ONLY_FIELDS = ("name", "aliases", "canon", "summary", "voice")
+SUPPORTING_ONLY_FIELDS = ("name", "aliases", "canon", "summary", "voice", "description")
 
 
 def _apply_character(bundle: StoryBundle, change: SettingsChange) -> None:
@@ -1080,12 +1103,12 @@ def _apply_character(bundle: StoryBundle, change: SettingsChange) -> None:
     field, value = change.field, change.value
     supporting = any(card is character for card in bundle.supporting.characters)
     if supporting and field not in SUPPORTING_ONLY_FIELDS:
-        # The supporting block sends only the summary and voice; skills and
-        # playability belong to the cast. Applying the rest changed nothing
-        # the storyteller could see.
+        # The supporting block sends the summary, voice and description (a
+        # long one condensed); skills and playability belong to the cast.
+        # Applying the rest changed nothing the storyteller could see.
         raise ValueError(
             f"{character.name} is a supporting card: it carries only a name, aliases, "
-            "canon, summary and voice (move them to the cast for the rest)"
+            "canon, summary, voice and description (move them to the cast for the rest)"
         )
     if field == "name":
         new_name = _required_text(value, "a name")
