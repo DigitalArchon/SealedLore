@@ -134,6 +134,7 @@ from sealedlore.gui.window_images import ImagesWindow
 from sealedlore.gui.window_layout import LayoutWindow, StoriesDock
 from sealedlore.gui.window_looks import LooksWindow
 from sealedlore.gui.window_phone import PhoneWindow
+from sealedlore.gui.window_plot import PlotWindow
 from sealedlore.gui.window_private import PrivateWindow
 from sealedlore.gui.window_tavern import TavernWindow
 from sealedlore.gui.window_text import TextSizeWindow
@@ -299,7 +300,14 @@ class _KeyedAction(QAction):
             self.by_key = False
 
 
+EDIT_PLOT_TIP = (
+    "This story's plot in the plot editor, its world and cast filled in: write one, or "
+    "change it (it shows the whole plot)"
+)
+
+
 class MainWindow(
+    PlotWindow,
     CastWindow,
     CastBoardWindow,
     CollectionWindow,
@@ -848,6 +856,12 @@ class MainWindow(
         )
         self.import_plot_action.triggered.connect(self.import_plot_into_story)
         story_menu.addAction(self.import_plot_action)
+        # The story's own world and cast filled in, so only the plot is written
+        # (the author, Nov 2026: the editor could only start from nothing).
+        self.edit_plot_action = QAction("&Edit the plot in the plot editor…", self)
+        self.edit_plot_action.setStatusTip(EDIT_PLOT_TIP)
+        self.edit_plot_action.triggered.connect(self.edit_story_plot)
+        story_menu.addAction(self.edit_plot_action)
         # Four ways out of the app, one submenu: the Story menu had seventeen items.
         self.export_menu = story_menu.addMenu("&Export")
         self.export_action = QAction("&Scenario…", self)
@@ -1371,13 +1385,9 @@ class MainWindow(
         )
 
     def open_plot_editor(self) -> None:
-        """The plot file editor, one window, kept while the app runs."""
-        if self._plot_editor is None:
-            self._plot_editor = PlotEditorWindow(self)
-            self._plot_editor.start_requested.connect(self._start_from_plot_file)
-        self._plot_editor.show()
-        self._plot_editor.raise_()
-        self._plot_editor.activateWindow()
+        """The plot file editor, one window, kept while the app runs
+        (gui/window_plot.py, which also opens it on a story)."""
+        self._show_plot_editor()
 
     def _start_from_plot_file(self, path: Path) -> None:
         if self._busy:
@@ -5267,6 +5277,7 @@ class MainWindow(
             self.setup_action,
             self.review_action,
             self.import_plot_action,
+            self.edit_plot_action,
             self.restart_action,
             self.export_action,
             self.archive_action,
@@ -5278,7 +5289,7 @@ class MainWindow(
         # A private scene freezes the plot and the setup (session
         # `_refuse_in_private`): offered, they only refused.
         if self.in_private:
-            for action in (self.setup_action, self.import_plot_action):
+            for action in (self.setup_action, self.import_plot_action, self.edit_plot_action):
                 action.setEnabled(False)
                 action.setStatusTip("Paused while the private scene is open: end it first")
         else:
@@ -5286,6 +5297,7 @@ class MainWindow(
             self.import_plot_action.setStatusTip(
                 "Give this story the facts and events from a plot file (.md)"
             )
+            self.edit_plot_action.setStatusTip(EDIT_PLOT_TIP)
         unstarted = has_story and not (self.session and self.session.nodes)
         self.start_action.setEnabled(unstarted and not busy)
         # Once the story has begun it can only restart: greyed for good, it
@@ -5299,6 +5311,7 @@ class MainWindow(
         for action in (
             self.review_action,
             self.import_plot_action,
+            self.edit_plot_action,
             self.last_review_action,
             self.undo_review_action,
             self.portraits_action,
@@ -5311,6 +5324,7 @@ class MainWindow(
                 self.start_action,
                 self.review_action,
                 self.import_plot_action,
+                self.edit_plot_action,
                 self.last_review_action,
                 self.undo_review_action,
             ):

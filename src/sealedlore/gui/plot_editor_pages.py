@@ -68,6 +68,11 @@ PACING_LABELS = {
     "quiet": "At a quiet moment — a lull, or settling down for the night",
     "any": "Any time the conditions hold",
 }
+PLOT_ABOUT = (
+    "The plot is what happens, and when: facts the program keeps, and events a "
+    "director brings about when the time and the moment are right. The storyteller "
+    "never sees it whole; it learns of an event only as it begins."
+)
 HELD = "the character you are playing"
 NOT_SET = "(not set — the app's default)"
 NO_PLACE = "(no particular place)"
@@ -130,6 +135,18 @@ def _fill(combo: QComboBox, choices: Iterable[tuple[str, str]], current: str) ->
     combo.blockSignals(False)
 
 
+def scope_label() -> QLabel:
+    """A page's heading: which half of the file it is in, the story or the
+    plot, and what it is (the author: which parts were plot and which just
+    writing a story wasn't clear)."""
+    label = QLabel()
+    label.setObjectName("plotScope")
+    font = label.font()
+    font.setBold(True)
+    label.setFont(font)
+    return label
+
+
 class Page(QWidget):
     """A form over one item. Subclasses fill `_form`, and implement `_fill`
     (item → widgets) and `_store` (widgets → item)."""
@@ -143,15 +160,39 @@ class Page(QWidget):
         self._loading = False
         self.item = None
         self.document = PlotDocument()
+        # Every field `_watch` was given, to lock the story's own (`set_locked`).
+        self._inputs: list[QWidget] = []
         inner = QWidget()
         self._form = QFormLayout(inner)
         self._form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(inner)
+        self.scope = scope_label()
+        # What the page is when the editor works on a story (plot_editor.py).
+        self.banner = hint("")
+        self.banner.hide()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.scope)
+        layout.addWidget(self.banner)
         layout.addWidget(scroll)
+
+    def set_context(self, scope: str, banner: str = "") -> None:
+        self.scope.setText(scope)
+        self.banner.setText(banner)
+        self.banner.setVisible(bool(banner))
+
+    def set_locked(self, locked: bool, *, open_: Iterable[QWidget] = ()) -> None:
+        """A story's own fields, read only in the editor (they are changed on
+        the Cast and Lore pages and in Setup); `open_` stay as they are."""
+        kept = {id(widget) for widget in open_}
+        for widget in self._inputs:
+            fixed = locked and id(widget) not in kept
+            if isinstance(widget, (QLineEdit, QPlainTextEdit)):
+                widget.setReadOnly(fixed)
+            else:
+                widget.setEnabled(not fixed)
 
     def load(self, item, document: PlotDocument) -> None:
         self._loading = True
@@ -175,6 +216,7 @@ class Page(QWidget):
 
     def _watch(self, *widgets: QWidget) -> None:
         for widget in widgets:
+            self._inputs.append(widget)
             if isinstance(widget, QLineEdit):
                 widget.textChanged.connect(self._on_change)
             elif isinstance(widget, QPlainTextEdit):
@@ -206,16 +248,6 @@ class StoryPage(Page):
         self.title = QLineEdit()
         self.description = QLineEdit()
         self.description.setPlaceholderText("One line for the story list.")
-        self.start_day = QSpinBox()
-        self.start_day.setRange(1, 99999)
-        self.start_time = QTimeEdit()
-        self.start_time.setDisplayFormat("HH:mm")
-        start = QHBoxLayout()
-        start.addWidget(QLabel("Day"))
-        start.addWidget(self.start_day)
-        start.addWidget(QLabel("at"))
-        start.addWidget(self.start_time)
-        start.addStretch(1)
         self.agency = QComboBox()
         self.agency.addItem(NOT_SET, None)
         for mode, label in AGENCY_LABELS.items():
@@ -253,8 +285,6 @@ class StoryPage(Page):
         form = self._form
         form.addRow("Title", self.title)
         form.addRow("Description", self.description)
-        form.addRow("Clock starts", start)
-        form.addRow(hint("The story's clock at the first passage. Events' days count from day 1."))
         form.addRow("Outcomes", self.agency)
         form.addRow("World", self.world_activity)
         form.addRow("Perspective", self.perspective)
@@ -268,8 +298,6 @@ class StoryPage(Page):
         self._watch(
             self.title,
             self.description,
-            self.start_day,
-            self.start_time,
             self.agency,
             self.world_activity,
             self.perspective,
@@ -278,14 +306,12 @@ class StoryPage(Page):
             self.notes,
         )
         self.picture_style.changed.connect(self._on_change)
+        self._inputs.append(self.picture_style)
 
     def _fill(self) -> None:
         document: PlotDocument = self.item
         self.title.setText(document.title)
         self.description.setText(document.description)
-        self.start_day.setValue(document.start_day)
-        time = QTime.fromString(document.start_time, "HH:mm")
-        self.start_time.setTime(time if time.isValid() else QTime(0, 0))
         for combo, value in (
             (self.agency, document.agency),
             (self.world_activity, document.world_activity),
@@ -302,8 +328,6 @@ class StoryPage(Page):
         old = document.title
         document.title = self.title.text()
         document.description = self.description.text()
-        document.start_day = self.start_day.value()
-        document.start_time = self.start_time.time().toString("HH:mm")
         document.agency = self.agency.currentData()
         document.world_activity = self.world_activity.currentData()
         document.perspective = self.perspective.currentData()
@@ -312,6 +336,63 @@ class StoryPage(Page):
         document.background = self.background.text().strip()
         document.notes = self.notes.toPlainText()
         self._name_changed(old, document.title)
+
+
+class PlotPage(Page):
+    """The plot's own settings: when its clock starts."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.start_day = QSpinBox()
+        self.start_day.setRange(1, 99999)
+        self.start_time = QTimeEdit()
+        self.start_time.setDisplayFormat("HH:mm")
+        start = QHBoxLayout()
+        start.addWidget(QLabel("Day"))
+        start.addWidget(self.start_day)
+        start.addWidget(QLabel("at"))
+        start.addWidget(self.start_time)
+        start.addStretch(1)
+        form = self._form
+        form.addRow(hint(PLOT_ABOUT))
+        form.addRow("Clock starts", start)
+        form.addRow(
+            hint(
+                "The story's clock at the first passage. Events' days count from day 1. "
+                "At 00:00, the first passage sets the hour."
+            )
+        )
+        self._watch(self.start_day, self.start_time)
+
+    def _fill(self) -> None:
+        document: PlotDocument = self.item
+        self.start_day.setValue(document.start_day)
+        time = QTime.fromString(document.start_time, "HH:mm")
+        self.start_time.setTime(time if time.isValid() else QTime(0, 0))
+
+    def _store(self) -> None:
+        document: PlotDocument = self.item
+        document.start_day = self.start_day.value()
+        document.start_time = self.start_time.time().toString("HH:mm")
+
+
+class SectionPage(QWidget):
+    """A section's heading in the tree: which half of the file it is in, and
+    what goes in it."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.scope = scope_label()
+        self.about = hint("")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.scope)
+        layout.addWidget(self.about)
+        layout.addStretch(1)
+
+    def show_section(self, scope: str, about: str) -> None:
+        self.scope.setText(scope)
+        self.about.setText(about)
 
 
 class WorldPage(Page):
@@ -388,7 +469,7 @@ class CharacterPage(Page):
             self.role.addItem(label, role)
         self.choose = QCheckBox("One of the characters the author chooses between at the start")
         self.present = QCheckBox("In the opening scene")
-        self.hidden = QCheckBox("Hidden until an event brings them in")
+        self.hidden = QCheckBox("The plot's: hidden until an event brings them in")
         self.aliases = QLineEdit()
         self.aliases.setPlaceholderText("comma-separated")
         self.voice = QLineEdit()
@@ -417,7 +498,8 @@ class CharacterPage(Page):
         form.addRow("Description", self.description)
         # Under its label, the width of the form: beside it, the strip's
         # buttons set the page's minimum width.
-        form.addRow(QLabel("Pictures"))
+        self.pictures_label = QLabel("Pictures")
+        form.addRow(self.pictures_label)
         form.addRow(self.pictures)
         self.role.currentIndexChanged.connect(self._sync_choose)
         self._watch(
@@ -434,9 +516,16 @@ class CharacterPage(Page):
             self.pictures,
         )
 
+    def set_locked(self, locked: bool, *, open_: Iterable[QWidget] = ()) -> None:
+        open_ = tuple(open_)
+        super().set_locked(locked, open_=open_)
+        # Whom the author chooses between is the story's: kept so whatever the role.
+        self._choose_fixed = locked and not any(widget is self.choose for widget in open_)
+        self._sync_choose()
+
     def _sync_choose(self) -> None:
         playable = self.role.currentData() in ("player", "author")
-        self.choose.setEnabled(playable)
+        self.choose.setEnabled(playable and not getattr(self, "_choose_fixed", False))
         if not playable and self.choose.isChecked():
             self.choose.setChecked(False)
 
@@ -474,6 +563,9 @@ class CharacterPage(Page):
 class EntryPage(Page):
     """A place, or with `is_place` off a lore entry."""
 
+    # Ticked or not: the window moves the entry between Places and Lore.
+    place_toggled = Signal(bool)
+
     def __init__(
         self,
         *,
@@ -487,12 +579,21 @@ class EntryPage(Page):
         self.keywords = QLineEdit()
         self.keywords.setPlaceholderText("comma-separated; the name itself is always one")
         self.always = QCheckBox("Sent every turn")
-        self.hidden = QCheckBox("Hidden until an event reveals it")
+        # A story's own entry becomes one of the plot's places this way.
+        self.place = QCheckBox("The plot's: a place the program follows the character to")
+        self.place.setChecked(is_place)
+        self.place.setToolTip(
+            "Ticked, it is under Places: events can test “at” and “visited” against it. "
+            "Unticked, it is under Lore."
+        )
+        self.place.toggled.connect(self._place_toggled)
+        self.hidden = QCheckBox("The plot's: hidden until an event reveals it")
         self.description = GrowingText(lines=8, fill=True)
         form = self._form
         form.addRow("Name", self.name)
         form.addRow("Keywords", self.keywords)
         form.addRow(self.always)
+        form.addRow(self.place)
         form.addRow(self.hidden)
         form.addRow(
             hint(
@@ -504,14 +605,20 @@ class EntryPage(Page):
             )
         )
         form.addRow("Description", self.description)
-        form.addRow(QLabel("Pictures"))
+        self.pictures_label = QLabel("Pictures")
+        form.addRow(self.pictures_label)
         form.addRow(self.pictures)
         self._watch(
             self.name, self.keywords, self.always, self.hidden, self.description, self.pictures
         )
 
+    def _place_toggled(self, on: bool) -> None:
+        if not self._loading and self.item is not None:
+            self.place_toggled.emit(on)
+
     def _fill(self) -> None:
         entry: EntryDoc = self.item
+        self.place.setChecked(any(place is entry for place in self.document.places))
         self.name.setText(entry.name)
         self.keywords.setText(", ".join(entry.keywords))
         self.always.setChecked(entry.always)

@@ -60,8 +60,17 @@ def test_a_sample_opens_clean_and_every_page_fills(app, editor: PlotEditorWindow
         editor.tree.setCurrentItem(item)
         app.processEvents()
         seen += 1
-    # 9 headers, 6 characters, 2 places, 1 lore entry, 3 facts, 6 events, 4 variants.
-    assert seen == 31
+    # The two halves (the story's row is its title and settings, the plot's its
+    # clock), 8 sections, 6 characters, 2 places, 1 lore entry, 3 facts, 6
+    # events, 4 variants.
+    assert seen == 32
+    halves = [editor.tree.topLevelItem(i) for i in range(editor.tree.topLevelItemCount())]
+    assert [half.text(0) for half in halves] == ["The story", "The plot"]
+    assert [halves[1].child(i).text(0) for i in range(halves[1].childCount())] == [
+        "Facts",
+        "Timeline",
+        "Optional events",
+    ]
 
     editor._select((EVENT, 0, 1))
     page = editor.pages.currentWidget()
