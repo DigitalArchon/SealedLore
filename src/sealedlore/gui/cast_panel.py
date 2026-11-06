@@ -918,12 +918,17 @@ class CastPanel(QWidget):
     def _remove_character(self) -> None:
         if self._current is None:
             return
+        text = f"Take {self._current.name} out of the story? Their card goes, pictures and all."
+        tavern = self._current.tavern
+        if tavern is not None and tavern.book_entries:
+            # Once in, the entries a card's lorebook made are the story's own:
+            # nothing says which they were, so they stay, and the author is told.
+            text += (
+                "\n\nThe lore that came in with their card stays: remove it on the Lore page "
+                "if the story no longer needs it."
+            )
         answer = QMessageBox.question(
-            self,
-            "Remove this character?",
-            f"Take {self._current.name} out of the story? Their card goes, pictures and all.",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
+            self, "Remove this character?", text, QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
         if answer != QMessageBox.Yes:
             return

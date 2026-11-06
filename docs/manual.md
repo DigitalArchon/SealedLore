@@ -1256,6 +1256,9 @@ becomes the name of the character you are playing. A card with files of its
 own (a background, pictures its greetings show) is also kept whole in Your
 characters, and the story's character linked to it, as From Your
 characters… would; during a private scene that waits until the scene ends.
+Once in, the lore a card brought is the story's own: removing the character
+later leaves it, and the question asking whether to remove them says so.
+Remove what the story no longer needs on the Lore page.
 
 **A character out.** **SillyTavern cards → Export this character as a card…**
 (or Story → Export → SillyTavern card…) saves a character as a card: a PNG

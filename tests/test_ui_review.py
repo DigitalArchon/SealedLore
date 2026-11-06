@@ -17,6 +17,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 from sealedlore.gui.prompt_editor import PromptEditorDialog  # noqa: E402
 from sealedlore.gui.setup_dialog import SetupDialog  # noqa: E402
 from sealedlore.gui.transcript import MessageWidget  # noqa: E402
+from sealedlore.models.tavern import TavernFields  # noqa: E402
 from tests.test_ui_tidy import app, window  # noqa: E402, F401
 
 
@@ -90,6 +91,28 @@ def test_removing_a_card_asks_and_defaults_to_no(app, window, monkeypatch):
     panel._remove_character()
     assert len(window.session.cast) == before
     assert seen and seen[0] == ("Remove this character?", QMessageBox.No)
+
+
+def test_removing_a_card_that_brought_lore_says_the_lore_stays(app, window, monkeypatch):
+    """The entries a card's lorebook made aren't taken out with the card
+    (nothing says which they were): the question says so, and only for a
+    card that had a lorebook."""
+    texts: list[str] = []
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda _p, _title, text, *_a, **_k: texts.append(text) or QMessageBox.No,
+    )
+    panel = window.cast_panel
+    character = window.session.cast[0]
+    panel._select(character.id)
+    panel._remove_character()
+    assert "Lore page" not in texts[-1], "a card of our own brought no lore"
+    character.tavern = TavernFields(character_book={"entries": [{"keys": ["x"], "content": "y"}]})
+    panel._select(character.id)
+    panel._remove_character()
+    assert "lore that came in with their card stays" in texts[-1]
+    assert "Lore page" in texts[-1]
 
 
 def test_enter_in_the_prompt_editors_search_saves_nothing(app, window, monkeypatch):
