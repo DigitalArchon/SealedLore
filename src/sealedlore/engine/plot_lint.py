@@ -119,15 +119,19 @@ class TooEarly:
     # "lead-in", a variant's title, or "begin" for an event of one way.
     way: str
     name: str
+    # A hidden lore entry or place, not a person.
+    entry: bool = False
 
     def describe(self) -> str:
         where = "its lead-in" if self.way == "lead-in" else f"“{self.way}”"
         if self.way == "begin":
             where = "its text"
-        return (
-            f"Event “{self.event}”: {where} names {self.name}, who is hidden and not "
-            "certainly brought in by then."
+        what = (
+            "which is hidden and not certainly revealed"
+            if self.entry
+            else ("who is hidden and not certainly brought in")
         )
+        return f"Event “{self.event}”: {where} names {self.name}, {what} by then."
 
 
 def named_too_early(
@@ -150,9 +154,9 @@ def named_too_early(
         return []
     by_id = {c.id: c for c in people}
 
-    def named(text: str, allowed: set[str]) -> list[str]:
+    def named(text: str, allowed: set[str]) -> list[tuple[str, bool]]:
         return [
-            item.name if isinstance(item, Character) else item.title
+            (item.name, False) if isinstance(item, Character) else (item.title, True)
             for item in secrets
             if item.id not in allowed
             and (mentions(text, item) if isinstance(item, Character) else names_entry(text, item))
@@ -164,12 +168,16 @@ def named_too_early(
         if event.lead_in:
             arriving = [by_id[i] for i in introduced(event, None) if i in by_id]
             lead = without_names(direction_text(event, "lead_in", None), arriving)
-            found += [TooEarly(event.title, "lead-in", name) for name in named(lead, before)]
+            found += [
+                TooEarly(event.title, "lead-in", name, entry) for name, entry in named(lead, before)
+            ]
         for variant in event.variants:
             if variant.offscreen:
                 continue
             allowed = before | known_once(plot, variant.requires) | set(introduced(event, variant))
             text = direction_text(event, "begin", variant)
             way = variant.title or "begin"
-            found += [TooEarly(event.title, way, name) for name in named(text, allowed)]
+            found += [
+                TooEarly(event.title, way, name, entry) for name, entry in named(text, allowed)
+            ]
     return found

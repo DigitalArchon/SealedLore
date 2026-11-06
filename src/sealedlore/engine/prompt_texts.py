@@ -3937,7 +3937,9 @@ Conditions (`requires:`), separated by commas, are all checked by the program:
 `fact = no`; `at = Place`, `at != Place` (where the author's character is
 now); `visited Place`, `not visited Place` (whether they have ever been
 there); `Name at = Place`, `Name visited Place` (the same, of one playable
-character by name); `Title happened`, `Title not happened` (of an event).
+character by name); `Title happened`, `Title not happened` (of an event, by
+its own `##` title, never a variant's). Every fact a condition or a `sets:`
+names is one of yours under `# Facts`, with one of its own values.
 
 ## How to write each part
 
@@ -4008,17 +4010,31 @@ Facts:
   character is, where they have been.
 
 Names:
+- Call the author's character "the player's character" in triggers, tells,
+  aftermaths and meanings, never by their name: the author may be playing
+  someone else when the event comes.
 - People are found by the parts of their names. A new character shares no
-  part of a name with anyone in the story (John and John Smith), and no part
-  of their name is a place's whole name.
+  part of a name with anyone in the story (John and John Smith, a sister and
+  her brother), and no part of their name is a place's whole name. Say how
+  they are related in their text instead.
 - Aliases are real names or one-of-a-kind epithets, never "the captain".
+- Write every name in `brings:`, `reveals:`, `at:` and the conditions
+  exactly as its own heading has it ("Borin Deepvein", never "Borin"), and
+  give every place they name a heading under `# Places`.
 - A name a list or a condition uses (a character, a place, an event's title,
   a fact's value) has no comma in it and not the word "and".
 - Hide anyone an event introduces (`hidden: yes`, and `brings:` on the
-  event): until then nothing can reach for them early.
-- Nothing hidden is named before an event brings it in: not in another
-  event's text, tell or aftermath, nor in a card. Only the event that brings
-  or reveals it may name it, and the events that require that event first.
+  event): until then nothing can reach for them early. Every hidden person,
+  place and lore entry needs an event that brings or reveals it, or it never
+  appears.
+- Nothing hidden is named before the event that brings it in has happened:
+  not in another event's text, tell or aftermath, nor in a card. An event may
+  name someone hidden only if it brings them itself, or requires an event
+  that certainly has: one with no offscreen way to go, since an offscreen way
+  brings nobody in until the character hears of it.
+- A lead-in takes only people's names out of the event's own text, so that
+  text never names a hidden place or lore entry, not even the one its own
+  event reveals.
 
 Places and lore:
 - Make a place of anywhere a condition or an event depends on; a building or

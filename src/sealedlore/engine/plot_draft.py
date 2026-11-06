@@ -314,21 +314,22 @@ def _newcomer_clashes(document: PlotDocument, people) -> list[str]:
 
 def plot_problems(document: PlotDocument) -> list[str]:
     """What stops the plot working as written, in words for the model: the
-    importer's errors first (nothing else can be judged past them), then a
-    newcomer's name another answers to, and a secret named before its time."""
+    importer's errors, a newcomer's name another answers to, and a secret
+    named before its time. All at once: live (GLM 5.3), a reply sent back
+    with its one error alone came back with that put right and seven secrets
+    still named early, none of which it had been told of. The importer reads
+    past what it refuses, so what it made of the rest is judged too."""
     rendered, problems = check_plot_document(document)
-    errors = [
+    found = [
         f"{describe_where(document, problem.where)}: {problem.message}"
         for problem in problems
         if problem.error
     ]
-    if errors:
-        return errors
     scenario = parse_plot_markdown(rendered.text).scenario
     if scenario.plot is None:
-        return ["There is no plot: write its facts and events."]
+        return [*found, "There is no plot: write its facts and events."]
     people, _entries = made_of(document, scenario)
-    found = _newcomer_clashes(document, people)
+    found += _newcomer_clashes(document, people)
     found += [
         early.describe()
         for early in named_too_early(

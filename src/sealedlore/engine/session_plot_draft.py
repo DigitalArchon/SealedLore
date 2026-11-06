@@ -32,7 +32,7 @@ from sealedlore.engine.scene_update import render_card
 from sealedlore.engine.session_plot import SessionNotice
 from sealedlore.engine.story_plot import document_from_story, without_plot
 from sealedlore.messages import PromptMessage
-from sealedlore.providers.base import ChatRequest, StreamCompleted, TextDelta
+from sealedlore.providers.base import ChatRequest, ReasoningDelta, StreamCompleted, TextDelta
 
 # How often a long reply says how far it has got.
 PROGRESS_SECONDS = 2.0
@@ -110,19 +110,28 @@ class PlotDraftRuntime:
         text, completed = "", StreamCompleted()
         for _attempt in range(2):
             chunks: list[str] = []
-            written = 0
+            written = thought = 0
             said = time.monotonic()
             completed = StreamCompleted()
             for event in self.provider.stream(request):
                 if isinstance(event, TextDelta):
                     chunks.append(event.text)
                     written += len(event.text)
-                    if time.monotonic() - said >= PROGRESS_SECONDS:
-                        said = time.monotonic()
-                        # About six characters to a word, the Markdown's marks included.
-                        yield SessionNotice(f"Writing the plot… about {written // 6:,} words.")
+                elif isinstance(event, ReasoningDelta):
+                    # Live (GLM 5.3), a first reply reasoned 20,000 tokens, five
+                    # minutes in which nothing else said it was working.
+                    thought += len(event.text)
                 elif isinstance(event, StreamCompleted):
                     completed = event
+                    continue
+                if time.monotonic() - said >= PROGRESS_SECONDS and (written or thought):
+                    said = time.monotonic()
+                    # About six characters to a word, the Markdown's marks included.
+                    yield SessionNotice(
+                        f"Writing the plot… about {written // 6:,} words."
+                        if written
+                        else f"Thinking the plot through… about {thought // 6:,} words so far."
+                    )
             text = "".join(chunks)
             if text.strip() or completed.finish_reason != "length":
                 break

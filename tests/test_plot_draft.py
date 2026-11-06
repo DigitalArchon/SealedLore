@@ -218,6 +218,26 @@ def test_problems_are_the_importer_s_then_a_shared_name_and_a_secret_told_early(
     assert any("names Dax" in p for p in problems)
 
 
+def test_every_problem_goes_back_at_once(tmp_path: Path):
+    """Live (GLM 5.3): sent back with its one importer error, a plot came
+    back with that put right and seven secrets still named early, none of
+    which it had been told of."""
+    base = without_plot(document_from_story(harbour()))
+    reply = read_reply(
+        "# Places\n\n## The Calf\n- hidden: yes\n\nA tidal island.\n\n"
+        "# Events\n\n## Low tide\n- lead-in: yes\n- reveals: The Calf\n\n"
+        "The causeway to The Calf opens at low tide.\n\n"
+        "## Odd\n- requires: tide = high\n\nNothing.\n"
+    ).document
+    merged, _ = merge_reply(base, reply)
+    problems = plot_problems(merged)
+    assert problems[0].startswith("Event “Odd”: No fact called `tide`")
+    assert (
+        "Event “Low tide”: its lead-in names The Calf, which is hidden and not certainly "
+        "revealed by then." in problems
+    )
+
+
 def test_what_the_importer_refuses_is_left_out_with_what_needed_it():
     base = without_plot(document_from_story(harbour()))
     reply = read_reply(
@@ -265,6 +285,20 @@ def test_the_session_writes_the_plot_logs_it_and_gives_it_to_the_story(tmp_path:
     assert session.unreported_usage
     # The document it returns is the story's, with the story's ids.
     assert next(c for c in draft.document.characters if c.name == "Teodor Vask").story_id
+
+
+def test_a_long_reply_says_how_far_it_has_got_while_it_thinks_too(tmp_path: Path, monkeypatch):
+    """Live (GLM 5.3), a first reply reasoned 20,000 tokens: five minutes in
+    which nothing said it was working."""
+    from sealedlore.engine import session_plot_draft
+
+    monkeypatch.setattr(session_plot_draft, "PROGRESS_SECONDS", 0.0)
+    session = session_for(harbour(), tmp_path, [PLOT_EXAMPLE])
+    session.provider.reasoning = "Weighing the harbour's people. " * 40
+    _, notices = run(session.draft_plot(PlotWishes()))
+    words = [notice.text for notice in notices]
+    assert words[0].startswith("Thinking the plot through… about ")
+    assert any(text.startswith("Writing the plot… about ") for text in words)
 
 
 def test_a_reply_with_problems_goes_back_once_and_its_answer_is_used(tmp_path: Path):
