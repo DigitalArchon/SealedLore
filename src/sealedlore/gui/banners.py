@@ -212,3 +212,48 @@ class HeldAwayBanner(QFrame):
             f"Keep the scene as it is. Choosing {name} under Playing again puts them back later"
         )
         self.show()
+
+
+class CastRoomBanner(QFrame):
+    """On the Cast page: the cast's cards are over their room in the prompt
+    (engine/cast_fit.py), and which are condensed, waiting or short."""
+
+    room_requested = Signal()
+    condense_requested = Signal()
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setObjectName("stalenessBanner")
+
+        self.message = QLabel()
+        self.message.setObjectName("stalenessText")
+        self.message.setWordWrap(True)
+
+        self.condense_button = QPushButton("Condense them now")
+        self.condense_button.setToolTip(
+            "Have the model write condensed cards for those waiting, in the background"
+        )
+        self.condense_button.clicked.connect(self.condense_requested)
+        self.room_button = QPushButton("Change the cast's room…")
+        self.room_button.setToolTip("Settings → Context → Cast cards may take")
+        self.room_button.clicked.connect(self.room_requested)
+
+        actions = QHBoxLayout()
+        actions.setContentsMargins(0, 0, 0, 0)
+        actions.setSpacing(6)
+        actions.addWidget(self.condense_button)
+        actions.addWidget(self.room_button)
+        actions.addStretch(1)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(8)
+        layout.addWidget(self.message)
+        layout.addLayout(actions)
+        self.hide()
+
+    def show_room(self, text: str, *, can_condense: bool) -> None:
+        """`text` from `cast_room.banner_text`; "" hides the banner."""
+        self.message.setText(text)
+        self.condense_button.setVisible(can_condense)
+        self.setVisible(bool(text))

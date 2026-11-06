@@ -1713,6 +1713,8 @@ class MainWindow(
         self.status_strip.set_budget(None)
         self.status_strip.set_lore(None)
         self.cast_panel.set_cast([], [], [])
+        self._condense_soon.stop()
+        self._refresh_cast_room()
         self.composer.clear_cast()
         self.scene_panel.set_scene(SceneState(), [])
         self._refresh_plot_panel()
@@ -2016,6 +2018,8 @@ class MainWindow(
         except (OSError, ValueError) as exc:
             self.statusBar().showMessage(f"Couldn't use the new background: {exc}", 12000)
         self.refresh_panels()
+        # Cards over the cast's room are condensed while the author reads.
+        self._condense_soon.start()
         # Before the first page: a story opened from a chat found People still
         # hidden, and the pages refuse a hidden one (it opened on Story so far).
         self._sync_chat_ui()
@@ -2048,6 +2052,8 @@ class MainWindow(
             hidden=hidden,
         )
         self._refresh_scene_panel()
+        # A card brought in or changed elsewhere may put the cast over its room.
+        self._cast_changed_soon()
         self.lore_panel.set_entries(self.session.bundle.lore, hidden=hidden)
         self.lore_panel.set_embeddings_available(self.session.embeddings is not None)
         self.style_panel.set_style(
@@ -3867,6 +3873,7 @@ class MainWindow(
             # speakers the composer offers follow who is present.
             self._refresh_scene_panel()
             self._refresh_composer()
+            self._after_cast_job()
         if self._asking:
             if self.session is not None and len(self.session.bundle.asides) > self._asides_before:
                 self.status_strip.add_usage(self.session.bundle.asides[-1].usage)
@@ -3918,6 +3925,7 @@ class MainWindow(
         self._refresh_scene_panel()
         self._refresh_composer()
         self._reassemble_inspector()
+        self._cast_changed_soon()
 
     def _after_tier_change(self, select_id: str | None = None) -> None:
         assert self.session is not None
@@ -5163,8 +5171,10 @@ class MainWindow(
                 self.session.embeddings = self._current_embeddings()
                 self.lore_panel.set_embeddings_available(self.session.embeddings is not None)
                 self._reassemble_inspector()
-                # The budget or the archival switch may have changed.
+                # The budget or the archival switch may have changed, and
+                # with them the cast's room.
                 self.refresh_summaries()
+                self._cast_changed_soon()
                 if self.in_chat and self.session.model != model_before:
                     self._chat_model_changed()
             else:

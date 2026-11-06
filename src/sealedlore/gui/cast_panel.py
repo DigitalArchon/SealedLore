@@ -34,8 +34,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.engine.card_condense import fingerprint
 from sealedlore.gui import theme
+from sealedlore.gui.banners import CastRoomBanner
 from sealedlore.gui.cast_board import BOARD_LABEL, SAVE_LABEL
+from sealedlore.gui.cast_room import CastRoom, banner_text, card_note, supporting_note
 from sealedlore.gui.fields import FormScroll, set_field_text
 from sealedlore.gui.lore_cast_dialog import FILL_LABEL
 from sealedlore.gui.portrait_view import PortraitView
@@ -55,6 +58,8 @@ from sealedlore.models.supporting import CharacterSuggestion
 
 HEADER_ROLE = Qt.UserRole + 1
 COLLECTION_ADD_LABEL = "From Your characters…"
+CONDENSE_LABEL = "Condense this card"
+CONDENSE_AGAIN_LABEL = "Write it again"
 BOARD_BUTTON = f"{BOARD_LABEL}…"
 MODEL_MARK = "  ✦"
 # The width of the card's left column: the portrait, its other pictures.
@@ -104,6 +109,10 @@ class CastPanel(QWidget):
     link_requested = Signal(str)
     # Another character is shown ("" for none).
     current_changed = Signal(str)
+    # (character id, or "" for every card waiting) a condensed card written.
+    condense_requested = Signal(str)
+    # Settings → Context, where the cast's room is set.
+    cast_room_requested = Signal()
 
     def __init__(self, pictures: StoryPictures | None = None) -> None:
         super().__init__()
@@ -114,6 +123,8 @@ class CastPanel(QWidget):
         self._suggestions: list[CharacterSuggestion] = []
         self._current: Character | None = None
         self._loading = False
+        # How the cast fits its room in the prompt (gui/cast_room.py).
+        self._room: CastRoom | None = None
 
         self.list = QListWidget()
         self.list.setObjectName("castList")
@@ -237,8 +248,14 @@ class CastPanel(QWidget):
         # The list's height as the author dragged it; 0 until they do.
         self._list_height = 0
 
+        # The cast over its room in the prompt: said above everything.
+        self.room_banner = CastRoomBanner()
+        self.room_banner.room_requested.connect(self.cast_room_requested)
+        self.room_banner.condense_requested.connect(lambda: self.condense_requested.emit(""))
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
+        layout.addWidget(self.room_banner)
         # Above the divider: in the list's part it took the names' room.
         layout.addWidget(self.board_button)
         layout.addWidget(splitter)
@@ -273,6 +290,35 @@ class CastPanel(QWidget):
             "Yours on every turn, not only while you hold them. The storyteller is told "
             "never to write their speech, thoughts or decisions."
         )
+        self.keep_whole = QCheckBox("Always send the whole card")
+        self.keep_whole.setToolTip(
+            "For a main character. When the cast's cards don't fit their room in the "
+            "prompt (Settings → Context), the others are condensed first and this one "
+            "never is."
+        )
+        # The card in fewer words, sent in its place while the cast's cards
+        # don't fit their room (engine/cast_fit.py); the author may edit it.
+        self.condensed = GrowingText(lines=3, most=14)
+        self.condensed.setPlaceholderText(
+            "Written by the model when the cast's cards don't fit their room in the prompt."
+        )
+        self.condensed_note = QLabel()
+        self.condensed_note.setObjectName("hintLabel")
+        self.condensed_note.setWordWrap(True)
+        self.condense_button = QPushButton(CONDENSE_AGAIN_LABEL)
+        self.condense_button.setToolTip(
+            "Have the model condense this card from what it says now, in the background"
+        )
+        self.condense_button.clicked.connect(
+            lambda: self._current and self.condense_requested.emit(self._current.id)
+        )
+        self.condensed_box = QWidget()
+        condensed_layout = QVBoxLayout(self.condensed_box)
+        condensed_layout.setContentsMargins(0, 0, 0, 0)
+        condensed_layout.setSpacing(4)
+        condensed_layout.addWidget(self.condensed_note)
+        condensed_layout.addWidget(self.condensed)
+        condensed_layout.addWidget(self.condense_button, 0, Qt.AlignLeft)
 
         self.skills = SkillsTable()
         self.skills.edited.connect(self._apply_edits)
@@ -335,6 +381,8 @@ class CastPanel(QWidget):
         self.player_available.toggled.connect(self._apply_edits)
         self.player_available.toggled.connect(self._sync_voicing)
         self.author_only.toggled.connect(self._apply_edits)
+        self.keep_whole.toggled.connect(self._apply_edits)
+        self.condensed.textChanged.connect(self._condensed_edited)
 
         # The portrait at the left of the card, tall, with the other pictures
         # under it; the card's text on the right (the author, Oct 15 2026:
@@ -366,6 +414,9 @@ class CastPanel(QWidget):
         form.addRow("Skills", skills_box)
         form.addRow(self.player_available)
         form.addRow(self.author_only)
+        form.addRow(self.keep_whole)
+        form.addRow("Condensed", self.condensed_box)
+        self._form = form
         form_host = QWidget()
         card = QHBoxLayout(form_host)
         card.setContentsMargins(0, 0, 0, 0)
@@ -759,10 +810,13 @@ class CastPanel(QWidget):
         self.competence.setPlainText(character.competence.notes)
         self.player_available.setChecked(character.is_player_available)
         self.author_only.setChecked(character.author_only)
+        self.keep_whole.setChecked(character.keep_whole)
+        self.condensed.setPlainText(character.condensed or "")
         self._sync_voicing()
         set_field_text(self.canon, character.canon or "")
         self._show_skills(character)
         self._loading = False
+        self._show_condensed()
 
     # --- editing ----------------------------------------------------------
 
@@ -784,6 +838,7 @@ class CastPanel(QWidget):
         character.competence.notes = self.competence.toPlainText().strip()
         character.is_player_available = self.player_available.isChecked()
         character.author_only = self.author_only.isChecked()
+        character.keep_whole = self.keep_whole.isChecked()
         character.canon = self.canon.text().strip() or None
         character.competence.tiers = self._skills_from_table()
 
@@ -792,6 +847,50 @@ class CastPanel(QWidget):
             mark = MODEL_MARK if character.origin == "model" else ""
             item.setText((character.name or "(unnamed)") + mark)
         self.changed.emit()
+
+    def _condensed_edited(self) -> None:
+        """The author's own words for the condensed card: kept as written,
+        and current for the card as it stands (they wrote it from it)."""
+        if self._loading or self._current is None:
+            return
+        text = self.condensed.toPlainText().strip()
+        self._current.condensed = text or None
+        self._current.condensed_from = fingerprint(self._current) if text else None
+        self.changed.emit()
+
+    def set_room(self, room: CastRoom | None) -> None:
+        """How the cast fits its room in the prompt (None: not said, as in a
+        chat): the banner, and the shown card's condensed text."""
+        self._room = room
+        text = banner_text(room) if room is not None else ""
+        can_condense = room is not None and any(
+            cid not in room.writing and cid not in room.failures for cid in room.fit.waiting
+        )
+        self.room_banner.show_room(text, can_condense=can_condense)
+        self._show_condensed()
+
+    def _show_condensed(self) -> None:
+        character = self._current
+        cast_card = character is not None and not self._is_supporting(character)
+        if character is None:
+            note = ""
+        elif cast_card:
+            note = card_note(self._room, character)
+        else:
+            note = supporting_note(self._room, character)
+        shown = character is not None and bool(note or character.condensed)
+        self._form.setRowVisible(self.condensed_box, shown)
+        self._form.setRowVisible(self.keep_whole, cast_card)
+        if not shown:
+            return
+        self.condensed_note.setText(note)
+        self.condensed_note.setVisible(bool(note))
+        room = self._room
+        writing = room is not None and character.id in room.writing
+        self.condense_button.setEnabled(not writing)
+        self.condense_button.setText(
+            CONDENSE_AGAIN_LABEL if character.condensed else CONDENSE_LABEL
+        )
 
     def _on_pictures_changed(self) -> None:
         if self._current is not None:

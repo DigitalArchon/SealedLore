@@ -1307,6 +1307,37 @@ class SettingsDialog(QDialog):
         )
         self.budget.setEnabled(self.story is not None)
 
+        # The cast's room: a share of the budget, or a fixed number of tokens.
+        self.cast_limit = QComboBox()
+        self.cast_limit.addItem("A share of the budget", "share")
+        self.cast_limit.addItem("A fixed number of tokens", "tokens")
+        self.cast_limit.setCurrentIndex(self.cast_limit.findData(self.config.cast_limit))
+        self.cast_share = QSpinBox()
+        self.cast_share.setRange(2, 60)
+        self.cast_share.setSuffix("%")
+        self.cast_share.setValue(round(self.config.cast_share * 100))
+        self.cast_tokens = QSpinBox()
+        self.cast_tokens.setRange(0, 500_000)
+        self.cast_tokens.setSingleStep(1_000)
+        self.cast_tokens.setGroupSeparatorShown(True)
+        self.cast_tokens.setSuffix(" tokens")
+        self.cast_tokens.setValue(self.config.cast_token_cap)
+        for control in (self.cast_limit, self.cast_share, self.cast_tokens):
+            control.setToolTip(
+                "Every main cast card is sent on every turn. While their cards fit this "
+                "room they go whole; past it, the largest are sent condensed, and the Cast "
+                "page says which. A share grows and shrinks with each story's budget."
+            )
+        cast_room = QWidget()
+        cast_row = QHBoxLayout(cast_room)
+        cast_row.setContentsMargins(0, 0, 0, 0)
+        cast_row.addWidget(self.cast_limit)
+        cast_row.addWidget(self.cast_share)
+        cast_row.addWidget(self.cast_tokens)
+        cast_row.addStretch(1)
+        self.cast_limit.currentIndexChanged.connect(self._show_cast_limit)
+        self._show_cast_limit()
+
         self.auto_archive = QCheckBox("Archive automatically when the budget is reached")
         self.auto_archive.setChecked(self.config.auto_archive)
         self.auto_archive.setToolTip(
@@ -1398,6 +1429,7 @@ class SettingsDialog(QDialog):
         scope.setWordWrap(True)
         form.addRow(scope)
         form.addRow("Context budget", self.budget)
+        form.addRow("Cast cards may take", cast_room)
         form.addRow(self.auto_archive)
         chapters = Fold(form, "Chapters and recall (advanced)")
         chapters.add_row(self.story_ledger)
@@ -1420,6 +1452,11 @@ class SettingsDialog(QDialog):
         hint.setWordWrap(True)
         form.addRow(hint)
         return widget
+
+    def _show_cast_limit(self) -> None:
+        share = self.cast_limit.currentData() == "share"
+        self.cast_share.setVisible(share)
+        self.cast_tokens.setVisible(not share)
 
     def done(self, result: int) -> None:  # noqa: N802 - Qt naming
         # The private tab's own catalog fetches on a thread parented to this
@@ -2247,6 +2284,9 @@ class SettingsDialog(QDialog):
         self.config.plot_chapter_days = self.plot_chapter_days.isChecked()
         self.config.archive_chunk_turns = self.chunk_turns.value()
         self.config.archive_target_ratio = self.archive_target.value() / 100
+        self.config.cast_limit = self.cast_limit.currentData()
+        self.config.cast_share = self.cast_share.value() / 100
+        self.config.cast_token_cap = self.cast_tokens.value()
         self.config.summary_target_words = self.summary_words.value()
         self.config.recall, self.config.recall_in = self.recall.currentData().split("|")
         self.config.recall_carry_turns = self.recall_carry.value()

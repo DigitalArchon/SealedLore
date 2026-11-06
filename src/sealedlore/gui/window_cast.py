@@ -4,14 +4,20 @@ guide. A mixin for `MainWindow`."""
 
 from __future__ import annotations
 
-from PySide6.QtCore import QFile
+from PySide6.QtCore import QFile, QTimer
 from PySide6.QtWidgets import QMessageBox, QVBoxLayout, QWidget
 
 from sealedlore.engine.session import SessionNotice
+from sealedlore.gui.cast_room import cast_room
 from sealedlore.gui.lore_cast_dialog import LoreCastDialog
 from sealedlore.storage.paths import story_dir
 from sealedlore.storage.repository import StoryBundle, save_story_bundle
 from sealedlore.storage.repository import delete_story as remove_story
+
+# Cards are condensed this long after the cast last changed, and a job out
+# is looked for this often.
+CONDENSE_AFTER_EDIT_MS = 3_000
+CONDENSE_POLL_MS = 1_000
 
 
 class CastWindow:
@@ -29,9 +35,125 @@ class CastWindow:
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.cast_panel)
         self.cast_panel.lore_fill_requested.connect(self.fill_lore_cast)
+        # Cards condensed when the cast is over its room (engine/session_cast.py):
+        # started a moment after the last edit to the cast, so typing a
+        # description doesn't send a card it is still changing, and taken
+        # in whenever nothing else is writing the story.
+        self.cast_panel.condense_requested.connect(self._condense_requested)
+        self.cast_panel.cast_room_requested.connect(lambda: self.open_settings("Context"))
+        self._condense_soon = QTimer(self)
+        self._condense_soon.setSingleShot(True)
+        self._condense_soon.setInterval(CONDENSE_AFTER_EDIT_MS)
+        self._condense_soon.timeout.connect(self._condense_if_needed)
+        self._condense_timer = QTimer(self)
+        self._condense_timer.setInterval(CONDENSE_POLL_MS)
+        self._condense_timer.timeout.connect(self._poll_condensing)
 
     def show_cast_page(self) -> None:
         self.right_tabs.setCurrentWidget(self.cast_page)
+
+    # --- the cast's room in the prompt (engine/cast_fit.py) -------------------
+
+    def _refresh_cast_room(self) -> None:
+        """The Cast page's line about how the cards fit, and each card's
+        condensed text: after anything that changes the cast, its room or
+        what has been condensed. The first time a story's cast goes over its
+        room, the status bar says so too: the Cast page may not be showing."""
+        room = cast_room(self.session)
+        self.cast_panel.set_room(room)
+        if room is None:
+            return
+        story_id = self.session.story.id
+        said = self.__dict__.setdefault("_cast_over_said", set())
+        if not room.fit.over:
+            said.discard(story_id)
+        elif story_id not in said and not self.session.bundle.notices:
+            # Never over what loading the story had to say (a backup used).
+            said.add(story_id)
+            self.statusBar().showMessage(
+                f"The cast's cards are over their room in the prompt (about "
+                f"{room.fit.whole_tokens:,} of {room.fit.cap:,} tokens): the largest are "
+                "sent condensed. The Cast page says which.",
+                15000,
+            )
+
+    def _cast_changed_soon(self) -> None:
+        self._refresh_cast_room()
+        self._condense_soon.start()
+
+    def _condense_if_needed(self) -> None:
+        """Have the cards waiting condensed, while nothing else runs."""
+        session = self.session
+        if session is None or self._busy or session.in_private or session.story.chat:
+            return
+        if session.start_condensing():
+            self._condense_timer.start()
+        self._refresh_cast_room()
+
+    def _condense_requested(self, character_id: str) -> None:
+        """The Cast page's Condense / Write it again ("" for every card
+        waiting): the author asked, so a card that failed is tried again."""
+        session = self.session
+        if session is None:
+            return
+        if self._busy:
+            self.statusBar().showMessage(
+                "Cards can be condensed once the story's current job is done.", 6000
+            )
+            return
+        if session.in_private:
+            self.statusBar().showMessage(
+                "Cards aren't condensed during a private scene: nothing else is called.", 6000
+            )
+            return
+        if session.condensing_ids():
+            self.statusBar().showMessage("Cards are being condensed already.", 6000)
+            return
+        wanted = None
+        if character_id:
+            wanted = [c for c in session.cast if c.id == character_id]
+        else:
+            waiting = set(session.cast_fit().waiting)
+            private = session.private_cast_fit()
+            if private is not None:
+                waiting |= set(private.waiting)
+            wanted = [c for c in session.cast if c.id in waiting]
+        if wanted and session.start_condensing(wanted):
+            self._condense_timer.start()
+            self.statusBar().showMessage(
+                "Condensing in the background: keep playing; the cards go in when written.",
+                8000,
+            )
+        self._refresh_cast_room()
+
+    def _poll_condensing(self) -> None:
+        """Put condensed cards in, once nothing else is writing the story. A
+        turn started meanwhile takes them in itself, before its prompt."""
+        session = self.session
+        if session is None or not session.condensing_ids():
+            self._condense_timer.stop()
+            if session is not None:
+                self._refresh_cast_room()
+            return
+        if self._busy or not session.condensing_ready():
+            return
+        notices = session.adopt_condensed()
+        self._condense_timer.stop()
+        for usage in session.unreported_usage:
+            self.status_strip.add_cost(usage)
+        session.unreported_usage.clear()
+        self._refresh_story_cost()
+        self._refresh_cast_room()
+        self._reassemble_inspector()
+        if notices:
+            self.statusBar().showMessage(" ".join(notices), 12000)
+
+    def _after_cast_job(self) -> None:
+        """After a job: the turn may have taken cards in, or started some."""
+        session = self.session
+        if session is not None and session.condensing_ids():
+            self._condense_timer.start()
+        self._refresh_cast_room()
 
     # --- the new story guide (gui/new_story_guide.py) -------------------------
 
