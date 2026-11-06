@@ -958,8 +958,15 @@ Choose:
   each, or world-changing), how disruptive (gentle, steady or upending), the
   kinds of event you want most (danger and fights, mysteries and secrets, new
   people arriving, bonds and rivalries, power and betrayal, exploration and
-  discovery, disasters, hard choices), and whether it may bring in new people
-  and places. Anything you leave alone, the model decides.
+  discovery, disasters, hard choices), how many **New people and places** it
+  may bring in (none, a few, several or many) and how much it writes **About
+  each** of them (briefly, or in depth). Anything you leave alone, the model
+  decides.
+
+A plot asked for in **Draft a story from an idea** writes its new people and
+places as fully as the story's own characters were drafted (briefly or in
+depth, under **How much**), unless the plot's own **About each** says
+otherwise.
 
 The authoring model writes it (see [Models](#models)), in a minute or a few:
 a plot's facts, its events on the timeline and off it, and the people, places
@@ -1341,10 +1348,32 @@ file.
 **Draft a story from an idea** (on the start page, or File → New…).
 Describe the story you want: the setting,
 who you'll play, the tone, and choose the **Person** and **Tense** it is told
-in (or leave them to the premise), so the opening is written that way. The
-model drafts everything in one go:
+in (or leave them to the premise), so the opening is written that way.
+
+Under **How much**, choose how much it sets up. Each list says what it asks
+the model for:
+- **World**: basic (a short world of 100 to 300 words, and at most four lore
+  entries), standard (300 to 900 words, and 3 to 10 entries), or detailed
+  (900 to 1,600 words, and 10 to 20 entries on the setting's places, peoples,
+  organisations, history and customs);
+- **People**: a handful (two or three main characters, and at most three
+  others with a card), standard (two to six main characters, and a few
+  others), or lots (five to eight main characters, and 10 to 20 others: the
+  regulars, rivals, family and officials the story's places would have);
+- **About each**: briefly (30 to 80 words about each character), standard (a
+  fuller sheet), or in depth (250 to 500 words about each main character and
+  120 to 250 about each of the others: how they look, their history, what
+  they want and fear, their secrets and habits, how they stand with the
+  others, and how they speak, with a line or two they might say).
+
+Standard is the draft as it has always been. More takes longer to draft, and
+every main character's card is sent with every turn: a large cast of long
+cards may be sent condensed (see
+[When the cast's cards don't fit](#when-the-casts-cards-dont-fit)).
+
+The model drafts everything in one go:
 - the world;
-- a small cast with sheets and skills, plus supporting cards (canon characters
+- a cast with sheets and skills, plus supporting cards (canon characters
   get a one-liner, since the model already knows them);
 - lore entries;
 - the opening and the starting scene;
