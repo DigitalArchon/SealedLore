@@ -1195,6 +1195,13 @@ QComboBox QAbstractItemView {
   font-size: 12px;
 }
 
+/* The plot editor on a story: the story's own fields, shown and not edited
+   there (gui/plot_editor_pages.py, Page.set_locked). Read-only fields looked
+   as editable as the rest. */
+QLineEdit[storyLocked="true"], QPlainTextEdit[storyLocked="true"] {
+  color: @text_hint;
+}
+
 #errorLabel {
   color: @error;
   font-size: 13px;

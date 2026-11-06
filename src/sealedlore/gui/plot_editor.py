@@ -465,9 +465,12 @@ class PlotEditorWindow(QMainWindow):
             half = QTreeWidgetItem([label])
             half.setData(0, REF_ROLE, (HEADER, group, -1))
             half.setToolTip(0, about)
+            # Capitals, spaced: the two halves stand apart from the bold
+            # sections under them.
             font = QFont(half.font(0))
             font.setBold(True)
-            font.setPointSizeF(font.pointSizeF() * 1.1)
+            font.setCapitalization(QFont.AllUppercase)
+            font.setLetterSpacing(QFont.AbsoluteSpacing, 1.0)
             half.setFont(0, font)
             self.tree.addTopLevelItem(half)
             for section, name in sections:

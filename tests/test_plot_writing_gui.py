@@ -192,6 +192,22 @@ def test_edit_in_the_plot_editor_opens_the_story_s_plot(app, window, monkeypatch
     editor.close()
 
 
+def test_the_plot_editor_open_on_the_story_follows_a_plot_the_model_writes(
+    app, window, monkeypatch
+):
+    window.edit_plot_action.trigger()
+    editor = window._plot_editor
+    assert editor.story is not None and editor.document.events == []
+    model(window, monkeypatch, PLOT)
+    monkeypatch.setattr(PlotDialog, "exec", lambda dialog: QDialog.Accepted)
+    seen = ready(monkeypatch)
+    window.write_plot_action.trigger()
+    wait_until(app, lambda: seen)
+    assert [e.title for e in editor.document.events] == ["The captain comes"]
+    assert not editor.modified
+    editor.close()
+
+
 def test_a_failed_plot_can_be_tried_again_or_left(app, window, monkeypatch):
     model(window, monkeypatch, "Not a plot at all.")
     monkeypatch.setattr(PlotDialog, "exec", lambda dialog: QDialog.Accepted)

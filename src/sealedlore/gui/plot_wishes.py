@@ -10,12 +10,11 @@ model decides" until chosen.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
     QComboBox,
-    QFormLayout,
     QGridLayout,
     QLabel,
     QRadioButton,
@@ -56,7 +55,7 @@ KIND_LABELS = (
     ("arrivals", "New people arriving"),
     ("relationships", "Bonds and rivalries"),
     ("intrigue", "Power and betrayal"),
-    ("discovery", "Exploration and discovery"),
+    ("discovery", "Discovery"),
     ("disaster", "Disasters"),
     ("choices", "Hard choices"),
 )
@@ -105,45 +104,54 @@ class PlotWishesForm(QWidget):
             layout.addWidget(button)
         self.choices[NONE if offer_none else MADE_UP].setChecked(True)
 
+        # Compact: two choices to a row, the kinds in three columns, so that
+        # opened in New story from a premise the dialog stays on a 1080p screen.
         self.details = QWidget()
-        form = QFormLayout(self.details)
-        form.setContentsMargins(24, 4, 0, 0)
+        grid = QGridLayout(self.details)
+        grid.setContentsMargins(24, 4, 0, 0)
         self.premise = GrowingText(lines=3, most=10)
         self.premise.setPlaceholderText(PREMISE_EXAMPLE)
-        self.premise.setTabChangesFocus(True)
-        form.addRow("Your plot", self.premise)
-        form.addRow(
-            "",
-            _hint(
-                "In your own words: what should happen, to whom, the twists you want. "
-                "Leave it blank to choose only what is below."
-            ),
+        self.premise.setToolTip(
+            "In your own words: what should happen, to whom, the twists you want. Leave it "
+            "blank to choose only what is below."
         )
+        self.premise.setTabChangesFocus(True)
+        grid.addWidget(QLabel("Your plot"), 0, 0)
+        grid.addWidget(self.premise, 0, 1, 1, 3)
         self.events = _choice(EVENTS)
         self.spacing = _choice(SPACINGS)
+        self.spacing.setToolTip("In the story's own time: its days and weeks")
         self.scale = _choice(SCALES)
         self.disruption = _choice(DISRUPTIONS)
-        form.addRow("How many events", self.events)
-        form.addRow("How often", self.spacing)
-        form.addRow("How big", self.scale)
-        form.addRow("How disruptive", self.disruption)
-        form.addRow("", _hint("How often is in the story's own time, its days and weeks."))
+        for row, pairs in enumerate(
+            (
+                (("How many", self.events), ("How often", self.spacing)),
+                (("How big", self.scale), ("How disruptive", self.disruption)),
+            ),
+            start=1,
+        ):
+            for column, (label, combo) in enumerate(pairs):
+                grid.addWidget(QLabel(label), row, column * 2)
+                grid.addWidget(combo, row, column * 2 + 1)
         kinds = QWidget()
-        grid = QGridLayout(kinds)
-        grid.setContentsMargins(0, 0, 0, 0)
+        kind_grid = QGridLayout(kinds)
+        kind_grid.setContentsMargins(0, 0, 0, 0)
         self.kinds: dict[str, QCheckBox] = {}
         for index, (key, label) in enumerate(KIND_LABELS):
             box = QCheckBox(label)
             self.kinds[key] = box
-            grid.addWidget(box, index // 2, index % 2)
+            kind_grid.addWidget(box, index // 3, index % 3)
             box.toggled.connect(self.changed)
-        form.addRow("Kinds of event", kinds)
+        grid.addWidget(QLabel("Kinds"), 3, 0, Qt.AlignTop)
+        grid.addWidget(kinds, 3, 1, 1, 3)
         self.newcomers = QCheckBox("It may bring in new people and places")
         self.newcomers.setChecked(True)
         self.newcomers.setToolTip(
             "Kept hidden from the story, and from your pages, until an event brings them in"
         )
-        form.addRow("", self.newcomers)
+        grid.addWidget(self.newcomers, 4, 1, 1, 3)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(3, 1)
         layout.addWidget(self.details)
 
         self.group.buttonToggled.connect(lambda *_args: self._sync())

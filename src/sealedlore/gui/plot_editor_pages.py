@@ -191,6 +191,11 @@ class Page(QWidget):
             fixed = locked and id(widget) not in kept
             if isinstance(widget, (QLineEdit, QPlainTextEdit)):
                 widget.setReadOnly(fixed)
+                # Dimmed by the stylesheet, so it reads as shown, not editable.
+                if bool(widget.property("storyLocked")) != fixed:
+                    widget.setProperty("storyLocked", fixed)
+                    widget.style().unpolish(widget)
+                    widget.style().polish(widget)
             else:
                 widget.setEnabled(not fixed)
 

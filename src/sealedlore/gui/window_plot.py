@@ -279,3 +279,14 @@ class PlotWindow:
         self._reassemble_inspector()
         self._update_controls()
         self.stories.refresh(selected_id=session.story.id)
+        editor = self._plot_editor
+        if (
+            editor is not None
+            and editor.story is not None
+            and editor.story.id == session.story.id
+            and not editor.modified
+        ):
+            # Open on this story with nothing of its own unsaved: it follows
+            # the story (a plot the model just wrote, say), or its next Save
+            # would put the old plot back.
+            editor.load_story(session.bundle, select=editor.current_ref())
