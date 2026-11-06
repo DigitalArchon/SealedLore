@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 from collections.abc import Callable, Iterator, Sequence
+from dataclasses import asdict
 from pathlib import Path
 
 from sealedlore.engine.authoring import (
@@ -18,6 +19,7 @@ from sealedlore.engine.authoring import (
     parse_generated,
 )
 from sealedlore.engine.card_link import fields_of, picture_mark, story_copy
+from sealedlore.engine.draft_detail import STANDARD_DETAIL, DraftDetail
 from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.ids import new_id, utc_now_iso
@@ -53,11 +55,13 @@ class StoryDraft:
         route: dict | None = None,
         reasoning: ReasoningConfig,
         characters: Sequence[Character] = (),
+        detail: DraftDetail = STANDARD_DETAIL,
     ) -> None:
         """`route`: the authoring role's (`routing.config_route`); `reasoning`:
         what the author's level for other calls asks of `model`
         (`reasoning.config_reasoning`). `characters`: the author's own (Your
-        characters) to build the story around, their cards as they are."""
+        characters) to build the story around, their cards as they are.
+        `detail`: how much to set up (engine/draft_detail.py)."""
         if not premise.strip():
             raise ValueError("write a premise first")
         self.provider = provider
@@ -68,11 +72,17 @@ class StoryDraft:
         self.person = person
         self.tense = tense
         self.characters = list(characters)
+        self.detail = detail
         self.request = ChatRequest(
             model=model,
             extra_body=dict(route or {}),
             messages=build_generation_messages(
-                premise, person=person, tense=tense, texts=texts, characters=self.characters
+                premise,
+                person=person,
+                tense=tense,
+                texts=texts,
+                characters=self.characters,
+                detail=detail,
             ),
             params=GenerationParams(max_tokens=GENERATION_MAX_TOKENS, reasoning=reasoning),
         )
@@ -123,17 +133,18 @@ class StoryDraft:
         style.tense = self.tense or style.tense
         save_story_bundle(bundle, root=root)
         request_id = new_id()
-        append_api_log(
-            bundle.story.id,
-            {
-                "id": request_id,
-                "kind": "draft_request",
-                "at": self._requested_at,
-                "premise": self.premise,
-                "payload": self.provider.build_payload(self.request),
-            },
-            root=root,
-        )
+        entry = {
+            "id": request_id,
+            "kind": "draft_request",
+            "at": self._requested_at,
+            "premise": self.premise,
+        }
+        if self.detail.chosen():
+            # What was asked for, beside the request it shaped; a standard
+            # draft's entry is as it always was.
+            entry["detail"] = asdict(self.detail)
+        entry["payload"] = self.provider.build_payload(self.request)
+        append_api_log(bundle.story.id, entry, root=root)
         append_api_log(
             bundle.story.id,
             {

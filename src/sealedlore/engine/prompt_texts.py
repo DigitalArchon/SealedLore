@@ -3733,6 +3733,74 @@ is a suggestion only: the premise decides.
     (("characters", "each character's card, under their name"),),
 )
 
+# How much a draft sets up (the author, Nov 6 2026: "just ... a handful of
+# characters and a basic world based on their premise, or ... really outlined
+# in detail, with lots of characters, each with lots of info about them";
+# engine/draft_detail.py). The standard levels are the drafting prompt's own
+# sizes and add nothing; another level is a line in the request, after the
+# premise, so the system prompt never changes. Not measured.
+_text(
+    "authoring.draft.detail",
+    AUTHORING,
+    "Drafting: how much to set up",
+    "After the premise, when the author chose more or less than the standard world, "
+    "people or detail about each.",
+    "The author has chosen how much to set up. For this story, these sizes replace the "
+    "ones above:\n\n{sizes}",
+    (("sizes", "a line for each choice away from the standard one"),),
+)
+
+for _key, _title, _words in (
+    (
+        "world.basic",
+        "a basic world",
+        'A basic world: "world" 100 to 300 words, only what must always hold; "lore" 0 '
+        "to 4 entries of 40 to 100 words each.",
+    ),
+    (
+        "world.detailed",
+        "a detailed world",
+        'A detailed world: "world" 900 to 1,600 words; "lore" 10 to 20 entries of 80 to '
+        "200 words each, covering the setting's places, peoples, organisations, history "
+        "and customs.",
+    ),
+    (
+        "people.handful",
+        "a handful of people",
+        'A handful of people: 2 or 3 in "cast", and at most 3 in "supporting", only those '
+        "the premise or the opening needs.",
+    ),
+    (
+        "people.lots",
+        "lots of people",
+        'Lots of people: 5 to 8 in "cast", and 10 to 20 in "supporting": the regulars, '
+        "rivals, family, officials and others the story's places would have.",
+    ),
+    (
+        "depth.sketch",
+        "each character in brief",
+        'Each character in brief: a one-line "summary", a "description" of 30 to 80 '
+        'words, a "voice" of a few words, and 3 "skills" for each cast member.',
+    ),
+    (
+        "depth.deep",
+        "each character in depth",
+        'Each character in depth: a "description" of 250 to 500 words for a cast member '
+        "and 120 to 250 for a supporting one (how they look, their history, what they "
+        "want and fear, their secrets and habits, and how they stand with the others), a "
+        '"voice" that says how they speak, with a line or two they might say, and 5 or 6 '
+        '"skills" for each cast member. A canon character still needs only what this '
+        "story changes.",
+    ),
+):
+    _text(
+        f"authoring.draft.{_key}",
+        AUTHORING,
+        f"Drafting: {_title}",
+        "One of the sizes the author chose, in the request after the premise.",
+        _words,
+    )
+
 # A person or tense the author chose comes before the draft, so the opening
 # is written in it (the author, Sept 2026: a second-person story drafted with
 # a third-person opening).

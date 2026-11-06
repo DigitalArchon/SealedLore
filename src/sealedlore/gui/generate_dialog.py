@@ -8,6 +8,7 @@ in Setup for the author to read, and then offers to start it.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from dataclasses import replace
 
 from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import (
@@ -15,6 +16,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPlainTextEdit,
@@ -25,7 +27,9 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.authoring import parse_generated
+from sealedlore.engine.draft_detail import STANDARD, DraftDetail
 from sealedlore.engine.drafting import StoryDraft
+from sealedlore.engine.plot_draft import DEPTHS, NO_NEWCOMERS, PlotWishes
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.gui.model_picker import Browse, ModelField
 from sealedlore.gui.plot_wishes import PlotWishesForm
@@ -43,6 +47,24 @@ PREMISE_EXAMPLE = (
 WITH_CHARACTERS_EXAMPLE = (
     "e.g. {name} as a smuggler in a steampunk port city; I play their new partner. "
     "Slow-burn, wry, with a heist going wrong."
+)
+# How much the draft sets up (engine/draft_detail.py; the author, Nov 6 2026),
+# each level with the numbers its words ask the model for, standard (the
+# draft as it always was) in the middle.
+WORLD_CHOICES = (
+    ("basic", "Basic (100 to 300 words)"),
+    (STANDARD, "Standard (300 to 900 words)"),
+    ("detailed", "Detailed (900 to 1,600 words)"),
+)
+PEOPLE_CHOICES = (
+    ("handful", "A handful (2 or 3, up to 3 more)"),
+    (STANDARD, "Standard (2 to 6, and more)"),
+    ("lots", "Lots (5 to 8, and 10 to 20 more)"),
+)
+DEPTH_CHOICES = (
+    ("sketch", "Briefly (30 to 80 words)"),
+    (STANDARD, "Standard (a fuller sheet)"),
+    ("deep", "In depth (up to 500 words)"),
 )
 
 
@@ -84,6 +106,7 @@ class GenerateDialog(QDialog):
         self._thread: QThread | None = None
         self._worker: GenerationWorker | None = None
         self._received = 0
+        self._thought = 0
         self._failure: str | None = None
         self._closing = False
 
@@ -160,6 +183,45 @@ class GenerateDialog(QDialog):
         voice_hint.setObjectName("hintLabel")
         voice_hint.setWordWrap(True)
 
+        # How much to set up: two to a row, like the plot's choices, so the
+        # dialog keeps to a 1080p screen.
+        self.world = self._level(
+            WORLD_CHOICES,
+            "How long the world text is, and its lore: basic, up to 4 entries of 40 to 100 "
+            "words; standard, 3 to 10 of 40 to 150; detailed, 10 to 20 of 80 to 200, on the "
+            "places, peoples, organisations, history and customs",
+        )
+        self.people = self._level(
+            PEOPLE_CHOICES,
+            "How many main characters (the ones you can play, and those the story turns on), "
+            "and how many others with a card of their own",
+        )
+        self.depth = self._level(
+            DEPTH_CHOICES,
+            "How much about each character. In depth: 250 to 500 words for a main character "
+            "and 120 to 250 for another, with how they speak and a line or two they might say. "
+            "A plot written for the story writes its own newcomers the same way, unless you "
+            "choose otherwise for it",
+        )
+        detail = QWidget()
+        detail_grid = QGridLayout(detail)
+        detail_grid.setContentsMargins(0, 0, 0, 0)
+        for row, column, label, combo in (
+            (0, 0, "World", self.world),
+            (0, 2, "People", self.people),
+            (1, 0, "About each", self.depth),
+        ):
+            detail_grid.addWidget(QLabel(label), row, column)
+            detail_grid.addWidget(combo, row, column + 1)
+        detail_grid.setColumnStretch(1, 1)
+        detail_grid.setColumnStretch(3, 1)
+        # One line, unwrapped: the form gives a wrapped label the height of its
+        # size hint, two lines for this one, out of the premise's room.
+        detail_hint = QLabel(
+            "More takes longer to draft, and every main character's card is sent with every turn."
+        )
+        detail_hint.setObjectName("hintLabel")
+
         form = QFormLayout()
         if self.characters or choose is not None:
             with_row = QHBoxLayout()
@@ -170,6 +232,8 @@ class GenerateDialog(QDialog):
         form.addRow("Person", self.person)
         form.addRow("Tense", self.tense)
         form.addRow("", voice_hint)
+        form.addRow("How much", detail)
+        form.addRow("", detail_hint)
         form.addRow("Model", self.model)
         form.addRow("", model_hint)
         # The author (Nov 2026): a drafted story had no plot unless they wrote
@@ -204,8 +268,25 @@ class GenerateDialog(QDialog):
         # whether anything typed would be lost.
         self._typed = self._as_typed()
 
+    @staticmethod
+    def _level(choices: tuple[tuple[str, str], ...], tip: str) -> QComboBox:
+        combo = QComboBox()
+        for value, label in choices:
+            combo.addItem(label, value)
+        combo.setCurrentIndex(combo.findData(STANDARD))
+        combo.setToolTip(tip)
+        return combo
+
     def model_text(self) -> str:
         return self.model.text().strip()
+
+    def detail(self) -> DraftDetail:
+        """How much the author asked the draft to set up."""
+        return DraftDetail(
+            world=self.world.currentData(),
+            people=self.people.currentData(),
+            depth=self.depth.currentData(),
+        )
 
     def _names(self) -> str:
         names = [character.name for character in self.characters]
@@ -249,8 +330,10 @@ class GenerateDialog(QDialog):
             route=self._route_for(model),
             reasoning=self._reasoning_for(model),
             characters=self.characters,
+            detail=self.detail(),
         )
         self._received = 0
+        self._thought = 0
         self._failure = None
         self.reply_view.hide()
         self._set_running(True)
@@ -261,6 +344,7 @@ class GenerateDialog(QDialog):
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.text_delta.connect(self._on_delta)
+        worker.reasoning_delta.connect(self._on_reasoning)
         worker.failed.connect(self._on_failed)
         worker.finished.connect(thread.quit)
         # Cleanup on the thread, never the worker's own finished (CONTRIBUTING.md).
@@ -271,8 +355,8 @@ class GenerateDialog(QDialog):
     def _set_running(self, running: bool) -> None:
         self.busy_bar.setVisible(running)
         self.premise.setReadOnly(running)
-        self.person.setEnabled(not running)
-        self.tense.setEnabled(not running)
+        for combo in (self.person, self.tense, self.world, self.people, self.depth):
+            combo.setEnabled(not running)
         self.model.setReadOnly(running)
         self.choose_button.setEnabled(not running)
         self.plot.set_read_only(running)
@@ -286,6 +370,16 @@ class GenerateDialog(QDialog):
         self._received += len(text)
         # About six characters to a word, JSON punctuation included.
         self._show_progress(f"Drafting… about {self._received // 6:,} words so far.")
+
+    def _on_reasoning(self, text: str) -> None:
+        # A model that reasons first can think for minutes before it writes a
+        # word of the draft: counted too, as the plot writer counts it, so the
+        # line doesn't sit still meanwhile.
+        self._thought += len(text)
+        if not self._received:
+            self._show_progress(
+                f"Thinking the story through… about {self._thought // 6:,} words so far."
+            )
 
     def _on_failed(self, message: str) -> None:
         self._failure = message
@@ -323,9 +417,20 @@ class GenerateDialog(QDialog):
         # By name, not `typed_texts`: the boxes are read-only while drafting.
         return [self.premise.toPlainText(), self.model.text(), self.plot.typed()]
 
-    def plot_wishes(self):
-        """What the author wants of the story's plot (engine/plot_draft.py), or None."""
-        return self.plot.wishes()
+    def plot_wishes(self) -> PlotWishes | None:
+        """What the author wants of the story's plot (engine/plot_draft.py), or
+        None. A story drafted briefly or in depth has the plot's newcomers
+        written the same way, unless the plot's own choice says otherwise."""
+        wishes = self.plot.wishes()
+        depth = self.depth.currentData()
+        if (
+            wishes is not None
+            and not wishes.depth
+            and depth in DEPTHS
+            and wishes.newcomers != NO_NEWCOMERS
+        ):
+            wishes = replace(wishes, depth=depth)
+        return wishes
 
     def reject(self) -> None:
         """Cancel or Esc: a premise typed here is asked about before it is

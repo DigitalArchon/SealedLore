@@ -24,6 +24,7 @@ from sealedlore.engine.cast_fit import CastFit
 from sealedlore.engine.catalog import ModelInfo
 from sealedlore.engine.chronicle import chronicle_at, format_clock
 from sealedlore.engine.dice import BAND_SHORT
+from sealedlore.engine.draft_detail import STANDARD_DETAIL, DraftDetail, render_detail
 from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.prompt_edits import missing_slots, set_text, texts_in_force
 from sealedlore.engine.prompt_texts import (
@@ -270,16 +271,22 @@ def build_generation_messages(
     tense: NarrativeTense | None = None,
     texts: PromptTexts = DEFAULT_TEXTS,
     characters: Sequence[Character] = (),
+    detail: DraftDetail = STANDARD_DETAIL,
 ) -> list[PromptMessage]:
     """The draft call. A person or tense the author chose comes before the
     draft, so the opening is written in it (the author, Sept 2026: a
     second-person story drafted with a third-person opening). `characters`:
-    the author's own, the story built around them (engine/drafting.py)."""
+    the author's own, the story built around them (engine/drafting.py).
+    `detail`: how much to set up (engine/draft_detail.py); at the standard
+    levels nothing is added, and the request is as it always was."""
     user = "The author's premise:\n\n" + premise.strip()
     if characters:
         user += "\n\n" + texts.fill(
             "authoring.draft.characters", characters=render_own_characters(characters)
         )
+    sizes = render_detail(detail, texts)
+    if sizes:
+        user += "\n\n" + sizes
     if person or tense:
         who = {"first": "I", "second": "you"}.get(person or "")
         user += "\n\n" + texts.fill(
