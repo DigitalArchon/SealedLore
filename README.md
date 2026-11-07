@@ -94,7 +94,7 @@ fun to play. This app will remain focused on text based roleplay.
   few clicks. Doomsville's John and Jane come in four expressions and three
   looks.
 
-![The cast board in Doomsville: John's sheet, his winter coat, combat armour and indoor clothes down the side and expressions across, two gaps chosen in the armour row and, beside them, one the story asked for, and the other characters in the list on the left](docs/screenshots/cast-board.webp)
+![The cast board in Doomsville: the story's characters down the left, and John's Pictures tab, his winter coat, combat armour and indoor clothes down the side and expressions across, each empty place showing the words it would be drawn with, two gaps chosen in the armour row and, beside them, one the story asked for](docs/screenshots/cast-board.webp)
 
 - **A picture style for each story** (3.0.0b1). Gritty and realistic, clean
   and polished sci-fi, glamorous, anime, painted fantasy and more, your own

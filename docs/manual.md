@@ -1188,8 +1188,8 @@ Before it starts you see, and can change, everything it is made of:
   sent and the model answers it (on a TEE or encrypted model still being
   checked, it waits in the box to type in instead, to send once it is).
 
-Their portrait goes with the chat as its own reference picture, so a picture
-of the chat draws them as they look. The card's background goes behind the
+They are one of the chat's people, with every picture of theirs (see "Simple
+chat"), so a picture of the chat draws them as they are shown there. The card's background goes behind the
 chat, and the pictures their greeting shows appear under it (see "Every file
 on the card is kept too" above).
 
@@ -1652,7 +1652,7 @@ or show them in another look (below). A card
 with no portrait has **Draw a portrait…** and **Choose a picture…** on it.
 **Cast board…** at the top of the page opens the cast board on everyone.
 
-![The People page in The Silverwood: where the story is and what is happening, then the ranger, the sellsword and the herbwife under Here now, by their portraits, and three villagers the story named under Also here, with no card yet](screenshots/people-page.webp)
+![The People page in The Silverwood: Cast board… at the top, where the story is and what is happening, then the ranger, the sellsword and the herbwife under Here now, by their portraits, and three villagers the story named under Also here, with no card yet](screenshots/people-page.webp)
 
 Until the story has them, a panel at the top offers **Draw portraits…** for
 everyone who has none (you see and can change every prompt first, as in
@@ -1729,7 +1729,7 @@ spoilers** shows the characters it hasn't brought in yet too (it is the Plot
 page's Show plot); their pictures can be drawn as well, and no model in the
 story hears of them early.
 
-![The cast board in Doomsville: John's sheet, his winter coat, combat armour and indoor clothes down the side and expressions across, two gaps chosen in the armour row and, beside them, one the story asked for, and the other characters in the list on the left](screenshots/cast-board.webp)
+![The cast board in Doomsville: the story's characters down the left, and John's Pictures tab, his winter coat, combat armour and indoor clothes down the side and expressions across, each empty place showing the words it would be drawn with, two gaps chosen in the armour row and, beside them, one the story asked for](screenshots/cast-board.webp)
 
 An empty place shows a **+** and the words it would be drawn with. Choose the
 ones you want (drag across them, Ctrl-click them, or click a row's or column's
@@ -1793,7 +1793,7 @@ call to the summarisation model; with nothing to go on it has their name
 alone, for you to fill in) and opens on their card on the cast board, where
 you can draw their portrait.
 
-![The People page in Doomsville: the player's character under Here now, and March, whom the story brought in, under Also here, with no card yet, with Make a card beside her name](screenshots/people-no-card.png)
+![The People page in Doomsville: Cast board… at the top, the player's character under Here now, and March, whom the story brought in, under Also here, with no card yet, with Make a card beside her name](screenshots/people-no-card.png)
 
 ## The scene, and who can walk into it
 
@@ -2516,10 +2516,14 @@ Find, pictures and the cost all work as in a story, and a long chat is summarise
 story is (Settings → Context), with a plain summariser.
 - **Characters, for their pictures alone.** A chat's **People** page starts
   empty. **Bring someone in** adds a character from Your characters, or a
-  new card. Their card and pictures are on the cast board (**Cast board…**
-  at the top of People): a chat's card has only what drawing them reads
-  (name, summary, description and their pictures), and their sheet of
-  looks and expressions works as a story's does. Nothing about them is sent
+  new card; on the cast board, **SillyTavern cards** brings one in from a
+  card file or a link, with its picture and expressions (never its
+  lorebook: a chat has no lore). Their card and pictures are on the cast
+  board (**Cast board…** at the top of People): a chat's card has only what
+  drawing them reads (name, summary, description and their pictures), and
+  their sheet of looks and expressions works as a story's does. A picture
+  the chat made can become one of theirs: **Use as a character's picture…**
+  on its ⋯ menu (or a video's last frame). Nothing about them is sent
   to the chat's model. Each is **Here now** or **Set aside** (right-click
   them: **Set aside for now**, **Bring them back here**), and right-click →
   **Show as** chooses which of their pictures they are shown with, from the
@@ -2527,6 +2531,9 @@ story is (Settings → Context), with a plain summariser.
   those here now, as they are shown, are offered first to go with it, as a
   story's characters' are; **Story → Draw pictures for the cards…** draws
   portraits for those with none.
+
+  ![A chat's People page: the line saying its characters are for their pictures alone, Bring someone in, John under Here now in his combat armour, and Jane under Set aside](screenshots/chat-people.webp)
+
 - **Keep in full** (a message's ⋯ menu) sends a message word for word even
   once its part of the chat is summarised: it rides after that part's
   summary. Your first message starts kept. Story so far says when kept
