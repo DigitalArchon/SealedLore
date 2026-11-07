@@ -288,8 +288,7 @@ class TavernWindow:
         self._refresh_scene_panel()
         self._refresh_composer()
         self._reassemble_inspector()
-        self.show_cast_page()
-        self.cast_panel.select_character(character.id)
+        self.show_cast_page(character.id)
         where_words = "the cast" if to_cast else "the supporting characters"
         if notes:
             self._say_left_out(

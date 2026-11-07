@@ -18,8 +18,9 @@ its width when a story opens.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QSize, Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
     QHBoxLayout,
@@ -76,6 +77,20 @@ class TabRows(QWidget):
         # Clear of the dock's edges, as the Stories list is.
         layout.setContentsMargins(8, 8, 8, 0)
         layout.addWidget(self._outer)
+        # The least width the pages take, whichever shows (`set_floor`).
+        self._floor: Callable[[], int] = lambda: 0
+
+    def set_floor(self, floor: Callable[[], int]) -> None:
+        """The narrowest the pages are, whichever shows: a page's own minimum
+        grows once it is first laid out (Story so far's by a scrollbar's
+        width), and while the Cast page was here, wider than any, it hid
+        that; without a floor, showing a page widened the dock (Nov 7 2026)."""
+        self._floor = floor
+        self.updateGeometry()
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802 - Qt naming
+        hint = super().minimumSizeHint()
+        return QSize(max(hint.width(), self._floor()), hint.height())
 
     # --- the QTabWidget subset --------------------------------------------
 

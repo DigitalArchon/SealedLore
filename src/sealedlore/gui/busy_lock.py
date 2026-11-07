@@ -22,6 +22,8 @@ came back editable once the passage was in.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
+
 from PySide6.QtCore import QEvent, QObject, Qt, QTimer
 from PySide6.QtWidgets import (
     QAbstractButton,
@@ -46,9 +48,13 @@ _BROWSED = (QListWidget, QTreeWidget)
 
 
 class BusyLock(QObject):
-    def __init__(self, page: QWidget) -> None:
+    def __init__(self, page: QWidget, skip: Callable[[], Sequence[QWidget]] = lambda: ()) -> None:
+        """`skip`: widgets in the page that look after themselves while a
+        job runs (the cast board in the cast panel: told whether cards may
+        change, and browsed whatever runs), left alone with all inside them."""
         super().__init__(page)
         self.page = page
+        self._skip = skip
         self.locked = False
         # A control's own enabled state as the page last set it.
         self._enabled: dict[QWidget, bool] = {}
@@ -84,9 +90,12 @@ class BusyLock(QObject):
         if not self.locked:
             return
         self._locking = True
+        skipped = [w for w in self._skip() if isValid(w)]
         try:
             for widget in self.page.findChildren(QWidget):
                 if widget in self._enabled or widget in self._read_only:
+                    continue
+                if any(w is widget or w.isAncestorOf(widget) for w in skipped):
                     continue
                 if isinstance(widget, _TEXT):
                     self._read_only[widget] = widget.isReadOnly()

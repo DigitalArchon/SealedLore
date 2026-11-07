@@ -278,11 +278,12 @@ def test_a_story_without_a_map_opens_on_its_people(app, window):
     assert window.right_tabs.currentWidget() is page
     assert set(page.cards) == {"char-serrik", "char-maela", "char-idris"}
     assert page.cards["char-serrik"].person.you
-    # A click on a card is the profile, on the Cast page.
+    # A click on a card is their card, on the cast board.
     page.cards["char-maela"].profile_requested.emit("char-maela")
     settle(app)
-    assert window.right_tabs.currentWidget() is window.cast_page
+    assert window.board_shown()
     assert window.cast_panel._current.id == "char-maela"
+    assert window.cast_panel.tabs.currentIndex() == 0
 
 
 def test_the_people_page_keeps_its_scroll_bar_so_its_width_never_follows_its_height(app):
@@ -598,7 +599,7 @@ def test_a_story_with_nobody_yet_offers_to_add_someone(app, tmp_path):
         assert window.right_tabs.currentWidget() is page and not page.cards
         page.tip_buttons["add"].click()
         settle(app)
-        assert window.right_tabs.currentWidget() is window.cast_page
+        assert window.board_shown()
         assert [c.name for c in window.session.cast] == ["New character"]
     finally:
         window.close()
@@ -696,8 +697,8 @@ def test_the_panel_beside_the_story_is_titled_with_its_page(app, window):
 
     dock = window.inspector_dock
     assert dock.windowTitle() == f"People  ·  {PAGE_ABOUT['People']}"
-    window.right_tabs.setCurrentWidget(window.cast_page)
-    assert dock.windowTitle().startswith("Cast  ·  ")
+    window.right_tabs.setCurrentWidget(window.scene_panel)
+    assert dock.windowTitle().startswith("Scene  ·  ")
     assert "Inspector" not in dock.windowTitle()
     window._close_story()
     settle(app)
@@ -706,7 +707,7 @@ def test_the_panel_beside_the_story_is_titled_with_its_page(app, window):
 
 def test_the_people_page_makes_a_card_for_someone_with_none(app, window, monkeypatch):
     """Make a card ▾ under "Also here, with no card yet" writes the card and
-    opens it on the Cast page (the map mode archived, Oct 24 2026: the slot
+    opens it on the cast board (the map mode archived, Oct 24 2026: the slot
     had gone with it, and the button did nothing)."""
     from sealedlore.providers.mock import MockChatProvider
 
@@ -719,8 +720,8 @@ def test_the_people_page_makes_a_card_for_someone_with_none(app, window, monkeyp
     actions = window.people_page.make_card_buttons["Suzuka Nakamoto"].menu().actions()
     actions[0].trigger()
     wait_until(app, lambda: any(c.name == "Suzuka Nakamoto" for c in window.session.supporting))
-    # The card opens on the Cast page once the job is in (`_after_job`).
-    wait_until(app, lambda: window.right_tabs.currentWidget() is window.cast_page)
+    # The card opens on the cast board once the job is in (`_after_job`).
+    wait_until(app, window.board_shown)
     assert "Suzuka Nakamoto" in [c.name for c in window.session.supporting]
 
 
@@ -768,7 +769,7 @@ def test_show_as_puts_a_character_in_another_look(app, window):
     assert window.people_page.cards["char-maela"].look_actions() == []
 
 
-def test_a_character_s_pictures_are_labelled_on_the_cast_page(app, window, monkeypatch):
+def test_a_character_s_pictures_are_labelled_on_their_card(app, window, monkeypatch):
     from PySide6.QtWidgets import QDialog
 
     from sealedlore.gui.picture_labels import PictureLabelsDialog
@@ -777,8 +778,7 @@ def test_a_character_s_pictures_are_labelled_on_the_cast_page(app, window, monke
     session.pictures.write("images/refs/portrait.png", _picture(0x335577))
     serrik = next(c for c in session.cast if c.id == "char-serrik")
     serrik.reference_images = [ImageRef(id="p", file="images/refs/portrait.png")]
-    window.right_tabs.setCurrentWidget(window.cast_page)
-    window.cast_panel.select_character("char-maela")
+    window.show_cast_page("char-maela")
     window.cast_panel.select_character("char-serrik")
     settle(app)
 

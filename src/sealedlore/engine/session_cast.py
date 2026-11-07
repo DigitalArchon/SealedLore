@@ -265,7 +265,7 @@ class CastRuntime:
         if written:
             fit = self.cast_fit()
             state = (
-                "the cast still doesn't fit its room: see the Cast page"
+                "the cast still doesn't fit its room: see the cast board"
                 if fit.still_over
                 else "the cast fits its room"
             )
@@ -273,7 +273,7 @@ class CastRuntime:
         if problems:
             notices.append(
                 f"Couldn't condense the cards of {_names(problems)}: they go whole "
-                "meanwhile. The Cast page has Try again."
+                "meanwhile. Their card on the cast board has Try again."
             )
         return notices
 

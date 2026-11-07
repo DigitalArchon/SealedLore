@@ -253,11 +253,12 @@ class SetupDialog(QDialog):
         layout = QVBoxLayout(widget)
         layout.addWidget(
             _hint(
-                "The Cast page itself: as many or as few characters as you like, in as "
-                "much or as little detail. The more you put on their cards, the more say "
-                "you have in who they are. Set in a world that already exists? Fill with "
-                "lore characters… writes cards for its people. Cards are kept as you make "
-                "them, as on the Cast page: Cancel doesn't take them back."
+                "The cast board's cards themselves: as many or as few characters as you "
+                "like, in as much or as little detail. The more you put on their cards, the "
+                "more say you have in who they are. Set in a world that already exists? Fill "
+                "with lore characters… writes cards for its people. Cards are kept as you "
+                "make them, as on the cast board: Cancel doesn't take them back. Their "
+                "pictures as sheets of looks and expressions are on the cast board."
             )
         )
         layout.addWidget(panel, 1)
@@ -692,7 +693,7 @@ class SetupDialog(QDialog):
             layout.addWidget(
                 _hint(
                     "This story has no cast yet. Once it has (the Characters tab, or the "
-                    "Cast page beside the story), choose here or when you start who is "
+                    "cast board, People → Cast board…), choose here or when you start who is "
                     "there at the start and which character to suggest playing. Until "
                     "then the opening places everyone."
                 )

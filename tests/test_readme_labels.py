@@ -122,8 +122,22 @@ def tree(tmp_path_factory) -> Tree:
     menus["Story"]["Setup…"] = setup
     pages = window.right_tabs
     inspector = {_clean(pages.tabText(i)): _labels(pages.widget(i)) for i in range(pages.count())}
+    # The story's characters in the whole window (People → Cast board…), and
+    # its two tabs, the card and the pictures.
+    board = window.cast_page
+    tabs = window.cast_panel.tabs
+    board_tree = {
+        **_labels(board),
+        **{_clean(tabs.tabText(i)): _labels(tabs.widget(i)) for i in range(tabs.count())},
+    }
     window.close()
-    return {**inspector, **menus, "Settings": settings, "Setup": setup}
+    return {
+        **inspector,
+        **menus,
+        "Settings": settings,
+        "Setup": setup,
+        "Cast board": board_tree,
+    }
 
 
 def _readme_text() -> str:

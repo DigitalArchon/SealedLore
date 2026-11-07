@@ -347,8 +347,9 @@ class CardLinkWindow:
         self._refresh_composer()
         self._reassemble_inspector()
         if not self.collection_shown():
-            self.show_cast_page()
-        self.cast_panel.select_character(added[0].id)
+            self.show_cast_page(added[0].id)
+        else:
+            self.cast_panel.select_character(added[0].id)
         names = ", ".join(character.name for character in added)
         where = "the cast" if to_cast else "the supporting characters"
         later = (

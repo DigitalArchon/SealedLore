@@ -639,8 +639,7 @@ class ImagesWindow:
         name = card.name if isinstance(card, Character) else card.title
         if action == "show":
             if isinstance(card, Character):
-                self.right_tabs.setCurrentWidget(self.cast_page)
-                self.cast_panel.select_character(card.id)
+                self.show_cast_page(card.id)
             else:
                 self.right_tabs.setCurrentWidget(self.lore_panel)
                 self.lore_panel.select_entry(card.id)

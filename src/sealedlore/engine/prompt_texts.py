@@ -3504,7 +3504,7 @@ _text(
     "authoring.lore_cast",
     AUTHORING,
     "Cards for a world's characters",
-    "The system prompt of Fill with lore characters… on the Cast page and in the "
+    "The system prompt of Fill with lore characters… on the cast board and in the "
     "new story guide. The program reads its JSON reply: keep the shape it asks for.",
     """\
 You write character cards for a collaborative roleplay story in SealedLore.

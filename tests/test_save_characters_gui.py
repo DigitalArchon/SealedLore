@@ -177,14 +177,17 @@ def test_a_character_the_plot_hides_is_left_out_unless_spoilers_are_on(app, wind
 def test_the_cast_board_saves_the_one_shown_or_everyone(app, window, monkeypatch):
     seen = answer(monkeypatch, tick=())
     window.show_cast_board(True)
-    board = window.cast_board
-    assert board.save_button.isVisibleTo(board)
-    assert board.keep_button.text() == KEEP_LABEL
-    assert "Pictures only" in board.keep_button.toolTip()
-    board.save_button.click()
+    # On the page's header: the board's own are put away there.
+    page = window.cast_page
+    assert page.save_button.isVisibleTo(page)
+    assert page.keep_button.text() == KEEP_LABEL
+    window.session.story.setup.template = "Doomsville"
+    window._refresh_board()
+    assert "Pictures only" in page.keep_button.toolTip()
+    page.save_button.click()
     assert seen[-1]["ticked"] == ["john", "jane", "evan"], "everyone, when everyone is shown"
-    board.show_character("jane")
-    board.save_button.click()
+    page.show_character("jane")
+    page.save_button.click()
     assert seen[-1]["ticked"] == ["jane"]
     window.show_cast_board(False)
 

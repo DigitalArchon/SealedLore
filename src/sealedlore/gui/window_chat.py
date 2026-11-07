@@ -139,7 +139,6 @@ class ChatWindow:
         for page in (
             self.people_page,
             self.scene_panel,
-            self.cast_page,
             self.lore_panel,
             self.style_panel,
         ):
@@ -147,7 +146,6 @@ class ChatWindow:
         if chat and self.right_tabs.currentWidget() in (
             self.people_page,
             self.scene_panel,
-            self.cast_page,
             self.lore_panel,
             self.style_panel,
         ):

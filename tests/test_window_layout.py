@@ -307,11 +307,10 @@ def test_groups_stand_further_apart_than_a_caption_from_its_control(app):
     host.close()
 
 
-def test_the_cast_list_shows_its_names_and_keeps_a_dragged_height(app, tmp_path: Path):
+def test_the_cast_list_shows_everyone_down_the_board(app, tmp_path: Path):
     """The author (Oct 2026): at 1440p the Cast page's list showed one name
-    at a time and couldn't be resized. With supporting cards and suggestions
-    under it, its fixed share left 84px. It is fitted to its names now, its
-    divider has a grip, and a drag is kept for the next launch."""
+    at a time. On the cast board (Nov 7 2026) the list runs down the left of
+    the whole window, as Your characters' does, and shows them all."""
     from sealedlore.models.character import Character
     from sealedlore.models.supporting import CharacterSuggestion
 
@@ -324,28 +323,12 @@ def test_the_cast_list_shows_its_names_and_keeps_a_dragged_height(app, tmp_path:
     window.resize(1920, 1080)
     window.show()
     window.open_story(story.id)
-    window.right_tabs.setCurrentWidget(window.cast_page)
+    window.show_cast_board(True)
     settle(app)
     panel = window.cast_panel
-    row = panel.list.sizeHintForRow(1)
-    assert panel.list.height() >= row * 6, "six names show at once"
-    assert panel.splitter.handleWidth() >= 10
-
-    top = panel.splitter.sizes()[0]
-    panel.splitter.moveSplitter(top + 80, 1)  # what a drag does
-    panel._list_dragged(top + 80, 1)
-    settle(app)
-    assert panel.list_height() == top + 80
-    window._remember_layout()
-    assert window.config.window.cast_list_height == top + 80
-    save_config(window.config, root=tmp_path)
+    rows = panel.list.count()
+    assert rows == 1 + 1 + 6 + 1 + 3  # Everyone, two headings, nine people
+    needed = sum(panel.list.sizeHintForRow(row) for row in range(rows))
+    assert panel.list.viewport().height() >= needed, "everyone shows at once"
+    assert panel.side.x() < panel.tabs.x(), "the list down the left, the card beside it"
     window.close()
-
-    again = MainWindow(root=tmp_path, use_mock=True)
-    again.resize(1920, 1080)
-    again.show()
-    again.open_story(story.id)
-    again.right_tabs.setCurrentWidget(again.cast_page)
-    settle(app)
-    assert abs(again.cast_panel.splitter.sizes()[0] - (top + 80)) <= 2
-    again.close()

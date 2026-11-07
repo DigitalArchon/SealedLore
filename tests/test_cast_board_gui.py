@@ -75,8 +75,11 @@ def test_the_board_takes_the_window_and_gives_it_back_as_it_was(app, window):
     window._sync_stories_list()
     window.inspector_dock.setVisible(True)
     branch_bar = window.branch_bar.isVisible()
-    window.cast_panel.board_button.click()
+    window._build_people()
+    window.people_page.board_button.click()
     assert window.board_shown()
+    # Everyone's pictures to begin with: the list's first entry.
+    assert window.cast_panel.everyone_shown() and window.cast_board.current is None
     for widget in (window.inspector_dock, window.stories_dock, window.composer, window.find_button):
         assert not widget.isVisible()
     window._on_escape()
@@ -374,15 +377,22 @@ def test_show_spoilers_on_the_board_shows_everyone(app, window, tmp_path):
     window.config.show_plot_spoilers = False
     window.show_cast_board(True)
     board = window.cast_board
-    assert not board.spoilers.isHidden() and not board.spoilers.isChecked()
+    # On the page's header (the board's own is the page's now).
+    spoilers = window.cast_page.spoilers
+    assert spoilers.isVisibleTo(window.cast_page) and not spoilers.isChecked()
     names = [board.people.item(i).text() for i in range(board.people.count())]
     assert not any(name.startswith(hidden.name) for name in names)
-    board.spoilers.setChecked(True)
+    panel = window.cast_panel
+    listed = [panel.list.item(i).text() for i in range(panel.list.count())]
+    assert not any(name.startswith(hidden.name) for name in listed)
+    spoilers.setChecked(True)
     assert window.config.show_plot_spoilers
     names = [board.people.item(i).text() for i in range(board.people.count())]
     shown = next(name for name in names if name.startswith(hidden.name))
     assert shown.endswith("not in the story yet")
-    board.spoilers.setChecked(False)
+    listed = [panel.list.item(i).text() for i in range(panel.list.count())]
+    assert any(name.startswith(hidden.name) for name in listed)
+    spoilers.setChecked(False)
     assert not window.config.show_plot_spoilers
 
 
@@ -555,9 +565,9 @@ def test_pictures_kept_from_the_board_come_with_the_templates_next_story(app, wi
         window.session.pictures.write(ref.file, png(30 * number + 20))
     window.session.story.setup.template = "Doomsville"
     window.show_cast_board(True, "char-serrik")
-    assert not window.cast_board.keep_button.isHidden()
+    assert not window.cast_page.keep_button.isHidden()
     monkeypatch.setattr(window, "_keep_choice", lambda *args: "keep")
-    window.cast_board.keep_button.click()
+    window.cast_page.keep_button.click()
     kept = read_kept("Doomsville", root=window.root)
     assert kept is not None and kept.count == 4
     window.show_cast_board(False)

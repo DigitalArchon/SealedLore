@@ -770,6 +770,8 @@ class CastBoard(QWidget):
     save_requested = Signal(str)
     # (card id, "" for everyone shown): pictures redrawn in a style.
     restyle_requested = Signal(str)
+    # (card id): one chosen on the overview, to see their sheet.
+    character_chosen = Signal(str)
 
     def __init__(self, pictures: StoryPictures, parent=None) -> None:
         super().__init__(parent)
@@ -785,6 +787,10 @@ class CastBoard(QWidget):
         self._sheet: Sheet | None = None
         self._fronts: dict[tuple[str, str, str], int] = {}
         self._hidden: set[str] = set()
+        # Inside a page that has its own list of people, title and buttons
+        # (Your characters, the story's cast board page): those are hidden.
+        self._embedded = False
+        self._template = ""
         # The prompt texts in force, for the usual words a heading is drawn with.
         self._texts: PromptTexts = DEFAULT_TEXTS
         # Whose sheet the table holds now.
@@ -1016,7 +1022,7 @@ class CastBoard(QWidget):
         self.spoilers.blockSignals(True)
         self.spoilers.setChecked(spoilers)
         self.spoilers.blockSignals(False)
-        self.spoilers.setVisible(bool(self._hidden))
+        self.spoilers.setVisible(bool(self._hidden) and not self._embedded)
         self._shown = dict(shown)
         self._wanted = {key: dict(value) for key, value in wanted.items()}
         self._drawing = dict(drawing)
@@ -1030,7 +1036,8 @@ class CastBoard(QWidget):
     def set_template(self, template: str, kept: int = 0) -> None:
         """The template the story was made from ("" for none): its pictures
         can be kept for the next story from it; `kept` were kept already."""
-        self.keep_button.setVisible(bool(template))
+        self._template = template
+        self.keep_button.setVisible(bool(template) and not self._embedded)
         already = f" {kept} are kept for it now." if kept else ""
         self.keep_button.setToolTip(
             f"Pictures only: everyone's pictures, labels and sheets, kept for the next story "
@@ -1046,7 +1053,32 @@ class CastBoard(QWidget):
 
     def set_savable(self, savable: bool) -> None:
         """Whether Save to Your characters… is offered (the story's board)."""
-        self.save_button.setVisible(savable)
+        self.save_button.setVisible(savable and not self._embedded)
+
+    def embed(self) -> None:
+        """Inside a page with its own list of people, title and buttons: the
+        board's own are put away for good."""
+        self._embedded = True
+        for widget in (
+            self.people,
+            self.title,
+            self.back_button,
+            self.save_button,
+            self.keep_button,
+            self.spoilers,
+        ):
+            widget.hide()
+
+    @property
+    def template(self) -> tuple[str, str]:
+        """(the template its pictures can be kept for, "" for none; what Keep
+        pictures for new stories… says of it)."""
+        return self._template, self.keep_button.toolTip()
+
+    @property
+    def offers_spoilers(self) -> bool:
+        """Whether the plot hides anyone (Show spoilers is offered)."""
+        return bool(self._hidden)
 
     def aim(self, card_id: str | None) -> None:
         """Whose sheet the next `set_cards` shows (None: everyone), without
@@ -1317,9 +1349,7 @@ class CastBoard(QWidget):
             name.setFlat(True)
             name.setCursor(Qt.PointingHandCursor)
             name.setToolTip(f"{card.name}'s pictures as a sheet of looks and expressions")
-            name.clicked.connect(
-                lambda _checked=False, card_id=card.id: self.show_character(card_id)
-            )
+            name.clicked.connect(lambda _checked=False, card_id=card.id: self._choose(card_id))
             strip = Strip(tile, self._thumbs)
             for index, ref in enumerate(card.reference_images):
                 item = QListWidgetItem()
@@ -1331,11 +1361,17 @@ class CastBoard(QWidget):
                 item.setData(TILE_ROLE, (None, False))
                 item.setToolTip(f"{card.name} has no pictures yet. Click for their sheet.")
                 strip.addItem(item)
-            strip.itemClicked.connect(lambda _item, card_id=card.id: self.show_character(card_id))
+            strip.itemClicked.connect(lambda _item, card_id=card.id: self._choose(card_id))
             self._overview_lists.append(strip)
             self._overview_rows.addWidget(name)
             self._overview_rows.addWidget(strip)
         self._overview_rows.addStretch(1)
+
+    def _choose(self, card_id: str) -> None:
+        """One chosen on the overview: their sheet (and the page that holds
+        the board shows them in its list)."""
+        self.show_character(card_id)
+        self.character_chosen.emit(card_id)
 
     def _thumbs_ready(self) -> None:
         """Pictures read since: drawn where they go."""

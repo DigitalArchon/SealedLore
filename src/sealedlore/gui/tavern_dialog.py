@@ -97,7 +97,7 @@ class CardImportDialog(QDialog):
         self.as_world = QRadioButton("A world, or a narrator for several people")
         self.as_world.setToolTip(
             "The card's description becomes the story's world, with no card for "
-            f"“{card.name}”; Fill with lore characters… on the Cast page can write cards for "
+            f"“{card.name}”; Fill with lore characters… on the cast board can write cards for "
             "the people in it"
         )
         self.as_character.setChecked(True)

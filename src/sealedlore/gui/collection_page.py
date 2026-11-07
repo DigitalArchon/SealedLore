@@ -91,6 +91,13 @@ CHAT_LABEL = "Chat with them…"
 DRAFT_LABEL = "Draft a story with them…"
 ADD_LABEL = "Add to the story"
 SCENARIO_STORY_LABEL = "A story from their card's own scenario…"
+# What the page is, said at its top: the author's own, for any story; a
+# story's cast board is that story's alone (gui/story_cast_page.py).
+SCOPE_WORDS = (
+    "Your characters: kept on this computer for any story or chat, outside every story. "
+    "A story gets its own copy of each one it takes, and what it changes comes back here "
+    "only when you save it here."
+)
 
 
 def _plural(count: int, word: str) -> str:
@@ -434,8 +441,7 @@ class CollectionPage(QWidget):
         )
         self.board = CastBoard(pictures)
         # One character's sheet: the page lists the people and goes back.
-        for widget in (self.board.people, self.board.back_button, self.board.title):
-            widget.hide()
+        self.board.embed()
         self.chat_form = ChatForm()
         self.chat_form.changed.connect(self._counted_changed)
         self.lorebook_form = LorebookForm()
@@ -467,9 +473,13 @@ class CollectionPage(QWidget):
         self.pages.addWidget(self.tabs)
         self.pages.addWidget(self._chosen_page())
 
+        self.scope = QLabel(SCOPE_WORDS)
+        self.scope.setObjectName("scopeNote")
+        self.scope.setWordWrap(True)
         right = QVBoxLayout()
         right.setSpacing(8)
         right.addLayout(header)
+        right.addWidget(self.scope)
         right.addWidget(self.stats)
         right.addWidget(self.pages, 1)
         layout = QHBoxLayout(self)

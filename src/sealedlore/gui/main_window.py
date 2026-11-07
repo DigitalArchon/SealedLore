@@ -60,7 +60,7 @@ from sealedlore.engine.session import (
 )
 from sealedlore.engine.tokens import TokenEstimator
 from sealedlore.engine.usage import usage_fields, usage_report
-from sealedlore.gui import crop_dialog, start_page
+from sealedlore.gui import crop_dialog, start_page, text_size
 from sealedlore.gui.attest_check import attestation_tests
 from sealedlore.gui.bad_hosts import bad_hosts
 from sealedlore.gui.banners import HeldAwayBanner, OverBudgetBanner, StalenessBanner
@@ -202,11 +202,13 @@ from sealedlore.tree import path_to
 # The panel beside the story: its title with no story open, and what each
 # of its pages shows, after the page's name (`_sync_dock_title`).
 NO_STORY_TITLE = "Open a story to see its pages here"
+# The Inspector's pages are never narrower than this at 100% text: wider
+# than any of them once laid out (gui/tab_rows.py `set_floor`).
+INSPECTOR_PAGES_FLOOR = 420
 PAGE_ABOUT = {
     "Map": "Where the story is; click where to go, right-click to mark a spot",
     "People": "Who is in the story, by their faces",
     "Scene": "Who is here, where and when, as the story has it",
-    "Cast": "Each character's sheet, portrait and skills",
     "Plot": "The story's clock, facts and events",
     "Lore": "What the storyteller knows of the world, entry by entry",
     "Style": "How the passages read",
@@ -581,8 +583,6 @@ class MainWindow(
         self.addDockWidget(Qt.LeftDockWidgetArea, left)
 
         self.cast_panel = CastPanel(self._story_pictures)
-        if self.config.window is not None:
-            self.cast_panel.set_list_height(self.config.window.cast_list_height)
         self.cast_panel.changed.connect(self._on_cast_changed)
         self.cast_panel.renamed.connect(self._on_character_renamed)
         self.cast_panel.promote_requested.connect(self._promote_character)
@@ -592,9 +592,6 @@ class MainWindow(
         self.cast_panel.scan_requested.connect(self.scan_for_characters)
         self.cast_panel.infer_requested.connect(self.infer_competence)
         self.cast_panel.picture_requested.connect(self._on_card_picture)
-        self.cast_panel.board_requested.connect(
-            lambda card_id: self.show_cast_board(True, card_id or None)
-        )
         self.scene_panel = ScenePanel()
         self.scene_panel.changed.connect(self._on_scene_changed)
         self.scene_panel.update_requested.connect(self.update_scene_from_story)
@@ -626,15 +623,18 @@ class MainWindow(
         self._wire_people()
         # The pages a job locks read-only rather than greys out.
         self._busy_locks = [
-            BusyLock(page)
-            for page in (
-                self.cast_panel,
-                self.scene_panel,
-                self.plot_panel,
-                self.lore_panel,
-                self.style_panel,
-                self.summaries_panel,
-            )
+            # The cast board, the panel's Pictures tab, looks after itself.
+            BusyLock(self.cast_panel, skip=lambda: (self.cast_board,)),
+            *(
+                BusyLock(page)
+                for page in (
+                    self.scene_panel,
+                    self.plot_panel,
+                    self.lore_panel,
+                    self.style_panel,
+                    self.summaries_panel,
+                )
+            ),
         ]
         self._init_cast()
         self._init_tavern()
@@ -647,13 +647,12 @@ class MainWindow(
         self._init_videos()
         self._init_private()
 
-        # Scene first, and the page a story opens on: playtesting found the
-        # scene read wrong too often to go unwatched, and Cast is for changes
-        # made by hand.
+        # People first, and the page a story opens on; the cards and
+        # pictures are on the cast board, in the whole window (People's Cast
+        # board…; the Cast page went, Nov 7 2026).
         self.right_tabs = TabRows()
         self.right_tabs.addTab(self.people_page, "People")
         self.right_tabs.addTab(self.scene_panel, "Scene")
-        self.right_tabs.addTab(self.cast_page, "Cast")
         self.right_tabs.addTab(self.plot_panel, "Plot")
         self.right_tabs.addTab(self.lore_panel, "Lore")
         self.right_tabs.addTab(self.style_panel, "Style")
@@ -666,6 +665,8 @@ class MainWindow(
             self.right_tabs.indexOf(self.inspector), self.config.prompt_page
         )
         self.right_tabs.set_empty(self._no_story_page())
+        # As wide as the widest page once laid out, at the text size chosen.
+        self.right_tabs.set_floor(lambda: round(INSPECTOR_PAGES_FLOOR * text_size.scale()))
         # Titled with the page it shows and what that page is for
         # (`_sync_dock_title`): "Inspector" said nothing to a new player.
         right = QDockWidget(NO_STORY_TITLE, self)
@@ -1068,7 +1069,7 @@ class MainWindow(
         page.file_requested.connect(self._choose_card_picture)
         page.play_requested.connect(self._play_as)
         page.look_requested.connect(self._show_look)
-        page.board_requested.connect(lambda card_id: self.show_cast_board(True, card_id))
+        page.board_requested.connect(lambda card_id: self.show_cast_board(True, card_id or None))
         page.whole_requested.connect(
             lambda name, file: (
                 self.session is not None
@@ -1089,10 +1090,10 @@ class MainWindow(
         page.add_requested.connect(self._add_character)
 
     def _add_character(self) -> None:
-        """A new card, on the Cast page, its name ready to type."""
+        """A new card, on the cast board, its name ready to type."""
         if self.session is None or self._busy:
             return
-        self.right_tabs.setCurrentWidget(self.cast_page)
+        self.show_cast_page()
         self.cast_panel.add_character()
 
     def _refresh_people(self) -> None:
@@ -1153,9 +1154,8 @@ class MainWindow(
         self._refresh_people()
 
     def _open_profile(self, card_id: str) -> None:
-        """A card on the People page: their profile, on the Cast page."""
-        self.right_tabs.setCurrentWidget(self.cast_page)
-        self.cast_panel.select_character(card_id)
+        """A card on the People page: their card, on the cast board."""
+        self.show_cast_page(card_id)
 
     def _choose_card_picture(self, card_id: str) -> None:
         """A picture from disk for a card with none (the People page), as the
@@ -1296,7 +1296,9 @@ class MainWindow(
                 return
             if not self.session.cast:
                 self.statusBar().showMessage(
-                    "Next: add the cast on the Cast page, then Story → Start story…", 12000
+                    "Next: add the cast on the cast board (People → Cast board…), then Story → "
+                    "Start story…",
+                    12000,
                 )
                 return
         # Its plot, if the last step asked for one; then Start: who to play,
@@ -2077,12 +2079,9 @@ class MainWindow(
         self._update_controls()
         self._sync_stories_list()
 
-    def refresh_panels(self) -> None:
-        if self.session is None:
-            return
-        story = self.session.story
-        # What the plot hasn't brought in stays out of the author's way too,
-        # unless they have chosen to see the plot.
+    def _refresh_cast_list(self) -> set[str]:
+        """The cast board's list of the story's characters as it stands (one
+        the plot hasn't brought in yet only with spoilers on); who is left out."""
         hidden = set() if self.config.show_plot_spoilers else self.session.hidden_ids()
         self._shown_hidden = hidden
         self.cast_panel.set_cast(
@@ -2091,6 +2090,15 @@ class MainWindow(
             self.session.character_suggestions,
             hidden=hidden,
         )
+        return hidden
+
+    def refresh_panels(self) -> None:
+        if self.session is None:
+            return
+        story = self.session.story
+        # What the plot hasn't brought in stays out of the author's way too,
+        # unless they have chosen to see the plot.
+        hidden = self._refresh_cast_list()
         self._refresh_scene_panel()
         # A card brought in or changed elsewhere may put the cast over its room.
         self._cast_changed_soon()

@@ -1195,6 +1195,18 @@ QComboBox QAbstractItemView {
   font-size: 12px;
 }
 
+/* What a whole-window page of characters is: Your characters (any story)
+   or a story's cast board (that story's alone). */
+#scopeNote {
+  color: @text;
+  background: @panel;
+  border: 1px solid @border;
+  border-left: 3px solid @accent;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
 #errorLabel {
   color: @error;
   font-size: 13px;

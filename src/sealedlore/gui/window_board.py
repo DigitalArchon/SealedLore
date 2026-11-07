@@ -1,7 +1,8 @@
-"""The window's side of the cast board (gui/cast_board.py): it takes the
-whole window, the story's panels, the box to type in and the row above the
-story put away until Back to the story (or Esc), and the pictures it asks
-for are drawn and kept as everywhere else. A mixin for `MainWindow`.
+"""The window's side of the cast board (gui/story_cast_page.py: the story's
+characters, their cards and their sheets of pictures): it takes the whole
+window, the story's panels, the box to type in and the row above the story
+put away until Back to the story (or Esc), and the pictures it asks for are
+drawn and kept as everywhere else. A mixin for `MainWindow`.
 
 The author (Nov 3 2026): "a Cast tab that can expand to the full screen so
 people can easily view all the characters, all their photos for different
@@ -24,6 +25,7 @@ from sealedlore.gui.cast_board import BOARD_LABEL, SAVE_LABEL, CastBoard
 from sealedlore.gui.fill_gaps import Waiting, ask_fill_gaps
 from sealedlore.gui.picture_labels import edit_labels
 from sealedlore.gui.ref_images import PICTURE_FILTER, store_reference
+from sealedlore.gui.story_cast_page import StoryCastPage
 from sealedlore.storage.template_pictures import (
     forget_kept,
     keep_pictures,
@@ -32,15 +34,19 @@ from sealedlore.storage.template_pictures import (
 )
 
 BOARD_TIP = (
-    "Every character's pictures in the whole window: each as a sheet of looks and "
-    "expressions, with what is missing ready to draw"
+    "This story's characters in the whole window: each one's card, and their pictures as a "
+    "sheet of looks and expressions with what is missing ready to draw"
 )
 
 
 class CastBoardWindow:
     def _init_board(self) -> None:
         self.cast_board = CastBoard(self._story_pictures)
-        self.centre_stack.addWidget(self.cast_board)
+        # The page: the cast panel's list and card, the board as its Pictures
+        # tab (gui/story_cast_page.py).
+        self.cast_page = StoryCastPage(self.cast_panel, self.cast_board)
+        self.centre_stack.addWidget(self.cast_page)
+        self.cast_page.back_requested.connect(lambda: self.show_cast_board(False))
         board = self.cast_board
         board.back_requested.connect(lambda: self.show_cast_board(False))
         board.picture_action.connect(self._board_picture)
@@ -76,12 +82,15 @@ class CastBoardWindow:
         view_menu.addAction(self.board_action)
 
     def board_shown(self) -> bool:
-        return self.centre_stack.currentWidget() is self.cast_board
+        return self.centre_stack.currentWidget() is self.cast_page
 
-    def show_cast_board(self, on: bool = True, card_id: str | None = None) -> None:
-        """The board in the whole window, on `card_id`'s sheet (None:
-        everyone), or the story back as it was."""
+    def show_cast_board(
+        self, on: bool = True, card_id: str | None = None, *, card: bool = False
+    ) -> None:
+        """The board in the whole window, on `card_id`'s pictures, or their
+        card (`card`; None: everyone's pictures), or the story back as it was."""
         session = self.session
+        card_id = card_id or None
         if on and (session is None or session.story.chat):
             return
         if on:
@@ -92,12 +101,14 @@ class CastBoardWindow:
                 self._board_away = [(w, w.isVisible()) for w in self._board_hides()]
                 for widget, _visible in self._board_away:
                     widget.setVisible(False)
-                self.centre_stack.setCurrentWidget(self.cast_board)
+                self.centre_stack.setCurrentWidget(self.cast_page)
                 self.cast_board.forget_pictures()
+                self._refresh_cast_list()
             self._hide_banners()
             self.cast_board.aim(card_id)
             self._refresh_board()
-            self.cast_board.setFocus()
+            self.cast_page.show_character(card_id, card=card)
+            self.cast_page.setFocus()
             return
         if not self.board_shown():
             return
@@ -181,6 +192,7 @@ class CastBoardWindow:
             hidden=session.hidden_ids(),
             spoilers=self.config.show_plot_spoilers,
         )
+        self.cast_page.sync_from_board()
 
     def _board_restyle(self, card_id: str) -> None:
         """Restyle… on the board: the character shown, or everyone shown."""

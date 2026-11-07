@@ -9,11 +9,18 @@ Two tiers share one list. The cast is the author's: on the roster, holdable,
 in the cached system block. Supporting characters are people the story
 introduced, carded for continuity and shown to the model only when mentioned.
 The model suggests them; nothing joins either tier without the author's say.
+
+Laid out as Your characters is (the author, Nov 7 2026: the People page, the
+Cast page and the cast board were three places for one thing): the list down
+the left, and the character shown in tabs on the right, the card here and
+their pictures the cast board's sheet (added by the window's cast board page,
+gui/story_cast_page.py, which holds the panel in the whole window). Lent to
+the new story guide and Setup, it is the list and the card alone.
 """
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QSize, Qt, Signal
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -28,7 +35,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSizePolicy,
-    QSplitter,
+    QTabWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -36,9 +43,9 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.card_condense import fingerprint
 from sealedlore.engine.look_sheet import keep_order
-from sealedlore.gui import theme
+from sealedlore.gui import text_size, theme
 from sealedlore.gui.banners import CastRoomBanner
-from sealedlore.gui.cast_board import BOARD_LABEL, SAVE_LABEL
+from sealedlore.gui.cast_board import SAVE_LABEL
 from sealedlore.gui.cast_room import CastRoom, banner_text, card_note, supporting_note
 from sealedlore.gui.fields import FormScroll, set_field_text
 from sealedlore.gui.lore_cast_dialog import FILL_LABEL
@@ -58,22 +65,21 @@ from sealedlore.models.character import Character
 from sealedlore.models.supporting import CharacterSuggestion
 
 HEADER_ROLE = Qt.UserRole + 1
+# The list's first entry in the whole window: everyone's pictures.
+EVERYONE_ROLE = Qt.UserRole + 2
+EVERYONE_LABEL = "Everyone"
 COLLECTION_ADD_LABEL = "From Your characters…"
 CONDENSE_LABEL = "Condense this card"
 CONDENSE_AGAIN_LABEL = "Write it again"
-BOARD_BUTTON = f"{BOARD_LABEL}…"
 MODEL_MARK = "  ✦"
+CARD_TAB = "Card"
 # The width of the card's left column: the portrait, its other pictures.
 PORTRAIT_COLUMN = 300
 PORTRAIT_COLUMN_MIN = 160
 # The portraits beside the names in the list.
-LIST_ICON = 28
-# The list of names, until the author drags the divider under it: as tall as
-# its rows, at least LIST_ROWS_MIN of them and at most LIST_ROWS_MAX, and never
-# more than LIST_SHARE_MAX of the page (the sheet under it is the long part).
-LIST_ROWS_MIN = 4
-LIST_ROWS_MAX = 12
-LIST_SHARE_MAX = 0.5
+LIST_ICON = 40
+# The list's column at 100% text, as Your characters' (gui/collection_page.py).
+LEFT_WIDTH = 320
 
 
 class CastPanel(QWidget):
@@ -143,11 +149,11 @@ class CastPanel(QWidget):
         self.move_button = QPushButton("Move to supporting")
         self.move_button.clicked.connect(self._move_character)
 
-        buttons = QHBoxLayout()
-        buttons.setContentsMargins(0, 0, 0, 0)
-        buttons.addWidget(add_button)
-        buttons.addWidget(self.remove_button)
-        buttons.addWidget(self.move_button)
+        # Each its own group: the list's column is narrow, and in pairs they
+        # were cut short at its edge.
+        buttons = WrapRow(spacing=6, group_spacing=6)
+        for button in (add_button, self.remove_button, self.move_button):
+            buttons.add_group([button])
         # Its own line: a fourth button abreast widened the Inspector.
         self.fill_button = QPushButton(FILL_LABEL)
         self.fill_button.setToolTip(
@@ -202,64 +208,57 @@ class CastPanel(QWidget):
         # One line while the panel has the room, wrapping when it is narrow:
         # a line of its own took the list's room for names.
         fill_row = WrapRow(spacing=6, group_spacing=6)
-        # Your characters' two ways together, the other two together.
-        fill_row.add_group([self.collection_button, self.save_button])
-        fill_row.add_group([self.fill_button, self.tavern_button])
+        for button in (
+            self.collection_button,
+            self.save_button,
+            self.fill_button,
+            self.tavern_button,
+        ):
+            fill_row.add_group([button])
 
-        # The page grown to the whole window: every picture of everyone, as
-        # sheets of looks and expressions (gui/cast_board.py).
-        self.board_button = QPushButton(BOARD_BUTTON)
-        self.board_button.setObjectName("sendButton")
-        self.board_button.setToolTip(
-            "Every character's pictures in the whole window: each as a sheet of looks and "
-            "expressions, with what is missing ready to draw"
-        )
-        self.board_button.clicked.connect(
-            lambda: self.board_requested.emit(self._current.id if self._current else "")
-        )
-
-        top = QWidget()
-        top_layout = QVBoxLayout(top)
-        top_layout.setContentsMargins(0, 0, 0, 0)
-        top_layout.setSpacing(6)
-        top_layout.addWidget(self.list, 1)
-        top_layout.addLayout(buttons)
-        top_layout.addLayout(fill_row)
+        # The list down the left, as tall as the page, its buttons and the
+        # suggestions under it; the character on the right, in tabs (the
+        # card; the window adds their pictures). In the Inspector the list
+        # sat over the card, with room for a few names (the author, Oct 2026).
+        side = QWidget()
+        side.setObjectName("castSide")
+        side_layout = QVBoxLayout(side)
+        side_layout.setContentsMargins(0, 0, 0, 0)
+        side_layout.setSpacing(6)
+        side_layout.addWidget(self.list, 1)
+        side_layout.addLayout(buttons)
+        side_layout.addLayout(fill_row)
         self.suggestions_box = self._build_suggestions()
-        top_layout.addWidget(self.suggestions_box)
+        side_layout.addWidget(self.suggestions_box)
+        self.side = side
+        self._fit_side()
 
-        # The list over the sheet, a divider with a grip between them. The
-        # list was given a fixed 150px share, and with supporting cards and
-        # suggestions under it that left room for one name at a time, even at
-        # 1440p (the author, Oct 2026); the divider was a bare 4px line. Now
-        # the list is as tall as its names (`_fit_list`) until the author
-        # drags the divider, and where they leave it is kept
-        # (`Config.window.cast_list_height`).
-        splitter = QSplitter(Qt.Vertical)
-        splitter.setObjectName("castSplit")
-        splitter.setChildrenCollapsible(False)
-        splitter.setHandleWidth(10)
-        splitter.addWidget(top)
-        splitter.addWidget(self._build_editor())
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        splitter.splitterMoved.connect(self._list_dragged)
-        self.splitter = splitter
-        self._top = top
-        # The list's height as the author dragged it; 0 until they do.
-        self._list_height = 0
+        self.tabs = QTabWidget()
+        self.tabs.setObjectName("castTabs")
+        self.tabs.setDocumentMode(True)
+        # Lent to the guide or Setup it is the card alone: no tab to choose.
+        self.tabs.setTabBarAutoHide(True)
+        self.tabs.addTab(self._build_editor(), CARD_TAB)
+        self.tabs.setTabToolTip(
+            0, "What the storyteller is told of them, who voices them, and their portrait"
+        )
 
         # The cast over its room in the prompt: said above everything.
         self.room_banner = CastRoomBanner()
         self.room_banner.room_requested.connect(self.cast_room_requested)
         self.room_banner.condense_requested.connect(lambda: self.condense_requested.emit(""))
 
+        body = QHBoxLayout()
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(12)
+        body.addWidget(side)
+        body.addWidget(self.tabs, 1)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.addWidget(self.room_banner)
-        # Above the divider: in the list's part it took the names' room.
-        layout.addWidget(self.board_button)
-        layout.addWidget(splitter)
+        layout.addLayout(body, 1)
+        # Everyone's pictures as the list's first entry (the window's page).
+        self._everyone = False
 
     def _build_editor(self) -> QWidget:
         self.name = QLineEdit()
@@ -425,7 +424,9 @@ class CastPanel(QWidget):
         card.setContentsMargins(0, 0, 0, 0)
         card.setSpacing(12)
         card.addWidget(pictures_column, 0, Qt.AlignTop)
-        card.addWidget(fields, 1)
+        # At the top: in the whole window the card is shorter than the page,
+        # and the spare height went to the skills table.
+        card.addWidget(fields, 1, Qt.AlignTop)
 
         self.empty_hint = QLabel("Add a character, or select one to edit.")
         self.empty_hint.setObjectName("hintLabel")
@@ -477,12 +478,6 @@ class CastPanel(QWidget):
         self.scan_button.setToolTip("Ask the model who in the recent prose isn't on file yet")
         self.scan_button.clicked.connect(self.scan_requested)
 
-        row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.addWidget(self.accept_button)
-        row.addWidget(self.accept_cast_button)
-        row.addWidget(self.dismiss_button)
-
         self.suggestion_hint = QLabel(
             "New characters are suggested when turns are archived, or scan now."
         )
@@ -493,11 +488,12 @@ class CastPanel(QWidget):
         caption.setObjectName("composerCaption")
         caption.setToolTip(self.suggestion_hint.text())
         self.scan_button.setToolTip(self.scan_button.toolTip() + ". " + self.suggestion_hint.text())
-        header = QHBoxLayout()
-        header.setContentsMargins(0, 0, 0, 0)
-        header.addWidget(caption)
-        header.addStretch(1)
-        header.addWidget(self.scan_button)
+        header = WrapRow(spacing=6, group_spacing=6)
+        header.add_group([caption])
+        header.add_group([self.scan_button])
+        suggestion_buttons = WrapRow(spacing=6, group_spacing=6)
+        for button in (self.accept_button, self.accept_cast_button, self.dismiss_button):
+            suggestion_buttons.add_group([button])
 
         box = QWidget()
         layout = QVBoxLayout(box)
@@ -506,7 +502,7 @@ class CastPanel(QWidget):
         layout.addLayout(header)
         layout.addWidget(self.suggestion_list)
         layout.addWidget(self.suggestion_hint)
-        layout.addLayout(row)
+        layout.addLayout(suggestion_buttons)
         return box
 
     # --- population -------------------------------------------------------
@@ -529,8 +525,19 @@ class CastPanel(QWidget):
         if suggestions is not None:
             self._suggestions = suggestions
         selected = self._current.id if self._current else None
+        everyone_was = self.everyone_shown()
         self._loading = True
         self.list.clear()
+        if self._everyone:
+            everyone = QListWidgetItem(EVERYONE_LABEL)
+            everyone.setData(EVERYONE_ROLE, True)
+            everyone.setToolTip("Everyone's pictures, each with all of theirs")
+            font = QFont(self.list.font())
+            font.setBold(True)
+            everyone.setFont(font)
+            self.list.addItem(everyone)
+            if everyone_was:
+                self.list.setCurrentItem(everyone)
         sections = [("CAST", self._cast)]
         if self._supporting:
             sections.append(("SUPPORTING — FROM THE STORY", self._supporting))
@@ -555,60 +562,47 @@ class CastPanel(QWidget):
             any(c.id not in self._hidden for c in (*self._cast, *self._supporting))
         )
         self._show_suggestions()
-        self._fit_list()
-        if self.list.currentItem() is None and self._cast:
-            self.list.setCurrentRow(1)
+        first = next(
+            (
+                row
+                for row in range(self.list.count())
+                if self.list.item(row).data(Qt.UserRole) is not None
+            ),
+            -1,
+        )
+        if self.list.currentItem() is None and first >= 0:
+            self.list.setCurrentRow(first)
         else:
             self._on_selection_changed(self.list.currentItem(), None)
 
-    # --- the list's height ------------------------------------------------
+    # --- the list's column -----------------------------------------------
 
-    def list_height(self) -> int:
-        """The list's part of the page as the author dragged it; 0 if never."""
-        return self._list_height
+    def _fit_side(self) -> None:
+        """The list's column, wider with the text (View → Text size)."""
+        self.side.setFixedWidth(round(LEFT_WIDTH * text_size.scale()))
 
-    def set_list_height(self, height: int) -> None:
-        """Where the author last left the divider (0: fitted to the names)."""
-        self._list_height = max(0, height)
-        self._fit_list()
+    def changeEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        super().changeEvent(event)
+        if event.type() in (QEvent.FontChange, QEvent.StyleChange) and hasattr(self, "side"):
+            self._fit_side()
 
-    def _list_dragged(self, position: int, _index: int) -> None:
-        self._list_height = position
+    def set_everyone(self, on: bool) -> None:
+        """Whether the list begins with Everyone (the whole window's page:
+        everyone's pictures), or not (lent to the guide or Setup)."""
+        if on != self._everyone:
+            self._everyone = on
+            self.set_cast(self._cast)
 
-    def _rows_height(self, rows: int) -> int:
-        """The height of the list's first `rows` rows; past its last, rows
-        as tall as a name's."""
-        heights = [self.list.sizeHintForRow(row) for row in range(self.list.count())]
-        name = max(heights, default=0) or LIST_ICON + 10
-        shown = heights[:rows]
-        return sum(shown) + name * (rows - len(shown))
+    def everyone_shown(self) -> bool:
+        item = self.list.currentItem()
+        return item is not None and bool(item.data(EVERYONE_ROLE))
 
-    def _fit_list(self) -> None:
-        """The list as tall as its names (see LIST_ROWS_*), or as dragged."""
-        total = sum(self.splitter.sizes())
-        if total <= 0:
-            return
-        frame = 2 * self.list.frameWidth()
-        self.list.setMinimumHeight(self._rows_height(LIST_ROWS_MIN) + frame)
-        # Everything in the top part but the list: buttons, suggestions.
-        rest = max(0, self._top.minimumSizeHint().height() - self.list.minimumHeight())
-        least = self.list.minimumHeight() + rest
-        if self._list_height > 0:
-            wanted = self._list_height
-        else:
-            rows = min(max(self.list.count(), LIST_ROWS_MIN), LIST_ROWS_MAX)
-            wanted = min(self._rows_height(rows) + frame + rest, int(total * LIST_SHARE_MAX))
-        editor = self.splitter.widget(1).minimumSizeHint().height()
-        top = max(least, min(wanted, total - editor))
-        self.splitter.setSizes([top, total - top])
-
-    def showEvent(self, event) -> None:
-        super().showEvent(event)
-        QTimer.singleShot(0, self, self._fit_list)
-
-    def resizeEvent(self, event) -> None:
-        super().resizeEvent(event)
-        self._fit_list()
+    def show_everyone(self) -> None:
+        """Everyone chosen in the list (when it has them)."""
+        for row in range(self.list.count()):
+            if self.list.item(row).data(EVERYONE_ROLE):
+                self.list.setCurrentRow(row)
+                return
 
     def _icon(self, character: Character) -> QIcon:
         return self._icons.icon(character.reference_images)

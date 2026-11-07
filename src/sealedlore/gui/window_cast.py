@@ -1,11 +1,11 @@
 """The main window's side of the cast: cards written for a published world's
-people (Fill with lore characters…), and the Cast page lent to the new story
+people (Fill with lore characters…), and the cast board's panel lent to the new story
 guide. A mixin for `MainWindow`."""
 
 from __future__ import annotations
 
 from PySide6.QtCore import QFile, QTimer
-from PySide6.QtWidgets import QMessageBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QMessageBox, QWidget
 
 from sealedlore.engine.session import SessionNotice
 from sealedlore.gui.cast_room import cast_room
@@ -22,18 +22,14 @@ CONDENSE_POLL_MS = 1_000
 
 class CastWindow:
     def _init_cast(self) -> None:
-        """Called from `_build_ui` once the Cast page is made: the page is a
-        holder with the panel in it, so the guide can borrow the panel and
-        the Inspector keeps its page (gui/new_story_guide.py)."""
+        """Called from `_build_ui` once the cast panel is made. The panel
+        stands on the cast board's page (gui/story_cast_page.py, made with
+        the board), which lends it to the guide and Setup."""
         # (story id) -> the world and names last asked for, offered again.
         self._lore_cast_asked: dict[str, tuple[str, str]] = {}
         # The new story guide, and Setup, while open: dialogs stand over them.
         self._guide: QWidget | None = None
         self._setup_dialog: QWidget | None = None
-        self.cast_page = QWidget()
-        layout = QVBoxLayout(self.cast_page)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.cast_panel)
         self.cast_panel.lore_fill_requested.connect(self.fill_lore_cast)
         # Cards condensed when the cast is over its room (engine/session_cast.py):
         # started a moment after the last edit to the cast, so typing a
@@ -49,8 +45,11 @@ class CastWindow:
         self._condense_timer.setInterval(CONDENSE_POLL_MS)
         self._condense_timer.timeout.connect(self._poll_condensing)
 
-    def show_cast_page(self) -> None:
-        self.right_tabs.setCurrentWidget(self.cast_page)
+    def show_cast_page(self, card_id: str | None = None) -> None:
+        """A character's card on the cast board (`card_id`, else the one the
+        list has chosen): where the Cast page used to be."""
+        current = self.cast_panel.current
+        self.show_cast_board(True, card_id or (current.id if current else None), card=True)
 
     # --- the cast's room in the prompt (engine/cast_fit.py) -------------------
 
@@ -73,7 +72,7 @@ class CastWindow:
             self.statusBar().showMessage(
                 f"The cast's cards are over their room in the prompt (about "
                 f"{room.fit.whole_tokens:,} of {room.fit.cap:,} tokens): the largest are "
-                "sent condensed. The Cast page says which.",
+                "sent condensed. The cast board says which.",
                 15000,
             )
 
@@ -204,22 +203,17 @@ class CastWindow:
     def guide_busy(self) -> bool:
         return self._busy
 
-    # --- the guide borrows the Cast page -------------------------------------
+    # --- the guide borrows the cast board's list and card -------------------------
 
     def lend_cast_panel(self) -> QWidget:
-        """The Cast page's panel, taken out to stand in a dialog (the guide's
-        Characters step, Setup's Characters tab); give it back with
-        `return_cast_panel`."""
-        self.cast_panel.setParent(None)
-        # Suggestions come from the story's prose, and there is none yet.
-        self.cast_panel.suggestions_box.setVisible(False)
-        return self.cast_panel
+        """The cast board's list and card, taken out to stand in a dialog (the
+        guide's Characters step, Setup's Characters tab), without the
+        pictures' sheet; give it back with `return_cast_panel`."""
+        return self.cast_page.detach()
 
     def return_cast_panel(self) -> None:
-        if self.cast_panel.parent() is not self.cast_page:
-            self.cast_page.layout().addWidget(self.cast_panel)
-            self.cast_panel.suggestions_box.setVisible(True)
-            self.cast_panel.show()
+        if self.cast_page.lent():
+            self.cast_page.attach()
 
     # --- Fill with lore characters --------------------------------------------
 
@@ -285,7 +279,7 @@ class CastWindow:
     def make_card(self, name: str, to_cast: bool = False) -> None:
         """A card for someone the story names with none (the People page's
         Make a card ▾), written from the story by the scan for new
-        characters (else the name alone), then opened on the Cast page."""
+        characters (else the name alone), then opened on the cast board."""
         session = self.session
         if session is None or not name.strip():
             return

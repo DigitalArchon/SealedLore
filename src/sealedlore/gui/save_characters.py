@@ -56,7 +56,7 @@ class SaveCharactersDialog(QDialog):
             "Who is kept in Your characters? Each goes there with their pictures, and can "
             "join any story from then on. This story's character stays as it is, linked to "
             "the card made: what either side changes later can go to the other (Changes… on "
-            "the Cast page)."
+            "their card on the cast board)."
         )
         heading.setWordWrap(True)
         self.list = QListWidget()
@@ -82,8 +82,8 @@ class SaveCharactersDialog(QDialog):
                 # (an item is checkable by default: All would tick them).
                 item.setFlags(item.flags() & ~(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable))
                 item.setToolTip(
-                    "Already in Your characters, linked to this story's: Changes… on the "
-                    "Cast page saves what this story changed of them"
+                    "Already in Your characters, linked to this story's: Changes… on their "
+                    "card on the cast board saves what this story changed of them"
                 )
             else:
                 item.setFlags(item.flags() | Qt.ItemIsUserCheckable)

@@ -218,7 +218,7 @@ def put_in_characters(
         if user is None and "{{user}}" in str(fields_of(copy)):
             warnings.append(
                 f"{card.name}'s card names {{{{user}}}}, the one they talk to: write that "
-                "person's name in on the Cast page"
+                "person's name in on the cast board"
             )
         marks = []
         for ref in card.reference_images:

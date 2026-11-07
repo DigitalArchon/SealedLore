@@ -7,10 +7,12 @@ to get people who play without a map started with portraits and stuff to
 suit their story". So a story without a map opens on this page: who is here
 now, large, the author's own character first; who is elsewhere and the
 supporting characters smaller; each card a portrait, a name and the first
-line of their summary. A click opens the profile (the Cast page); a card with
-no portrait offers to draw one or choose a picture, and the panel at the top
-offers portraits for everyone who has none and a background behind the
-story.
+line of their summary. A click opens their card on the cast board
+(gui/story_cast_page.py, Cast board… at the top: every card and picture of
+the story's in the whole window, since the Cast page went, Nov 7 2026); a
+card with no portrait offers to draw one or choose a picture, and the panel
+at the top offers portraits for everyone who has none and a background
+behind the story.
 
 Who is here is the scene card's, as the Scene page shows it (playtesting:
 the scene read is wrong too often to go unwatched; here it is watched by
@@ -65,7 +67,12 @@ NOT_BEGUN = (
     "The story hasn't begun. Story → Start story… chooses who you play, and the "
     "opening places everyone."
 )
-CARD_TIP = "Click to open {name}'s profile. Right-click for more."
+CARD_TIP = "Click to open {name}'s card on the cast board. Right-click for more."
+BOARD_BUTTON = "Cast board…"
+BOARD_TIP = (
+    "This story's characters in the whole window: everyone's cards, and their pictures as "
+    "sheets of looks and expressions, the missing ones ready to draw"
+)
 SHOW_AS = "Show as"
 BOARD_MENU = "All their pictures, on the cast board"
 PORTRAIT_WORDS = "Their portrait"
@@ -527,6 +534,15 @@ class PeoplePage(QScrollArea):
         self.tip = None
         self.tip_buttons = {}
         self.make_card_buttons: dict[str, QToolButton] = {}
+
+        if view.story_id:
+            # Where every card and picture of theirs is changed: the Cast page
+            # and the board were two places for it.
+            self.board_button = QPushButton(BOARD_BUTTON)
+            self.board_button.setObjectName("sendButton")
+            self.board_button.setToolTip(BOARD_TIP)
+            self.board_button.clicked.connect(lambda: self.board_requested.emit(""))
+            layout.addWidget(self.board_button, 0, Qt.AlignLeft)
 
         if view.location or view.situation:
             heading = QLabel(view.location or "Where the story is")

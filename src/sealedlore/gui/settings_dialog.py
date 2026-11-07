@@ -1793,7 +1793,7 @@ class SettingsDialog(QDialog):
         known = recommended_model("portrait_model", model)
         self.portrait_note.setText(
             "A portrait of each character from their card, offered when a story starts and "
-            "on the Cast page; every prompt is shown to you first. "
+            "on the cast board; every prompt is shown to you first. "
             f"{model or 'No model'}: {price}." + (f" {known.note}" if known is not None else "")
         )
 
