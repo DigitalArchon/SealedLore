@@ -60,10 +60,11 @@ fun to play. This app will remain focused on text based roleplay.
 - **Cast cards that fit** (3.1.0b1). The cast's cards get room in proportion
   to the story's context budget (Settings → Context), and a card past it is
   condensed to about a third of its length instead of being cut to a line.
-  The Cast page shows each condensed card, to edit or have written again.
-- **A story's characters, kept** (3.1.0b1). Cast page → Save to Your
-  characters… (on the cast board too) keeps any or all of a story's
-  characters in Your characters, linked to the story.
+  Each character's card on the cast board shows its condensed text, to edit
+  or have written again.
+- **A story's characters, kept** (3.1.0b1). Cast board → Save to Your
+  characters… keeps any or all of a story's characters in Your characters,
+  linked to the story.
 - **Your characters** (3.0.0b1). Every character you keep, in one place
   outside any story (File → Your characters…, or the start page). Import
   SillyTavern cards (PNG, CHARX or JSON files, or a link to Chub or
@@ -71,11 +72,11 @@ fun to play. This app will remain focused on text based roleplay.
   their greetings show, sounds), or make your own; give them
   pictures on the cast board's sheet of looks and expressions; keep versions
   of one. Put any of them into a story as you set it up or while you play
-  (Cast page → From Your characters…), and keep any or all of a story's
-  characters there (Cast page → Save to Your characters…). When a story
-  changes them (a new picture, a changed description), the Cast page says
-  so, and **Changes…** saves the change to their card, makes a new version
-  of it, or keeps it in that story only. **Chat with them…** starts a simple chat from their card
+  (Cast board → From Your characters…), and keep any or all of a story's
+  characters there (Cast board → Save to Your characters…). When a story
+  changes them (a new picture, a changed description), their card on the
+  cast board says so, and **Changes…** saves the change to their card, makes
+  a new version of it, or keeps it in that story only. **Chat with them…** starts a simple chat from their card
   and a greeting of theirs, and **Draft a story with them…** has a story
   drafted around them from your premise. Simple chats keep your favourite
   system prompts (**Saved prompts**). A SillyTavern card imported from File
@@ -87,10 +88,11 @@ fun to play. This app will remain focused on text based roleplay.
   labelled with the look they wear (a winter coat, combat armour) and the
   expression of the moment, and the picture that fits is chosen after each
   passage: on the People page, and if you like on a stage under the story and
-  beside each passage (View). **The cast board** (Cast page → Cast board…)
-  shows every character's pictures as a sheet of looks and expressions across
-  the whole window, the missing ones drawn in a few clicks. Doomsville's John
-  and Jane come in four expressions and three looks.
+  beside each passage (View). **The cast board** (**Cast board…** on the
+  People page) takes the whole window: every character's card, and their
+  pictures as a sheet of looks and expressions, the missing ones drawn in a
+  few clicks. Doomsville's John and Jane come in four expressions and three
+  looks.
 
 ![The cast board in Doomsville: John's sheet, his winter coat, combat armour and indoor clothes down the side and expressions across, two gaps chosen in the armour row and, beside them, one the story asked for, and the other characters in the list on the left](docs/screenshots/cast-board.webp)
 
@@ -174,8 +176,8 @@ fun to play. This app will remain focused on text based roleplay.
   Help), the sample plots reworded where it mattered, and the plot director
   asked far less often.
 - **Characters from the start, and a known world's cast** (new in
-  2.0.0b4). Write a story from scratch makes your characters on the Cast page
-  itself, portraits and all, in as much or as little detail as you like. For
+  2.0.0b4). Write a story from scratch makes your characters on the cards
+  themselves, portraits and all, in as much or as little detail as you like. For
   a story set in a world that already exists, **Fill with lore characters…**
   writes cards for its people, the ones you name first.
 - **A distrusted root out of the bundle** (2.0.0b5). The AppImage no longer
@@ -330,7 +332,8 @@ Have fun!
   the rest of the cast and the supporting characters, each with their
   portrait; someone the story brings in without a card gets one in a click.
   Label a character's pictures by look and expression and the one that fits
-  is shown as the story goes; the cast board shows them all, gaps and all.
+  is shown as the story goes; the cast board has everyone's cards and shows
+  all their pictures, gaps and all.
 - **A picture style for each story**, ready-made or your own words or taken
   from a picture, with portraits head and shoulders, upper body or full body,
   and pictures redrawn in another style while keeping what they show.

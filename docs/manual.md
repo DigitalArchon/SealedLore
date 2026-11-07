@@ -556,11 +556,14 @@ archiving, rebuilding summaries.
   as two rows of buttons, its title naming the page shown and what it is for: **People** (who is
   in the story, by their faces; the page a story opens on: see
   "The People page"), **Scene** (who is here and where the story is, to
-  correct), **Cast** (sheets, skills, supporting characters), **Plot** (the
+  correct), **Plot** (the
   clock, facts and events; shown only for a story with a plot), **Lore**,
   **Style**, **Story so far** (the chapter summaries: edit, rebuild, archive
   now; double-click one to go to it in the story) and **Media** (every
-  picture and video the story has made, and its background). **View → Prompt page (advanced)** adds **Prompt**: exactly what the
+  picture and video the story has made, and its background). The
+  characters' cards and pictures are on the **cast board**, which takes the
+  whole window: **Cast board…** at the top of People, or View → Cast board…
+  (see "Perspective and supporting characters"). **View → Prompt page (advanced)** adds **Prompt**: exactly what the
   storyteller was sent last turn, for checking the model's work; **Copy
   prompt** copies it as readable text, **Copy request JSON** as the exact
   request body.
@@ -842,8 +845,9 @@ happens first, the person, tense and length it is told in, and whether the
 model writes it a plot (see [A plot written by the model](#a-plot-written-by-the-model)).
 
 The story is made, and listed in your Stories, once its first step is done,
-so its **Characters** step is the Cast page itself: every field a card has,
-pictures drawn or chosen from a file, and **You play** to choose your own
+so its **Characters** step is the cast board's own list and card: every
+field a card has, pictures drawn or chosen from a file (their sheets of
+looks and expressions are on the cast board itself), and **You play** to choose your own
 character (or nobody, to direct the story). Make as many or as few as you
 like, in as much or as little detail: a name is enough to begin. The more you
 put on the cards, the more say you have in who they are; anyone you leave out,
@@ -854,7 +858,7 @@ people (see Perspective and supporting characters).
 **Create the story** then goes to Start, which asks who you play and offers
 portraits for anyone still without one before the opening is written. With a
 plot asked for on the last step, the model writes it first.
-Everything else keeps its default and is in Setup and on the Cast page;
+Everything else keeps its default and is in Setup and on the cast board;
 **Advanced setup…** opens Setup instead, characters included.
 **Cancel** after the first step asks whether to keep the story made so far
 (not begun, in your Stories) or discard it to the Trash.
@@ -864,9 +868,10 @@ Everything else keeps its default and is in Setup and on the Cast page;
   (see [Outcomes and dice](#outcomes-and-dice)), how much the world does on
   its own, and the story's picture style;
 - **World**: the setting and its rules, sent with every turn and cached;
-- **Characters**: the Cast page itself, with every card's fields, portraits
-  and **Fill with lore characters…**. Cards are kept as you make them, as on
-  the Cast page, so Cancel doesn't take them back; the Starting scene tab
+- **Characters**: the cast board's list and card, with every card's fields,
+  portraits and **Fill with lore characters…** (the sheets of pictures stay
+  on the cast board). Cards are kept as you make them, as on the cast board,
+  so Cancel doesn't take them back; the Starting scene tab
   lists whoever you made here;
 - **Style**: length, perspective, person, tense and the rest, the same form as
   the Style page beside the story, so a new story's opening is written the way
@@ -1036,7 +1041,10 @@ own.
 Characters you keep for any story or chat, outside every story: File → Your
 characters…, or **Your characters** on the start page. The page takes the
 whole window, as the cast board does; **Back to the story** (or Esc) brings
-the story back as it was, its job still running if one was.
+the story back as it was, its job still running if one was. A line at the
+top of the page says so. A story gets its own copy of each character it
+takes, on its cast board, and what the story changes of them comes back here
+only when you save it here (see "Into a story" below).
 
 On the left is every character, with a search over what their card says of
 them (names, descriptions, personality, scenario, greetings and examples, its
@@ -1195,7 +1203,7 @@ card can take or not (below). **Choose…** beside them builds the story around
 others too, and **Draft a story from an idea** offers the same once you keep
 any characters.
 
-**Into a story.** On the Cast page, **From Your characters…** (also in the
+**Into a story.** On the cast board, **From Your characters…** (also in the
 new story guide's characters step and Setup's Characters tab) puts any of
 your characters into the open story, on the cast or as supporting
 characters, with their pictures and, if you like, their own lorebook as the
@@ -1204,9 +1212,9 @@ shown. `{{char}}` and `{{user}}` become their name and the name of the
 character you are playing (before anyone is played, the one the story
 suggests you play, else whoever you choose when it begins).
 
-A character from Your characters says so on the Cast page, with what has
-changed since they joined: in this story (a new picture, a changed
-description), on their card, or both. **Changes…** shows each change side by
+A character from Your characters says so on their Card tab on the cast
+board, with what has changed since they joined: in this story (a new
+picture, a changed description), on their card, or both. **Changes…** shows each change side by
 side, ticked, and offers:
 
 - **Save the ticked to the card**: their card takes them, `{{char}}` and
@@ -1215,20 +1223,21 @@ side, ticked, and offers:
 - **Save as a new version…**: the character as this story has them becomes a
   new version of their card, kept beside it, and this story's character is
   that version from now on;
-- **Keep them in this story only**: the card stays as it is, and the Cast page
-  says so quietly until there are other changes;
+- **Keep them in this story only**: the card stays as it is, and the cast
+  board says so quietly until there are other changes;
 - **Take the ticked into this story**: changes made to their card since.
 
 **Out of a story.** Any character a story made, or brought in some other
 way, can be kept in Your characters, to join other stories. **Save to Your
-characters…** on the Cast page (beside From Your characters…) lists the
+characters…** at the top of the cast board lists the
 story's characters, the one shown ticked: tick any of them, or **All**, and
 each goes into Your characters with their pictures, linked to the story's as
 if they had come from there, so what either side changes later can go to the
-other (Changes…, above). The same is on the cast board, and in Your
+other (Changes…, above). The same is in the new story guide's characters
+step and Setup's Characters tab, and in Your
 characters' own **Import → Characters from the open story…**. A character
 already there is listed but can't be ticked again: Changes… is how their card
-takes what this story changed. The Cast page says which a character is: "Only
+takes what this story changed. Their Card tab says which a character is: "Only
 in this story, not in Your characters." with **Save them to Your characters**
 for that one alone, or where their card is. **Their card…** opens Your
 characters on a character whose story copy is in step with their card.
@@ -1249,7 +1258,7 @@ story from it, and asks:
 - whether the card is **one character** the storyteller plays, or **a world,
   or a narrator for several people** (its description then becomes the
   story's world, with no card of its own; **Fill with lore characters…** on
-  the Cast page can write cards for the people in it);
+  the cast board can write cards for the people in it);
 - **who you play**: SealedLore needs a character for you where SillyTavern
   has your persona. Every `{{user}}` on the card becomes their name, and
   every `{{char}}` the card's;
@@ -1263,7 +1272,7 @@ no longer fit their room in the prompt, the largest are sent condensed (see
 "When the cast's cards don't fit"). The card's own background goes behind the story, and the
 pictures the opening greeting shows appear under the opening once the story
 begins. The story's character is linked to their card in Your characters, as
-**Add to the story** links one, so **Changes…** on the Cast page works for
+**Add to the story** links one, so **Changes…** on their Card tab works for
 them; expression pictures you chose to leave out of the story count as kept
 here, not as a change. Setup opens next, to set the style before the story
 begins. What the card holds that SealedLore has no place for is listed: its
@@ -1271,7 +1280,7 @@ own system prompt (SealedLore's storyteller rules stand, though a tick adds
 it to Style → Other notes), its tags, macros other than `{{char}}` and
 `{{user}}`, the other greetings, and lorebook settings (below).
 
-**A card into a story.** On the Cast page, **SillyTavern cards → Import a
+**A card into a story.** On the cast board, **SillyTavern cards → Import a
 character card…** adds the card's character to the open story, on the cast
 or as a supporting character, with its lorebook if you like. Its `{{user}}`
 becomes the name of the character you are playing. A card with files of its
@@ -1327,7 +1336,7 @@ be put in order there, entry by entry (**Move up**, **Move down**).
 **By link.** Instead of downloading a card first, paste its link: File →
 Import from a link… (or Import on Your characters' page) to keep it in Your
 characters, **SillyTavern cards → Import a card from
-a link…** on the Cast page for the open story, and **SillyTavern lorebook →
+a link…** on the cast board for the open story, and **SillyTavern lorebook →
 Import a lorebook from a link…** on the Lore page. It takes:
 
 - a character's or a lorebook's page on **Chub** (chub.ai or characterhub.org):
@@ -1526,18 +1535,32 @@ story* lets it cut away to other places and people, though nobody elsewhere
 can perceive your scene except through a channel the story has set up. *Stay
 with my character* shows only what your character perceives.
 
-The **Cast** tab lists your cast and, below it, **supporting** characters: the
-people the story introduced, marked ✦ when the model drafted the card. When
-turns are archived, or when you press **Scan recent story**, the model suggests
-named characters who aren't on file yet:
+A story's characters are on its **cast board**, which takes the whole
+window as Your characters does: **Cast board…** at the top of the People
+page opens it (so does View → Cast board…), a click on someone's face there
+opens it on their card, and **Back to the story** (or Esc) brings the story
+back as it was. A line at its top says what it is: this story's characters,
+their cards and pictures as this story has them. What you change there
+stays in this story; **Save to Your characters…** beside it keeps any of
+them in Your characters, for other stories and chats (see "Your
+characters").
+
+Down the left is **Everyone**, then your cast and, below it, the
+**supporting** characters: the people the story introduced, marked ✦ when
+the model drafted the card. Choose one and the right side has two tabs:
+**Card**, everything the storyteller is told of them (below), and
+**Pictures**, their pictures as a sheet of looks and expressions (see "The
+cast board" under The People page). **Everyone** shows each character's
+pictures in a row; click one for their sheet. **Add** and **Remove** under
+the list make a card and take one off. When turns are archived, or when you
+press **Scan recent story** (under the list too), the model suggests named
+characters who aren't on file yet:
 - **Add** keeps them as supporting characters, shown to the model only when
   they're mentioned;
 - **Add to cast** puts them on the roster and in every prompt;
 - **Dismiss** stops the name being suggested again.
 
 **Move to cast** and **Move to supporting** switch a character between the two.
-The list is as tall as its names; drag the divider under it to make it taller
-or shorter, and it stays where you leave it.
 
 **Fill with lore characters…** is for a story set in a world that already
 exists: a book or series, a film, a game, a myth, a period of history. Name
@@ -1551,8 +1574,8 @@ it is told who is on file already, and never adds a name twice. Without
 cards, a story in a known world tends to bring in its first few famous
 characters and seldom the rest.
 
-A selected character's **portrait** is shown large at the left of their
-sheet, with their other pictures small under it and the sheet's fields to the
+On the **Card** tab, a character's **portrait** is shown large at the left,
+with their other pictures small under it and the card's fields to the
 right. The portrait is simply their first picture: **Make portrait** under the
 others puts another first, **Choose a file…** takes one from your computer,
 and the buttons under it have an image model draw one, grouped by what is
@@ -1562,9 +1585,9 @@ Pictures → Pictures for the cards). Click the portrait to see it whole. Each
 name in the list has its portrait beside it, small. A lore entry's first
 picture is shown the same way on the Lore page.
 
-![The Cast page: the list of characters, each with a small portrait, and below it the selected character's portrait at the left with the buttons that draw or change it, and the fields of their sheet at the right](screenshots/cast-page.webp)
+![A character's card: the list of characters, each with a small portrait, and the selected character's portrait at the left with the buttons that draw or change it, and the fields of their card at the right](screenshots/cast-page.webp)
 
-Two checkboxes on a cast sheet decide who writes that character:
+Two checkboxes on a character's card decide who writes them:
 
 - **Available to play** on (the default) — you can play them, and the model
   voices them on the turns you don't.
@@ -1595,21 +1618,21 @@ characters the storyteller voices outright are kept whole longest. The
 condensed cards are written in the background, a moment after the cast last
 changed; until one is ready, its card is sent whole.
 
-The Cast page says when the cast is over its room, and which cards are sent
-condensed. A selected card shows its **Condensed** text under its other
-fields: edit it, and your words are sent instead; **Write it again** has the
+The cast board says when the cast is over its room, and which cards are
+sent condensed. A character's card shows its **Condensed** text under its
+other fields: edit it, and your words are sent instead; **Write it again** has the
 model write it afresh from the card as it is now. Change a card, and its old
 condensed text is no longer sent until it is written again (or you edit it).
 Tick **Always send the whole card** for a main character the storyteller
 should always have in full: the others are condensed first. If even condensed
 the cast doesn't fit, the last cards go as their name, summary and voice
-alone, and the page says so: give the cast more room, or move some of them to
+alone, and the board says so: give the cast more room, or move some of them to
 supporting characters, whose cards are sent only when the story names them.
 
 A supporting character's card goes with its description on the turns that
 name them or find them present: whole when it is short (up to 150 words),
 condensed to about 150 words when it is longer. Their **Condensed** text is
-on the Cast page as a cast member's is.
+on their card as a cast member's is.
 
 In a private scene the cast's room is its share of the private model's budget,
 and nothing is condensed while the scene is open: cards are condensed for it
@@ -1622,10 +1645,12 @@ by their faces. **Here now** has whoever the story has in the scene, large,
 the character you play first (marked **You**); **Not here** and **Also in the
 story** have the rest of the cast and the supporting characters, smaller,
 with where they are when the story has said. Each card is a portrait, a name
-and the first line of their summary. Click a card for the whole profile, on
-the Cast page; right-click it to draw a portrait, choose a picture of your
-own, play as that character, or show them in another look (below). A card
+and the first line of their summary. Click a card to open their card on
+the cast board (see "Perspective and supporting characters"); right-click it
+to draw a portrait, choose a picture of your own, play as that character,
+or show them in another look (below). A card
 with no portrait has **Draw a portrait…** and **Choose a picture…** on it.
+**Cast board…** at the top of the page opens the cast board on everyone.
 
 ![The People page in The Silverwood: where the story is and what is happening, then the ranger, the sellsword and the herbwife under Here now, by their portraits, and three villagers the story named under Also here, with no card yet](screenshots/people-page.webp)
 
@@ -1636,15 +1661,15 @@ Story → Draw pictures for the cards…) and a background behind the story
 Pictures need an image model: without one, **Set up pictures…** opens
 Settings → Images. **Not now** puts the panel away until you next open the
 story. Characters the plot hasn't brought in yet stay off the page, as they
-do on the Cast page.
+do on the cast board until you tick **Show spoilers** there.
 
 Who is here is the scene's (below), so the faces show at a glance who the
 storyteller thinks is in the room; **Correct the scene…** goes to the Scene
 page to put it right.
 
 **Looks.** A character can have several pictures: in normal clothes and in
-armour, angry, laughing, in a fighting stance. Label each on the Cast page
-(**Labels…** under the portrait, or on one of the pictures below it) with its
+armour, angry, laughing, in a fighting stance. Label each on their card on
+the cast board (**Labels…** under the portrait, or on one of the pictures below it) with its
 **Look**, which lasts until the story changes it (normal clothes, combat
 armour, injured), and its **Expression or pose**, which is the moment's
 (angry, talking, in a fighting stance). Then right-click their card here,
@@ -1693,10 +1718,11 @@ To see it working, play Doomsville with both turned on: John and Jane come
 happy, sad, angry and afraid, in combat armour and in indoor clothes, and the
 people they meet have a few looks of their own.
 
-**The cast board.** With many pictures to keep, **Cast board…** at the top of
-the Cast page opens them in the whole window (so does View → Cast board…, and
-**All their pictures, on the cast board** on a card's menu on the People page).
-**Everyone** shows each character with all their pictures; click one for their
+**The cast board.** Beside each character's card on the cast board (see
+"Perspective and supporting characters"), their **Pictures** tab keeps every
+picture of them: **All their pictures, on the cast board** on a card's menu
+here opens it on theirs. **Everyone**, first in the board's list, shows each
+character with all their pictures; click one for their
 sheet: their looks down the side, expressions across, each picture in its
 place, the one the story shows now marked. In a story with a plot, **Show
 spoilers** shows the characters it hasn't brought in yet too (it is the Plot
@@ -1756,7 +1782,7 @@ expression pictures (kept with them in Your characters when the card is
 imported; More → A story from their card's own scenario… asks whether the
 story keeps them, and gives their size), or a SillyTavern expression pack, a zip of pictures named by
 expression ("joy.png", "anger-2.png"), added with **SillyTavern cards → Add
-expression pictures from a zip…** on the Cast page. Each is labelled by its
+expression pictures from a zip…** on the cast board. Each is labelled by its
 name.
 
 Someone the story has here who has no card (named in the opening or by a
@@ -1764,8 +1790,8 @@ passage, never given one) is listed under **Also here, with no card yet**,
 with **Make a card**: as a supporting character, or in the cast so you can
 play them. The card is written from what the story says of them (a short
 call to the summarisation model; with nothing to go on it has their name
-alone, for you to fill in) and opens on the Cast page, where you can draw
-their portrait.
+alone, for you to fill in) and opens on their card on the cast board, where
+you can draw their portrait.
 
 ![The People page in Doomsville: the player's character under Here now, and March, whom the story brought in, under Also here, with no card yet, with Make a card beside her name](screenshots/people-no-card.png)
 
@@ -2115,8 +2141,8 @@ are cleaned the same way as they are imported.
 
 ### Pictures for the cards
 
-**Story → Draw pictures for the cards…**, **Draw a portrait…** on a cast
-sheet, **Draw a picture…** on a lore entry, or the box in the Start dialog
+**Story → Draw pictures for the cards…**, **Draw a portrait…** on a
+character's card, **Draw a picture…** on a lore entry, or the box in the Start dialog
 gives each character a portrait and each lore entry a picture, drawn from
 what their cards say. The Start dialog counts the characters and lore entries
 with no picture yet (a plot file or a premise often brings none) and offers
@@ -2127,7 +2153,8 @@ name. A lore entry with nothing to see (a rule, a history) is left unticked.
 The dialog shows every prompt: change any you like, untick anything you don't
 want drawn, choose the model and see the price, then **Draw**. Nothing is
 drawn before that. Each picture goes first among its card's pictures, shown
-large on the Cast or Lore page, and is kept in Media with its prompt and cost.
+large on their card on the cast board or on the Lore page, and is kept in
+Media with its prompt and cost.
 Characters the plot hasn't brought in yet, and lore held back until you
 mention it, are never offered: their picture would tell a model about them
 early.
@@ -2240,7 +2267,7 @@ framing), or show them from the waist up or as a whole figure. The new picture
 keeps the old one's labels and is labelled with its framing.
 
 **Story → Restyle pictures…**, or **Restyle…** on the cast board (everyone's
-from the overview), redraws many pictures at once: pictures you imported
+with **Everyone** chosen), redraws many pictures at once: pictures you imported
 from a character card, say, to suit the story's style. Every picture is
 listed with its prompt, ticked to begin with if it isn't in the style chosen,
 and nothing is drawn until **Draw**. Each redrawn picture takes the old one's
@@ -2820,8 +2847,8 @@ crash reporting.
   paired and the day it was last seen, and which stories are shared. What a
   phone shows is on the phone, and Tor Browser and Android may keep it (see
   [Playing from your phone](#playing-from-your-phone)).
-- **A card or a lorebook by link** (File → Import from a link…, and the
-  Cast and Lore pages): the link is fetched from its site (Chub's API and its
+- **A card or a lorebook by link** (File → Import from a link…, the cast
+  board and the Lore page): the link is fetched from its site (Chub's API and its
   picture host for a Chub link, RisuRealm for a RisuRealm one, the link's own
   host otherwise), which sees your address as a browser would. Only the
   request for that link goes, with no key or anything from your stories.
