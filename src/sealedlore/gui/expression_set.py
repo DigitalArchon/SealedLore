@@ -30,7 +30,8 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.image_variants import family_of, fitting_model, picture_support
 from sealedlore.engine.images import ImageRequest
-from sealedlore.engine.looks import COMMON_EXPRESSIONS, look_change, look_words
+from sealedlore.engine.look_sheet import sheet_change
+from sealedlore.engine.looks import COMMON_EXPRESSIONS, look_words
 from sealedlore.engine.portraits import card_size
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.model_picker import ModelField
@@ -166,7 +167,8 @@ class ExpressionSetDialog(QDialog):
 
     def _prompt_for(self, expression: str) -> str:
         return self.session.picture_edit_prompt(
-            look_change(expression=expression, texts=self.session.texts), keep="person"
+            sheet_change(self.character, expression=expression, texts=self.session.texts),
+            keep="person",
         )
 
     def _by_hand(self, *_args) -> None:

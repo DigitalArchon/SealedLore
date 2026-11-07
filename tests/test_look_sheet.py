@@ -7,12 +7,21 @@ from sealedlore.engine.look_sheet import (
     DEFAULT_EXPRESSIONS,
     add_label,
     gap_change,
+    keep_order,
     label_key,
+    move,
     relabel,
+    remove_label,
+    reorder,
+    set_wording,
+    sheet_change,
     sheet_for,
     split_wanted,
+    usual_wording,
     wanted_along,
+    wording,
 )
+from sealedlore.engine.prompt_texts import PromptTexts
 from sealedlore.models.character import Character
 from sealedlore.models.image import ImageRef
 from sealedlore.models.node import Node
@@ -56,7 +65,10 @@ def test_a_gap_is_drawn_from_its_own_looks_neutral_picture():
     assert len(gaps) == 8
     armour = sheet.gap("combat armour", "angry")
     assert armour.source.id == "armour"
-    assert gap_change(armour) == "Change their expression or pose to: angry."
+    assert gap_change(armour) == (
+        "Change their expression or pose to: an angry expression, brows drawn together and the "
+        "jaw set."
+    )
     assert sheet.gap("indoor clothes", "sad").source.id == "indoors"
     assert sheet.gap("winter coat", "happy") is None  # not a gap: it has its picture
 
@@ -127,7 +139,9 @@ def test_unnamed_halves_and_unlabelled_pictures():
     # A gap in the unnamed row asks for no clothes.
     gap = sheet.gap("", "happy")
     assert gap.source.id == "joy"
-    assert gap_change(gap) == "Change their expression or pose to: happy."
+    assert gap_change(gap) == (
+        "Change their expression or pose to: a happy expression with a bright smile."
+    )
 
 
 def test_what_the_story_asked_for_is_on_its_cell_or_listed():
@@ -170,3 +184,165 @@ def test_renaming_a_row_or_column_relabels_every_picture_in_it():
     # Into a row that exists: the two become one.
     relabel(character, look=("combat armour", "parka"))
     assert sheet_for(character).looks[:2] == ["parka", "indoor clothes"]
+
+
+# --- the order stays as the author sees it (Nov 7 2026) ------------------------------------
+
+
+def test_a_card_never_changed_reads_in_the_old_order():
+    """Pictures' looks in card order, then the planned ones: nothing moves the
+    day the order began to be kept."""
+    character = john()
+    character.sheet_looks = ["formal clothes"]
+    assert sheet_for(character).looks == [
+        "winter coat",
+        "combat armour",
+        "indoor clothes",
+        "formal clothes",
+    ]
+
+
+def test_once_kept_a_portrait_changed_moves_no_row():
+    character = john()
+    assert keep_order(character)
+    assert character.sheet_ordered
+    before = sheet_for(character).looks
+    # The armour picture made the portrait: it was its look's row at the top.
+    character.reference_images.insert(0, character.reference_images.pop(5))
+    assert sheet_for(character).looks == before
+    assert not keep_order(character)  # nothing new to keep
+
+
+def test_once_kept_a_row_keeps_its_place_when_its_last_picture_moves_out():
+    character = john()
+    keep_order(character)
+    character.reference_images[6].look = "winter coat"  # the indoor clothes picture
+    character.reference_images[6].expression = "surprised"
+    sheet = sheet_for(character)
+    assert sheet.looks == ["winter coat", "combat armour", "indoor clothes"]
+    assert sheet.gap("indoor clothes", "neutral") is not None
+
+
+def test_a_new_look_goes_after_the_rows_already_there():
+    """A portrait drawn in a new look went first: it is last instead."""
+    character = john()
+    keep_order(character)
+    character.reference_images.insert(0, picture("new", "riding gear", "neutral"))
+    assert sheet_for(character).looks[-1] == "riding gear"
+    assert keep_order(character)
+    assert character.sheet_looks[-1] == "riding gear"
+
+
+def test_the_usual_columns_stay_blank_and_a_pictures_own_is_kept():
+    character = john()
+    keep_order(character)
+    assert character.sheet_expressions == []
+    character.reference_images.append(picture("joy", "winter coat", "laughing"))
+    character.reference_images.append(picture("grim", "winter coat", "grim"))
+    keep_order(character)
+    assert character.sheet_expressions == [*DEFAULT_EXPRESSIONS, "laughing", "grim"]
+    # The laughing one made the portrait: the columns stay.
+    character.reference_images.insert(0, character.reference_images.pop())
+    assert sheet_for(character).expressions[-2:] == ["laughing", "grim"]
+
+
+def test_the_author_moves_rows_and_columns():
+    character = john()
+    assert move(character, "indoor clothes", -1, look=True)
+    assert sheet_for(character).looks == ["winter coat", "indoor clothes", "combat armour"]
+    assert not move(character, "winter coat", -1, look=True)  # first already
+    assert move(character, "afraid", -4)
+    assert sheet_for(character).expressions[:2] == ["afraid", "neutral"]
+    assert reorder(character, looks=["combat armour"])
+    assert sheet_for(character).looks == ["combat armour", "winter coat", "indoor clothes"]
+    assert not reorder(character, looks=["combat armour"])
+
+
+def test_the_unnamed_row_stays_last():
+    character = Character(
+        id="c",
+        name="C",
+        reference_images=[picture("joy", "", "happy"), picture("coat", "coat", "neutral")],
+    )
+    reorder(character, looks=["coat"])
+    assert sheet_for(character).looks == ["coat", ""]
+
+
+def test_a_row_taken_off_takes_its_words_with_it():
+    character = john()
+    character.sheet_looks = ["formal clothes"]
+    set_wording(character, "formal clothes", "a dark suit and tie", look=True)
+    remove_label(character, look="formal clothes")
+    assert "formal clothes" not in sheet_for(character).looks
+    assert character.look_wording == {}
+    # The rest stayed as they were.
+    assert character.sheet_looks == ["winter coat", "combat armour", "indoor clothes"]
+
+
+# --- a heading, and the words it is drawn with (Nov 7 2026) --------------------------------
+
+
+def test_a_column_is_drawn_with_the_usual_words_or_the_cards_own():
+    character = john()
+    assert wording(character, "happy") == "a happy expression with a bright smile"
+    assert wording(character, "smug") == "smug"  # no usual words: the heading
+    assert set_wording(character, "Happy", "  happy but reserved, a small smile.  ")
+    assert character.expression_wording == {"happy": "happy but reserved, a small smile"}
+    assert wording(character, "happy") == "happy but reserved, a small smile"
+    assert not set_wording(character, "happy", "happy but reserved, a small smile")
+    assert set_wording(character, "happy", "")
+    assert wording(character, "happy") == usual_wording("happy")
+
+
+def test_a_gap_is_drawn_with_its_cards_words():
+    character = john()
+    set_wording(character, "angry", "furious, teeth bared")
+    set_wording(character, "formal clothes", "a dark suit and tie", look=True)
+    character.sheet_looks = ["formal clothes"]
+    sheet = sheet_for(character)
+    assert gap_change(sheet.gap("combat armour", "angry"), character=character) == (
+        "Change their expression or pose to: furious, teeth bared."
+    )
+    assert gap_change(sheet.gap("formal clothes", "neutral"), character=character) == (
+        "Change their clothes or state to: a dark suit and tie."
+    )
+    assert sheet_change(character, expression="laughing") == (
+        "Change their expression or pose to: laughing."
+    )
+
+
+def test_the_usual_words_are_prompt_texts():
+    texts = PromptTexts({"looks.wording.happy": "beaming"})
+    assert wording(john(), "happy", texts=texts) == "beaming"
+    assert wording(john(), "in a fighting stance").startswith("in a fighting stance")
+
+
+def test_a_renamed_column_keeps_its_words():
+    character = john()
+    set_wording(character, "afraid", "terrified, trembling")
+    relabel(character, expression=("afraid", "scared"))
+    assert character.expression_wording == {"scared": "terrified, trembling"}
+    # Renamed onto one with words of its own: those stand.
+    set_wording(character, "sad", "weeping")
+    relabel(character, expression=("scared", "sad"))
+    assert character.expression_wording == {"sad": "weeping"}
+
+
+def test_a_gap_shows_the_words_its_edit_asks_for_and_no_more():
+    """A new look's first cell is drawn from a picture with its expression
+    already: it shows the look's words, not the expression's."""
+    from sealedlore.engine.look_sheet import gap_words
+
+    character = john()
+    character.sheet_looks = ["formal clothes"]
+    set_wording(character, "formal clothes", "a dark suit and tie", look=True)
+    sheet = sheet_for(character)
+    assert gap_words(sheet.gap("formal clothes", "neutral"), character=character) == (
+        "a dark suit and tie"
+    )
+    assert gap_words(sheet.gap("formal clothes", "happy"), character=character) == (
+        "a happy expression with a bright smile"
+    )
+    assert gap_words(sheet.gap("combat armour", "sad"), character=character).startswith(
+        "a sad expression"
+    )

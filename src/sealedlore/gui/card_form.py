@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.engine.look_sheet import keep_order
 from sealedlore.gui.fields import FormScroll, set_field_text
 from sealedlore.gui.json_field import JsonField
 from sealedlore.gui.portrait_view import PortraitView
@@ -138,6 +139,8 @@ class CharacterForm(QWidget):
 
         self.portrait = PortraitView(scene=False)
         self.others = RefImageStrip(self._pictures, "them", after_portrait=True, crop="portrait")
+        # Their sheet's rows and columns stay where they are as pictures change.
+        self.others.before_change = self._keep_sheet_order
         self.portrait.draw_requested.connect(lambda: self._ask("new"))
         self.portrait.again_requested.connect(lambda: self._ask("again", first=True))
         self.portrait.edit_requested.connect(lambda: self._ask("edit", first=True))
@@ -298,12 +301,17 @@ class CharacterForm(QWidget):
             self.others.remove_ref(shown)
             self._on_pictures_changed()
 
+    def _keep_sheet_order(self) -> None:
+        if self._character is not None:
+            keep_order(self._character)
+
     def _label_portrait(self) -> None:
         character = self._character
         if character is None or not character.reference_images:
             return
         from sealedlore.gui.picture_labels import edit_labels
 
+        keep_order(character)
         if edit_labels(self, character.reference_images[0], character.reference_images):
             self._on_pictures_changed()
 

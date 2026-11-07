@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.card_condense import fingerprint
+from sealedlore.engine.look_sheet import keep_order
 from sealedlore.gui import theme
 from sealedlore.gui.banners import CastRoomBanner
 from sealedlore.gui.cast_board import BOARD_LABEL, SAVE_LABEL
@@ -352,6 +353,8 @@ class CastPanel(QWidget):
         # small under the sheet (the author, Oct 15 2026).
         self.portrait = PortraitView()
         self.pictures = RefImageStrip(self._pictures, "them", after_portrait=True, crop="portrait")
+        # Their sheet's rows and columns stay where they are as pictures change.
+        self.pictures.before_change = self._keep_sheet_order
         self.portrait.draw_requested.connect(lambda: self._ask("new"))
         self.portrait.again_requested.connect(lambda: self._ask("again", first=True))
         self.portrait.edit_requested.connect(lambda: self._ask("edit", first=True))
@@ -667,12 +670,17 @@ class CastPanel(QWidget):
             if self._current.id == character.id:
                 self.pictures.remove_ref(shown)
 
+    def _keep_sheet_order(self) -> None:
+        if self._current is not None:
+            keep_order(self._current)
+
     def _label_portrait(self) -> None:
         character = self._current
         if character is None or not character.reference_images:
             return
         from sealedlore.gui.picture_labels import edit_labels
 
+        keep_order(character)
         if edit_labels(self, character.reference_images[0], character.reference_images):
             self._on_pictures_changed()
 

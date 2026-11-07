@@ -18,7 +18,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
-from sealedlore.engine.look_sheet import label_key, sheet_for, wanted_along
+from sealedlore.engine.look_sheet import keep_order, label_key, sheet_for, wanted_along
 from sealedlore.engine.looks import look_words
 from sealedlore.gui.cast_board import BOARD_LABEL, SAVE_LABEL, CastBoard
 from sealedlore.gui.fill_gaps import Waiting, ask_fill_gaps
@@ -170,6 +170,7 @@ class CastBoardWindow:
         kept = read_kept(template, self.root) if template else None
         self.cast_board.set_template(template, kept.count if kept else 0)
         self.cast_board.set_savable(True)
+        self.cast_board.set_texts(session.texts)
         self.cast_board.set_cards(
             self._board_cards(),
             shown=session.looks_now(),
@@ -308,6 +309,8 @@ class CastBoardWindow:
             return
         if self._board_refused():
             return
+        # Their sheet's rows and columns kept where they are first.
+        keep_order(card)
         if what == "labels":
             if edit_labels(self, ref, card.reference_images):
                 self._board_changed(card_id)
@@ -447,6 +450,7 @@ class CastBoardWindow:
             paths, _ = QFileDialog.getOpenFileNames(
                 self, f"Pictures of {card.name}", str(Path.home()), PICTURE_FILTER
             )
+        keep_order(card)
         added, problems = 0, []
         for number, path in enumerate(paths, 1):
             counter = f"{number} of {len(paths)}" if len(paths) > 1 else ""

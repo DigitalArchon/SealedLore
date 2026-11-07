@@ -48,12 +48,20 @@ class Character(BaseModel):
     portrait_path: str | None = None
     # Pictures sent with an image prompt so they look the same every time.
     reference_images: list[ImageRef] = Field(default_factory=list)
-    # Their pictures as a sheet on the cast board (engine/look_sheet.py): the
-    # looks the author has planned that no picture has yet, and the
-    # expressions across (none: the usual few). The board's alone; no model
-    # sees them.
+    # Their pictures as a sheet on the cast board (engine/look_sheet.py): its
+    # rows, and the expressions across (none: the usual few). Before
+    # `sheet_ordered` the rows are only the looks the author planned that no
+    # picture had yet, after the pictures' own; once it is set (the first
+    # change made on the sheet) they are every row in the author's order.
+    # The board's alone; no model sees them.
     sheet_looks: list[str] = Field(default_factory=list)
     sheet_expressions: list[str] = Field(default_factory=list)
+    sheet_ordered: bool = False
+    # How a row or a column is drawn (label key → words), where the card has
+    # its own words for it: sent to the image model in place of the label
+    # (engine/look_sheet.py `wording`).
+    look_wording: dict[str, str] = Field(default_factory=dict)
+    expression_wording: dict[str, str] = Field(default_factory=dict)
     origin: CharacterOrigin = "author"
     # The work a canonical character comes from ("Night of the Living Dead (1968)").
     # The model already knows them; the card only records what this story changed.

@@ -13,14 +13,28 @@ expression as two attributes (Ren'Py's layered images), the shape the
 labels already have. So: a sheet, its gaps in plain view, each drawn from
 the nearest picture so the face and clothes match.
 
-Rows are the looks the pictures carry, in card order (the portrait's
-first), then the looks the author has planned (`Character.sheet_looks`)
-that no picture has yet. Columns are the author's expressions for them
-(`Character.sheet_expressions`, else DEFAULT_EXPRESSIONS), then any other a
-picture carries. A picture with an expression and no look is in the row
-"" (no look named), one with a look and no expression in the column "";
-one with neither is unlabelled, kept apart. Labels match whatever their
-case and spacing, and show as first written.
+Rows are the looks in the author's order (`Character.sheet_looks`, once
+`sheet_ordered`), then any look a picture carries that isn't listed yet.
+Columns are the author's expressions for them (`Character.sheet_expressions`,
+else DEFAULT_EXPRESSIONS), then any other a picture carries. A picture with
+an expression and no look is in the row "" (no look named), one with a look
+and no expression in the column ""; one with neither is unlabelled, kept
+apart. Labels match whatever their case and spacing, and show as first
+written.
+
+**The order stays as the author sees it** (the author, Nov 7 2026: the rows
+moved about as pictures changed). Before, the rows were the pictures' looks
+in card order, so a picture made the portrait, moved to another row or drawn
+first brought its look to the top, and a row lost its last picture went. Now
+whatever changes the sheet keeps its rows and columns on the card first
+(`keep_order`), and they stay where they are until the author moves them
+(`reorder`). A card never changed since reads in the old order, so nothing
+moves the day this came in.
+
+**A row or column has a heading and the words it is drawn with**
+(`wording`): the heading is the label, the words what an image model is
+asked for (the card's own, else the usual ones for a common expression,
+else the heading).
 """
 
 from __future__ import annotations
@@ -29,7 +43,7 @@ from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
-from sealedlore.engine.looks import look_change
+from sealedlore.engine.looks import USUAL_WORDING, look_change
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.models.character import Character
 from sealedlore.models.image import ImageRef
@@ -148,9 +162,13 @@ def sheet_for(character: Character, wanted: Mapping[str, int] | None = None) -> 
     refs = list(character.reference_images)
     labelled = [r for r in refs if r.look.strip() or r.expression.strip()]
     unlabelled = [r for r in refs if not (r.look.strip() or r.expression.strip())]
+    pictured = [r.look for r in labelled if r.look.strip()]
     looks = _ordered(
-        [r.look for r in labelled if r.look.strip()]
-        + list(character.sheet_looks)
+        (
+            [*character.sheet_looks, *pictured]
+            if character.sheet_ordered
+            else [*pictured, *character.sheet_looks]
+        )
         + [""] * any(not r.look.strip() for r in labelled)
     )
     # Nothing labelled yet: one row all the same, a place to drop a picture
@@ -207,6 +225,16 @@ def sheet_for(character: Character, wanted: Mapping[str, int] | None = None) -> 
     )
 
 
+def sheet_rows(character: Character) -> list[str]:
+    """The sheet's named rows, in order."""
+    return [look for look in sheet_for(character).looks if look]
+
+
+def sheet_columns(character: Character) -> list[str]:
+    """The sheet's named columns, in order."""
+    return [expression for expression in sheet_for(character).expressions if expression]
+
+
 def _first_cell(expressions: Sequence[str]) -> str:
     """The cell a new look is drawn in first: neutral if there is one."""
     for expression in expressions:
@@ -233,23 +261,208 @@ def _start_of_new_look(
     return same[0] if same else portrait
 
 
-def gap_change(gap: Gap, texts: PromptTexts = DEFAULT_TEXTS) -> str:
-    """What a gap's edit asks for: only what differs from its source (an
-    unnamed look or expression is left as it is). A waiting one is drawn
-    from its row's first picture, in its look already: only its expression."""
+def _gap_labels(gap: Gap) -> tuple[str, str]:
+    """(look, expression) a gap's edit asks for: only what differs from its
+    source (an unnamed look or expression is left as it is). A waiting one is
+    drawn from its row's first picture, in its look already: only its
+    expression."""
     source = gap.source
     if source is None:
         assert gap.after, "a gap with nothing to draw it from"
         if label_key(gap.expression) == label_key(gap.after):
-            return ""
-        return look_change(expression=gap.expression, texts=texts)
+            return "", ""
+        return "", gap.expression
     look = gap.look if gap.look and label_key(gap.look) != label_key(source.look) else ""
     expression = (
         gap.expression
         if gap.expression and label_key(gap.expression) != label_key(source.expression)
         else ""
     )
-    return look_change(look=look, expression=expression, texts=texts)
+    return look, expression
+
+
+def gap_change(
+    gap: Gap, texts: PromptTexts = DEFAULT_TEXTS, character: Character | None = None
+) -> str:
+    """What a gap's edit asks for (`_gap_labels`), in the words `character`'s
+    sheet draws each with."""
+    look, expression = _gap_labels(gap)
+    return sheet_change(character, look=look, expression=expression, texts=texts)
+
+
+def gap_words(
+    gap: Gap, texts: PromptTexts = DEFAULT_TEXTS, character: Character | None = None
+) -> str:
+    """The words a gap is drawn with, as the sheet shows them in it: what its
+    edit asks for, and no more."""
+    look, expression = _gap_labels(gap)
+    parts = [
+        wording(character, look, look=True, texts=texts) if look else "",
+        wording(character, expression, texts=texts) if expression else "",
+    ]
+    return "; ".join(part for part in parts if part)
+
+
+# --- how a row or column is drawn ---------------------------------------------------------
+
+
+def _words(character: Character, look: bool) -> dict[str, str]:
+    return character.look_wording if look else character.expression_wording
+
+
+def usual_wording(label: str, *, look: bool = False, texts: PromptTexts = DEFAULT_TEXTS) -> str:
+    """The words a label is drawn with on a card with none of its own: the
+    usual ones for a common expression, else the label itself."""
+    key = label_key(label)
+    text_key = None if look else USUAL_WORDING.get(key)
+    return _phrase(texts[text_key]) if text_key else tidy(label)
+
+
+def wording(
+    character: Character | None,
+    label: str,
+    *,
+    look: bool = False,
+    texts: PromptTexts = DEFAULT_TEXTS,
+) -> str:
+    """The words a row (`look`) or a column is drawn with: the card's own,
+    else the usual ones (`usual_wording`). "" for an unnamed one."""
+    if not label_key(label):
+        return ""
+    own = _words(character, look).get(label_key(label), "") if character is not None else ""
+    return _phrase(own) or usual_wording(label, look=look, texts=texts)
+
+
+def own_wording(character: Character, label: str, *, look: bool = False) -> str:
+    """The card's own words for a row or column, "" for none."""
+    return _phrase(_words(character, look).get(label_key(label), ""))
+
+
+def set_wording(character: Character, label: str, words: str, *, look: bool = False) -> bool:
+    """The words a row or column is drawn with kept on the card, or taken off
+    (blank); whether anything changed."""
+    key = label_key(label)
+    if not key:
+        return False
+    kept = _words(character, look)
+    words = _phrase(words)
+    if words:
+        if kept.get(key) == words:
+            return False
+        kept[key] = words
+        return True
+    return kept.pop(key, None) is not None
+
+
+def sheet_change(
+    character: Character | None,
+    *,
+    look: str = "",
+    expression: str = "",
+    texts: PromptTexts = DEFAULT_TEXTS,
+) -> str:
+    """`look_change` in the words `character`'s sheet draws each with."""
+    return look_change(
+        look=wording(character, look, look=True, texts=texts) if look.strip() else "",
+        expression=wording(character, expression, texts=texts) if expression.strip() else "",
+        texts=texts,
+    )
+
+
+def _phrase(text: str) -> str:
+    """Words as they fill a prompt's sentence: spacing tidied, no full stop of
+    their own at the end (the sentence brings it)."""
+    return tidy(text).rstrip(" .")
+
+
+# --- the order of the rows and columns ----------------------------------------------------
+
+
+def keep_order(character: Character) -> bool:
+    """The sheet's rows and columns as they stand now, kept on the card so a
+    change to the pictures never moves them; whether the card changed. Run
+    before anything that changes a character's pictures or their labels."""
+    looks, expressions = sheet_rows(character), sheet_columns(character)
+    changed = False
+    if not character.sheet_ordered or looks != list(character.sheet_looks):
+        character.sheet_looks = looks
+        character.sheet_ordered = True
+        changed = True
+    # Left blank while it is the usual few: only a picture's own column
+    # needs a place kept.
+    if expressions != list(character.sheet_expressions or DEFAULT_EXPRESSIONS):
+        character.sheet_expressions = expressions
+        changed = True
+    return changed
+
+
+def reorder(
+    character: Character,
+    *,
+    looks: Sequence[str] | None = None,
+    expressions: Sequence[str] | None = None,
+) -> bool:
+    """The rows (`looks`) or the columns put in the author's order; whether
+    the order changed. A label left out keeps its place after those given;
+    the unnamed row and column stay last."""
+    keep_order(character)
+    moved = False
+    if looks is not None:
+        order = _put_first(character.sheet_looks, looks)
+        moved = order != character.sheet_looks
+        character.sheet_looks = order
+    if expressions is not None:
+        listed = list(character.sheet_expressions or DEFAULT_EXPRESSIONS)
+        order = _put_first(listed, expressions)
+        if order != listed:
+            character.sheet_expressions = order
+            moved = True
+    return moved
+
+
+def _put_first(labels: Sequence[str], first: Sequence[str]) -> list[str]:
+    by_key = {label_key(label): label for label in labels}
+    order = [by_key[label_key(x)] for x in first if label_key(x) in by_key]
+    return _ordered([*order, *labels])
+
+
+def move(character: Character, label: str, step: int, *, look: bool = False) -> bool:
+    """A row (`look`) or a column moved `step` places along; whether it moved."""
+    keep_order(character)
+    labels = list(
+        character.sheet_looks if look else (character.sheet_expressions or DEFAULT_EXPRESSIONS)
+    )
+    keys = [label_key(x) for x in labels]
+    if label_key(label) not in keys:
+        return False
+    at = keys.index(label_key(label))
+    to = at + step
+    if not 0 <= to < len(labels):
+        return False
+    labels.insert(to, labels.pop(at))
+    if look:
+        character.sheet_looks = labels
+    else:
+        character.sheet_expressions = labels
+    return True
+
+
+def remove_label(
+    character: Character, *, look: str | None = None, expression: str | None = None
+) -> None:
+    """A row or a column taken off the sheet, with the words it was drawn with
+    (its pictures stay where the window puts them: it is offered for an
+    empty one only)."""
+    keep_order(character)
+    if look is not None:
+        character.sheet_looks = [
+            x for x in character.sheet_looks if label_key(x) != label_key(look)
+        ]
+        character.look_wording.pop(label_key(look), None)
+    if expression is not None:
+        listed = character.sheet_expressions or list(DEFAULT_EXPRESSIONS)
+        character.sheet_expressions = [x for x in listed if label_key(x) != label_key(expression)]
+        character.expression_wording.pop(label_key(expression), None)
 
 
 def add_label(labels: list[str], label: str) -> bool:
@@ -267,8 +480,15 @@ def relabel(
     expression: tuple[str, str] | None = None,
 ) -> int:
     """Rename a row (`look`: old, new) or a column (`expression`) on every
-    picture of theirs and in their planned labels; how many pictures moved."""
+    picture of theirs and on the sheet, where it stands, with the words it is
+    drawn with (a row renamed onto another keeps that one's); how many
+    pictures moved."""
+    keep_order(character)
     moved = 0
+    if look is not None:
+        _move_words(character.look_wording, look)
+    if expression is not None:
+        _move_words(character.expression_wording, expression)
     if look is not None:
         old, new = label_key(look[0]), tidy(look[1])
         for ref in character.reference_images:
@@ -287,3 +507,10 @@ def relabel(
         listed = character.sheet_expressions or list(DEFAULT_EXPRESSIONS)
         character.sheet_expressions = _ordered(new if label_key(x) == old else x for x in listed)
     return moved
+
+
+def _move_words(kept: dict[str, str], rename: tuple[str, str]) -> None:
+    old, new = label_key(rename[0]), label_key(rename[1])
+    words = kept.pop(old, None)
+    if words is not None and new and new not in kept:
+        kept[new] = words

@@ -24,6 +24,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from sealedlore.engine.look_sheet import DEFAULT_EXPRESSIONS, sheet_columns, sheet_rows
 from sealedlore.ids import new_id
 from sealedlore.models.character import Character, Competence
 from sealedlore.models.collection import CardLink, CollectionInfo, PictureMark
@@ -44,6 +45,8 @@ LINKED_FIELDS = (
     "canon",
     "sheet_looks",
     "sheet_expressions",
+    "look_wording",
+    "expression_wording",
 )
 FIELD_LABELS = {
     "name": "Name",
@@ -56,6 +59,8 @@ FIELD_LABELS = {
     "canon": "From",
     "sheet_looks": "Looks on their sheet",
     "sheet_expressions": "Expressions on their sheet",
+    "look_wording": "How their looks are drawn",
+    "expression_wording": "How their expressions are drawn",
 }
 PORTRAIT = "portrait"
 STORY, CARD, BOTH = "story", "card", "both"
@@ -72,8 +77,13 @@ def fields_of(character: Character) -> dict[str, Any]:
         "voice_notes": character.voice_notes or "",
         "competence": character.competence.model_dump(),
         "canon": character.canon or "",
-        "sheet_looks": list(character.sheet_looks),
-        "sheet_expressions": list(character.sheet_expressions),
+        # The sheet as it reads (engine/look_sheet.py), not the lists kept:
+        # those are kept in its order only once it is first changed, so the
+        # same sheet can be kept two ways.
+        "sheet_looks": sheet_rows(character),
+        "sheet_expressions": sheet_columns(character),
+        "look_wording": dict(character.look_wording),
+        "expression_wording": dict(character.expression_wording),
     }
 
 
@@ -81,8 +91,16 @@ def set_fields(character: Character, values: Mapping[str, Any]) -> None:
     for key, value in values.items():
         if key == "competence":
             character.competence = Competence.model_validate(value)
-        elif key in ("aliases", "sheet_looks", "sheet_expressions"):
-            setattr(character, key, list(value))
+        elif key == "sheet_looks":
+            character.sheet_looks = list(value)
+            character.sheet_ordered = True
+        elif key == "sheet_expressions":
+            listed = list(value)
+            character.sheet_expressions = [] if listed == list(DEFAULT_EXPRESSIONS) else listed
+        elif key in ("look_wording", "expression_wording"):
+            setattr(character, key, dict(value))
+        elif key == "aliases":
+            character.aliases = list(value)
         elif key == "name":
             character.name = value or character.name
         elif key in LINKED_FIELDS:

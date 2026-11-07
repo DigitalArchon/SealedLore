@@ -33,6 +33,11 @@ COMMON_EXPRESSIONS = (
     "thinking",
     "in a fighting stance",
 )
+# The usual words each common expression is drawn with, by label
+# (engine/look_sheet.py `wording`): prompt texts, so they can be changed.
+USUAL_WORDING = {
+    expression: f"looks.wording.{expression.replace(' ', '_')}" for expression in COMMON_EXPRESSIONS
+}
 
 
 def looks_at(path: Sequence[Node]) -> dict[str, str]:

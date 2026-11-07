@@ -135,7 +135,9 @@ class FillGapsDialog(QDialog):
             tick.setToolTip(f"Drawn from {source}")
             tick.toggled.connect(self._sync)
             prompt = GrowingText(lines=2, most=6)
-            prompt.setPlainText(session.card_edit_prompt(character, gap_change(gap, session.texts)))
+            prompt.setPlainText(
+                session.card_edit_prompt(character, gap_change(gap, session.texts, character))
+            )
             prompt.textChanged.connect(self._sync)
             column = QVBoxLayout()
             column.setSpacing(4)

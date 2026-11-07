@@ -3143,6 +3143,33 @@ _text(
     (("expression", "The expression or pose the new picture is labelled with"),),
 )
 
+# How the usual expressions are drawn (engine/look_sheet.py `wording`): what
+# fills `pictures.look.expression` for an expression the card has no words of
+# its own for. The author (Nov 7 2026): a column's heading says the emotion,
+# and the words it is drawn with should say more ("a happy expression and a
+# bright smile", or "happy but reserved, a small smile and bright eyes"); a
+# card's own words replace these. Not A/B'd: before, the label alone was sent.
+for _key, _words in (
+    ("neutral", "a calm, neutral expression, relaxed"),
+    ("happy", "a happy expression with a bright smile"),
+    ("sad", "a sad expression, eyes downcast and the mouth turned down"),
+    ("angry", "an angry expression, brows drawn together and the jaw set"),
+    ("afraid", "a frightened expression, eyes wide and shoulders tense"),
+    ("surprised", "a surprised expression, eyes wide, eyebrows raised, mouth open"),
+    ("talking", "talking, mouth open mid-word, as though speaking to someone"),
+    ("thinking", "a thoughtful expression, looking aside, lost in thought"),
+    ("in a fighting stance", "in a fighting stance, weight forward, ready to strike"),
+):
+    _text(
+        f"looks.wording.{_key.replace(' ', '_')}",
+        LOOKS,
+        f"How “{_key}” is drawn",
+        f"The words an image model is given for the expression or pose “{_key}”, when a "
+        "character's card has none of its own for it (the cast board's column menu, How it is "
+        "drawn…).",
+        _words,
+    )
+
 # Looks (engine/look_pick.py): after a passage, which of their pictures each
 # character in it is shown with. On the scene model (in a private scene, the
 # private model). Measured on Doomsville passages with labelled looks

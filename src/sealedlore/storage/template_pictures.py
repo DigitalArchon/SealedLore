@@ -128,6 +128,9 @@ def keep_pictures(
             "pictures": pictures,
             "sheet_looks": list(character.sheet_looks),
             "sheet_expressions": list(character.sheet_expressions),
+            "sheet_ordered": character.sheet_ordered,
+            "look_wording": dict(character.look_wording),
+            "expression_wording": dict(character.expression_wording),
         }
     for stale in (folder / PICTURES).iterdir():
         if stale.name not in used:
@@ -207,4 +210,9 @@ def apply_kept(
         character.reference_images = pictures
         character.sheet_looks = [str(x) for x in card.get("sheet_looks") or []]
         character.sheet_expressions = [str(x) for x in card.get("sheet_expressions") or []]
+        character.sheet_ordered = bool(card.get("sheet_ordered"))
+        for key in ("look_wording", "expression_wording"):
+            words = card.get(key)
+            if isinstance(words, dict):
+                setattr(character, key, {str(k): str(v) for k, v in words.items()})
     return added

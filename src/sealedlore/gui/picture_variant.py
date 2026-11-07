@@ -15,7 +15,7 @@ nothing is sent before Draw; the prompt is sent exactly as it stands.
 
 An edit of a character's picture is also how another look is drawn
 (engine/looks.py): its Look and Expression or pose start as the picture's
-own, a changed one becomes the change asked for (`look_change`), and the
+own, a changed one becomes the change asked for (`sheet_change`), and the
 new picture is labelled with them.
 
 An edit can also redraw the picture in another style (`restyle_prompt`, its
@@ -51,7 +51,8 @@ from sealedlore.engine.image_variants import (
     version_words,
 )
 from sealedlore.engine.images import ImageRequest
-from sealedlore.engine.looks import COMMON_EXPRESSIONS, COMMON_LOOKS, labels_in_use, look_change
+from sealedlore.engine.look_sheet import sheet_change
+from sealedlore.engine.looks import COMMON_EXPRESSIONS, COMMON_LOOKS, labels_in_use
 from sealedlore.engine.picture_styles import style_key, style_label, style_words
 from sealedlore.engine.portraits import (
     DEFAULT_FRAMING,
@@ -386,7 +387,9 @@ class PictureVariantDialog(QDialog):
             return ""
         look, expression = self.labels()
         source = self.subject.source
-        return look_change(
+        card = self.subject.card
+        return sheet_change(
+            card if isinstance(card, Character) else None,
             look=look if look.lower() != source.look.lower() else "",
             expression=expression if expression.lower() != source.expression.lower() else "",
             texts=self.session.texts,

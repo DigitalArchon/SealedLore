@@ -330,6 +330,9 @@ class RefImageStrip(QWidget):
         self._refs: list[ImageRef] | None = None
         self._after_portrait = after_portrait
         self._crop = crop
+        # Run before the strip changes the pictures (a character's sheet
+        # keeps its rows and columns where they are: engine/look_sheet.py).
+        self.before_change: Callable[[], object] | None = None
 
         self.list = QListWidget()
         self.list.setObjectName("refImageList")
@@ -456,6 +459,10 @@ class RefImageStrip(QWidget):
         self.add_button.setEnabled(refs is not None and store is not None)
         self._sync_buttons()
 
+    def _before(self) -> None:
+        if self.before_change is not None:
+            self.before_change()
+
     def _sync_buttons(self, *_args) -> None:
         selected = self.list.currentItem() is not None
         self.caption_button.setEnabled(selected)
@@ -479,6 +486,7 @@ class RefImageStrip(QWidget):
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Add reference pictures", str(Path.home()), PICTURE_FILTER
         )
+        self._before()
         added, problems = False, []
         for number, path in enumerate(paths, 1):
             counter = f"{number} of {len(paths)}" if len(paths) > 1 else ""
@@ -505,6 +513,7 @@ class RefImageStrip(QWidget):
         if self._person:
             from sealedlore.gui.picture_labels import edit_labels
 
+            self._before()
             if edit_labels(self, ref, self._refs or []):
                 self.set_refs(self._refs)
                 self.changed.emit()
@@ -535,6 +544,7 @@ class RefImageStrip(QWidget):
             return
         for index, ref in enumerate(self._refs):
             if ref.id == ref_id:
+                self._before()
                 self._refs.pop(index)
                 self.set_refs(self._refs)
                 self.changed.emit()
@@ -544,6 +554,7 @@ class RefImageStrip(QWidget):
         ref = self._ref(self.list.currentItem())
         if ref is None or self._refs is None:
             return
+        self._before()
         self._refs.remove(ref)
         self._refs.insert(0, ref)
         self.set_refs(self._refs)
@@ -566,6 +577,7 @@ class RefImageStrip(QWidget):
             picture = cropped_picture(self, Path(path), self._crop)
             if picture is None:
                 return False
+            self._before()
             self._refs.insert(0, store_reference(*picture, store, "portrait"))
         except (OSError, ValueError) as exc:
             QMessageBox.warning(self, "Couldn't add", str(exc))
@@ -617,6 +629,7 @@ class RefImageStrip(QWidget):
             return
         # The file stays: a generated image's record may name it, and an
         # Undo of the card would want it back. It is small.
+        self._before()
         self._refs.remove(ref)
         self.set_refs(self._refs)
         self.changed.emit()

@@ -21,6 +21,7 @@ import threading
 from collections.abc import Sequence
 
 from sealedlore.engine.images import ImageRequest
+from sealedlore.engine.look_sheet import keep_order
 from sealedlore.engine.picture_styles import (
     STYLE_OWNER,
     STYLE_REF_ID,
@@ -472,6 +473,10 @@ class PortraitRuntime:
                     style=image.card_style,
                 )
                 pictures = card.reference_images
+                if isinstance(card, Character):
+                    # Their sheet's rows and columns kept where they are: a
+                    # portrait drawn in a new look brought its row to the top.
+                    keep_order(card)
                 old = next((r for r in pictures if r.id == image.card_replaces), None)
                 if old is not None:
                     # A restyle takes the old one's place, labels and all; the

@@ -170,9 +170,13 @@ _OWN = (
     "is_player_available",
     "author_only",
     "canon",
-    # Their sheet's own rows and columns (engine/look_sheet.py).
+    # Their sheet's own rows and columns (engine/look_sheet.py), and the
+    # words each is drawn with.
     "sheet_looks",
     "sheet_expressions",
+    "sheet_ordered",
+    "look_wording",
+    "expression_wording",
 )
 
 

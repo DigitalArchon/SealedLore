@@ -22,7 +22,7 @@ from pathlib import Path
 from PySide6.QtCore import QFile, Qt, QTimer
 from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMessageBox
 
-from sealedlore.engine.look_sheet import label_key
+from sealedlore.engine.look_sheet import keep_order, label_key
 from sealedlore.engine.looks import look_words
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.usage import usage_report
@@ -542,6 +542,7 @@ class CollectionWindow:
                 key = (card.id, label_key(waiting.look), label_key(waiting.expression))
                 drawing[key] = drawing.get(key, 0) + 1
         page.board.aim(card.id)
+        page.board.set_texts(self._collection.texts)
         page.board.set_cards(
             [card], shown={}, wanted={}, drawing=drawing, begun=False, can_change=True
         )
@@ -1450,9 +1451,12 @@ class CollectionWindow:
         elif what in ("edit", "again", "set"):
             self._on_card_picture(card_id, ref_id, what, session=self._collection_session())
         elif what == "labels":
+            # Their sheet's rows and columns kept where they are first.
+            keep_order(card)
             if edit_labels(self, ref, card.reference_images):
                 self._collection_pictures_changed(card_id)
         elif what == "portrait":
+            keep_order(card)
             card.reference_images.remove(ref)
             card.reference_images.insert(0, ref)
             self._collection_pictures_changed(card_id)
@@ -1465,6 +1469,7 @@ class CollectionWindow:
                 QMessageBox.No,
             )
             if answer == QMessageBox.Yes and ref in card.reference_images:
+                keep_order(card)
                 card.reference_images.remove(ref)
                 self._collection_pictures_changed(card_id)
 
@@ -1503,6 +1508,7 @@ class CollectionWindow:
                 self, f"Pictures of {card.name}", str(Path.home()), PICTURE_FILTER
             )
         store = self._collection_store()
+        keep_order(card)
         added, problems = 0, []
         for number, path in enumerate(paths, 1):
             counter = f"{number} of {len(paths)}" if len(paths) > 1 else ""

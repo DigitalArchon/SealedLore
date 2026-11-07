@@ -71,7 +71,7 @@ def test_another_look_starts_from_the_picture_s_labels_and_asks_for_what_changed
     assert not dialog.draw_button.isEnabled()
     dialog.expression.setCurrentText("angry")
     prompt = dialog.prompt.toPlainText()
-    assert "Change their expression or pose to: angry." in prompt
+    assert "Change their expression or pose to: an angry expression," in prompt
     assert "clothes or state" not in prompt  # the look stays the picture's own
     assert dialog.draw_button.isEnabled()
     request = dialog.request()

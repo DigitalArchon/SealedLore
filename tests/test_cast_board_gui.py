@@ -120,7 +120,7 @@ def test_filling_gaps_asks_for_only_what_differs_from_their_picture(app, window,
     ]
     assert [r.references[0].ref_id for r in requests] == ["a", "p"]
     assert all(not r.card_first for r in requests)
-    assert "Change their expression or pose to: angry." in requests[0].prompt
+    assert "Change their expression or pose to: an angry expression," in requests[0].prompt
     assert "clothes" not in requests[0].prompt.split("Keep")[0]
     # Untick one and change a prompt: what is approved is what is sent.
     dialog.ticks[1].setChecked(False)
@@ -159,30 +159,169 @@ def test_cells_being_drawn_say_so(app, window, monkeypatch):
     monkeypatch.undo()
 
 
-def test_looks_and_expressions_of_ones_own_are_kept_on_the_card(app, window, monkeypatch):
-    from PySide6.QtWidgets import QInputDialog
+def answer_heading(monkeypatch, heading: str, words: str = "") -> list:
+    """The heading dialog answered (gui/sheet_labels.py); what it was asked."""
+    asked: list = []
 
+    def ask(_parent, **kwargs):
+        asked.append(kwargs)
+        return heading, words
+
+    monkeypatch.setattr("sealedlore.gui.cast_board.ask_sheet_label", ask)
+    return asked
+
+
+def test_looks_and_expressions_of_ones_own_are_kept_on_the_card(app, window, monkeypatch):
     window.show_cast_board(True, "char-serrik")
     board = window.cast_board
-    monkeypatch.setattr(QInputDialog, "getItem", lambda *a, **k: ("formal clothes", True))
+    asked = answer_heading(monkeypatch, "formal clothes")
     board._add_look()
-    assert serrik(window).sheet_looks == ["formal clothes"]
+    assert "formal clothes" in asked[0]["offered"] and asked[0]["look"]
+    # Every row kept in the order shown, the new one last.
+    assert serrik(window).sheet_looks == ["normal clothes", "combat armour", "formal clothes"]
     assert board._sheet.looks[-1] == "formal clothes"
     assert board._sheet.gap("formal clothes", "neutral").source is not None
     assert board._sheet.gap("formal clothes", "happy").source is None
 
-    monkeypatch.setattr(QInputDialog, "getItem", lambda *a, **k: ("laughing", True))
+    answer_heading(monkeypatch, "laughing", "laughing out loud, head thrown back")
     board._add_expression(everyone=True)
     for character in window.session.cast:
         assert "laughing" in character.sheet_expressions
+        assert character.expression_wording["laughing"] == "laughing out loud, head thrown back"
     saved = load_story_bundle(window.session.story.id, root=window.root)
     card = next(c for c in saved.cast if c.id == "char-serrik")
-    assert card.sheet_looks == ["formal clothes"] and "laughing" in card.sheet_expressions
+    assert card.sheet_looks[-1] == "formal clothes" and "laughing" in card.sheet_expressions
 
     # A column renamed: every picture in it is relabelled.
-    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("smiling", True))
+    answer_heading(monkeypatch, "smiling")
     board._rename(serrik(window), expression="happy")
     assert next(r for r in serrik(window).reference_images if r.id == "h").expression == "smiling"
+    assert board._sheet.expressions.index("smiling") == 1  # where happy was
+
+
+# --- the author's look over the board, Nov 7 2026 ----------------------------------------
+
+
+def test_the_rows_stay_where_they_are_whatever_their_pictures_do(app, window, monkeypatch):
+    """A picture moved out of its row, or made the portrait, moved the rows:
+    they stay as the author sees them."""
+    window.show_cast_board(True, "char-serrik")
+    board = window.cast_board
+    assert board._sheet.looks == ["normal clothes", "combat armour"]
+    # The armour picture's only one moved into normal clothes: its row stays.
+    sheet = board._sheet
+    board.sheet.picture_dropped.emit(
+        "a", sheet.looks.index("normal clothes"), sheet.expressions.index("sad")
+    )
+    assert board._sheet.looks == ["normal clothes", "combat armour"]
+    assert cell_of(window, "combat armour", "neutral").refs == []
+    # Back, then made the portrait: still where it was.
+    sheet = board._sheet
+    board.sheet.picture_dropped.emit(
+        "a", sheet.looks.index("combat armour"), sheet.expressions.index("neutral")
+    )
+    board.picture_action.emit("portrait", "char-serrik", "a")
+    assert serrik(window).reference_images[0].id == "a"
+    assert board._sheet.looks == ["normal clothes", "combat armour"]
+    saved = load_story_bundle(window.session.story.id, root=window.root)
+    card = next(c for c in saved.cast if c.id == "char-serrik")
+    assert card.sheet_looks == ["normal clothes", "combat armour"] and card.sheet_ordered
+
+
+def test_a_row_or_column_moves_only_when_the_author_moves_it(app, window):
+    window.show_cast_board(True, "char-serrik")
+    board = window.cast_board
+    card = serrik(window)
+    board._move(card, "combat armour", -1, look=True)
+    assert board._sheet.looks == ["combat armour", "normal clothes"]
+    board._move(card, "neutral", 1, look=False)
+    assert board._sheet.expressions[:2] == ["happy", "neutral"]
+    # Dragged by its heading: the sheet takes the new order, and the header
+    # is in step with it again.
+    board.sheet.verticalHeader().moveSection(1, 0)
+    QApplication.processEvents()
+    assert board._sheet.looks == ["normal clothes", "combat armour"]
+    assert not board.sheet.verticalHeader().sectionsMoved()
+    assert board.sheet.verticalHeaderItem(0).text() == "normal clothes"
+    assert load_story_bundle(window.session.story.id, root=window.root).cast[0].sheet_ordered
+
+
+def test_the_tray_is_there_to_set_a_picture_aside_with_nothing_in_it(app, window, monkeypatch):
+    window.show_cast_board(True, "char-serrik")
+    board = window.cast_board
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+    board.picture_action.emit("remove", "char-serrik", "u")
+    assert board.tray.count() == 0
+    assert board.tray.isVisibleTo(board) and board.tray_title.isVisibleTo(board)
+    # A picture set aside while deciding, and back.
+    board.tray.picture_dropped.emit("h")
+    ref = next(r for r in serrik(window).reference_images if r.id == "h")
+    assert (ref.look, ref.expression) == ("", "") and board.tray.count() == 1
+    assert board._sheet.expressions[1] == "happy"  # its column stays
+
+
+def test_a_gap_is_blank_but_for_the_words_it_is_drawn_with(app, window):
+    from PySide6.QtCore import QRect
+    from PySide6.QtGui import QPainter, QPixmap
+    from PySide6.QtWidgets import QStyleOptionViewItem
+
+    window.show_cast_board(True, "char-serrik")
+    board = window.cast_board
+    gap = cell_of(window, "combat armour", "angry")
+    assert gap.drawn_as == "an angry expression, brows drawn together and the jaw set"
+    asked: list = []
+    delegate = board.sheet.itemDelegate()
+    real = delegate.thumbs.get
+    delegate.thumbs.get = lambda file, w, h: asked.append(file) or real(file, w, h)
+    sheet = board._sheet
+    index = board.sheet.model().index(
+        sheet.looks.index("combat armour"), sheet.expressions.index("angry")
+    )
+    option = QStyleOptionViewItem()
+    option.rect = QRect(0, 0, 156, 234)
+    option.font = board.sheet.font()
+    canvas = QPixmap(156, 234)
+    painter = QPainter(canvas)
+    delegate.paint(painter, option, index)
+    painter.end()
+    delegate.thumbs.get = real
+    assert asked == []  # the picture it is drawn from isn't shown behind it
+
+
+def test_a_headings_words_are_its_own_and_drawn_with(app, window, monkeypatch):
+    window.show_cast_board(True, "char-serrik")
+    board = window.cast_board
+    card = serrik(window)
+    asked = answer_heading(monkeypatch, "angry", "furious, teeth bared")
+    board._rename(card, expression="angry")
+    assert asked[0]["heading"] == "angry"
+    assert asked[0]["words"].startswith("an angry expression")
+    assert card.expression_wording == {"angry": "furious, teeth bared"}
+    assert cell_of(window, "combat armour", "angry").drawn_as == "furious, teeth bared"
+    assert "furious, teeth bared" in board.sheet.horizontalHeaderItem(3).toolTip()
+    dialog = FillGapsDialog(
+        window.session,
+        card,
+        [board._sheet.gap("combat armour", "angry")],
+        catalog=None,
+        browse=None,
+    )
+    assert (
+        "Change their expression or pose to: furious, teeth bared." in dialog.requests()[0].prompt
+    )
+    dialog.deleteLater()
+
+
+def test_long_headings_wrap(app, window):
+    window.show_cast_board(True, "char-serrik")
+    board = window.cast_board
+    header = board.sheet.horizontalHeader()
+    short = header.wrapped_height()
+    card = serrik(window)
+    card.sheet_expressions = ["neutral", "in a fighting stance with both fists raised"]
+    window._refresh_board()
+    assert header.wrapped_height() > short
+    assert header.height() == header.wrapped_height()
 
 
 def test_a_pictures_own_actions_from_the_sheet(app, window, monkeypatch):
@@ -266,7 +405,8 @@ def test_a_new_looks_whole_row_is_approved_at_once_and_drawn_from_its_first(
     waiting = dialog.waiting()
     assert [w.expression for w in waiting] == ["happy", "sad", "angry", "afraid"]
     assert waiting[0].prompt.startswith(
-        "Edit this picture: Change their expression or pose to: happy."
+        "Edit this picture: Change their expression or pose to: a happy expression with a bright "
+        "smile."
     )
     # Unticking the first lets the rest go with it.
     dialog.ticks[0].setChecked(False)
@@ -445,3 +585,22 @@ def test_pictures_kept_from_the_board_come_with_the_templates_next_story(app, wi
         ("", ""),
     ]
     assert window.session.pictures.read(card.reference_images[1].file) == png(50)
+
+
+def test_the_gaps_chosen_stay_chosen_when_the_board_is_refreshed(app, window):
+    """A picture landing from an earlier drawing refreshes the board: the
+    choice being made, and where the sheet was scrolled, stay."""
+    window.show_cast_board(True, "char-serrik")
+    board = window.cast_board
+    sheet = board._sheet
+    index = board.sheet.model().index(1, sheet.expressions.index("angry"))
+    board.sheet.selectionModel().select(index, QItemSelectionModel.Select)
+    assert board.fill_button.text() == "Draw 1 chosen…"
+    window._refresh_board()
+    assert board.fill_button.text() == "Draw 1 chosen…"
+    assert [(c.look, c.expression) for c in board._selected_cells()] == [("combat armour", "angry")]
+    # Another character's sheet starts with nothing chosen.
+    other = next(c for c in window.session.cast if c.id != "char-serrik")
+    board.show_character(other.id)
+    board.show_character("char-serrik")
+    assert board._selected_cells() == []

@@ -1705,22 +1705,34 @@ story hears of them early.
 
 ![The cast board in Doomsville: John's sheet, his winter coat, combat armour and indoor clothes down the side and expressions across, two gaps chosen in the armour row and, beside them, one the story asked for, and the other characters in the list on the left](screenshots/cast-board.webp)
 
-An empty place shows, faded, the picture it would be drawn from. Choose the
+An empty place shows a **+** and the words it would be drawn with. Choose the
 ones you want (drag across them, Ctrl-click them, or click a row's or column's
-name) and draw them, or fill every gap at once: you see every prompt and the
+heading) and draw them, or fill every gap at once: you see every prompt and the
 price first, and each is drawn from the nearest picture of them, so the face
 and clothes stay and only what differs changes. **Add a look…** adds a row
 (combat armour, formal clothes, injured): choose its places and its first
 picture is drawn at once, the rest from that picture once it is in, so they
 all wear the same thing. **Add an expression…** adds a column, for one
-character or for everyone. Right-click a row's or column's name to fill it,
-rename it (every picture in it is relabelled) or remove it while it is empty.
+character or for everyone.
 
-Drag a picture to another place to relabel it, or onto the pictures not
-labelled yet to take its labels off; drag one of those to a place to label it;
-drop pictures from your computer on a place to add them there. Enter sees a
-picture whole (on a gap, draws the ones chosen), Delete removes a picture, F2
-changes its labels. A look the story asked for is marked on its place ("Asked
+Each row and column has a **heading**, which names it and labels its
+pictures, and the **words it is drawn with**, which are what the image model
+is asked for: "happy" is drawn as "a happy expression with a bright smile"
+until you write your own, and one character's "happy" can be "happy but
+reserved, a small smile and bright eyes". Hover over a heading to see its
+words. Right-click a heading to fill its row or column, change its
+**Heading and wording…** (a new heading relabels every picture in it), move
+it, or remove it while it is empty. Rows and columns stay where they are
+whatever happens to their pictures; drag a heading, or use **Move up** and
+**Move down** (**Move left** and **Move right** for a column), to put them in
+another order.
+
+Drag a picture to another place to relabel it. Under the sheet, the pictures
+**set aside** have no labels: drag a picture there to take it off the sheet
+while you decide where it goes, and drag one from there to a place to label
+it. Drop pictures from your computer on a place to add them there, or on the
+pictures set aside to add them unlabelled. Enter sees a picture whole (on a
+gap, draws the ones chosen), Delete removes a picture, F2 changes its labels. A look the story asked for is marked on its place ("Asked
 for ×2"); one that fits no place is listed above the sheet, to draw as the
 story put it or to add to the sheet. Right-click a picture to see it whole,
 show them like that in the story, make it their portrait, change its labels,
@@ -2233,7 +2245,8 @@ from a character card, say, to suit the story's style. Every picture is
 listed with its prompt, ticked to begin with if it isn't in the style chosen,
 and nothing is drawn until **Draw**. Each redrawn picture takes the old one's
 place on its card, with its labels; the old one stays at the end of the card's
-pictures, unlabelled (in the cast board's tray), for you to keep or remove.
+pictures, unlabelled (set aside under the cast board's sheet), for you to keep
+or remove.
 
 ### Pictures of places
 

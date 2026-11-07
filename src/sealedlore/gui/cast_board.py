@@ -1,8 +1,8 @@
 """The cast board (View → Cast board…, or Cast board… on the Cast page): every
 character's pictures in the whole window. Everyone, each with their pictures
 in a row; and a character's sheet, their looks down the side and their
-expressions or poses across (engine/look_sheet.py), each gap shown as the
-picture it would be drawn from, faded, ready to be drawn.
+expressions or poses across (engine/look_sheet.py), each gap blank but for
+the words it would be drawn with, ready to be drawn.
 
 The author (Nov 3 2026): managing many pictures per person should be
 seamless and visually engaging, all the characters and all their pictures
@@ -10,6 +10,13 @@ for every emotion and dress or pose type in view, the missing ones easy to
 fill in, types of their own easy to add. The page shows and edits a
 character's sheet; drawing, saving and the story are the window's
 (gui/window_board.py).
+
+Nov 7 2026, the author's look over it: the rows and columns stay where they
+are and move only when the author moves them (dragged by their headings, or
+Move up / Move down); the tray of pictures set aside is always there, to put
+one in while deciding; a gap no longer shows the picture it would be drawn
+from, faded (it read as a picture there); headings wrap; and a heading's
+words, the ones it is drawn with, show in its gaps.
 """
 
 from __future__ import annotations
@@ -18,7 +25,17 @@ from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from PySide6.QtCore import QByteArray, QMimeData, QObject, QRectF, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import (
+    QByteArray,
+    QItemSelectionModel,
+    QMimeData,
+    QObject,
+    QRectF,
+    QSize,
+    Qt,
+    QTimer,
+    Signal,
+)
 from PySide6.QtGui import (
     QColor,
     QDrag,
@@ -36,7 +53,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QHBoxLayout,
-    QInputDialog,
+    QHeaderView,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -46,6 +63,7 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QStyle,
     QStyledItemDelegate,
+    QStyleOptionHeader,
     QTableWidget,
     QTableWidgetItem,
     QToolButton,
@@ -58,15 +76,24 @@ from sealedlore.engine.look_sheet import (
     Gap,
     Sheet,
     add_label,
+    gap_words,
+    keep_order,
     label_key,
+    move,
     relabel,
+    remove_label,
+    reorder,
+    set_wording,
     sheet_for,
     split_wanted,
+    wording,
 )
 from sealedlore.engine.looks import COMMON_EXPRESSIONS, COMMON_LOOKS, look_words
 from sealedlore.engine.plot_md import PICTURE_SUFFIXES
+from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.gui import theme
 from sealedlore.gui.ref_images import StoryPictures, pixmap_of
+from sealedlore.gui.sheet_labels import HEADING_AND_WORDING, ask_sheet_label
 from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.models.character import Character
 from sealedlore.models.image import ImageRef
@@ -176,6 +203,8 @@ class Cell:
     shown_id: str | None = None
     drawing: int = 0
     front: int = 0  # which of `refs` is shown, when there are several
+    # The words a gap would be drawn with: what its edit asks for.
+    drawn_as: str = ""
 
     @property
     def ref(self) -> ImageRef | None:
@@ -270,15 +299,9 @@ class SheetDelegate(QStyledItemDelegate):
                     theme.colour("window"),
                 )
         else:
+            # Blank: the picture it would be drawn from, faded behind it, read
+            # as a picture already there (the author, Nov 7 2026).
             gap = cell.gap
-            if gap is not None and gap.source is not None and not cell.drawing:
-                pixmap = self.thumbs.get(gap.source.file, size.width(), size.height())
-                if pixmap is not None and not pixmap.isNull():
-                    painter.setOpacity(0.2)
-                    painter.setClipPath(path)
-                    painter.drawPixmap(rect.topLeft().toPoint(), pixmap)
-                    painter.setClipping(False)
-                    painter.setOpacity(1.0)
             wanted = gap.wanted if gap is not None else 0
             colour = theme.colour(
                 "primary" if selected else "warning" if wanted else "control_border"
@@ -303,17 +326,16 @@ class SheetDelegate(QStyledItemDelegate):
                     Qt.AlignHCenter | Qt.AlignBottom,
                     "+",
                 )
-                painter.setFont(option.font)
-                label = cell.expression or cell.look or "draw"
+                # The words it is drawn with: its heading is over the column.
+                painter.setFont(small)
+                label = cell.drawn_as or "as it is"
                 if gap.source is None:
                     # The rest of a new look's row: drawn from its first.
-                    label += f"\nafter the {gap.after or 'first'}"
-                painter.drawText(
-                    QRectF(words.left(), middle + 2, words.width(), words.height() / 2 - 2),
-                    Qt.AlignHCenter | Qt.AlignTop | Qt.TextWordWrap,
-                    label,
-                )
-                painter.setFont(small)
+                    label += f"\n(after the {gap.after or 'first'})"
+                box = QRectF(words.left(), middle + 2, words.width(), words.bottom() - middle - 2)
+                if wanted:
+                    box.setBottom(box.bottom() - painter.fontMetrics().height() - 6)
+                painter.drawText(box, Qt.AlignHCenter | Qt.AlignTop | Qt.TextWordWrap, label)
             if wanted:
                 inner = rect.adjusted(6, 6, -6, -6)
                 text = "Asked for" if wanted == 1 else f"Asked for ×{wanted}"
@@ -353,6 +375,73 @@ def _picture_drag(source: QWidget, ref_id: str, pixmap: QPixmap | None) -> None:
     drag.exec(Qt.MoveAction)
 
 
+class WrappingHeader(QHeaderView):
+    """A sheet's headings, wrapped onto as many lines as they take (a look's
+    name was cut short at the row's width), and dragged to move a row or a
+    column (`moved`, once the drag is done)."""
+
+    # (the labels in their new order, by logical index)
+    moved = Signal(list)
+    PADDING_X, PADDING_Y = 8, 6
+
+    def __init__(self, orientation, parent=None) -> None:
+        super().__init__(orientation, parent)
+        self.setSectionsMovable(True)
+        self.setSectionsClickable(True)
+        self.setHighlightSections(True)
+        self.sectionMoved.connect(self._section_moved)
+
+    def _text(self, logical: int) -> str:
+        model = self.model()
+        if model is None:
+            return ""
+        value = model.headerData(logical, self.orientation(), Qt.DisplayRole)
+        return str(value) if value is not None else ""
+
+    def paintSection(self, painter: QPainter, rect, logical: int) -> None:  # noqa: N802
+        if not rect.isValid():
+            return
+        option = QStyleOptionHeader()
+        self.initStyleOptionForIndex(option, logical)
+        option.rect = rect
+        option.text = ""
+        painter.save()
+        # The section as the stylesheet draws it, then its words, wrapped.
+        self.style().drawControl(QStyle.CE_HeaderSection, option, painter, self)
+        # Brighter over a chosen cell's heading, or under the pointer (the
+        # stylesheet's hover colour).
+        bright = bool(option.state & (QStyle.State_On | QStyle.State_MouseOver))
+        painter.setPen(theme.colour("text_heading" if bright else "text_dim"))
+        painter.setFont(self.font())
+        inner = rect.adjusted(self.PADDING_X, self.PADDING_Y, -self.PADDING_X, -self.PADDING_Y)
+        align = (
+            Qt.AlignRight | Qt.AlignVCenter
+            if self.orientation() == Qt.Vertical
+            else Qt.AlignHCenter | Qt.AlignVCenter
+        )
+        painter.drawText(inner, align | Qt.TextWordWrap, self._text(logical))
+        painter.restore()
+
+    def wrapped_height(self) -> int:
+        """The height its headings take wrapped at their widths (a
+        horizontal header's)."""
+        metrics = self.fontMetrics()
+        tallest = metrics.height()
+        for logical in range(self.count()):
+            width = max(10, self.sectionSize(logical) - 2 * self.PADDING_X)
+            bounds = metrics.boundingRect(
+                0, 0, width, 10_000, Qt.AlignHCenter | Qt.TextWordWrap, self._text(logical)
+            )
+            tallest = max(tallest, bounds.height())
+        return tallest + 2 * self.PADDING_Y + 2
+
+    def _section_moved(self, _logical: int, _old: int, _new: int) -> None:
+        order = [self.logicalIndex(visual) for visual in range(self.count())]
+        # After the drag: the sheet is rebuilt in its new order, which this
+        # header must not be in the middle of.
+        QTimer.singleShot(0, self, lambda: self.moved.emit(order))
+
+
 class SheetTable(QTableWidget):
     """A character's sheet: looks down the side, expressions across; both
     stay in view as the cells scroll. Drag across gaps, or Ctrl-click them,
@@ -390,10 +479,11 @@ class SheetTable(QTableWidget):
         self.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.setHorizontalHeader(WrappingHeader(Qt.Horizontal, self))
+        self.setVerticalHeader(WrappingHeader(Qt.Vertical, self))
         for header in (self.horizontalHeader(), self.verticalHeader()):
             header.setSectionResizeMode(header.ResizeMode.Fixed)
             header.setContextMenuPolicy(Qt.CustomContextMenu)
-            header.setHighlightSections(True)
         self.verticalHeader().setFixedWidth(ROW_HEADER)
         self.verticalHeader().setDefaultAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
@@ -404,6 +494,12 @@ class SheetTable(QTableWidget):
             self.setColumnWidth(column, width)
         for row in range(self.rowCount()):
             self.setRowHeight(row, int(width * ASPECT))
+        self.fit_headings()
+
+    def fit_headings(self) -> None:
+        """The headings across as tall as their wrapped words."""
+        header = self.horizontalHeader()
+        header.setFixedHeight(header.wrapped_height())
 
     def cell_at(self, row: int, column: int) -> Cell | None:
         item = self.item(row, column)
@@ -483,11 +579,20 @@ class SheetTable(QTableWidget):
 
 
 class Tray(QListWidget):
-    """Pictures not labelled yet: dragged onto a place, they take its labels;
-    a picture of the sheet dropped here loses its own."""
+    """Pictures set aside, with no labels: dragged onto a place, they take its
+    labels; a picture of the sheet dropped here loses its own, and is kept
+    here while the author decides. Always there under a sheet, empty too (it
+    used to show only while something was in it, so with every picture in
+    place there was nowhere to put one aside)."""
 
     # (picture id): a picture of the sheet dropped here.
     picture_dropped = Signal(str)
+    # (files): pictures from the desktop dropped here, to add unlabelled.
+    files_dropped = Signal(list)
+    EMPTY = (
+        "Nothing set aside. Drag a picture here to take it off the sheet while you decide "
+        "where it goes, or drop pictures from your computer"
+    )
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -507,7 +612,8 @@ class Tray(QListWidget):
             _picture_drag(self, item.data(Qt.UserRole), item.icon().pixmap(72, 108))
 
     def dragEnterEvent(self, event) -> None:  # noqa: N802 - Qt naming
-        if event.mimeData().hasFormat(PICTURE_MIME) and event.source() is not self:
+        mime = event.mimeData()
+        if (mime.hasFormat(PICTURE_MIME) and event.source() is not self) or picture_files(mime):
             event.acceptProposedAction()
         else:
             event.ignore()
@@ -517,12 +623,29 @@ class Tray(QListWidget):
 
     def dropEvent(self, event) -> None:  # noqa: N802 - Qt naming
         mime = event.mimeData()
-        if not mime.hasFormat(PICTURE_MIME) or event.source() is self:
+        if mime.hasFormat(PICTURE_MIME) and event.source() is not self:
+            self.picture_dropped.emit(bytes(mime.data(PICTURE_MIME)).decode())
+            event.setDropAction(Qt.MoveAction)
+        elif files := picture_files(mime):
+            self.files_dropped.emit([str(path) for path in files])
+            event.setDropAction(Qt.CopyAction)
+        else:
             event.ignore()
             return
-        self.picture_dropped.emit(bytes(mime.data(PICTURE_MIME)).decode())
-        event.setDropAction(Qt.MoveAction)
         event.accept()
+
+    def paintEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        super().paintEvent(event)
+        if self.count():
+            return
+        painter = QPainter(self.viewport())
+        painter.setPen(theme.colour("text_soft"))
+        painter.drawText(
+            self.viewport().rect().adjusted(16, 8, -16, -8),
+            Qt.AlignCenter | Qt.TextWordWrap,
+            self.EMPTY,
+        )
+        painter.end()
 
 
 TILE_ROLE = Qt.UserRole + 2
@@ -662,6 +785,10 @@ class CastBoard(QWidget):
         self._sheet: Sheet | None = None
         self._fronts: dict[tuple[str, str, str], int] = {}
         self._hidden: set[str] = set()
+        # The prompt texts in force, for the usual words a heading is drawn with.
+        self._texts: PromptTexts = DEFAULT_TEXTS
+        # Whose sheet the table holds now.
+        self._filled_for: str | None = None
 
         self.people = QListWidget()
         self.people.setObjectName("boardPeople")
@@ -765,24 +892,32 @@ class CastBoard(QWidget):
         self.sheet.horizontalHeader().customContextMenuRequested.connect(self._column_menu)
         self.sheet.verticalHeader().customContextMenuRequested.connect(self._row_menu)
         self.sheet.picture_dropped.connect(self._dropped_on_sheet)
+        self.sheet.horizontalHeader().moved.connect(
+            lambda order: self._headings_moved(order, False)
+        )
+        self.sheet.verticalHeader().moved.connect(lambda order: self._headings_moved(order, True))
         self.sheet.files_dropped.connect(self._files_on_sheet)
         self.sheet.activated.connect(self._activated)
         self.sheet.remove_pressed.connect(lambda ref_id: self._ask("remove", ref_id))
         self.sheet.labels_pressed.connect(lambda ref_id: self._ask("labels", ref_id))
         self.hint = QLabel(
-            "Drag across gaps, or Ctrl-click them, to choose which to draw; a header chooses its "
-            "whole row or column. Drag a picture to another place to relabel it, or drop "
-            "pictures from your computer on a place. Right-click a picture for more."
+            "Drag across gaps, or Ctrl-click them, to choose which to draw; a heading chooses its "
+            "whole row or column, and dragged moves it. Drag a picture to another place to "
+            "relabel it, or drop pictures from your computer on a place. Right-click a picture "
+            "or a heading for more."
         )
         self.hint.setObjectName("hintLabel")
         self.hint.setWordWrap(True)
 
         self.tray_title = QLabel(
-            "Not labelled yet: drag one to its place; double-click to see it, right-click for more"
+            "Set aside, no labels: drag one to its place on the sheet, or one from the sheet "
+            "here; double-click to see it, right-click for more"
         )
         self.tray_title.setObjectName("peopleSection")
+        self.tray_title.setWordWrap(True)
         self.tray = Tray()
         self.tray.picture_dropped.connect(self._unlabel)
+        self.tray.files_dropped.connect(lambda paths: self._files_on_tray(paths))
         # As on the sheet: double-click (or Enter) shows it whole.
         self.tray.itemActivated.connect(
             lambda item: (
@@ -904,6 +1039,11 @@ class CastBoard(QWidget):
             f"characters themselves for any story, use {SAVE_LABEL}"
         )
 
+    def set_texts(self, texts: PromptTexts) -> None:
+        """The prompt texts in force (the usual words a heading is drawn with
+        are prompt texts, which may be edited)."""
+        self._texts = texts
+
     def set_savable(self, savable: bool) -> None:
         """Whether Save to Your characters… is offered (the story's board)."""
         self.save_button.setVisible(savable)
@@ -982,8 +1122,16 @@ class CastBoard(QWidget):
         width = self._width()
         self.sheet.set_cell_size(width)
         self.tray.setIconSize(QSize(int(width * 0.6), int(width * 0.6 * ASPECT)))
-        self.tray.setFixedHeight(int(width * 0.6 * ASPECT) + 40)
         self._show()
+
+    def _fit_tray(self) -> None:
+        """As tall as its pictures, or a strip of words with none: empty, it
+        took a row's height from the sheet."""
+        if self.tray.count():
+            height = int(self._width() * 0.6 * ASPECT) + 40
+        else:
+            height = 3 * self.tray.fontMetrics().height() + 2 * self.tray.frameWidth() + 8
+        self.tray.setFixedHeight(height)
 
     def _show(self) -> None:
         card = self._card(self._current)
@@ -1002,6 +1150,7 @@ class CastBoard(QWidget):
                 "pictures as a sheet of looks and expressions."
             )
             self._sheet = None
+            self._filled_for = None
             self._show_asked(None)
             self._fill_overview()
             self.pages.setCurrentIndex(0)
@@ -1029,11 +1178,37 @@ class CastBoard(QWidget):
 
     def _fill_sheet(self, card: Character, sheet: Sheet) -> None:
         table = self.sheet
+        # The same character again (a picture landed, a label changed): the
+        # gaps chosen stay chosen and the sheet stays where it was scrolled.
+        # Both were lost on every refresh, so a picture landing from an
+        # earlier drawing took away the choice being made.
+        same = self._filled_for == card.id
+        chosen = (
+            {(label_key(c.look), label_key(c.expression)) for c in self._selected_cells()}
+            if same
+            else set()
+        )
+        scrolled = (
+            (table.horizontalScrollBar().value(), table.verticalScrollBar().value())
+            if same
+            else (0, 0)
+        )
+        self._filled_for = card.id
         table.clearSelection()
+        for header in (table.horizontalHeader(), table.verticalHeader()):
+            if header.sectionsMoved():
+                # A heading dragged: the sheet is in its new order now, and
+                # the header's own reordering is undone by emptying it.
+                table.setRowCount(0)
+                table.setColumnCount(0)
         table.setRowCount(len(sheet.looks))
         table.setColumnCount(len(sheet.expressions))
         table.setHorizontalHeaderLabels([e or NO_EXPRESSION for e in sheet.expressions])
         table.setVerticalHeaderLabels([look or NO_LOOK for look in sheet.looks])
+        for column, expression in enumerate(sheet.expressions):
+            table.horizontalHeaderItem(column).setToolTip(self._heading_tip(card, expression))
+        for row, look in enumerate(sheet.looks):
+            table.verticalHeaderItem(row).setToolTip(self._heading_tip(card, look, look=True))
         shown = self._shown.get(card.id) or sheet.portrait_id
         for row, look in enumerate(sheet.looks):
             for column, expression in enumerate(sheet.expressions):
@@ -1047,6 +1222,7 @@ class CastBoard(QWidget):
                     shown_id=shown if self._begun else None,
                     drawing=self._drawing.get(key, 0),
                     front=self._fronts.get(key, 0),
+                    drawn_as=self._drawn_as(card, sheet.gap(look, expression)),
                 )
                 item = QTableWidgetItem()
                 item.setData(CELL_ROLE, cell)
@@ -1059,6 +1235,19 @@ class CastBoard(QWidget):
                 item.setFlags(flags)
                 table.setItem(row, column, item)
         table.set_cell_size(self._width())
+        if chosen:
+            selection = table.selectionModel()
+            table.blockSignals(True)
+            for row, look in enumerate(sheet.looks):
+                for column, expression in enumerate(sheet.expressions):
+                    key = (label_key(look), label_key(expression))
+                    if key in chosen and key in sheet.gaps:
+                        selection.select(
+                            table.model().index(row, column), QItemSelectionModel.Select
+                        )
+            table.blockSignals(False)
+        table.horizontalScrollBar().setValue(scrolled[0])
+        table.verticalScrollBar().setValue(scrolled[1])
         self.stats.setText(self._stats(sheet))
         self.tray.clear()
         width = int(self._width() * 0.6)
@@ -1067,8 +1256,25 @@ class CastBoard(QWidget):
             item.setData(Qt.UserRole, ref.id)
             item.setIcon(QIcon(self._thumbs.now(ref.file, width, int(width * ASPECT))))
             self.tray.addItem(item)
-        self.tray.setVisible(bool(sheet.unlabelled))
-        self.tray_title.setVisible(bool(sheet.unlabelled))
+        self._fit_tray()
+
+    def _drawn_as(self, card: Character, gap: Gap | None) -> str:
+        if gap is None or (gap.source is None and not gap.after):
+            return ""
+        return gap_words(gap, self._texts, card)
+
+    def _heading_tip(self, card: Character, label: str, *, look: bool = False) -> str:
+        if not label:
+            return (
+                "Pictures labelled with an expression and no look"
+                if look
+                else "Pictures labelled with a look and no expression"
+            )
+        words = wording(card, label, look=look, texts=self._texts)
+        return (
+            f"{label}: drawn as “{words}”. Drag to move this "
+            f"{'row' if look else 'column'}; right-click to change its heading or wording."
+        )
 
     def _tip(self, cell: Cell) -> str:
         if cell.refs:
@@ -1086,7 +1292,10 @@ class CastBoard(QWidget):
             )
         if gap is None or gap.source is None:
             return f"{cell.words()}: they have no picture to draw it from yet."
-        words = f"{cell.words()}: none yet. Drawn from their {look_words(gap.source) or 'picture'}"
+        words = (
+            f"{cell.words()}: none yet. Drawn as “{cell.drawn_as}”, from their "
+            f"{look_words(gap.source) or 'picture'}"
+        )
         if gap.wanted:
             words += f"; the story asked for it {gap.wanted} time{'' if gap.wanted == 1 else 's'}"
         return words + ". Double-click to draw it."
@@ -1285,6 +1494,9 @@ class CastBoard(QWidget):
             label_key(expression),
         ):
             return
+        # The rows and columns as the author sees them, kept first: moved
+        # away, a picture took its row with it, or moved it.
+        keep_order(card)
         ref.look, ref.expression = look, expression
         self._changed(card)
 
@@ -1294,8 +1506,13 @@ class CastBoard(QWidget):
         ref = next((r for r in card.reference_images if r.id == ref_id), None) if card else None
         if ref is None or not self._can_change or not (ref.look or ref.expression):
             return
+        keep_order(card)
         ref.look = ref.expression = ""
         self._changed(card)
+
+    def _files_on_tray(self, paths: list) -> None:
+        if self._current is not None and self._can_change:
+            self.files_dropped.emit(self._current, "", "", list(paths))
 
     def _files_on_sheet(self, paths: list, row: int, column: int) -> None:
         if self._current is None or self._sheet is None or not self._can_change:
@@ -1421,9 +1638,17 @@ class CastBoard(QWidget):
         fill = menu.addAction(f"Fill this column ({len(gaps)})…")
         fill.setEnabled(bool(gaps))
         fill.triggered.connect(lambda: self.fill_requested.emit(card.id, gaps))
-        rename = menu.addAction("Rename…")
-        rename.setEnabled(self._can_change)
+        rename = menu.addAction(HEADING_AND_WORDING)
+        rename.setEnabled(self._can_change and bool(expression))
         rename.triggered.connect(lambda: self._rename(card, expression=expression))
+        named = [e for e in self._sheet.expressions if e]
+        for words, step in (("Move left", -1), ("Move right", 1)):
+            action = menu.addAction(words)
+            at = named.index(expression) if expression in named else -1
+            action.setEnabled(self._can_change and at >= 0 and 0 <= at + step < len(named))
+            action.triggered.connect(
+                lambda _on=False, step=step: self._move(card, expression, step, look=False)
+            )
         remove = menu.addAction("Remove this column")
         remove.setEnabled(
             self._can_change
@@ -1444,9 +1669,17 @@ class CastBoard(QWidget):
         fill = menu.addAction(f"Fill this row ({len(gaps)})…")
         fill.setEnabled(bool(gaps))
         fill.triggered.connect(lambda: self.fill_requested.emit(card.id, gaps))
-        rename = menu.addAction("Rename…")
-        rename.setEnabled(self._can_change)
+        rename = menu.addAction(HEADING_AND_WORDING)
+        rename.setEnabled(self._can_change and bool(look))
         rename.triggered.connect(lambda: self._rename(card, look=look))
+        named = [x for x in self._sheet.looks if x]
+        for words, step in (("Move up", -1), ("Move down", 1)):
+            action = menu.addAction(words)
+            at = named.index(look) if look in named else -1
+            action.setEnabled(self._can_change and at >= 0 and 0 <= at + step < len(named))
+            action.triggered.connect(
+                lambda _on=False, step=step: self._move(card, look, step, look=True)
+            )
         remove = menu.addAction("Remove this row")
         remove.setEnabled(self._can_change and not self._line_has_pictures(row=row))
         remove.triggered.connect(lambda: self._remove(card, look=look))
@@ -1459,46 +1692,64 @@ class CastBoard(QWidget):
         self._fill_people()
         self._show()
 
-    def _ask_label(self, title: str, prompt: str, offered: Sequence[str], text: str = "") -> str:
-        if text or not offered:
-            value, ok = QInputDialog.getText(self, title, prompt, text=text)
-        else:
-            value, ok = QInputDialog.getItem(self, title, prompt, list(offered), 0, True)
-        return " ".join(value.split()) if ok else ""
+    def _ask_heading(self, card: Character | None, **kwargs) -> tuple[str, str] | None:
+        """A heading and the words it is drawn with (gui/sheet_labels.py)."""
+        return ask_sheet_label(self, texts=self._texts, **kwargs)
 
     def _add_look(self) -> None:
         card = self._card(self._current)
         if card is None or self._sheet is None or not self._can_change:
             return
-        have = {label_key(look) for look in self._sheet.looks}
-        offered = [look for look in COMMON_LOOKS if label_key(look) not in have]
-        look = self._ask_label(
-            "Add a look",
-            f"A look for {card.name}: clothes, armour, an injury, anything that lasts.",
-            offered,
+        have = [look for look in self._sheet.looks if look]
+        offered = [look for look in COMMON_LOOKS if label_key(look) not in map(label_key, have)]
+        asked = self._ask_heading(
+            card,
+            title="Add a look",
+            about=f"A look for {card.name}: clothes, armour, an injury, anything that lasts. "
+            "It goes at the bottom of the sheet; drag its heading to move it.",
+            look=True,
+            offered=offered,
+            taken=have,
         )
-        if look and add_label(card.sheet_looks, look):
+        if asked is None:
+            return
+        heading, words = asked
+        keep_order(card)
+        if add_label(card.sheet_looks, heading):
+            set_wording(card, heading, words, look=True)
             self._changed(card)
 
     def _add_expression(self, *, everyone: bool) -> None:
         card = self._card(self._current)
         if not self._can_change or (card is None and not everyone):
             return
-        have = set() if self._sheet is None else {label_key(e) for e in self._sheet.expressions}
-        offered = [e for e in COMMON_EXPRESSIONS if label_key(e) not in have]
+        have = [] if self._sheet is None else [e for e in self._sheet.expressions if e]
+        offered = [e for e in COMMON_EXPRESSIONS if label_key(e) not in map(label_key, have)]
         who = "everyone in the story" if everyone else card.name if card else "them"
-        expression = self._ask_label(
-            "Add an expression",
-            f"An expression or pose for {who}: laughing, crying, in a fighting stance.",
-            offered,
+        asked = self._ask_heading(
+            card,
+            title="Add an expression",
+            about=f"An expression or pose for {who}: laughing, crying, in a fighting stance. "
+            "It goes at the right of the sheet; drag its heading to move it."
+            + (" Each keeps their own words for it if they have some." if everyone else ""),
+            look=False,
+            offered=offered,
+            taken=() if everyone else have,
         )
-        if not expression:
+        if asked is None:
             return
+        heading, words = asked
         changed = []
         for each in self._cards if everyone else [card]:
+            keep_order(each)
             listed = each.sheet_expressions or list(DEFAULT_EXPRESSIONS)
-            if add_label(listed, expression):
+            added = add_label(listed, heading)
+            if added:
                 each.sheet_expressions = listed
+            worded = bool(words) and not (each.expression_wording.get(label_key(heading)))
+            if worded:
+                set_wording(each, heading, words)
+            if added or worded:
                 changed.append(each)
         for each in changed:
             self.sheet_changed.emit(each.id)
@@ -1510,6 +1761,7 @@ class CastBoard(QWidget):
         card = self._card(self._current)
         if card is None or not self._can_change:
             return
+        keep_order(card)
         look, expression = split_wanted(words)
         if look:
             add_label(card.sheet_looks, look)
@@ -1522,29 +1774,61 @@ class CastBoard(QWidget):
     def _rename(
         self, card: Character, *, look: str | None = None, expression: str | None = None
     ) -> None:
-        old = look if look is not None else expression
-        what = "look" if look is not None else "expression"
-        new = self._ask_label(
-            f"Rename the {what}",
-            f"A new name for {old or 'this ' + what}: every picture of {card.name}'s "
-            f"labelled so is relabelled.",
-            (),
-            text=old or "",
-        )
-        if not new or new == old:
+        """Heading and wording…: a row's or column's heading (every picture
+        of theirs labelled so is relabelled; onto another's, the two become
+        one) and the words it is drawn with."""
+        is_look = look is not None
+        old = (look if is_look else expression) or ""
+        what = "look" if is_look else "expression"
+        if not old or not self._can_change:
             return
-        if look is not None:
-            relabel(card, look=(look, new))
+        asked = self._ask_heading(
+            card,
+            title=f"The {what}: heading and wording",
+            about=f"The heading names the {'row' if is_look else 'column'} and labels "
+            f"{card.name}'s pictures in it: changed, every one is relabelled.",
+            look=is_look,
+            heading=old,
+            words=wording(card, old, look=is_look, texts=self._texts),
+        )
+        if asked is None:
+            return
+        heading, words = asked
+        changed = False
+        if heading and heading != old:
+            if is_look:
+                relabel(card, look=(old, heading))
+            else:
+                relabel(card, expression=(old, heading))
+            changed = True
+        changed = set_wording(card, heading or old, words, look=is_look) or changed
+        if changed:
+            self._changed(card)
+
+    def _move(self, card: Character, label: str, step: int, *, look: bool) -> None:
+        if self._can_change and move(card, label, step, look=look):
+            self._changed(card)
+
+    def _headings_moved(self, order: list, look: bool) -> None:
+        """A heading dragged to another place: the sheet put in that order
+        (the unnamed row and column stay last)."""
+        card = self._card(self._current)
+        sheet = self._sheet
+        if card is None or sheet is None:
+            return
+        labels = sheet.looks if look else sheet.expressions
+        if not self._can_change or any(index >= len(labels) for index in order):
+            self._show()  # back as it was
+            return
+        named = [labels[index] for index in order if labels[index]]
+        if look:
+            reorder(card, looks=named)
         else:
-            relabel(card, expression=(expression or "", new))
+            reorder(card, expressions=named)
         self._changed(card)
 
     def _remove(
         self, card: Character, *, look: str | None = None, expression: str | None = None
     ) -> None:
-        if look is not None:
-            card.sheet_looks = [x for x in card.sheet_looks if label_key(x) != label_key(look)]
-        if expression is not None:
-            listed = card.sheet_expressions or list(DEFAULT_EXPRESSIONS)
-            card.sheet_expressions = [x for x in listed if label_key(x) != label_key(expression)]
+        remove_label(card, look=look, expression=expression)
         self._changed(card)
