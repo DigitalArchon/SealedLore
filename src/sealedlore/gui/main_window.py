@@ -1280,8 +1280,14 @@ class MainWindow(
             else:
                 self.show_collection(False)
         elif self.board_shown():
-            # Before Stop: the board hides the story, so Esc there means "back".
-            self.show_cast_board(False)
+            # Before Stop: the board hides the story, so Esc there means "back";
+            # but typing in a card's field, Esc first leaves the field, as on
+            # Your characters (the Cast page's fields are the board's now).
+            focus = self.focusWidget()
+            if isinstance(focus, QLineEdit | QPlainTextEdit) and self.cast_page.isAncestorOf(focus):
+                self.cast_page.setFocus()
+            else:
+                self.show_cast_board(False)
         elif self._busy:
             self.stop_generation()
         elif self.map_shown():

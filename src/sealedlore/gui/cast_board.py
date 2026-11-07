@@ -27,6 +27,7 @@ from pathlib import Path
 
 from PySide6.QtCore import (
     QByteArray,
+    QEvent,
     QItemSelectionModel,
     QMimeData,
     QObject,
@@ -40,6 +41,7 @@ from PySide6.QtGui import (
     QColor,
     QDrag,
     QFont,
+    QFontMetrics,
     QIcon,
     QKeySequence,
     QPainter,
@@ -47,6 +49,7 @@ from PySide6.QtGui import (
     QPen,
     QPixmap,
     QShortcut,
+    QTextLayout,
 )
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -91,7 +94,7 @@ from sealedlore.engine.look_sheet import (
 from sealedlore.engine.looks import COMMON_EXPRESSIONS, COMMON_LOOKS, look_words
 from sealedlore.engine.plot_md import PICTURE_SUFFIXES
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
-from sealedlore.gui import theme
+from sealedlore.gui import text_size, theme
 from sealedlore.gui.ref_images import StoryPictures, pixmap_of
 from sealedlore.gui.sheet_labels import HEADING_AND_WORDING, ask_sheet_label
 from sealedlore.gui.wrap_row import WrapRow
@@ -107,6 +110,9 @@ KEEP_LABEL = "Keep pictures for new stories…"
 SAVE_LABEL = "Save to Your characters…"
 EVERYONE = "Everyone"
 NO_LOOK = "No look named"
+# The one row of a character with no picture at all: where a first one goes.
+FIRST_ROW = "Their first picture"
+PORTRAIT_FIRST = "Draw their portrait…"
 NO_EXPRESSION = "No expression named"
 # A cell's width by the size chosen; its height is the portraits' 2:3.
 CELL_WIDTHS = {"Small": 116, "Medium": 156, "Large": 216}
@@ -226,6 +232,30 @@ def scaled_font(font: QFont, factor: float) -> QFont:
     return scaled
 
 
+def fitted(text: str, font: QFont, width: int, lines: int) -> str:
+    """`text` wrapped at `width` in whole lines, at most `lines` of them, the
+    last ending "…" if there is more: drawn wrapped into a box too small, the
+    words were cut through the middle of a line (at 150% text)."""
+    metrics = QFontMetrics(font)
+    layout = QTextLayout(text.replace("\n", "\u2028"), font)
+    layout.beginLayout()
+    starts: list[tuple[int, int]] = []
+    while True:
+        line = layout.createLine()
+        if not line.isValid():
+            break
+        line.setLineWidth(width)
+        starts.append((line.textStart(), line.textLength()))
+    layout.endLayout()
+    shown = layout.text()
+    if len(starts) <= max(1, lines):
+        return "\n".join(shown[a : a + n].rstrip("\u2028 ") for a, n in starts)
+    kept = [shown[a : a + n].rstrip("\u2028 ") for a, n in starts[: lines - 1]]
+    rest = shown[starts[lines - 1][0] :].replace("\u2028", " ")
+    kept.append(metrics.elidedText(rest, Qt.ElideRight, width))
+    return "\n".join(kept)
+
+
 def _pill(painter: QPainter, rect: QRectF, text: str, background: QColor, colour: QColor) -> None:
     """A small rounded label at `rect`'s top left."""
     metrics = painter.fontMetrics()
@@ -311,7 +341,11 @@ class SheetDelegate(QStyledItemDelegate):
             painter.drawPath(path)
             words = rect.adjusted(8, 8, -8, -8)
             if cell.drawing or gap is None or (gap.source is None and not gap.after):
-                text = "Drawing…" if cell.drawing else "Give them a\npicture first"
+                text = (
+                    "Drawing…"
+                    if cell.drawing
+                    else "Draw their portrait first, or drop a picture here"
+                )
                 painter.setPen(theme.colour("text_soft"))
                 painter.drawText(words, Qt.AlignCenter | Qt.TextWordWrap, text)
             else:
@@ -335,7 +369,9 @@ class SheetDelegate(QStyledItemDelegate):
                 box = QRectF(words.left(), middle + 2, words.width(), words.bottom() - middle - 2)
                 if wanted:
                     box.setBottom(box.bottom() - painter.fontMetrics().height() - 6)
-                painter.drawText(box, Qt.AlignHCenter | Qt.AlignTop | Qt.TextWordWrap, label)
+                rows = max(1, int(box.height() // painter.fontMetrics().lineSpacing()))
+                label = fitted(label, painter.font(), int(box.width()), rows)
+                painter.drawText(box, Qt.AlignHCenter | Qt.AlignTop, label)
             if wanted:
                 inner = rect.adjusted(6, 6, -6, -6)
                 text = "Asked for" if wanted == 1 else f"Asked for ×{wanted}"
@@ -484,7 +520,7 @@ class SheetTable(QTableWidget):
         for header in (self.horizontalHeader(), self.verticalHeader()):
             header.setSectionResizeMode(header.ResizeMode.Fixed)
             header.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.verticalHeader().setFixedWidth(ROW_HEADER)
+        self.verticalHeader().setFixedWidth(round(ROW_HEADER * text_size.scale()))
         self.verticalHeader().setDefaultAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
     def set_cell_size(self, width: int) -> None:
@@ -772,6 +808,8 @@ class CastBoard(QWidget):
     restyle_requested = Signal(str)
     # (card id): one chosen on the overview, to see their sheet.
     character_chosen = Signal(str)
+    # (card id): a portrait drawn for one with no picture at all.
+    portrait_requested = Signal(str)
 
     def __init__(self, pictures: StoryPictures, parent=None) -> None:
         super().__init__(parent)
@@ -1076,6 +1114,14 @@ class CastBoard(QWidget):
         return self._template, self.keep_button.toolTip()
 
     @property
+    def has_cards(self) -> bool:
+        return bool(self._cards)
+
+    @property
+    def has_pictures(self) -> bool:
+        return any(c.reference_images for c in self._cards)
+
+    @property
     def offers_spoilers(self) -> bool:
         """Whether the plot hides anyone (Show spoilers is offered)."""
         return bool(self._hidden)
@@ -1148,7 +1194,17 @@ class CastBoard(QWidget):
     # --- showing --------------------------------------------------------------------------
 
     def _width(self) -> int:
-        return CELL_WIDTHS.get(self.size_choice.currentText(), CELL_WIDTHS["Medium"])
+        """A cell's width: the size chosen, larger with the text (View → Text
+        size), or its words no longer fitted."""
+        width = CELL_WIDTHS.get(self.size_choice.currentText(), CELL_WIDTHS["Medium"])
+        return round(width * text_size.scale())
+
+    def changeEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        super().changeEvent(event)
+        if event.type() == QEvent.StyleChange and hasattr(self, "sheet"):
+            # Text size is the stylesheet: the cells and headings follow.
+            self.sheet.verticalHeader().setFixedWidth(round(ROW_HEADER * text_size.scale()))
+            self._resize()
 
     def _resize(self, _size: str = "") -> None:
         width = self._width()
@@ -1172,7 +1228,9 @@ class CastBoard(QWidget):
             widget.setVisible(editing)
             widget.setEnabled(editing and self._can_change)
         # One character's pictures, or everyone's from the overview.
-        self.restyle_button.setEnabled(self._can_change)
+        # Something to restyle: the one shown's pictures, or anyone's.
+        shown = [card] if card is not None else self._cards
+        self.restyle_button.setEnabled(self._can_change and any(c.reference_images for c in shown))
         self.restyle_button.setText("Restyle…" if editing else "Restyle everyone…")
         if card is None:
             self.title.setText(EVERYONE)
@@ -1180,6 +1238,9 @@ class CastBoard(QWidget):
             self.stats.setText(
                 f"{_characters(len(self._cards))}, {total} pictures. Click one to see their "
                 "pictures as a sheet of looks and expressions."
+                if self._cards
+                else "Nobody yet. Add a character with the buttons under the list: a new card, "
+                "one of Your characters, or a SillyTavern card."
             )
             self._sheet = None
             self._filled_for = None
@@ -1196,6 +1257,8 @@ class CastBoard(QWidget):
         self._sync_fill()
 
     def _stats(self, sheet: Sheet) -> str:
+        if not sheet.picture_count:
+            return "no pictures yet: draw their portrait, or add or drop pictures here"
         parts = [f"{sheet.picture_count} picture{'' if sheet.picture_count == 1 else 's'}"]
         parts.append(f"{len(sheet.looks)} look{'' if len(sheet.looks) == 1 else 's'}")
         gaps = len(sheet.drawable())
@@ -1236,7 +1299,9 @@ class CastBoard(QWidget):
         table.setRowCount(len(sheet.looks))
         table.setColumnCount(len(sheet.expressions))
         table.setHorizontalHeaderLabels([e or NO_EXPRESSION for e in sheet.expressions])
-        table.setVerticalHeaderLabels([look or NO_LOOK for look in sheet.looks])
+        table.setVerticalHeaderLabels(
+            [look or (FIRST_ROW if not sheet.picture_count else NO_LOOK) for look in sheet.looks]
+        )
         for column, expression in enumerate(sheet.expressions):
             table.horizontalHeaderItem(column).setToolTip(self._heading_tip(card, expression))
         for row, look in enumerate(sheet.looks):
@@ -1467,19 +1532,32 @@ class CastBoard(QWidget):
             self.fill_button.setText(f"Draw {len(chosen)} chosen…")
         elif every:
             self.fill_button.setText(f"Fill every gap ({len(every)})…")
+        elif not self._sheet.picture_count:
+            # Every picture here is drawn from one of theirs: the first is
+            # their portrait, drawn from their card's words.
+            self.fill_button.setText(PORTRAIT_FIRST)
+            self.fill_button.setToolTip(
+                "Every picture here is drawn from one of theirs: their portrait first, from "
+                "their card. Or add pictures, or drop one on a place."
+            )
+            self.fill_button.setEnabled(self._can_change)
+            return
         elif self._sheet.gaps and not self._sheet.cells:
             self.fill_button.setText("No picture to draw from yet")
         else:
             self.fill_button.setText("No gaps to fill")
         self.fill_button.setToolTip(
-            "Every picture here is drawn from one of theirs: give them a portrait first "
-            "(Draw a portrait… on their card), or drop a picture on a place"
+            "Every picture here is drawn from one of theirs: drag one from the pictures set "
+            "aside onto a place first"
             if self._sheet.gaps and not self._sheet.cells and not (chosen or every)
             else ""
         )
         self.fill_button.setEnabled(bool(chosen or every))
 
     def _fill(self) -> None:
+        if self._sheet is not None and not self._sheet.picture_count and self._current:
+            self.portrait_requested.emit(self._current)
+            return
         gaps = self._selected_gaps() or self._drawable()
         if gaps and self._current is not None:
             self.fill_requested.emit(self._current, gaps)

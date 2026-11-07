@@ -620,13 +620,16 @@ class CastPanel(QWidget):
         self._form.setRowVisible(self.chat_hint, on)
         # SillyTavern cards stay: a card's character, and its expression
         # pictures, are as welcome in a chat (its lore isn't brought).
-        for widget in (
-            self.move_button,
-            self.fill_button,
-            self.suggestions_box,
-            self.room_banner,
-        ):
+        # (The suggestions are the page's to show: lent, the panel has none.)
+        for widget in (self.move_button, self.fill_button):
             widget.setVisible(not on)
+        # The room's banner shows only when it has something to say: forced
+        # visible on leaving a chat, a story with nothing over its room had
+        # an empty banner over its board.
+        if on:
+            self.room_banner.hide()
+        else:
+            self.set_room(self._room)
         self.set_cast(self._cast)
 
     @property

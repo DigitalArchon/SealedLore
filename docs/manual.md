@@ -1731,7 +1731,9 @@ story hears of them early.
 
 ![The cast board in Doomsville: the story's characters down the left, and John's Pictures tab, his winter coat, combat armour and indoor clothes down the side and expressions across, each empty place showing the words it would be drawn with, two gaps chosen in the armour row and, beside them, one the story asked for](screenshots/cast-board.webp)
 
-An empty place shows a **+** and the words it would be drawn with. Choose the
+An empty place shows a **+** and the words it would be drawn with. Every
+picture on the sheet is drawn from one of theirs, so someone with no picture
+yet has **Draw their portrait…** where the button to fill the gaps is. Choose the
 ones you want (drag across them, Ctrl-click them, or click a row's or column's
 heading) and draw them, or fill every gap at once: you see every prompt and the
 price first, and each is drawn from the nearest picture of them, so the face

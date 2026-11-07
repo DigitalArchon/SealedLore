@@ -25,7 +25,7 @@ from sealedlore.gui.cast_board import BOARD_LABEL, SAVE_LABEL, CastBoard
 from sealedlore.gui.fill_gaps import Waiting, ask_fill_gaps
 from sealedlore.gui.picture_labels import edit_labels
 from sealedlore.gui.ref_images import PICTURE_FILTER, store_reference
-from sealedlore.gui.story_cast_page import StoryCastPage
+from sealedlore.gui.story_cast_page import PAGE_TITLE, StoryCastPage
 from sealedlore.storage.template_pictures import (
     forget_kept,
     keep_pictures,
@@ -63,6 +63,7 @@ class CastBoardWindow:
         board.keep_requested.connect(self._board_keep)
         board.save_requested.connect(self._board_save)
         board.restyle_requested.connect(self._board_restyle)
+        board.portrait_requested.connect(lambda card_id: self._on_card_picture(card_id, "", "new"))
         self.image_jobs.changed.connect(self._refresh_board)
         # A new look's first picture failed: the rest of its row is let go
         # (once the failure is out of the pending list).
@@ -194,6 +195,9 @@ class CastBoardWindow:
             spoilers=self.config.show_plot_spoilers,
         )
         self.cast_page.sync_from_board()
+        # Whose characters these are, beside the line that says they are
+        # this story's (or chat's) alone.
+        self.cast_page.title.setText(f"{PAGE_TITLE} · {session.story.title}")
 
     def _board_restyle(self, card_id: str) -> None:
         """Restyle… on the board: the character shown, or everyone shown."""

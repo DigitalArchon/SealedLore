@@ -616,3 +616,96 @@ def test_the_gaps_chosen_stay_chosen_when_the_board_is_refreshed(app, window):
     board.show_character(other.id)
     board.show_character("char-serrik")
     assert board._selected_cells() == []
+
+
+# --- the look over the new UI, Nov 8 2026 --------------------------------------------------
+
+
+def test_someone_with_no_picture_is_offered_their_portrait(app, window, monkeypatch):
+    """Five cells of "Give them a picture first" under "No look named", and a
+    dead button: now it says so once and draws the portrait from there."""
+    from sealedlore.gui.cast_board import FIRST_ROW, PORTRAIT_FIRST
+
+    card = next(c for c in window.session.cast if c.id != "char-serrik")
+    card.reference_images = []
+    asked: list = []
+    monkeypatch.setattr(window, "_on_card_picture", lambda *a, **k: asked.append(a))
+    window.show_cast_board(True, card.id)
+    board = window.cast_board
+    assert board.fill_button.text() == PORTRAIT_FIRST and board.fill_button.isEnabled()
+    assert board.stats.text().startswith("no pictures yet")
+    assert board.sheet.verticalHeaderItem(0).text() == FIRST_ROW
+    assert not board.restyle_button.isEnabled()
+    board.fill_button.click()
+    assert asked == [(card.id, "", "new")]
+
+
+def test_an_empty_board_says_how_to_begin_and_offers_nothing_to_nobody(app, tmp_path):
+    from sealedlore.models.story import Story
+
+    story = Story(title="Nobody yet")
+    save_story_bundle(StoryBundle(story=story), root=tmp_path)
+    window = MainWindow(root=tmp_path, use_mock=True)
+    window.open_story(story.id)
+    window.show_cast_board(True)
+    board, page = window.cast_board, window.cast_page
+    assert board.stats.text().startswith("Nobody yet.")
+    assert not board.restyle_button.isEnabled()
+    assert not page.save_button.isEnabled() and not page.keep_button.isEnabled()
+    window.close()
+
+
+def test_the_rooms_banner_never_shows_with_nothing_to_say(app, window):
+    """Leaving a chat forced it visible: a story with nothing over its room
+    had an empty banner over its board."""
+    window.cast_panel.set_chat_mode(True)
+    window.cast_panel.set_chat_mode(False)
+    assert window.cast_panel.room_banner.isHidden()
+
+
+def test_esc_in_a_cards_field_leaves_the_field_first(app, window):
+    window.show()
+    window.show_cast_board(True, "char-serrik", card=True)
+    window.cast_panel.name.setFocus()
+    app.processEvents()
+    window._on_escape()
+    assert window.board_shown() and not window.cast_panel.name.hasFocus()
+    window._on_escape()
+    assert not window.board_shown()
+
+
+def test_the_cells_grow_with_the_text_and_their_words_end_whole(app, window, monkeypatch):
+    from PySide6.QtGui import QFont
+
+    from sealedlore.gui import cast_board
+
+    window.show_cast_board(True, "char-serrik")
+    board = window.cast_board
+    medium = board._width()
+    monkeypatch.setattr(cast_board.text_size, "scale", lambda: 1.5)
+    assert board._width() == round(medium * 1.5)
+    # Two lines at most: the second ends in "…", nothing cut through a line.
+    words = "an angry expression, brows drawn together and the jaw set"
+    shown = cast_board.fitted(words, QFont(), 90, 2).split("\n")
+    assert len(shown) == 2 and shown[1].endswith("…")
+    assert cast_board.fitted("happy", QFont(), 90, 2) == "happy"
+
+
+def test_the_wording_dialog_asks_only_about_words_written(app, window, monkeypatch):
+    """Picking a heading from its list and pressing Cancel asked "Discard
+    what you wrote?"."""
+    from sealedlore.gui.sheet_labels import SheetLabelDialog
+
+    asked: list = []
+    monkeypatch.setattr(
+        QMessageBox, "question", lambda *a, **k: asked.append(a) or QMessageBox.Cancel
+    )
+    dialog = SheetLabelDialog(window, title="t", about="a", look=False, offered=["talking"])
+    dialog.heading.setCurrentText("talking")
+    dialog.reject()
+    assert asked == [] and dialog.result() == SheetLabelDialog.Rejected
+    dialog = SheetLabelDialog(window, title="t", about="a", look=False, offered=["talking"])
+    dialog.words.setPlainText("mouth wide, mid-shout")
+    dialog.reject()
+    assert len(asked) == 1 and dialog.isVisible() is False
+    dialog.deleteLater()

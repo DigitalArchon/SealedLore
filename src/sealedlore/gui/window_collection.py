@@ -183,6 +183,11 @@ class CollectionWindow:
             )
         )
         board.restyle_requested.connect(self._collection_restyle)
+        board.portrait_requested.connect(
+            lambda card_id: self._on_card_picture(
+                card_id, "", "new", session=self._collection_session()
+            )
+        )
         # What the page put away, each as it was, to bring back as it was.
         self._collection_away: list[tuple[object, bool]] = []
         self._collection_save = QTimer(self)

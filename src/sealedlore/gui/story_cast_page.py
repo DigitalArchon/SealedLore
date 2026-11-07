@@ -182,6 +182,9 @@ class StoryCastPage(QWidget):
         self.spoilers.setChecked(self.board.spoilers.isChecked())
         self.spoilers.blockSignals(False)
         self.spoilers.setVisible(self.board.offers_spoilers)
+        # Nobody to keep yet, or no picture to keep.
+        self.save_button.setEnabled(self.board.has_cards)
+        self.keep_button.setEnabled(self.board.has_pictures)
 
     def _one(self) -> bool:
         return self.panel.current is not None and not self.panel.everyone_shown()

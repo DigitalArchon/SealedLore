@@ -14,12 +14,13 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from PySide6.QtCore import QSize, QTimer
+from PySide6.QtCore import QSize
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QPushButton,
     QVBoxLayout,
@@ -28,7 +29,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.look_sheet import tidy, usual_wording
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
-from sealedlore.gui.sizing import GrowingText, may_discard, size_to_screen, typed_texts
+from sealedlore.gui.sizing import GrowingText, may_discard, size_to_screen
 
 HEADING_AND_WORDING = "Heading and wording…"
 USUAL_LABEL = "Use the usual words"
@@ -110,7 +111,12 @@ class SheetLabelDialog(QDialog):
         form.addRow("", heading_hint)
         form.addRow("Drawn as", self.words)
         form.addRow("", words_hint)
-        form.addRow("", self.usual)
+        # As wide as its words: across the form it read as a field.
+        usual_row = QHBoxLayout()
+        usual_row.setContentsMargins(0, 0, 0, 0)
+        usual_row.addWidget(self.usual)
+        usual_row.addStretch(1)
+        form.addRow("", usual_row)
         self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
@@ -121,8 +127,9 @@ class SheetLabelDialog(QDialog):
         layout.addStretch(1)
         layout.addWidget(self.buttons)
         self._sync()
-        # What the boxes hold once shown: Cancel asks only when that changed.
-        QTimer.singleShot(0, self, lambda: setattr(self, "_typed", typed_texts(self)))
+        # The words it opened with: Cancel asks only when the author wrote
+        # words of their own since (a heading picked from the list asked).
+        self._opened_words = tidy(self.words.toPlainText())
 
     def values(self) -> tuple[str, str]:
         """(heading, words), tidied; the words "" when they are the usual."""
@@ -159,7 +166,8 @@ class SheetLabelDialog(QDialog):
         )
 
     def reject(self) -> None:  # noqa: D102
-        if may_discard(self, getattr(self, "_typed", None)):
+        written = self._words_by_hand and tidy(self.words.toPlainText()) != self._opened_words
+        if not written or may_discard(self, [], [True]):
             super().reject()
 
 
