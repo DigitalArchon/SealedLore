@@ -71,9 +71,10 @@ class PortraitRuntime:
 
     def picture_cards(self) -> tuple[list[Character], list[LoreEntry]]:
         """Every card that may have a picture now: the characters and the
-        enabled lore entries the models may see."""
+        enabled lore entries the models may see. A chat's characters, kept for
+        their pictures (it has no lore)."""
         if self.story.chat:
-            return [], []
+            return list(self.cast), []
         characters = [*self.visible_cast(), *self.visible_supporting()]
         return characters, [e for e in self.visible_lore() if e.enabled]
 
@@ -429,8 +430,6 @@ class PortraitRuntime:
         comes back while the worker owns the story, and is taken once the
         job is done (live, Oct 18 2026: the map drew those cards' avatars
         from their words in between, and again from the portraits)."""
-        if self.story.chat:
-            return set()
         taken = set(self.story.card_pictures_taken)
         return {
             image.card_id
@@ -442,10 +441,9 @@ class PortraitRuntime:
         """Put each picture drawn for this story's cards and not yet taken
         onto its card; the names of the cards that changed. Each is taken
         once (`Story.card_pictures_taken`): one the author later removes
-        stays removed. A card gone since is skipped."""
+        stays removed. A card gone since is skipped. A chat's characters take
+        theirs as a story's do (they are kept for their pictures)."""
         self.portraits_taken = []
-        if self.story.chat:
-            return []
         taken = set(self.story.card_pictures_taken)
         names: list[str] = []
         changed = False

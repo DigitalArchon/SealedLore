@@ -163,7 +163,7 @@ class CardLinkWindow:
 
     def _link_refused(self) -> bool:
         session = self.session
-        if session is None or session.story.chat:
+        if session is None:
             return True
         if self._busy:
             self.statusBar().showMessage(
@@ -182,18 +182,28 @@ class CardLinkWindow:
         characters' page, ticked to begin with)."""
         if self._link_refused():
             return
+        chat = self.session.story.chat
         picker = CollectionPicker(
             self._kept(),
             self._collection_pictures,
             title="From Your characters",
-            lead="Who joins this story? Each comes with their pictures, and what the story "
-            "changes of them can go back to their card.",
-            action="Add to the story",
+            lead=(
+                "Who joins this chat? Each comes with their pictures, for drawing and for "
+                "pictures you ask for: nothing about them is sent to the chat's model."
+                if chat
+                else "Who joins this story? Each comes with their pictures, and what the "
+                "story changes of them can go back to their card."
+            ),
+            action="Add to the chat" if chat else "Add to the story",
+            # A chat has no cast or supporting characters, and no lore.
+            placing=not chat,
             ticked=ticked,
             parent=self._dialog_parent(),
         )
         accepted = picker.exec() == QDialog.Accepted
         chosen, (to_cast, with_lore) = picker.chosen(), picker.options()
+        if chat:
+            to_cast, with_lore = True, False
         picker.deleteLater()
         chosen = self._not_twice(chosen) if accepted else []
         if not chosen:

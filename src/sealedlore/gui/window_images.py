@@ -221,17 +221,16 @@ class ImagesWindow:
         has_story = self.session is not None
         busy = self._busy
         self.image_action.setEnabled(has_story and not busy)
+        # A chat's characters too: they are kept for their pictures.
         self.portraits_action.setEnabled(
             has_story
             and not busy
-            and not self.session.story.chat
             and not self.session.in_private
             and any(self.session.picture_cards())
         )
         self.restyle_action.setEnabled(
             has_story
             and not busy
-            and not self.session.story.chat
             and not self.session.in_private
             and any(c.reference_images for cards in self.session.picture_cards() for c in cards)
         )
@@ -433,7 +432,7 @@ class ImagesWindow:
         """Why pictures for the cards can't be asked for now, said; or False.
         The author's own characters (gui/window_collection.py) are their own
         session: the story's job doesn't hold them."""
-        if session is None or session.story.chat:
+        if session is None:
             return True
         if self._busy and session is self.session:
             self.statusBar().showMessage(

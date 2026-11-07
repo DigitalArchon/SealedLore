@@ -36,6 +36,12 @@ SCOPE_WORDS = (
     "here stay in this story. {save} keeps any of them in Your characters, for other "
     "stories and chats."
 )
+# In a simple chat: characters for their pictures alone (the author, Nov 7 2026).
+CHAT_SCOPE_WORDS = (
+    "This chat's characters, for their pictures alone: nothing about them is sent to the "
+    "chat's model. The pictures they are shown with on the People page go with a picture "
+    "you ask for. {save} keeps any of them in Your characters."
+)
 
 
 class StoryCastPage(QWidget):
@@ -115,7 +121,9 @@ class StoryCastPage(QWidget):
             )
             self.board.show()
         panel.set_everyone(True)
-        panel.suggestions_box.setVisible(True)
+        # Suggestions come from a story's prose; a chat's characters are
+        # brought in by hand.
+        panel.suggestions_box.setVisible(not panel.chat_mode)
         # The page's header has it, for the one shown or everyone.
         panel.save_button.setVisible(False)
         self._sync_tabs()
@@ -136,6 +144,14 @@ class StoryCastPage(QWidget):
         panel.suggestions_box.setVisible(False)
         panel.save_button.setVisible(True)
         return panel
+
+    def set_chat_mode(self, on: bool) -> None:
+        """A simple chat's characters (pictures alone) or a story's."""
+        words = CHAT_SCOPE_WORDS if on else SCOPE_WORDS
+        self.scope.setText(words.format(save=SAVE_LABEL.rstrip("…")))
+        self.back_button.setText("Back to the chat" if on else "Back to the story")
+        if not self.lent():
+            self.panel.suggestions_box.setVisible(not on)
 
     def lent(self) -> bool:
         return self.panel.parent() is not self

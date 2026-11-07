@@ -251,6 +251,14 @@ class Story(BaseModel):
     # A chat's own reference pictures, added from disk (a story's are on its
     # cards and lore entries).
     reference_images: list[ImageRef] = Field(default_factory=list)
+    # A chat's characters are for their pictures alone (the author, Nov 7
+    # 2026): brought in by hand, nothing of them sent to the chat's model,
+    # their pictures offered to pictures asked for. Who of them is set aside
+    # (not here now: everyone brought in is here until then), and which of
+    # their pictures each is shown with (character id → picture id), both
+    # the author's, by hand, for the whole chat.
+    chat_away: list[str] = Field(default_factory=list)
+    chat_looks: dict[str, str] = Field(default_factory=dict)
     # The author's edits to the program's prompt texts for this story, by key
     # (engine/prompt_texts.py); over the config's edits for every story.
     prompt_edits: dict[str, PromptEdit] = Field(default_factory=dict)

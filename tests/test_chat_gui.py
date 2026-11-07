@@ -110,9 +110,11 @@ def test_a_new_chat_shows_only_what_a_chat_has(app, window, monkeypatch):
         assert control.isHidden()
     assert not composer.private_toggle.isHidden() and not composer.private_keep.isHidden()
     tabs = window.right_tabs
-    for page in (window.scene_panel, window.cast_panel, window.lore_panel, window.style_panel):
+    for page in (window.scene_panel, window.lore_panel, window.style_panel):
         assert not tabs.isTabVisible(tabs.indexOf(page))
     assert tabs.isTabVisible(tabs.indexOf(window.summaries_panel))
+    # People stays: a chat's characters, for their pictures (Nov 7 2026).
+    assert tabs.isTabVisible(tabs.indexOf(window.people_page))
     assert not window.review_action.isEnabled() and not window.start_action.isEnabled()
     assert window.image_action.isEnabled(), "pictures work in a chat kept on disk"
     assert window._current_turn("Hello").speaker_id == CHAT_USER_ID
@@ -247,7 +249,6 @@ def test_a_chat_shows_none_of_a_story_s_own_menu_items_or_card_pictures(app, win
         window.import_plot_action,
         window.last_review_action,
         window.undo_review_action,
-        window.portraits_action,
     )
     assert all(action.isVisible() for action in story_only)
     picture = GeneratedImage(file="images/p.png", prompt="p", model="m", size="1k")
@@ -255,6 +256,8 @@ def test_a_chat_shows_none_of_a_story_s_own_menu_items_or_card_pictures(app, win
     assert "Use as a place's picture…" in texts(ImageMessageWidget(picture, None))
     make_chat(window, monkeypatch)
     assert not any(action.isVisible() for action in story_only)
+    # A chat's characters have pictures drawn as a story's do (Nov 7 2026).
+    assert window.portraits_action.isVisible()
     in_chat = texts(ImageMessageWidget(picture, None, chat=True))
     assert "Open full size" in in_chat
     assert not any(text.startswith("Use as a") for text in in_chat)
@@ -1095,3 +1098,57 @@ def test_the_model_button_leaves_the_default_model_alone_in_a_chat(
     window.choose_story_model()
     assert window.session.model == "TEE/gemma-3-27b"
     assert window.config.active_provider().model == "z-ai/glm-5.3"
+
+
+def test_a_chats_characters_are_for_their_pictures_alone(app, window, monkeypatch):
+    """The author (Nov 7 2026): a People page in a chat, empty at the start,
+    characters brought in by hand, each shown with the picture chosen for
+    them; nothing of them reaches the chat's model."""
+    from sealedlore.gui.people_page import BRING_BACK_LABEL, SET_ASIDE_LABEL
+    from sealedlore.gui.story_cast_page import CHAT_SCOPE_WORDS
+
+    make_chat(window, monkeypatch)
+    page = window.people_page
+    window.right_tabs.setCurrentWidget(page)
+    window._build_people()
+    assert page.bring_button.isVisibleTo(page) and not page.cards
+    # A new character: their card on the board, with only what drawing reads.
+    page.add_requested.emit()
+    assert window.board_shown()
+    panel = window.cast_panel
+    assert [c.name for c in window.session.cast] == ["New character"]
+    for field in (panel._skills_box, panel.voice_notes, panel.player_available, panel.canon):
+        assert not field.isVisibleTo(panel)
+    for field in (panel.name, panel.full_description, panel.chat_hint):
+        assert field.isVisibleTo(panel)
+    assert not panel.suggestions_box.isVisibleTo(panel)
+    assert window.cast_page.scope.text().startswith(CHAT_SCOPE_WORDS[:30])
+    window.show_cast_board(False)
+    # Nobody to speak as: a chat's turn is the user's.
+    assert window._current_turn("Hello").speaker_id == CHAT_USER_ID
+    # Here now, then set aside, then back.
+    window.right_tabs.setCurrentWidget(page)
+    window._build_people()
+    card_id = window.session.cast[0].id
+    card = page.cards[card_id]
+    assert SET_ASIDE_LABEL in [label for label, _act in card.menu_actions()]
+    card.presence_requested.emit(card_id, False)
+    assert window.session.story.chat_away == [card_id]
+    assert BRING_BACK_LABEL in [label for label, _act in page.cards[card_id].menu_actions()]
+    assert not any(label.startswith("Play as") for label, _act in card.menu_actions())
+    # A look chosen before any message.
+    session = window.session
+    session.pictures.write("images/refs/x.png", b"picture")
+    session.pictures.write("images/refs/y.png", b"picture")
+    from sealedlore.models.image import ImageRef
+
+    session.cast[0].reference_images = [
+        ImageRef(id="x", file="images/refs/x.png", look="coat"),
+        ImageRef(id="y", file="images/refs/y.png", look="armour"),
+    ]
+    window._build_people()
+    looks = page.cards[card_id].look_actions()
+    assert [words for words, _shown, _act in looks][1] == "armour"
+    looks[1][2]()
+    assert session.story.chat_looks == {card_id: "y"}
+    window.close_story()

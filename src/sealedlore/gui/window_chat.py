@@ -136,20 +136,23 @@ class ChatWindow:
         for action in (self.dice_rolls_action, self.stage_action, self.passage_faces_action):
             action.setVisible(not chat)
         self.close_story_action.setText("&Close chat" if chat else "&Close story")
+        # People stays: a chat's characters are there for their pictures
+        # (the author, Nov 7 2026), the rest is a story's.
         for page in (
-            self.people_page,
             self.scene_panel,
             self.lore_panel,
             self.style_panel,
         ):
             self.right_tabs.setTabVisible(self.right_tabs.indexOf(page), not chat)
         if chat and self.right_tabs.currentWidget() in (
-            self.people_page,
             self.scene_panel,
             self.lore_panel,
             self.style_panel,
         ):
             self.right_tabs.setCurrentWidget(self.summaries_panel)
+        # The cast board in a chat: pictures alone, nothing a story keeps.
+        self.cast_panel.set_chat_mode(chat)
+        self.cast_page.set_chat_mode(chat)
         tee = self.session is not None and self.session.tee_chat
         # A chat on a TEE model is private throughout: no part to set apart.
         # One kept in memory only keeps its private parts in memory too.

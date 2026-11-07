@@ -53,19 +53,57 @@ class LooksRuntime:
 
     def looks_now(self) -> dict[str, str]:
         """Who is shown with which picture at the end of the story
-        (character id → picture id)."""
+        (character id → picture id). A chat's are the author's own, for the
+        whole chat (`Story.chat_looks`)."""
+        if self.story.chat:
+            return self._chat_looks()
         return looks_at(self._looks_path())
+
+    def _chat_looks(self) -> dict[str, str]:
+        """A chat's chosen pictures, each while it is still on its card."""
+        cards = {c.id: c for c in self.cast}
+        return {
+            character_id: ref_id
+            for character_id, ref_id in self.story.chat_looks.items()
+            if character_id in cards
+            and any(ref.id == ref_id for ref in cards[character_id].reference_images)
+        }
+
+    # --- a chat's characters, for their pictures alone ------------------------------
+
+    def chat_present(self) -> list:
+        """A chat's characters here now (all brought in, less those set aside),
+        in the order brought in."""
+        away = set(self.story.chat_away)
+        return [c for c in self.cast if c.id not in away] if self.story.chat else []
+
+    def set_chat_presence(self, character_id: str, here: bool) -> None:
+        """One of a chat's characters set aside, or brought back."""
+        if not self.story.chat or all(c.id != character_id for c in self.cast):
+            raise ValueError("That character isn't in this chat.")
+        away = [x for x in self.story.chat_away if x != character_id]
+        if not here:
+            away.append(character_id)
+        self.story.chat_away = away
+        self.save()
 
     def looks_wanted_now(self) -> dict[str, str]:
         """For the latest passage, per character, the look and expression the
-        choice found no picture for ("armour · angry"), or none."""
+        choice found no picture for ("armour · angry"), or none (always, in a
+        chat: no model chooses there)."""
+        if self.story.chat:
+            return {}
         path = self._looks_path()
         return dict(path[-1].meta.looks_wanted) if path else {}
 
     def show_look(self, character_id: str, ref_id: str | None) -> None:
         """Show a character with one of their pictures from here on; None
         puts them back to their portrait. ValueError, in words, when there is
-        nowhere to keep it yet."""
+        nowhere to keep it yet. A chat keeps it for the whole chat, from its
+        start (`Story.chat_looks`)."""
+        if self.story.chat:
+            self._show_chat_look(character_id, ref_id)
+            return
         path = self.full_path()
         if not path:
             raise ValueError("A look can be chosen once the story has begun.")
@@ -86,6 +124,20 @@ class LooksRuntime:
         else:
             looks[character_id] = ref_id
         path[-1].meta.looks = looks
+        self.save()
+
+    def _show_chat_look(self, character_id: str, ref_id: str | None) -> None:
+        character = next((c for c in self.cast if c.id == character_id), None)
+        if character is None:
+            raise ValueError("That character isn't in this chat.")
+        if ref_id is not None and all(ref.id != ref_id for ref in character.reference_images):
+            raise ValueError(f"That picture isn't one of {character.name}'s any more.")
+        looks = dict(self.story.chat_looks)
+        if ref_id is None:
+            looks.pop(character_id, None)
+        else:
+            looks[character_id] = ref_id
+        self.story.chat_looks = looks
         self.save()
 
     # --- chosen after a passage (engine/look_pick.py) ------------------------------

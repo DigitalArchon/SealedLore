@@ -14,6 +14,12 @@ card with no portrait offers to draw one or choose a picture, and the panel
 at the top offers portraits for everyone who has none and a background
 behind the story.
 
+In a simple chat (the author, Nov 7 2026) the page is the chat's characters,
+kept for their pictures alone: empty at the start, brought in by hand (from
+Your characters or a new card), each here now or set aside, shown with the
+picture chosen for them; nothing of them reaches the chat's model, and the
+pictures they are shown with go with a picture asked for (`chat_view`).
+
 Who is here is the scene card's, as the Scene page shows it (playtesting:
 the scene read is wrong too often to go unwatched; here it is watched by
 face), and "Correct the scene…" goes there. Each card shows the picture the
@@ -82,6 +88,24 @@ NAME_LABEL = "Name…"
 # How the map's scene lists someone it has no name for (engine/map_presence.py).
 NOT_NAMED_SUFFIX = " (not named yet)"
 MAKE_CARD_LABEL = "Make a card"
+# A simple chat's characters (`chat_view`).
+CHAT_HERE_HEADING = "Here now"
+CHAT_AWAY_HEADING = "Set aside"
+BRING_IN_LABEL = "Bring someone in"
+FROM_COLLECTION_LABEL = "From Your characters…"
+NEW_CHARACTER_LABEL = "A new character…"
+SET_ASIDE_LABEL = "Set aside for now"
+BRING_BACK_LABEL = "Bring them back here"
+CHAT_INTRO = (
+    "Characters here are for their pictures alone: nothing about them is sent to the "
+    "chat's model. Right-click one to choose how they look now (Show as); the pictures "
+    "they are shown with go with any picture you ask for."
+)
+CHAT_NOBODY = (
+    "Nobody here yet. Bring in the characters this chat is about, to keep their pictures "
+    "at hand: draw new looks and expressions for them, and have them in the pictures you "
+    "ask for."
+)
 
 
 def card_choices(name: str) -> list[tuple[str, bool]]:
@@ -136,6 +160,9 @@ class PeopleView:
     # Whether an image endpoint is set up, and whether the story has a background.
     pictures_ready: bool = False
     background: bool = False
+    # A simple chat's characters, for their pictures alone (`chat_view`):
+    # `here` those here now, `away` those set aside.
+    chat: bool = False
 
 
 def first_sentence(text: str | None, limit: int = 140) -> str:
@@ -231,6 +258,31 @@ def people_view(
     return view
 
 
+def chat_view(
+    here: Sequence[Character],
+    away: Sequence[Character],
+    *,
+    story_id: str = "",
+    missing: Sequence[str] = (),
+    pictures_ready: bool = False,
+    background: bool = False,
+    looks: Mapping[str, str] | None = None,
+) -> PeopleView:
+    """A simple chat's characters, here now and set aside, each with the
+    picture chosen for them (`looks`)."""
+    view = PeopleView(
+        story_id=story_id,
+        begun=True,
+        missing=list(missing),
+        pictures_ready=pictures_ready,
+        background=background,
+        chat=True,
+    )
+    view.here = [_person(c, None, looks=looks) for c in here]
+    view.away = [_person(c, None, looks=looks) for c in away]
+    return view
+
+
 def _initials(name: str) -> str:
     words = [word for word in name.split() if word[:1].isalpha()]
     return "".join(word[0].upper() for word in words[:2]) or "?"
@@ -269,13 +321,26 @@ class PersonCard(QFrame):
     variant_requested = Signal(str, str, str)
     # (card id, picture id, "look · expression"): draw the look found missing.
     wanted_requested = Signal(str, str, str)
+    # (card id, here): a chat's character set aside, or brought back.
+    presence_requested = Signal(str, bool)
 
-    def __init__(self, person: Person, *, max_height: int, can_draw: bool, can_play: bool) -> None:
+    def __init__(
+        self,
+        person: Person,
+        *,
+        max_height: int,
+        can_draw: bool,
+        can_play: bool,
+        chat_here: bool | None = None,
+    ) -> None:
+        """`chat_here`: in a simple chat, whether they are here now (None:
+        a story's character)."""
         super().__init__()
         self.person = person
         self._max_height = max_height
         self._can_draw = can_draw
         self._can_play = can_play
+        self._chat_here = chat_here
         self._pixmap = QPixmap()
         self.setObjectName("personCard")
         self.setProperty("you", "true" if person.you else "false")
@@ -380,7 +445,7 @@ class PersonCard(QFrame):
         """What the right-click menu offers, in order."""
         person = self.person
         actions: list[tuple[str, Callable[[], None]]] = [
-            ("Open the profile", lambda: self.profile_requested.emit(person.card_id)),
+            ("Open their card", lambda: self.profile_requested.emit(person.card_id)),
         ]
         if person.picture:
             actions.append(
@@ -414,6 +479,15 @@ class PersonCard(QFrame):
                     )
         actions.append(("Choose a picture…", lambda: self.file_requested.emit(person.card_id)))
         actions.append((BOARD_MENU, lambda: self.board_requested.emit(person.card_id)))
+        if self._chat_here is not None:
+            here = self._chat_here
+            actions.append(
+                (
+                    SET_ASIDE_LABEL if here else BRING_BACK_LABEL,
+                    lambda: self.presence_requested.emit(person.card_id, not here),
+                )
+            )
+            return actions
         if self._can_play and person.playable and not person.you:
             actions.append(
                 (f"Play as {person.name}", lambda: self.play_requested.emit(person.card_id))
@@ -424,7 +498,7 @@ class PersonCard(QFrame):
         """Show as: each of their pictures (words, shown now, act), once the
         story has begun and they have more than one."""
         person = self.person
-        if not self._can_play:
+        if not self._can_play and self._chat_here is None:
             return []
         return [
             (
@@ -475,6 +549,10 @@ class PeoplePage(QScrollArea):
     card_requested = Signal(str, bool)
     # Name someone the map has here with no name yet: their label.
     name_requested = Signal(str)
+    # A simple chat: characters from Your characters, and (card id, here)
+    # one set aside or brought back.
+    collection_requested = Signal()
+    presence_requested = Signal(str, bool)
 
     def __init__(self, pictures: Callable[[], object]) -> None:
         super().__init__()
@@ -544,6 +622,13 @@ class PeoplePage(QScrollArea):
             self.board_button.clicked.connect(lambda: self.board_requested.emit(""))
             layout.addWidget(self.board_button, 0, Qt.AlignLeft)
 
+        if view.chat:
+            self._build_chat(layout)
+            layout.addStretch(1)
+            self.setWidget(page)
+            self._show_pictures()
+            return
+
         if view.location or view.situation:
             heading = QLabel(view.location or "Where the story is")
             heading.setObjectName("peopleHeading")
@@ -602,6 +687,52 @@ class PeoplePage(QScrollArea):
         layout.addStretch(1)
         self.setWidget(page)
         self._show_pictures()
+
+    def _build_chat(self, layout: QVBoxLayout) -> None:
+        """A simple chat's characters (see the module)."""
+        view = self._view
+        intro = QLabel(CHAT_INTRO)
+        intro.setObjectName("hintLabel")
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+        bring = QToolButton()
+        bring.setText(BRING_IN_LABEL)
+        bring.setToolTip("A character of yours, or a new card, into this chat")
+        bring.setPopupMode(QToolButton.InstantPopup)
+        menu = QMenu(bring)
+        menu.addAction(FROM_COLLECTION_LABEL).triggered.connect(
+            lambda _on=False: self.collection_requested.emit()
+        )
+        menu.addAction(NEW_CHARACTER_LABEL).triggered.connect(
+            lambda _on=False: self.add_requested.emit()
+        )
+        bring.setMenu(menu)
+        self.bring_button = bring
+        layout.addWidget(bring, 0, Qt.AlignLeft)
+        if not (view.here or view.away):
+            nobody = QLabel(CHAT_NOBODY)
+            nobody.setObjectName("hintLabel")
+            nobody.setWordWrap(True)
+            layout.addWidget(nobody)
+            return
+        self._add_tip(layout)
+        here_columns, other_columns = self._columns
+        self._grid(
+            layout, CHAT_HERE_HEADING, view.here, here_columns, HERE_MAX_HEIGHT, chat_here=True
+        )
+        if not view.here:
+            nobody = QLabel("Nobody is here now: bring someone back from those set aside.")
+            nobody.setObjectName("hintLabel")
+            nobody.setWordWrap(True)
+            layout.addWidget(nobody)
+        self._grid(
+            layout,
+            CHAT_AWAY_HEADING,
+            view.away,
+            other_columns,
+            OTHERS_MAX_HEIGHT,
+            chat_here=False,
+        )
 
     def _also_here(
         self,
@@ -672,6 +803,8 @@ class PeoplePage(QScrollArea):
         people: Sequence[Person],
         columns: int,
         max_height: int,
+        *,
+        chat_here: bool | None = None,
     ) -> None:
         if not people:
             return
@@ -685,8 +818,10 @@ class PeoplePage(QScrollArea):
                 person,
                 max_height=max_height,
                 can_draw=self._view.pictures_ready,
-                can_play=self._view.begun,
+                can_play=self._view.begun and not self._view.chat,
+                chat_here=chat_here,
             )
+            card.presence_requested.connect(self.presence_requested)
             card.profile_requested.connect(self.profile_requested)
             card.draw_requested.connect(self.draw_requested)
             card.file_requested.connect(self.file_requested)
@@ -717,7 +852,7 @@ class PeoplePage(QScrollArea):
         box = QVBoxLayout(tip)
         box.setContentsMargins(12, 10, 12, 10)
         box.setSpacing(6)
-        title = QLabel("Make the story yours")
+        title = QLabel("Make the chat yours" if view.chat else "Make the story yours")
         title.setObjectName("peopleTipTitle")
         box.addWidget(title)
         lines = []
@@ -732,7 +867,7 @@ class PeoplePage(QScrollArea):
                 "choose a picture of your own on any card."
             )
         if wants_background:
-            lines.append("A picture behind the story sets the scene.")
+            lines.append(f"A picture behind the {'chat' if view.chat else 'story'} sets the scene.")
         text = QLabel(" ".join(lines))
         text.setObjectName("peopleTipText")
         text.setWordWrap(True)

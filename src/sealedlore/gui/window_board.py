@@ -91,7 +91,7 @@ class CastBoardWindow:
         card (`card`; None: everyone's pictures), or the story back as it was."""
         session = self.session
         card_id = card_id or None
-        if on and (session is None or session.story.chat):
+        if on and session is None:
             return
         if on:
             if not self.board_shown():
@@ -177,7 +177,8 @@ class CastBoardWindow:
             if story_id == session.story.id:
                 key = (waiting.card_id, label_key(waiting.look), label_key(waiting.expression))
                 drawing[key] += 1
-        template = template_of(session.story)
+        # A chat is no template's: its pictures are kept in Your characters.
+        template = "" if session.story.chat else template_of(session.story)
         kept = read_kept(template, self.root) if template else None
         self.cast_board.set_template(template, kept.count if kept else 0)
         self.cast_board.set_savable(True)

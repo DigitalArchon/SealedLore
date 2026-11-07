@@ -601,6 +601,10 @@ def test_a_story_with_nobody_yet_offers_to_add_someone(app, tmp_path):
         settle(app)
         assert window.board_shown()
         assert [c.name for c in window.session.cast] == ["New character"]
+        # Their card shows, its name ready to type (the board had opened on
+        # Everyone's pictures, the name's tab not showing).
+        assert window.cast_panel.tabs.currentIndex() == 0
+        assert window.cast_panel.name.isVisibleTo(window.cast_panel)
     finally:
         window.close()
 

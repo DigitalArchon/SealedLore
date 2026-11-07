@@ -137,17 +137,29 @@ class ImageRuntime:
         A character the plot hasn't brought in yet is never offered: their
         picture would be the first a model heard of them. Pictures added from
         disk (`Story.reference_images`) belong to no card and come last. A
-        simple chat has no cards: it offers those and every picture it made.
-        A character's picture they are shown with now (engine/looks.py) comes
-        first among theirs, its caption saying so, so the writer draws them
-        as they look now unless asked otherwise.
+        simple chat offers its characters' pictures (kept for that alone:
+        those here now first, as each is shown now), those added and every
+        picture it made. A character's picture they are shown with now
+        (engine/looks.py) comes first among theirs, its caption saying so, so
+        the writer draws them as they look now unless asked otherwise.
         """
         added = [
             (_use("story", self.story.id, ref.caption or "Added picture", ref), False)
             for ref in self.story.reference_images
         ]
         if self.story.chat:
-            uses = added
+            here = {c.id for c in self.chat_present()}
+            looks = self.looks_now()
+            uses = []
+            for character in self.cast:
+                now = looks.get(character.id)
+                refs = sorted(character.reference_images, key=lambda ref: ref.id != now)
+                for ref in refs:
+                    use = _use("character", character.id, character.name, ref, now=ref.id == now)
+                    uses.append((use, character.id in here))
+            # Those here now first: the likeliest to be in the picture.
+            uses.sort(key=lambda item: not item[1])
+            uses += added
             for image in self.generated_images():
                 shown = ImageRef(id=image.id, file=image.file, caption=image.prompt[:80])
                 uses.append((_use("picture", image.id, "A picture from this chat", shown), False))

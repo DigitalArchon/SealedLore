@@ -80,6 +80,12 @@ PORTRAIT_COLUMN_MIN = 160
 LIST_ICON = 40
 # The list's column at 100% text, as Your characters' (gui/collection_page.py).
 LEFT_WIDTH = 320
+# A simple chat's characters are for their pictures alone (the author, Nov 7
+# 2026): their card says so, and shows only what drawing them reads.
+CHAT_HINT = (
+    "In a chat, characters are here for their pictures alone: nothing on their card is "
+    "sent to the chat's model. Their description is what their portrait is drawn from."
+)
 
 
 class CastPanel(QWidget):
@@ -259,6 +265,8 @@ class CastPanel(QWidget):
         layout.addLayout(body, 1)
         # Everyone's pictures as the list's first entry (the window's page).
         self._everyone = False
+        # A simple chat's characters, for their pictures alone (`set_chat_mode`).
+        self._chat = False
 
     def _build_editor(self) -> QWidget:
         self.name = QLineEdit()
@@ -339,6 +347,7 @@ class CastPanel(QWidget):
         skill_buttons.addWidget(self.remove_skill)
         skill_buttons.addStretch(1)
         skills_box = QWidget()
+        self._skills_box = skills_box
         skills_layout = QVBoxLayout(skills_box)
         skills_layout.setContentsMargins(0, 0, 0, 0)
         skills_layout.addWidget(self.skills)
@@ -428,6 +437,12 @@ class CastPanel(QWidget):
         # and the spare height went to the skills table.
         card.addWidget(fields, 1, Qt.AlignTop)
 
+        # In a simple chat: what a chat's characters are for.
+        self.chat_hint = QLabel(CHAT_HINT)
+        self.chat_hint.setObjectName("hintLabel")
+        self.chat_hint.setWordWrap(True)
+        self.chat_hint.hide()
+        form.insertRow(0, self.chat_hint)
         self.empty_hint = QLabel("Add a character, or select one to edit.")
         self.empty_hint.setObjectName("hintLabel")
         self.empty_hint.setWordWrap(True)
@@ -538,7 +553,7 @@ class CastPanel(QWidget):
             self.list.addItem(everyone)
             if everyone_was:
                 self.list.setCurrentItem(everyone)
-        sections = [("CAST", self._cast)]
+        sections = [("IN THIS CHAT" if self._chat else "CAST", self._cast)]
         if self._supporting:
             sections.append(("SUPPORTING — FROM THE STORY", self._supporting))
         for title, characters in sections:
@@ -585,6 +600,37 @@ class CastPanel(QWidget):
         super().changeEvent(event)
         if event.type() in (QEvent.FontChange, QEvent.StyleChange) and hasattr(self, "side"):
             self._fit_side()
+
+    def set_chat_mode(self, on: bool) -> None:
+        """A simple chat's characters (pictures alone) or a story's: in a
+        chat, only what drawing them reads, and nothing a story keeps."""
+        self._chat = on
+        for field in (
+            self.canon,
+            self.personality,
+            self.voice_notes,
+            self.competence,
+            self._skills_box,
+            self.player_available,
+            self.author_only,
+            self.keep_whole,
+            self.condensed_box,
+        ):
+            self._form.setRowVisible(field, not on)
+        self._form.setRowVisible(self.chat_hint, on)
+        for widget in (
+            self.move_button,
+            self.fill_button,
+            self.tavern_button,
+            self.suggestions_box,
+            self.room_banner,
+        ):
+            widget.setVisible(not on)
+        self.set_cast(self._cast)
+
+    @property
+    def chat_mode(self) -> bool:
+        return self._chat
 
     def set_everyone(self, on: bool) -> None:
         """Whether the list begins with Everyone (the whole window's page:
@@ -880,9 +926,10 @@ class CastPanel(QWidget):
             note = card_note(self._room, character)
         else:
             note = supporting_note(self._room, character)
-        shown = character is not None and bool(note or character.condensed)
+        # A chat's characters are never sent: no room, nothing condensed.
+        shown = character is not None and bool(note or character.condensed) and not self._chat
         self._form.setRowVisible(self.condensed_box, shown)
-        self._form.setRowVisible(self.keep_whole, cast_card)
+        self._form.setRowVisible(self.keep_whole, cast_card and not self._chat)
         if not shown:
             return
         self.condensed_note.setText(note)
@@ -913,6 +960,9 @@ class CastPanel(QWidget):
         self._current = character
         self.set_cast(self._cast)
         self._select(character.id)
+        # Their card, to name them: added from Everyone or their pictures,
+        # the name to type in was on a tab not showing.
+        self.tabs.setCurrentIndex(0)
         self.name.setFocus()
         self.name.selectAll()
         self.changed.emit()

@@ -87,7 +87,7 @@ from sealedlore.gui.model_trouble import (
     TroubleRole,
 )
 from sealedlore.gui.new_story_guide import NewStoryGuide
-from sealedlore.gui.people_page import PeoplePage, people_view
+from sealedlore.gui.people_page import PeoplePage, chat_view, people_view
 from sealedlore.gui.phone_status import PhoneStatusButton
 from sealedlore.gui.plot_editor import PlotEditorWindow
 from sealedlore.gui.plot_panel import ClockDialog, PlotPanel
@@ -1088,6 +1088,19 @@ class MainWindow(
         page.settings_requested.connect(lambda: self.open_settings("Images"))
         page.scene_requested.connect(self._correct_scene)
         page.add_requested.connect(self._add_character)
+        page.collection_requested.connect(lambda: self.add_from_collection())
+        page.presence_requested.connect(self._chat_presence)
+
+    def _chat_presence(self, card_id: str, here: bool) -> None:
+        """One of a chat's characters set aside, or brought back here."""
+        if self.session is None:
+            return
+        try:
+            self.session.set_chat_presence(card_id, here)
+        except ValueError as exc:
+            self.statusBar().showMessage(str(exc), 6000)
+            return
+        self._refresh_people()
 
     def _add_character(self) -> None:
         """A new card, on the cast board, its name ready to type."""
@@ -1113,8 +1126,21 @@ class MainWindow(
         """Who is in the story by their faces, as the People page and the
         stage show them."""
         session = self.session
-        if session is None or session.story.chat:
+        if session is None:
             return people_view([], [], SceneState(), None)
+        if session.story.chat:
+            # A chat's characters, for their pictures alone (people_page.chat_view).
+            here = session.chat_present()
+            missing, _lore = session.without_pictures()
+            return chat_view(
+                here,
+                [c for c in session.cast if c not in here],
+                story_id=session.story.id,
+                missing=[c.name for c in missing],
+                pictures_ready=session.config.images() is not None,
+                background=bool(session.story.background_image),
+                looks=session.looks_now(),
+            )
         hidden = set() if self.config.show_plot_spoilers else session.hidden_ids()
         missing, _lore = session.without_pictures()
         scene, unnamed = session.story.scene, []
@@ -1214,6 +1240,8 @@ class MainWindow(
             about = PAGE_ABOUT.get(name, "")
             if page is self.summaries_panel and self.session.story.chat:
                 about = "The chapter summaries that stand in for older messages"
+            if page is self.people_page and self.session.story.chat:
+                about = "This chat's characters, for their pictures"
             title = f"{name}  ·  {about}" if about else name
         self.inspector_dock.setWindowTitle(title)
 
@@ -5125,7 +5153,8 @@ class MainWindow(
         assert self.session is not None
         story = self.session.story
         self.composer.refresh(
-            self.session.visible_cast(),
+            # A chat's characters are for their pictures: nobody to speak as.
+            [] if story.chat else self.session.visible_cast(),
             story.scene,
             story.held_character_id,
             default_length=story.style.response_style,
@@ -5307,8 +5336,8 @@ class MainWindow(
             lock.set_locked(busy)
         self.find_action.setEnabled(has_story)
         self.find_button.setEnabled(has_story)
-        # A story's characters only: a chat has none (hidden, not greyed).
-        self.board_action.setVisible(has_story and not self.session.story.chat)
+        # A chat's too: its characters are there for their pictures.
+        self.board_action.setVisible(has_story)
         if self.session is not None:
             # A story that has begun keeps its person and tense.
             self.style_panel.set_started(bool(self.session.nodes))
@@ -5377,8 +5406,6 @@ class MainWindow(
             self.edit_plot_action,
             self.last_review_action,
             self.undo_review_action,
-            self.portraits_action,
-            self.restyle_action,
         ):
             action.setVisible(not self.in_chat)
         if self.in_chat:

@@ -348,7 +348,7 @@ def test_a_pictures_own_actions_from_the_sheet(app, window, monkeypatch):
     window._busy = False
 
 
-def test_everyone_is_on_the_overview_and_a_chat_has_no_board(app, window):
+def test_everyone_is_on_the_overview_and_a_chat_has_a_board_too(app, window):
     window.show_cast_board(True)
     board = window.cast_board
     assert board.current is None and board.pages.currentIndex() == 0
@@ -359,11 +359,13 @@ def test_everyone_is_on_the_overview_and_a_chat_has_no_board(app, window):
     board._overview_lists[0].itemClicked.emit(board._overview_lists[0].item(0))
     assert board.current == window.session.cast[0].id
     window.show_cast_board(False)
+    # A chat's characters are kept for their pictures (Nov 7 2026).
     window.session.story.mode = "chat"
     window._update_controls()
-    assert not window.board_action.isVisible()
+    assert window.board_action.isVisible()
     window.show_cast_board(True)
-    assert not window.board_shown()
+    assert window.board_shown()
+    window.show_cast_board(False)
 
 
 def test_show_spoilers_on_the_board_shows_everyone(app, window, tmp_path):

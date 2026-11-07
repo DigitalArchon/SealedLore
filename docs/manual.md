@@ -2514,6 +2514,19 @@ write them, with none of the storytelling around them (no rules, cast, lore,
 scene, plot, OOC notes, dice, Questions or side models). Branches, takes, Edit,
 Find, pictures and the cost all work as in a story, and a long chat is summarised in parts as a
 story is (Settings → Context), with a plain summariser.
+- **Characters, for their pictures alone.** A chat's **People** page starts
+  empty. **Bring someone in** adds a character from Your characters, or a
+  new card. Their card and pictures are on the cast board (**Cast board…**
+  at the top of People): a chat's card has only what drawing them reads
+  (name, summary, description and their pictures), and their sheet of
+  looks and expressions works as a story's does. Nothing about them is sent
+  to the chat's model. Each is **Here now** or **Set aside** (right-click
+  them: **Set aside for now**, **Bring them back here**), and right-click →
+  **Show as** chooses which of their pictures they are shown with, from the
+  chat's start. When you ask for a picture (**Picture…**), the pictures of
+  those here now, as they are shown, are offered first to go with it, as a
+  story's characters' are; **Story → Draw pictures for the cards…** draws
+  portraits for those with none.
 - **Keep in full** (a message's ⋯ menu) sends a message word for word even
   once its part of the chat is summarised: it rides after that part's
   summary. Your first message starts kept. Story so far says when kept
