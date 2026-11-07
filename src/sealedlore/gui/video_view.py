@@ -454,8 +454,6 @@ class VideoMessageWidget(QFrame):
                 continue  # a memory-only chat's video has no file to open
             if key in ("continue", "frame") and not video.last_frame:
                 continue
-            if key == "frame" and chat:
-                continue  # a card's picture, and a chat has no cards
             action = menu.addAction(text)
             action.triggered.connect(lambda _checked=False, k=key: self._act(k))
         more = QToolButton()

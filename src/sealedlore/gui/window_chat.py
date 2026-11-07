@@ -129,8 +129,8 @@ class ChatWindow:
         self.chapter_markdown_action.setText(
             "Current &part as Markdown…" if chat else "Current &chapter as Markdown…"
         )
-        # A chat has no cast and no lore to give SillyTavern.
-        self.card_export_action.setVisible(not chat)
+        # A chat has no lore to give SillyTavern; its characters (kept for
+        # their pictures) can go out as cards.
         self.lorebook_export_action.setVisible(not chat)
         # Nor dice, nor faces over passages or a stage: shown, they did nothing.
         for action in (self.dice_rolls_action, self.stage_action, self.passage_faces_action):

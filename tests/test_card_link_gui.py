@@ -277,9 +277,15 @@ def test_a_chat_starts_from_their_card_and_greeting(app, window, monkeypatch):
     assert "You are talking with John." in first.content
     assert greeting.kind == "assistant"
     assert greeting.content == 'Elena lowers the rifle an inch. "Who sent you, John?"'
-    # Her portrait is the chat's own reference picture.
-    ref = session.story.reference_images[0]
-    assert ref.caption == "Elena" and session.pictures.read(ref.file)
+    # She is one of the chat's people, for her pictures (Nov 7 2026): linked
+    # to her card, her portrait with her, offered first for a picture.
+    assert [c.name for c in session.chat_present()] == ["Elena"]
+    copy = session.cast[0]
+    assert copy.linked is not None and copy.linked.card_id == elena.id
+    assert copy.reference_images and session.pictures.read(copy.reference_images[0].file)
+    assert session.story.reference_images == []
+    first_choice = session.image_ref_choices()[0]
+    assert first_choice.use.owner_name == "Elena" and first_choice.present
 
 
 def test_with_no_greeting_their_card_is_sent_and_answered(app, window, monkeypatch):

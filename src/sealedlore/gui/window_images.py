@@ -923,7 +923,8 @@ class ImagesWindow:
         picture dialog opens to draw a portrait or a picture of the place
         from it."""
         session = self.session
-        if session is None or data is None or session.story.chat:
+        # A chat's too: its characters are kept for their pictures.
+        if session is None or data is None:
             return
         if self._busy:
             self.statusBar().showMessage("Wait for the story's current job to finish.", 6000)

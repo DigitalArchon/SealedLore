@@ -13,12 +13,12 @@ from sealedlore.gui.card_chat_dialog import CardChatDialog
 from sealedlore.gui.collection_picker import CollectionPicker
 from sealedlore.ids import new_id
 from sealedlore.models.character import Character
-from sealedlore.models.image import GeneratedImage, ImageRef
+from sealedlore.models.image import GeneratedImage
 from sealedlore.models.story import Story
 from sealedlore.models.tavern import CardAsset
 from sealedlore.storage import card_files
 from sealedlore.storage.image_meta import picture_kind
-from sealedlore.storage.images import IMAGES_DIR, REFS_DIR
+from sealedlore.storage.images import IMAGES_DIR
 from sealedlore.storage.repository import StoryBundle, save_config, save_story_bundle
 
 
@@ -81,7 +81,7 @@ class CardStartWindow:
             nodes[0].meta.scene = story.scene.model_copy(deep=True)
             story.active_leaf_id = nodes[-1].id
         bundle = StoryBundle(story=story, nodes=nodes)
-        files = self._portrait_for_chat(card, story)
+        files: dict[str, bytes] = {}
         shown: list[GeneratedImage] = []
         if nodes:
             shown = self._card_pictures_for(card, first.pictures, nodes[0].id, files)
@@ -98,6 +98,12 @@ class CardStartWindow:
             self.open_story(story.id)
         if self.session is None or self.session.story.id != story.id:
             return
+        # They are in the chat, for their pictures (its People, linked to
+        # their card, every picture of theirs), so a picture of the chat draws
+        # them as they look now; it was their portrait alone, on no card.
+        self._kept_into_story(card, True, False)
+        self.refresh_panels()
+        self._refresh_people()
         if shown:
             self.session.pictures.add_images(shown)
             self._load_images()
@@ -124,20 +130,6 @@ class CardStartWindow:
         if self.session is not None and self.session.memory_only:
             self._close_story()
         return True
-
-    def _portrait_for_chat(self, card: Character, story: Story) -> dict[str, bytes]:
-        """Their portrait as the chat's own reference picture, so a picture
-        of the chat draws them as they look."""
-        if not card.reference_images:
-            return {}
-        data = self._collection_store().read(card.reference_images[0].file)
-        suffix = picture_kind(data) if data else None
-        if data is None or suffix is None:
-            return {}
-        ref_id = new_id()
-        ref = ImageRef(id=ref_id, file=f"{REFS_DIR}/{ref_id}{suffix}", caption=card.name)
-        story.reference_images.append(ref)
-        return {ref.file: data}
 
     def _card_pictures_for(
         self,

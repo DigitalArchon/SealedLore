@@ -197,8 +197,9 @@ class TavernWindow:
         return next((c for c in session.cast if c.id == held_id), None) if held_id else None
 
     def import_card_to_cast(self, path: Path | None = None) -> None:
+        # A chat's too: its characters are kept for their pictures.
         session = self.session
-        if session is None or self._busy or self.in_chat:
+        if session is None or self._busy:
             return
         if path is None:
             chosen, _ = QFileDialog.getOpenFileName(
@@ -230,10 +231,16 @@ class TavernWindow:
         fill = macro_filler(card.name, held.name if held is not None else None)
         character = character_from_card(card, fill)
         lore = lore_from_card(card, fill)
-        where = self._ask_where_card_goes(character, len(lore.entries))
-        if where is None:
-            return
-        to_cast, with_lore = where
+        chat = session.story.chat
+        if chat:
+            # A chat's characters are for their pictures: no cast or
+            # supporting characters, and no lore to give them.
+            to_cast, with_lore = True, False
+        else:
+            where = self._ask_where_card_goes(character, len(lore.entries))
+            if where is None:
+                return
+            to_cast, with_lore = where
         if card.files:
             self._card_kept_into_story(card, to_cast, with_lore)
             return
@@ -269,12 +276,12 @@ class TavernWindow:
         ):
             notes.append(f"The story already had a card named {character.name}: both are kept.")
         written = f"{character.full_description or ''} {character.voice_notes or ''}".lower()
-        if held is None and "{{user}}" in written:
+        if held is None and "{{user}}" in written and not chat:
             notes.append(
                 "Nobody is being played yet, so {{user}} stays as written on the card: "
                 "replace it with your character's name."
             )
-        if card.greetings or card.text("scenario").strip():
+        if (card.greetings or card.text("scenario").strip()) and not chat:
             notes.append(
                 "The card's scenario and greetings belong to a story of their own: "
                 "File → Import… makes one from the card."
@@ -289,7 +296,9 @@ class TavernWindow:
         self._refresh_composer()
         self._reassemble_inspector()
         self.show_cast_page(character.id)
-        where_words = "the cast" if to_cast else "the supporting characters"
+        where_words = (
+            "this chat" if chat else "the cast" if to_cast else "the supporting characters"
+        )
         if notes:
             self._say_left_out(
                 "Import a character card", f"{character.name} joined {where_words}.", notes
@@ -304,7 +313,9 @@ class TavernWindow:
         so nothing on the card is lost."""
         if self._collection_unwritable():
             return
-        kept, notes = self._kept_from_card(card, f"the story {self.session.story.title}")
+        chat = self.session.story.chat
+        place = "chat" if chat else "story"
+        kept, notes = self._kept_from_card(card, f"the {place} {self.session.story.title}")
         self._collection_session().cast.append(kept)
         self._save_collection()
         added = self._kept_into_story(kept, to_cast, with_lore, notes)
@@ -312,9 +323,11 @@ class TavernWindow:
         notes.insert(
             0,
             f"{kept.name} is kept in Your characters too, with everything on the card; this "
-            f"story's {added.name} is linked to it.",
+            f"{place}'s {added.name} is linked to it.",
         )
-        where_words = "the cast" if to_cast else "the supporting characters"
+        where_words = (
+            "this chat" if chat else "the cast" if to_cast else "the supporting characters"
+        )
         self._say_left_out("Import a character card", f"{added.name} joined {where_words}.", notes)
 
     def _ask_where_card_goes(self, character: Character, lore: int) -> tuple[bool, bool] | None:
@@ -359,9 +372,9 @@ class TavernWindow:
 
     def export_card(self, character_id: str | None = None) -> None:
         """A character as a SillyTavern card: a PNG with their portrait when
-        they have one, else JSON."""
+        they have one, else JSON. A chat's characters too."""
         session = self.session
-        if session is None or self.in_chat:
+        if session is None:
             return
         cards = self._shown_cards()
         if character_id is None:
@@ -569,7 +582,10 @@ class TavernWindow:
         if where != "collection" and self._busy:
             self._say_wait("Import from a link")
             return
-        if where in ("cast", "lore") and (self.session is None or self.in_chat):
+        # A chat takes characters (for their pictures), never lore.
+        if where == "lore" and (self.session is None or self.in_chat):
+            return
+        if where == "cast" and self.session is None:
             return
         title, lead = {
             "story": (
@@ -707,10 +723,12 @@ class TavernWindow:
     def _card_from_link(self, card: TavernCard, where: str) -> None:
         if where in ("story", "collection"):
             self._card_into_collection(card, self._link_source)
-        elif self.session is None or self.in_chat:
+        elif self.session is None:
             return
         elif where == "cast":
             self._card_into_story(card)
+        elif self.in_chat:
+            return
         elif card.book is None:
             self._warn_plain("Import a lorebook", f"{card.name}'s card has no lorebook in it.")
         else:
@@ -759,9 +777,10 @@ class TavernWindow:
 
     def import_expressions(self, character_id: str) -> None:
         """A SillyTavern expression pack (a zip of pictures named by
-        expression) added to a character's pictures, each labelled."""
+        expression) added to a character's pictures, each labelled. A chat's
+        characters too."""
         session = self.session
-        if session is None or self._busy or self.in_chat:
+        if session is None or self._busy:
             return
         character = next(
             (c for c in (*session.cast, *session.supporting) if c.id == character_id), None

@@ -239,8 +239,9 @@ def test_a_story_opened_from_a_chat_opens_on_its_people(app, window, monkeypatch
 
 def test_a_chat_shows_none_of_a_story_s_own_menu_items_or_card_pictures(app, window, monkeypatch):
     """Greyed in a chat, the review, the plot and the cards' pictures were one
-    more thing to read past; and "Use as a character's picture…" was offered
-    on a chat's pictures, and did nothing."""
+    more thing to read past; and "Use as a place's picture…" was offered on a
+    chat's pictures, and did nothing (a character's is wanted since a chat
+    keeps characters for their pictures, Nov 7 2026)."""
     from sealedlore.gui.transcript import ImageMessageWidget
     from sealedlore.models.image import GeneratedImage
 
@@ -260,7 +261,9 @@ def test_a_chat_shows_none_of_a_story_s_own_menu_items_or_card_pictures(app, win
     assert window.portraits_action.isVisible()
     in_chat = texts(ImageMessageWidget(picture, None, chat=True))
     assert "Open full size" in in_chat
-    assert not any(text.startswith("Use as a") for text in in_chat)
+    # A chat's characters take pictures (Nov 7 2026); a chat has no places.
+    assert "Use as a character's picture…" in in_chat
+    assert "Use as a place's picture…" not in in_chat
     window.close_story()
     assert all(action.isVisible() for action in story_only)
 

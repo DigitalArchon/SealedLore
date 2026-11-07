@@ -188,6 +188,31 @@ def test_a_card_joins_the_open_story(app, tmp_path: Path, monkeypatch, story, ca
     window.close()
 
 
+def test_a_card_joins_a_chat_for_its_pictures_with_no_lore(app, tmp_path: Path, monkeypatch):
+    """A chat's characters are kept for their pictures (Nov 7 2026): a card
+    comes in with its portrait, asked nothing about the cast, and its
+    lorebook stays out (a chat has no lore)."""
+    from sealedlore.models.story import Story
+
+    chat = Story(title="Chat", mode="chat", chat_prompt="Be kind.")
+    window = window_on(tmp_path, chat)
+    choose_file(monkeypatch, png_card(tmp_path, {"chara": v2()}))
+
+    def never(*_args):
+        raise AssertionError("a chat has no cast to choose")
+
+    monkeypatch.setattr(window, "_ask_where_card_goes", never)
+    no_boxes(monkeypatch)
+    assert not window.cast_panel.tavern_button.isHidden()
+    window.cast_panel.card_import_requested.emit()
+    session = window.session
+    assert [c.name for c in session.cast] == ["Elena"]
+    assert session.cast[0].reference_images
+    assert session.bundle.lore == []
+    assert window.board_shown()
+    window.close()
+
+
 def test_a_character_goes_out_as_a_png_card_with_their_portrait(
     app, tmp_path: Path, monkeypatch, story, cast
 ):

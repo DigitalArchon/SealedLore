@@ -1011,7 +1011,7 @@ class ImageMessageWidget(QFrame):
             if key == "-":
                 menu.addSeparator()
                 continue
-            if chat and key in FOR_CARDS:
+            if chat and key in PLACES_ONLY:
                 continue
             if image.from_card and key in NOT_DRAWN:
                 continue
@@ -1050,9 +1050,11 @@ class ImageMessageWidget(QFrame):
             layout.addWidget(self.picture)
 
 
-# What a picture offers only where there are cards: a chat has none, and
-# these did nothing there (the mode audit, Oct 29 2026).
-FOR_CARDS = frozenset({"character", "place", "frame"})
+# What a picture offers only where there are places: a chat has none, and
+# it did nothing there (the mode audit, Oct 29 2026). A chat's characters
+# take pictures as a story's do (Nov 7 2026): Use as a character's picture…
+# and a video's last frame are offered there too.
+PLACES_ONLY = frozenset({"place"})
 # What a picture from a card's own files has nothing for: no prompt drew it.
 NOT_DRAWN = frozenset({"prompt", "again"})
 

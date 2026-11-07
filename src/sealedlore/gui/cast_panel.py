@@ -618,10 +618,11 @@ class CastPanel(QWidget):
         ):
             self._form.setRowVisible(field, not on)
         self._form.setRowVisible(self.chat_hint, on)
+        # SillyTavern cards stay: a card's character, and its expression
+        # pictures, are as welcome in a chat (its lore isn't brought).
         for widget in (
             self.move_button,
             self.fill_button,
-            self.tavern_button,
             self.suggestions_box,
             self.room_banner,
         ):

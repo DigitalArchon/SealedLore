@@ -43,7 +43,7 @@ from sealedlore.gui.picture_words import (
     USE_PLACE_LABEL,
 )
 from sealedlore.gui.ref_images import thumbnail_of
-from sealedlore.gui.transcript import FOR_CARDS, IMAGE_ACTIONS, NOT_DRAWN, picture_caption
+from sealedlore.gui.transcript import IMAGE_ACTIONS, NOT_DRAWN, PLACES_ONLY, picture_caption
 from sealedlore.gui.video_view import VIDEO_ACTIONS, video_caption
 from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage, ImageRef
@@ -367,7 +367,7 @@ class ImagesPanel(QWidget):
                 if key == "-":
                     menu.addSeparator()
                     continue
-                if self._chat and key in FOR_CARDS:
+                if self._chat and key in PLACES_ONLY:
                     continue
                 menu.addAction(text).triggered.connect(
                     lambda _checked=False, k=key: self.added_action_requested.emit(k, image_id)
@@ -379,7 +379,7 @@ class ImagesPanel(QWidget):
                 if key == "-":
                     menu.addSeparator()
                     continue
-                if self._chat and key in FOR_CARDS:
+                if self._chat and key in PLACES_ONLY:
                     continue
                 menu.addAction(text).triggered.connect(
                     lambda _checked=False, k=key: self.background_action_requested.emit(k)
@@ -391,7 +391,7 @@ class ImagesPanel(QWidget):
                 if key == "-":
                     menu.addSeparator()
                     continue
-                if self._chat and key in FOR_CARDS:
+                if self._chat and key in PLACES_ONLY:
                     continue
                 if key == "play":
                     key, text = "show", "Show in the story"
@@ -405,7 +405,7 @@ class ImagesPanel(QWidget):
             if key == "-":
                 menu.addSeparator()
                 continue
-            if self._chat and key in FOR_CARDS:
+            if self._chat and key in PLACES_ONLY:
                 continue
             if item.data(Qt.UserRole + 2) and key in NOT_DRAWN:
                 continue
