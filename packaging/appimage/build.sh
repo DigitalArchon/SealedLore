@@ -106,6 +106,13 @@ chmod +x "$CACHE/$PYTHON_APPIMAGE"
 # --appimage-extract needs no FUSE, so this works in containers too.
 (cd "$BUILD" && rm -rf squashfs-root && "$CACHE/$PYTHON_APPIMAGE" --appimage-extract >/dev/null)
 mv "$BUILD/squashfs-root" "$APPDIR"
+# The extractor makes every folder 0700, whatever the base stores (0755) and
+# whatever the umask. Packed by root (-all-root), those folders were root's
+# alone: a launch through FUSE never checks, but one the kernel mounts does
+# (firejail --appimage, the AppImage catalog's test), and an ordinary user
+# couldn't reach AppRun ("Permission denied"). Every release to 3.1.0b2 had
+# 76 such folders, the AppImage's root among them.
+find "$APPDIR" -type d -exec chmod 755 {} +
 # Its own launcher, desktop entry and icon give way to SealedLore's.
 rm -f "$APPDIR"/AppRun "$APPDIR"/*.desktop "$APPDIR"/*.png "$APPDIR"/.DirIcon
 rm -rf "$APPDIR/usr/share/applications" "$APPDIR/usr/share/metainfo" "$APPDIR/usr/share/icons"
@@ -324,6 +331,15 @@ grep -v '^#' "$SRC/sealedlore.desktop" \
 echo "X-AppImage-Version=$VERSION" >> "$APPDIR/sealedlore.desktop"
 
 log "Checking the result"
+# Everything inside readable by whoever runs it, whoever mounts it: every
+# folder 755, every file 644 or 755 (see the Python base's step).
+modes="$(find "$APPDIR" \( \( -type d ! -perm 755 \) -o \( -type f ! -perm 644 ! -perm 755 \) \) \
+    -printf '%m /%P\n' | head -20)"
+if [ -n "$modes" ]; then
+    echo "not readable by everyone (folders must be 755, files 644 or 755):" >&2
+    echo "$modes" >&2
+    exit 1
+fi
 # Every ELF inside must run on the glibc floor.
 floor="$(find "$APPDIR" -type f \( -name '*.so*' -o -perm -u+x \) -exec sh -c \
     'file -b "$1" | grep -q ELF && objdump -T "$1" 2>/dev/null' _ {} \; \
