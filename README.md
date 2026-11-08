@@ -37,6 +37,21 @@ fun to play. This app will remain focused on text based roleplay.
 
 ### New in version 3
 
+- **The cast board, in one place** (3.1.0b2). A story's characters are on
+  one page, laid out as Your characters is: **Cast board…** on the People page
+  shows everyone down the left, and each one's card and pictures in two tabs
+  (the Cast page has gone into it). It says plainly that it is this story's
+  own, and Save to Your characters… keeps any of them for other stories. On
+  the sheet of looks and expressions, rows and columns stay where you put
+  them (drag a heading, or Move up and down), each heading has the words its
+  pictures are drawn with ("happy, but reserved, a small smile"), a missing
+  picture is a blank place showing what it would be drawn as, and the row for
+  pictures set aside is always there.
+- **Characters in a simple chat** (3.1.0b2). A chat can have characters for
+  their pictures alone: bring them in on the People page or the cast board
+  (from Your characters, a new card or a SillyTavern card), choose how each is
+  shown, and draw new pictures of them. Nothing about them is sent to the chat's model;
+  their pictures go with a picture you ask for, as a story's do.
 - **A plot without writing one** (3.1.0b1). The model can write a story's
   plot: made up from the story's world and characters, or from what you
   describe (how many events, how often, how big, how disruptive, what kinds).
