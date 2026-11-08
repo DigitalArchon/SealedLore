@@ -10,10 +10,10 @@ import argparse
 import faulthandler
 import os
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from PySide6.QtCore import QCoreApplication
+from PySide6.QtCore import QCoreApplication, Qt
 from PySide6.QtWidgets import QApplication
 
 from sealedlore import __version__
@@ -50,11 +50,33 @@ def pick_font(app: QApplication) -> None:
             return
 
 
-def build_app(argv: Sequence[str]) -> QApplication:
+def in_firejail(env: Mapping[str, str]) -> bool:
+    """Whether SealedLore runs inside firejail, which says so in `container`.
+
+    There the desktop's own file dialog can't be used (Nov 8 2026, Ubuntu
+    26.04 under firejail 0.9.72): the file-chooser portal refuses a
+    sandboxed process ("Unable to open /proc/…/root"), Qt falls back to
+    GTK's dialog, GTK loads its icons through glycin, which starts `bwrap`,
+    and firejail forbids that: GTK aborts, and the whole app with it, at
+    the first file dialog (Import…, every Export and Save as, a picture
+    from disk). Qt's own dialogs need neither."""
+    return env.get("container", "") == "firejail"
+
+
+def own_dialogs_in_firejail(env: Mapping[str, str]) -> bool:
+    """Qt's own file dialogs inside firejail (`in_firejail`); whether so."""
+    sandboxed = in_firejail(env)
+    if sandboxed:
+        QCoreApplication.setAttribute(Qt.AA_DontUseNativeDialogs, True)
+    return sandboxed
+
+
+def build_app(argv: Sequence[str], env: Mapping[str, str] | None = None) -> QApplication:
     QCoreApplication.setApplicationName("SealedLore")
     QCoreApplication.setOrganizationName("SealedLore")
     # Drives the Wayland app_id and the X11 WM_CLASS.
     QApplication.setDesktopFileName(APP_ID)
+    own_dialogs_in_firejail(os.environ if env is None else env)
 
     app = QApplication(list(argv))
     # Before any widget and before the stylesheet (fields.install_wheel_guard).
