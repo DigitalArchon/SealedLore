@@ -792,8 +792,8 @@ def test_a_character_s_pictures_are_labelled_on_their_card(app, window, monkeypa
         return QDialog.Accepted
 
     monkeypatch.setattr(PictureLabelsDialog, "exec", labelled)
-    assert window.cast_panel.portrait.labels_button.isVisible()
-    window.cast_panel.portrait.labels_button.click()
+    assert window.cast_panel.portrait.labels_action.isVisible()
+    window.cast_panel.portrait.labels_action.trigger()
     portrait = serrik.reference_images[0]
     assert (portrait.look, portrait.expression) == ("normal clothes", "neutral")
     assert "normal clothes · neutral" in window.cast_panel.portrait.caption.text()

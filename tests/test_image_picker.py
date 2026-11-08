@@ -139,7 +139,10 @@ def test_recommended_models_are_offered_beside_the_field_with_their_notes(app):
     assert recommended_model("portrait_model", choices[0].id) is choices[0]
     assert recommended_model("portrait_model", "no-such-model") is None
     field = ModelField("", recommended=choices)
-    actions = [a for a in field.recommended_button.menu().actions() if not a.isSeparator()]
+    # One Choose button: its menu's heading, then each model with its note.
+    actions = [a for a in field.button.menu().actions() if not a.isSeparator()]
+    assert actions[0].defaultWidget().text() == "Recommended for this"
+    actions = actions[1:]
     assert actions[0].text() == "FLUX.3 Klein (default)"
     # The note, wrapped in a label of its own: a menu entry never wraps.
     note = actions[1].defaultWidget()
@@ -148,7 +151,7 @@ def test_recommended_models_are_offered_beside_the_field_with_their_notes(app):
     premium = next(a for a in actions if a.text().startswith("Seedream 5.0 Pro"))
     premium.trigger()
     assert field.text() == "bytedance/seedream-v5.0-pro"
-    assert ModelField("").recommended_button is None
+    assert ModelField("").button.menu() is None
 
 
 def test_the_text_model_fields_offer_what_was_measured_for_them(app):
@@ -168,15 +171,13 @@ def test_the_text_model_fields_offer_what_was_measured_for_them(app):
         ("plot_model", dialog.plot_model),
         ("lore_model", dialog.lore_model),
     ):
-        assert field.recommended_button is not None, role
+        assert field.button.menu() is not None, role
         first = RECOMMENDED_TEXT_MODELS[role][0].id
         assert first == (DEFAULT_STORY_MODEL if role == "story" else RECOMMENDED_MODELS[role])
-    premium = next(
-        a for a in dialog.model.recommended_button.menu().actions() if "(premium)" in a.text()
-    )
+    premium = next(a for a in dialog.model.button.menu().actions() if "(premium)" in a.text())
     premium.trigger()
     assert dialog.model.text() == "anthropic/claude-opus-5.5"
-    assert dialog.summarization_model.recommended_button is None  # nothing measured
+    assert dialog.summarization_model.button.menu() is None  # nothing measured
     dialog.reject()
 
 

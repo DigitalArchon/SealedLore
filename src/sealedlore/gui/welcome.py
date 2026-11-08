@@ -71,7 +71,7 @@ def welcome_html(missing: list[str], *, partly_set: bool) -> str:
         "the API key from your NanoGPT account into <b>API key</b>.</li>"
         "<li>On the <b>Models</b> page the <b>Story model</b> is already Claude "
         "Sonnet 4.6, which with Opus 5.5 writes best; GLM 5.3 is a good cheaper "
-        "one. <b>Browse…</b> beside it chooses another. Leave the other models "
+        "one. <b>Choose</b> beside it picks another. Leave the other models "
         "blank: they use the story model.</li>"
         "<li><b>Save</b>, then start a story.</li>"
         "</ol>"

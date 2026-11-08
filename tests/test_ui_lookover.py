@@ -4,6 +4,7 @@ only."""
 
 from __future__ import annotations
 
+import gc
 import os
 import re
 from pathlib import Path
@@ -198,3 +199,53 @@ def test_the_plot_page_says_nothing_has_happened_rather_than_show_an_empty_table
     assert panel.events.isVisibleTo(panel)
     assert panel.events_label.text() == "Events"
     window.close()
+
+
+def test_the_portraits_more_menu_outlives_setup_borrowing_the_card(app, tmp_path, monkeypatch):
+    """The card lent to Setup and back keeps its More menu. In a run of the
+    real window its actions, made by addAction(text), were deleted with the
+    dialog and the next story opened raised; that run's conditions aren't
+    reproduced here, so this checks the path, not that case."""
+    from PySide6.QtCore import QCoreApplication, QEvent
+
+    from sealedlore.engine.plot_md import parse_plot_markdown
+    from sealedlore.gui.ref_images import load_plot_pictures
+    from sealedlore.gui.setup_dialog import SetupDialog
+    from sealedlore.storage.scenario import bundle_from_scenario
+
+    sample = Path(__file__).resolve().parents[1] / "SampleStories" / "The Silverwood.md"
+    parsed = parse_plot_markdown(sample.read_text(encoding="utf-8"))
+    assert load_plot_pictures(parsed, sample.parent) == []
+    bundle = bundle_from_scenario(parsed.scenario)
+    save_story_bundle(bundle, root=tmp_path)
+    from sealedlore.gui.text_size import load_stylesheet
+
+    app.setStyleSheet(load_stylesheet())
+    window = MainWindow(root=tmp_path, use_mock=True)
+    window.resize(1920, 1080)
+    window.show()
+    window.open_story(bundle.story.id)
+    settle(app)
+
+    def looked_over(dialog: SetupDialog) -> int:
+        dialog.show()
+        for index in range(dialog.tabs.count()):
+            dialog.tabs.setCurrentIndex(index)
+            settle(app)
+            dialog.grab()
+        dialog.hide()
+        return SetupDialog.Rejected
+
+    monkeypatch.setattr(SetupDialog, "exec", looked_over)
+    window.open_setup()
+    for _ in range(5):
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        settle(app)
+    gc.collect()
+    portrait = window.cast_panel.portrait
+    # Each still there (a deleted one raises), and the story opens again.
+    for action in (portrait.again_action, portrait.add_action, portrait.remove_action):
+        assert action.text()
+    window.open_story(bundle.story.id)
+    window.close()
+    app.setStyleSheet("")

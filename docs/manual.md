@@ -415,7 +415,7 @@ between turns: an hour (the default) costs a little more a turn and outlasts
 the pauses of real play; after five minutes, a longer pause rewrites the whole
 prompt at full price.
 
-![Settings, open on Models: the pages down the left in their groups, and every model by the job it does, with Route…, Recommended and Browse… beside each](screenshots/settings.png)
+![Settings, open on Models: the pages down the left in their groups, and every model by the job it does, with Route… and Choose beside each](screenshots/settings.png)
 
 **Several endpoints.** Settings → Endpoints lists every endpoint you have
 set up, each with its own address, protocol (**Speaks**) and API key; **Add**
@@ -423,7 +423,7 @@ makes another, **Remove** takes one out (its key with it, when you Save), and
 **Make default** chooses the one a model named without an endpoint is sent to.
 The fields below the list are the selected endpoint's. To use Anthropic's own
 API beside NanoGPT: Add, name it `Anthropic`, give it
-`https://api.anthropic.com` and your Anthropic key, Save. Browse… on the Models
+`https://api.anthropic.com` and your Anthropic key, Save. **Choose** on the Models
 page then lists both endpoints' models together, with a **Provider** column
 saying which endpoint each is from, and the search finds an endpoint's name
 too; NanoGPT and Anthropic both serve Claude Opus 5.5, and with a key for
@@ -448,7 +448,7 @@ https://api.anthropic.com --api-key …`.
 (`deepseek/deepseek-v4.1-flash`), the Jev decision model, the image model
 (Seedream), and the `TEE/` and `private/` private models, are NanoGPT's. On OpenRouter or
 another endpoint the chat model works as it is; set the lore, scene, plot and
-image models to ones your endpoint lists (Browse… shows them), or the calls
+image models to ones your endpoint lists (Choose shows them), or the calls
 that use them fail and fall back where they can.
 
 **Anthropic's own API.** With an Anthropic key, set an endpoint's base URL
@@ -458,7 +458,7 @@ protocol from the address, or choose **Anthropic** there outright for a
 proxy that speaks Anthropic's Messages API elsewhere. The key is sent as
 Anthropic's `x-api-key` header, and the note under the key field says so.
 Models are Anthropic's own ids (`claude-sonnet-4-6`, `claude-opus-5-5`;
-Browse… lists them), so set the story model to one of them: NanoGPT's
+Choose lists them), so set the story model to one of them: NanoGPT's
 default, `anthropic/claude-sonnet-4.6`, isn't a name Anthropic knows.
 Prompt caching works as on NanoGPT, and every model field falls back to the
 story model as usual. What differs: every call is
@@ -471,8 +471,9 @@ possible sends nothing to a model that thinks only when asked, and the
 lowest effort to one whose thinking can't be turned off, such as Opus 5.5).
 NanoGPT's routes and private models don't apply.
 
-**Choosing a model.** Every model field has a **Browse…** button. It lists the
-models your endpoint offers, fetched from the endpoint itself, and the list is
+**Choosing a model.** Every model field has a **Choose** button. It lists the
+models your endpoint offers (where a job has models measured for it,
+**Choose** is a menu: **Browse all models…** first, then those), fetched from the endpoint itself, and the list is
 searchable ("sonnet 4.6", "llama 70b") and sortable by context size or price.
 The model name in the status bar does the same for the open story, in one
 click. You can still type an id by hand. The image model (Settings → Images,
@@ -644,7 +645,7 @@ archiving, rebuilding summaries.
 Fourteen settings name a model; the text models are together on Settings →
 Models, the picture models on Settings → Images. Blank ones fall back as
 shown; the defaults marked ★ are NanoGPT model ids, so on another endpoint
-set them to one it lists (Browse…).
+set them to one it lists (Choose).
 
 **A story's own models.** A story goes with Settings → Models and follows it when
 it changes. **Story → Setup… → Models** chooses any of the text models for that
@@ -707,8 +708,8 @@ story model will be sent.
 of the summarisation model, to the story model, the most expensive place to run a small call on every turn. On
 NanoGPT a new setup starts with the ones that measured best, and Settings →
 Models has **Use recommended models** to fill them in on a setup you already
-have (nothing changes until you press Save). **Recommended** beside the story,
-scene, plot and lore fields lists the models measured for that job, the recommended one first, each with a note on roughly what it scored
+have (nothing changes until you press Save). **Choose** beside the story,
+scene, plot and lore fields lists, under **Browse all models…**, the models measured for that job, the recommended one first, each with a note on roughly what it scored
 and what it costs (for the story, Claude Opus 5.5 as the premium choice: the
 better writer on every blind judge, at about 2.4 times Sonnet's price, and
 longer passages). Choosing one only fills in the field.
@@ -720,7 +721,7 @@ longer passages). Choosing one only fills in the field.
 | Lore | `deepseek/deepseek-v4.1-flash` | Picks the lore a turn needs after each passage; with 100 entries it cut contradictions of the lore from about 10 in 32 passages to a few |
 
 They are NanoGPT model ids. On another endpoint the fields stay blank: choose
-a model that reasons for the scene and a quick one for the plot (Browse…).
+a model that reasons for the scene and a quick one for the plot (Choose).
 
 **How fast is each one?** Settings → Models has **Test speed…**. It sends every
 model named there, and the private model, one short request, all at the same
@@ -1577,11 +1578,13 @@ characters and seldom the rest.
 On the **Card** tab, a character's **portrait** is shown large at the left,
 with their other pictures small under it and the card's fields to the
 right. The portrait is simply their first picture: **Make portrait** under the
-others puts another first, **Choose a file…** takes one from your computer,
-and the buttons under it have an image model draw one, grouped by what is
-sent: **From words:** **Draw a new portrait…** and **Same prompt again…**;
-**Sends this picture:** **Change this picture…** and **In a scene…** (see
-Pictures → Pictures for the cards). Click the portrait to see it whole. Each
+others puts another first. Under the portrait, **Draw a new portrait…** (from
+words) and **Change this picture…** (sends this picture) have an image model
+draw one; **More** holds the rest, grouped the same way: **Same prompt
+again…** (from words), **In a scene…** and **A set of expressions…** (send
+this picture), then **Labels…**, **Choose a file…** (one from your computer)
+and **Remove** (see Pictures → Pictures for the cards). Click the portrait to
+see it whole. Each
 name in the list has its portrait beside it, small. A lore entry's first
 picture is shown the same way on the Lore page.
 
@@ -1669,7 +1672,7 @@ page to put it right.
 
 **Looks.** A character can have several pictures: in normal clothes and in
 armour, angry, laughing, in a fighting stance. Label each on their card on
-the cast board (**Labels…** under the portrait, or on one of the pictures below it) with its
+the cast board (**More** → **Labels…** under the portrait, or **Labels…** on one of the pictures below it) with its
 **Look**, which lasts until the story changes it (normal clothes, combat
 armour, injured), and its **Expression or pose**, which is the moment's
 (angry, talking, in a fighting stance). Then right-click their card here,
@@ -1888,7 +1891,7 @@ story after it stays where it is, whichever take is showing (if a chapter
 summary covers it, the summary is marked out of date). The **⋯** menu on a
 message offers **Regenerate this passage** (any passage, not just the latest).
 
-**Continue**, under Regenerate in the bottom bar (and **⋯ → Continue this
+**Continue**, beside Regenerate in the bottom bar (and **⋯ → Continue this
 passage** on the latest passage), writes more of the latest passage into it,
 carried on from where it stops: the way on when a passage ends too soon, or
 was cut off at the length limit mid-sentence. The **Length** control says how
@@ -2168,9 +2171,11 @@ Characters the plot hasn't brought in yet, and lore held back until you
 mention it, are never offered: their picture would tell a model about them
 early.
 
-Under a card's large picture the buttons are grouped by what goes to the
-image model with the prompt, and every dialog says it again on a line of its
-own (**Sent with the prompt:**):
+Under a card's large picture, what draws one is grouped by what goes to the
+image model with the prompt: **Draw a new portrait…** and **Change this
+picture…** are buttons, the others are in **More** under them, under the same
+two captions. Every dialog says it again on a line of its own (**Sent with the
+prompt:**):
 
 - **From words:** **Draw a new portrait…** (a new picture from the card's
   description) and **Same prompt again…** (another take from the picture's own
@@ -2190,7 +2195,7 @@ The small pictures under the large one offer **Same prompt again…** and
 
 Many image models come in two versions, one drawing from words and one
 changing a picture (FLUX.3 Klein, Seedream 5.0 Pro, Nano Banana Pro…). You
-only ever choose the model: **Browse…** lists each model once, its
+only ever choose the model: **Choose** lists each model once, its
 **Pictures** column saying how many pictures it can be given ("none" for a
 model that draws from words alone, "needs one" for one that only changes a
 picture), and beside every image model field a few words say the same
@@ -2203,8 +2208,8 @@ A new picture is added to the card's pictures; the original stays. **Make
 portrait** (**Show first** on a lore entry) puts the one you like first, and
 **Remove** takes off the one you don't.
 
-The portrait model is Settings → Images → **Portrait model**; **Recommended**
-beside it lists the models measured for portraits, with what each is good at:
+The portrait model is Settings → Images → **Portrait model**; **Choose**
+beside it lists, under **Browse all models…**, the models measured for portraits, with what each is good at:
 
 - **FLUX.3 Klein** (the default, about $0.009, a few seconds): ahead of FLUX.2
   klein on five of six characters for two blind judges, and its edit version
@@ -2359,7 +2364,7 @@ even if you stop waiting or delete it afterwards. So:
   service charges more than the dialog showed, the app tells you.
 
 The dialog shows the model's own settings (resolution, length, aspect ratio,
-sound and so on, from the service's list; **Browse…** finds another model),
+sound and so on, from the service's list; **Choose…** finds another model),
 and only values that list offers are sent. **Starts on** and **Ends on** take
 any picture of the story: a reference picture from a card, a picture it made,
 one from disk, or the last frame of an earlier video, which carries a scene
@@ -2473,7 +2478,7 @@ off until one is.
 
 **End-to-end encrypted models (`private/…`).** NanoGPT's Private Mode
 models (`private/glm-5-3`, `private/kimi-k3`, `private/gemma4-31b` and the
-rest; Browse… lists them as "end-to-end encrypted") close the gap above: the
+rest; Choose lists them as "end-to-end encrypted") close the gap above: the
 prompt is sealed on your machine to a key only the model's enclave holds, and
 the reply comes back sealed the same way, so NanoGPT relays ciphertext.
 Before anything is sent the app attests the enclave with Tinfoil's own
@@ -2822,7 +2827,7 @@ whole way (see [Playing from your phone](#playing-from-your-phone)). An API
 key sent over plain `http://` to another machine, even one on your own
 network, can be read by anyone on that network, a café's or a hotel's Wi-Fi
 included, so Settings asks before it saves one there, or sends one there
-before Save (Browse…, Test speed…, Test attestation and Detect use the keys
+before Save (Choose, Test speed…, Test attestation and Detect use the keys
 as typed), and `sealedlore configure` warns; one sent to this computer itself
 (`localhost`, `127.0.0.1`) never leaves it. There is no telemetry, no update check and no
 crash reporting.

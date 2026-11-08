@@ -10,13 +10,16 @@ are, `ref_images.pixmap_within`); a click shows the file whole.
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtGui import QAction, QImage, QPixmap
 from PySide6.QtWidgets import (
     QLabel,
+    QMenu,
     QPushButton,
     QSizePolicy,
+    QToolButton,
     QVBoxLayout,
     QWidget,
+    QWidgetAction,
 )
 
 from sealedlore.gui.expression_set import SET_LABEL, SET_TIP
@@ -32,6 +35,9 @@ from sealedlore.gui.picture_words import (
 )
 from sealedlore.gui.ref_images import image_of
 from sealedlore.gui.wrap_row import WrapRow
+
+# The button under the two that holds the rest of what can be done.
+MORE_LABEL = "More"
 
 # The tallest the portrait is drawn, and the widest it is held at.
 PORTRAIT_MAX_HEIGHT = 380
@@ -138,13 +144,6 @@ class PortraitView(QWidget):
             "pictures.",
             self.draw_requested,
         )
-        self.again_button = self._button(
-            AGAIN_LABEL,
-            "Another take from this picture's own prompt, by the same model or another. "
-            "This picture isn't sent (only any pictures it was itself drawn from, as "
-            "before). The new one is added to the pictures; this one stays.",
-            self.again_requested,
-        )
         self.edit_button = self._button(
             EDIT_LABEL,
             "This picture is sent to the image model with what you want changed (a scar, "
@@ -152,50 +151,73 @@ class PortraitView(QWidget):
             f"{'person' if person else 'thing'}. The changed copy is added to the pictures.",
             self.edit_requested,
         )
-        self.scene_button = self._button(
+        self.from_words = QLabel(FROM_WORDS)
+        self.from_words.setObjectName("hintLabel")
+        self.sends_picture = QLabel(SENDS_PICTURE)
+        self.sends_picture.setObjectName("hintLabel")
+
+        # The two most asked for stay buttons, each under what it sends; the
+        # rest are in More, grouped the same way (the author, Nov 2026: twelve
+        # buttons under a portrait). Fusion draws a menu's sections as bare
+        # lines, so the captions are rows of their own.
+        menu = QMenu(self)
+        self._menu_words = self._caption_row(menu, FROM_WORDS)
+        self.again_action = self._action(
+            menu,
+            AGAIN_LABEL,
+            "Another take from this picture's own prompt, by the same model or another. "
+            "This picture isn't sent (only any pictures it was itself drawn from, as "
+            "before). The new one is added to the pictures; this one stays.",
+            self.again_requested,
+        )
+        self._menu_sends = self._caption_row(menu, SENDS_PICTURE)
+        self.scene_action = self._action(
+            menu,
             SCENE_LABEL,
             "Their portrait is sent to the image model with a description of them as they "
             "are now in the story (where they are, what they wear and are doing), so it is "
             "the same face. It is added to their pictures.",
             self.scene_requested,
         )
-        self.set_button = self._button(SET_LABEL, SET_TIP, self.set_requested)
-        self.from_words = QLabel(FROM_WORDS)
-        self.from_words.setObjectName("hintLabel")
-        self.sends_picture = QLabel(SENDS_PICTURE)
-        self.sends_picture.setObjectName("hintLabel")
-        self.scene_button.setVisible(person and scene)
-        self.add_button = self._button(
+        self.set_action = self._action(menu, SET_LABEL, SET_TIP, self.set_requested)
+        menu.addSeparator()
+        self.labels_action = self._action(menu, LABELS_LABEL, LABELS_TIP, self.labels_requested)
+        self.add_action = self._action(
+            menu,
             "Choose a file…",
             f"A picture from your computer as the {self._noun}",
             self.add_requested,
         )
-        self.remove_button = self._button(
+        self.remove_action = self._action(
+            menu,
             "Remove",
             f"Take this {self._noun} off; the next picture takes its place",
             self.remove_requested,
         )
-        self.labels_button = self._button(LABELS_LABEL, LABELS_TIP, self.labels_requested)
-        # Wraps rather than widen the Inspector.
-        # Each kind under its caption, the buttons wrapping under it: as narrow
-        # as the widest button, so the portrait's column keeps its width.
-        words = WrapRow(spacing=6, group_spacing=6)
-        for button in (self.draw_button, self.again_button):
-            words.add_group([button])
-        sends = WrapRow(spacing=6, group_spacing=6)
-        for button in (self.edit_button, self.scene_button, self.set_button):
-            sends.add_group([button])
-        files = WrapRow(spacing=6, group_spacing=6)
-        for button in (self.labels_button, self.add_button, self.remove_button):
-            files.add_group([button])
+        menu.setToolTipsVisible(True)
+        self.more_button = QToolButton()
+        self.more_button.setText(MORE_LABEL)
+        self.more_button.setToolTip(
+            "Another take from the same prompt, more pictures of them, labels, a file "
+            "from your computer, remove"
+        )
+        self.more_button.setPopupMode(QToolButton.InstantPopup)
+        self.more_button.setMenu(menu)
+
         buttons = QVBoxLayout()
         buttons.setSpacing(4)
-        buttons.addWidget(self.from_words)
-        buttons.addLayout(words)
-        buttons.addWidget(self.sends_picture)
-        buttons.addLayout(sends)
+        for caption, button in (
+            (self.from_words, self.draw_button),
+            (self.sends_picture, self.edit_button),
+        ):
+            buttons.addWidget(caption)
+            row = WrapRow(spacing=6, group_spacing=6)
+            row.add_group([button])
+            buttons.addLayout(row)
         buttons.addSpacing(4)
-        buttons.addLayout(files)
+        more = WrapRow(spacing=6, group_spacing=6)
+        more.add_group([self.more_button])
+        buttons.addLayout(more)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 4)
         layout.setSpacing(4)
@@ -214,6 +236,26 @@ class PortraitView(QWidget):
         button.setToolTip(tip)
         button.clicked.connect(signal)
         return button
+
+    @staticmethod
+    def _action(menu: QMenu, text: str, tip: str, signal) -> QAction:
+        # Made with its menu as parent, then added: made by addAction(text),
+        # the actions were deleted with the Setup dialog the card had been
+        # lent to, though the menu itself came back with it.
+        action = QAction(text, menu)
+        action.setToolTip(tip)
+        action.triggered.connect(signal)
+        menu.addAction(action)
+        return action
+
+    @staticmethod
+    def _caption_row(menu: QMenu, text: str) -> QWidgetAction:
+        label = QLabel(text)
+        label.setObjectName("menuCaption")
+        row = QWidgetAction(menu)
+        row.setDefaultWidget(label)
+        menu.addAction(row)
+        return row
 
     def show_portrait(self, data: bytes | None, caption: str, name: str) -> None:
         """`data`: the first picture's file, or None for none."""
@@ -239,14 +281,18 @@ class PortraitView(QWidget):
         on, has = self._offered, getattr(self, "_has", False)
         self.draw_button.setVisible(on)
         self.from_words.setVisible(on)
-        self.add_button.setVisible(on)
-        for button in (self.again_button, self.edit_button, self.remove_button):
-            button.setVisible(on and has)
-        self.labels_button.setVisible(on and has and self._person)
+        self.more_button.setVisible(on)
+        self.add_action.setVisible(on)
+        self.edit_button.setVisible(on and has)
         self.sends_picture.setVisible(on and has)
+        for action in (self.again_action, self.remove_action):
+            action.setVisible(on and has)
+        self.labels_action.setVisible(on and has and self._person)
         # Their portrait is what keeps the face: with none, Draw a portrait first.
-        self.scene_button.setVisible(on and has and self._person and self._scene)
-        self.set_button.setVisible(on and has and self._person)
+        self.scene_action.setVisible(on and has and self._person and self._scene)
+        self.set_action.setVisible(on and has and self._person)
+        self._menu_words.setVisible(self.again_action.isVisible())
+        self._menu_sends.setVisible(self.scene_action.isVisible() or self.set_action.isVisible())
 
     def _show_whole(self) -> None:
         # The one viewer every picture opens in.

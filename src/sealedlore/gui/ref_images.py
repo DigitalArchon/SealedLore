@@ -457,7 +457,18 @@ class RefImageStrip(QWidget):
         self.list.setVisible(bool(shown))
         self.hint.setVisible(refs is not None and not shown)
         self.add_button.setEnabled(refs is not None and store is not None)
+        # With no picture here, only Add…: five greyed buttons for pictures
+        # that weren't there said nothing.
+        for button in self._for_one():
+            button.setVisible(bool(shown))
         self._sync_buttons()
+
+    def _for_one(self) -> tuple[QPushButton, ...]:
+        """The buttons that act on a chosen picture of the strip."""
+        own = (self.caption_button, self.remove_button)
+        if self._after_portrait:
+            return own + (self.portrait_button, self.again_button, self.edit_button)
+        return own
 
     def _before(self) -> None:
         if self.before_change is not None:

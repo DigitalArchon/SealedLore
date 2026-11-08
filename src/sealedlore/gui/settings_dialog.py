@@ -501,7 +501,7 @@ class SettingsDialog(QDialog):
         self._load_endpoint_fields()
         self._refresh_endpoint_rows()
         self.endpoints_note.setText(
-            f"Added {name}. Give it a name, its address and its key; Browse… on the Models "
+            f"Added {name}. Give it a name, its address and its key; Choose on the Models "
             "page then lists its models beside the others', and a model chosen from it "
             'names it ("Name::model").'
         )
@@ -652,7 +652,7 @@ class SettingsDialog(QDialog):
             "Each endpoint has an address and a key of its own; a model chosen from one "
             'names it ("Anthropic::claude-opus-5-5"), and a model named without an '
             "endpoint goes to the default one. NanoGPT and Anthropic both serve Claude: with "
-            "a key for each, Browse… on the Models page shows which is which."
+            "a key for each, Choose on the Models page shows which is which."
         )
         intro.setObjectName("hintLabel")
         intro.setWordWrap(True)
@@ -978,7 +978,7 @@ class SettingsDialog(QDialog):
         self.lore_model.setToolTip(
             "Picks lore after each passage when a lorebook is too large to send whole and "
             'Lore → Large lorebooks is "Model picks". The default is a NanoGPT model id; '
-            "on another endpoint pick one it lists (Browse…), or leave it blank to use "
+            "on another endpoint pick one it lists (Choose), or leave it blank to use "
             "the scene model."
         )
         form.addRow("Lore model", self.lore_model)
@@ -1162,7 +1162,7 @@ class SettingsDialog(QDialog):
             "Filled in: " + ", ".join(filled) + ". Save to keep them."
             if found
             else "The recommendations are NanoGPT model ids. On these endpoints, choose a "
-            "small, fast model for the scene and plot with Browse…"
+            "small, fast model for the scene and plot with Choose"
         )
         self.recommended_note.show()
 

@@ -138,7 +138,7 @@ def test_the_cast_page_shows_the_portrait_large_and_the_others_small(app):
     panel.portrait.edit_button.click()  # on Jane's portrait, now "b"
     panel.pictures.list.setCurrentRow(0)
     panel.pictures.again_button.click()  # on her other picture, "a"
-    panel.portrait.scene_button.click()
+    panel.portrait.scene_action.trigger()  # in More
     assert asked == [(jane.id, "b", "edit"), (jane.id, "a", "again"), (jane.id, "", "scene")]
     asked.clear()
     panel.select_character(john.id)
@@ -300,7 +300,7 @@ def test_the_lore_page_shows_an_entry_s_picture_large_with_the_same_actions(app)
     panel.set_entries([town, bare])
     panel.list.setCurrentRow(0)
     assert not panel.picture.picture.isHidden()
-    assert panel.picture.scene_button.isHidden()  # a character's alone
+    assert not panel.picture.scene_action.isVisible()  # a character's alone
     asked: list[tuple] = []
     panel.picture_requested.connect(lambda *args: asked.append(args))
     panel.picture.edit_button.click()
@@ -466,7 +466,7 @@ def test_remove_takes_off_the_portrait_shown_when_asked(app, monkeypatch):
         return QMessageBox.Yes
 
     monkeypatch.setattr(QMessageBox, "question", landing)
-    panel.portrait.remove_button.click()
+    panel.portrait.remove_action.trigger()
     assert [ref.id for ref in jane.reference_images] == ["new"]
 
 

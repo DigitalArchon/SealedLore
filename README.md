@@ -510,7 +510,7 @@ Windows offers weaker privacy on the machine itself (see
 
 2. **Check the story model** on the Models page. It starts as Claude Sonnet
    4.6, which with Opus 5.5 measured best as a storyteller; GLM 5.3 is a good
-   cheap one. Browse… lists what the endpoint offers. On NanoGPT the small
+   cheap one. **Choose** beside it lists what the endpoint offers. On NanoGPT the small
    calls made on every turn (the scene, the plot, picking lore) start on
    cheaper models that measured well for them; **Use recommended models**
    fills them in on a setup you already have, and **Test speed…** shows how

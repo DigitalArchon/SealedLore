@@ -13,6 +13,7 @@ from PySide6.QtCore import QEvent, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QKeyEvent
 from PySide6.QtWidgets import (
     QComboBox,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMenu,
@@ -412,13 +413,17 @@ class Composer(QWidget):
         )
         self.image_button.clicked.connect(self.image_requested)
 
-        buttons = QVBoxLayout()
-        buttons.setSpacing(8)
-        buttons.addWidget(self.send_button)
-        buttons.addWidget(self.stop_button)
-        buttons.addWidget(self.regenerate_button)
-        buttons.addWidget(self.continue_button)
-        buttons.addWidget(self.image_button)
+        # Two abreast, three rows: one above another, five set the composer's
+        # least height at ~212px, and the story couldn't have the room.
+        buttons = QGridLayout()
+        buttons.setHorizontalSpacing(6)
+        buttons.setVerticalSpacing(8)
+        buttons.addWidget(self.send_button, 0, 0)
+        buttons.addWidget(self.stop_button, 0, 1)
+        buttons.addWidget(self.regenerate_button, 1, 0)
+        buttons.addWidget(self.continue_button, 1, 1)
+        buttons.addWidget(self.image_button, 2, 0, 1, 2)
+        buttons.setRowStretch(3, 1)
 
         entry = QHBoxLayout()
         entry.setContentsMargins(0, 0, 0, 0)

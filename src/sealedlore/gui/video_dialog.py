@@ -325,7 +325,7 @@ class VideoDialog(QDialog):
             self.model_note.setText(
                 "Loading the endpoint's video models…"
                 if loading
-                else "This model isn't in the endpoint's list (Browse… shows what is). Its "
+                else "This model isn't in the endpoint's list (Choose… shows what is). Its "
                 "settings and price can't be known, so it can't be sent from here."
             )
             self._sync_frames()

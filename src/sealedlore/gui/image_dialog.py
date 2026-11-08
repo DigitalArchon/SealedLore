@@ -554,7 +554,7 @@ class ImageDialog(QDialog):
         self.model.setToolTip(
             ImagePickerDialog._describe(info)
             if info is not None
-            else "The model that draws: type its id, or Browse… the endpoint's image models."
+            else "The model that draws: type its id, or Choose… from the endpoint's image models."
         )
         current = self.size_choice.currentText()
         self.size_choice.blockSignals(True)

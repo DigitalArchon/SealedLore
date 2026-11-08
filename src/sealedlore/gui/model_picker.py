@@ -6,7 +6,7 @@ endpoint's models together with a Provider column saying which (the author:
 NanoGPT and Anthropic both serve Opus 5.5, and with a key for each the choice
 must be theirs); what it stores is the model's reference, which names its
 endpoint when that isn't the default ("Anthropic::claude-opus-5-5",
-models/config.py). `ModelField` is a text box with a Browse… button, used
+models/config.py). `ModelField` is a text box with a Choose button, used
 wherever a chat model is chosen, with the endpoint's name beside it for a
 model off the default endpoint. Typing an id by hand still works — other
 endpoints, local servers, a model the list leaves out.
@@ -563,20 +563,32 @@ class ModelPickerDialog(QDialog):
             self.accept()
 
 
-def recommended_button(
-    choices: tuple[RecommendedModel, ...], choose: Callable[[str], None]
-) -> QToolButton | None:
-    """ "Recommended ▾": the models recommended for a role, each with its
-    note under its name; choosing one puts it in the field (`choose` is
-    given the id as listed: NanoGPT's)."""
+def choose_menu(
+    parent: QWidget,
+    choices: tuple[RecommendedModel, ...],
+    choose: Callable[[str], None],
+    browse: Callable[[], None] | None,
+) -> QMenu | None:
+    """ "Choose ▾": every model the endpoints offer (Browse all models…),
+    then the models recommended for a role, each with its note under its
+    name; choosing one puts it in the field (`choose` is given the id as
+    listed: NanoGPT's). None with nothing recommended: the button opens the
+    list itself. One button where there were Recommended and Browse…, so
+    every row of Settings → Models ends alike (the author, Nov 2026)."""
     if not choices:
         return None
-    button = QToolButton()
-    button.setText("Recommended")
-    button.setToolTip("Models recommended for this, with what each is good at")
-    button.setPopupMode(QToolButton.InstantPopup)
-    menu = QMenu(button)
+    menu = QMenu(parent)
     menu.setToolTipsVisible(True)
+    if browse is not None:
+        every = menu.addAction(BROWSE_ALL)
+        every.setToolTip("Every model your endpoints offer, with prices and what each can do")
+        every.triggered.connect(lambda _checked=False: browse())
+        menu.addSeparator()
+    caption = QLabel("Recommended for this")
+    caption.setObjectName("menuCaption")
+    heading = QWidgetAction(menu)
+    heading.setDefaultWidget(caption)
+    menu.addAction(heading)
     for index, choice in enumerate(choices):
         label = choice.label + (f" ({choice.tag})" if choice.tag else "")
         action = menu.addAction(label)
@@ -596,8 +608,12 @@ def recommended_button(
         menu.addAction(note)
         if index < len(choices) - 1:
             menu.addSeparator()
-    button.setMenu(menu)
-    return button
+    return menu
+
+
+# The model fields' one button, and its menu's first entry.
+CHOOSE_LABEL = "Choose"
+BROWSE_ALL = "Browse all models…"
 
 
 # A Recommended note's width in its menu.
@@ -605,7 +621,7 @@ NOTE_WIDTH = 460
 
 
 class ModelField(QWidget):
-    """A model id: typed, or chosen from the endpoint's list with Browse…."""
+    """A model id: typed, or chosen from the endpoint's list with Choose."""
 
     textChanged = Signal(str)
 
@@ -641,12 +657,26 @@ class ModelField(QWidget):
         self._pictures = _weak(pictures) if pictures else None
         self.edit = line_edit(text)
         self.edit.textChanged.connect(self.textChanged)
-        self.button = QToolButton()
-        self.button.setText("Browse…")
-        self.button.setToolTip("Choose from the models your endpoints offer")
-        self.button.setVisible(browse is not None or browse_route is not None)
         self._browse = browse
-        self.button.clicked.connect(self._open)
+        can_browse = browse is not None or browse_route is not None
+        self.button = QToolButton()
+        menu = choose_menu(
+            self, recommended, self._choose_recommended, self._open if can_browse else None
+        )
+        if menu is None:
+            self.button.setText(f"{CHOOSE_LABEL}…")
+            self.button.setToolTip("Choose from the models your endpoints offer")
+            self.button.clicked.connect(self._open)
+        else:
+            # The chevron says it's a menu (style.qss), so no "…" or "▾".
+            self.button.setText(CHOOSE_LABEL)
+            self.button.setToolTip(
+                "Every model your endpoints offer, or one recommended for this, with "
+                "what each is good at"
+            )
+            self.button.setPopupMode(QToolButton.InstantPopup)
+            self.button.setMenu(menu)
+        self.button.setVisible(can_browse or menu is not None)
         # Says, beside the field, which endpoint the model is on when that
         # isn't the default one ("Anthropic::claude-opus-5-5" → "Anthropic").
         self.endpoint_label = QLabel()
@@ -665,7 +695,6 @@ class ModelField(QWidget):
         self.route_button = QToolButton()
         self.route_button.setObjectName("routeButton")
         self.route_button.clicked.connect(self._edit_route)
-        self.recommended_button = recommended_button(recommended, self._choose_recommended)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
@@ -674,8 +703,6 @@ class ModelField(QWidget):
         layout.addWidget(self.privacy)
         layout.addWidget(self.picture_note)
         layout.addWidget(self.route_button)
-        if self.recommended_button is not None:
-            layout.addWidget(self.recommended_button)
         layout.addWidget(self.button)
         self.edit.textChanged.connect(self._show_privacy)
         self.edit.textChanged.connect(lambda _text: self.show_pictures())

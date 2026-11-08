@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QFormLayout,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -155,11 +156,6 @@ class CastPanel(QWidget):
         self.move_button = QPushButton("Move to supporting")
         self.move_button.clicked.connect(self._move_character)
 
-        # Each its own group: the list's column is narrow, and in pairs they
-        # were cut short at its edge.
-        buttons = WrapRow(spacing=6, group_spacing=6)
-        for button in (add_button, self.remove_button, self.move_button):
-            buttons.add_group([button])
         # Its own line: a fourth button abreast widened the Inspector.
         self.fill_button = QPushButton(FILL_LABEL)
         self.fill_button.setToolTip(
@@ -211,16 +207,28 @@ class CastPanel(QWidget):
         self.save_button.clicked.connect(
             lambda: self.collection_save_requested.emit(self._current.id if self._current else "")
         )
-        # One line while the panel has the room, wrapping when it is narrow:
-        # a line of its own took the list's room for names.
-        fill_row = WrapRow(spacing=6, group_spacing=6)
-        for button in (
-            self.collection_button,
-            self.save_button,
-            self.fill_button,
-            self.tavern_button,
+        # The column's full width, Add and Remove abreast: wrapped by their
+        # own widths they stood one or two to a line, ragged (the author,
+        # Nov 2026). The column widens with the text size (`_fit_side`).
+        buttons = QGridLayout()
+        buttons.setContentsMargins(0, 0, 0, 0)
+        buttons.setHorizontalSpacing(6)
+        buttons.setVerticalSpacing(6)
+        buttons.addWidget(add_button, 0, 0)
+        buttons.addWidget(self.remove_button, 0, 1)
+        for row, button in enumerate(
+            (
+                self.move_button,
+                self.collection_button,
+                self.save_button,
+                self.fill_button,
+                self.tavern_button,
+            ),
+            start=1,
         ):
-            fill_row.add_group([button])
+            buttons.addWidget(button, row, 0, 1, 2)
+        for button in (add_button, self.remove_button, self.tavern_button):
+            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         # The list down the left, as tall as the page, its buttons and the
         # suggestions under it; the character on the right, in tabs (the
@@ -233,7 +241,6 @@ class CastPanel(QWidget):
         side_layout.setSpacing(6)
         side_layout.addWidget(self.list, 1)
         side_layout.addLayout(buttons)
-        side_layout.addLayout(fill_row)
         self.suggestions_box = self._build_suggestions()
         side_layout.addWidget(self.suggestions_box)
         self.side = side

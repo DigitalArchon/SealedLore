@@ -733,6 +733,15 @@ QToolButton::menu-indicator:disabled {
   height: 10px;
 }
 
+/* A caption among a menu's items (gui/portrait_view.py): Fusion draws a
+   menu's own sections as bare lines. */
+#menuCaption {
+  color: @text_hint;
+  font-size: 12px;
+  padding: 6px 12px 2px 12px;
+  background: transparent;
+}
+
 /* ⋯ says "more" by itself: no chevron beside it. */
 #messageAction[dots="true"][popupMode="2"] {
   padding-right: 8px;

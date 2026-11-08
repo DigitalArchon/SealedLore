@@ -278,9 +278,7 @@ def test_the_recommended_ids_name_the_nanogpt_endpoint_when_it_isnt_the_default(
     dialog._fill_recommended()
     assert dialog.scene_model.text() == f"NanoGPT::{RECOMMENDED_MODELS['scene_model']}"
     assert "NanoGPT::" in dialog.recommended_note.text()
-    premium = next(
-        a for a in dialog.model.recommended_button.menu().actions() if "(premium)" in a.text()
-    )
+    premium = next(a for a in dialog.model.button.menu().actions() if "(premium)" in a.text())
     premium.trigger()
     assert dialog.model.text() == "NanoGPT::anthropic/claude-opus-5.5"
     # With NanoGPT the default, bare as before.
