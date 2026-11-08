@@ -502,12 +502,11 @@ Windows offers weaker privacy on the machine itself (see
    field. It is used for nothing else. NanoGPT is the recommended endpoint: it also serves the
    end-to-end encrypted models that private scenes and chats use. Make an
    account at [nano-gpt.com](https://nano-gpt.com/), or through the
-   developer's [referral link](https://nano-gpt.com/r/mackztyf). It applies to
-   what you use directly on the NanoGPT website (image and video generation,
-   text chat and so on): you get a 5% discount there, and the developer gets
-   credit worth 10% of it. It doesn't discount what SealedLore itself uses
-   through your API key. Until an endpoint, key and story model are set, the
-   window's start screen walks through these steps.
+   developer's [referral link](https://nano-gpt.com/r/cDT4qL3x). It applies to
+   most NanoGPT website and API default route usage, including images and
+   video. You get a 5% discount there, and the developer gets credit worth up
+   to 10% of it. Until an endpoint, key and story model are set, the window's
+   start screen walks through these steps.
 
 2. **Check the story model** on the Models page. It starts as Claude Sonnet
    4.6, which with Opus 5.5 measured best as a storyteller; GLM 5.3 is a good

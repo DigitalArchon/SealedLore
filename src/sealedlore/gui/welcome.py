@@ -16,7 +16,7 @@ from sealedlore.providers.http import is_local
 
 NANO_GPT_URL = "https://nano-gpt.com/"
 # The developer's referral link, offered second and said to be one.
-REFERRAL_URL = "https://nano-gpt.com/r/mackztyf"
+REFERRAL_URL = "https://nano-gpt.com/r/cDT4qL3x"
 
 
 def setup_missing(config: Config) -> list[str]:
@@ -61,11 +61,10 @@ def welcome_html(missing: list[str], *, partly_set: bool) -> str:
         "SealedLore uses, including the end-to-end encrypted private models for "
         "private scenes and chats. If you don't have an account, you can make one "
         f"at {a(NANO_GPT_URL, 'nano-gpt.com')}. Or sign up through the developer's "
-        f"{a(REFERRAL_URL, 'referral link')}. It applies to what you use directly "
-        "on the NanoGPT website (image and video generation, text chat and so "
-        "on): you get a 5% discount there, and the developer gets credit worth "
-        "10% of it, which helps support SealedLore. It doesn't discount what "
-        "SealedLore itself uses through your API key.</p>"
+        f"{a(REFERRAL_URL, 'referral link')}. It applies to most NanoGPT website "
+        "and API default route usage, including images and video. You get a 5% "
+        "discount there, and the developer gets credit worth up to 10% of it, "
+        "which helps support SealedLore.</p>"
         "<ol>"
         "<li>Open <b>Settings</b> (the button below, or File → Settings).</li>"
         "<li>On the <b>Endpoints</b> page the base URL is already NanoGPT's. Paste "

@@ -663,12 +663,12 @@ def test_a_first_run_is_welcomed_with_how_to_set_up(app, tmp_path: Path):
         text, buttons = _start_screen_text(window)
         assert "Welcome to SealedLore" in text
         assert 'href="https://nano-gpt.com/"' in text
-        assert 'href="https://nano-gpt.com/r/mackztyf"' in text
-        assert text.index('href="https://nano-gpt.com/"') < text.index("/r/mackztyf")
-        assert "5% discount" in text and "10%" in text
-        # Only on the website: it never discounts what SealedLore uses.
-        assert "directly on the NanoGPT website" in text
-        assert "doesn't discount what SealedLore itself uses" in text
+        assert 'href="https://nano-gpt.com/r/cDT4qL3x"' in text
+        assert text.index('href="https://nano-gpt.com/"') < text.index("/r/cDT4qL3x")
+        assert "5% discount" in text and "up to 10%" in text
+        # The website and the API's default route alike.
+        assert "most NanoGPT website and API default route usage" in text
+        assert "doesn't discount" not in text
         assert "Still missing" not in text  # nothing is set: the steps say it all
         assert buttons == {"Open Settings…", "Import…"}
         # It opens at its heading, not followed to its last steps. The view is
