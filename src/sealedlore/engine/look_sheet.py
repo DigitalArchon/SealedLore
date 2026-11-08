@@ -465,6 +465,50 @@ def remove_label(
         character.expression_wording.pop(label_key(expression), None)
 
 
+def name_unnamed(character: Character, heading: str, *, look: bool) -> bool:
+    """The unnamed row (`look`) or column given a heading: every picture in
+    it takes the heading (onto one the sheet has, the two become one). With
+    no picture in it (the one row of a sheet with nothing labelled), the
+    heading becomes the sheet's first named row or column. Whether anything
+    changed. Before, the unnamed row and column couldn't be named at all
+    (the author, Nov 8 2026)."""
+    heading = tidy(heading)
+    if not heading:
+        return False
+    keep_order(character)
+    if look:
+        if relabel(character, look=("", heading)):
+            return True
+        return add_label(character.sheet_looks, heading)
+    if relabel(character, expression=("", heading)):
+        return True
+    listed = list(character.sheet_expressions or DEFAULT_EXPRESSIONS)
+    if not add_label(listed, heading):
+        return False
+    character.sheet_expressions = listed
+    return True
+
+
+def set_aside(
+    character: Character, *, look: str | None = None, expression: str | None = None
+) -> int:
+    """A row (`look`) or column taken off the sheet with its pictures: each
+    is set aside without labels, none deleted; how many. The unnamed row and
+    column too, which never emptied of themselves (the author, Nov 8 2026)."""
+    keep_order(character)
+    moved = 0
+    for ref in character.reference_images:
+        if not (ref.look.strip() or ref.expression.strip()):
+            continue
+        in_row = look is not None and label_key(ref.look) == label_key(look)
+        in_column = expression is not None and label_key(ref.expression) == label_key(expression)
+        if in_row or in_column:
+            ref.look = ref.expression = ""
+            moved += 1
+    remove_label(character, look=look, expression=expression)
+    return moved
+
+
 def add_label(labels: list[str], label: str) -> bool:
     """Add a row or column the author typed, once; whether it was new."""
     if not tidy(label) or label_key(label) in {label_key(x) for x in labels}:

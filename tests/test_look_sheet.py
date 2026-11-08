@@ -10,9 +10,11 @@ from sealedlore.engine.look_sheet import (
     keep_order,
     label_key,
     move,
+    name_unnamed,
     relabel,
     remove_label,
     reorder,
+    set_aside,
     set_wording,
     sheet_change,
     sheet_for,
@@ -346,3 +348,78 @@ def test_a_gap_shows_the_words_its_edit_asks_for_and_no_more():
     assert gap_words(sheet.gap("combat armour", "sad"), character=character).startswith(
         "a sad expression"
     )
+
+
+# --- the unnamed row and column, named or taken off (the author, Nov 8 2026) -------------
+
+
+def test_the_unnamed_row_and_column_are_named_where_they_stand():
+    """A row "No look named" could never be named: its pictures take the
+    heading, in the row's own place (last)."""
+    character = Character(
+        id="c",
+        name="C",
+        reference_images=[
+            picture("coat", "coat", "neutral"),
+            picture("joy", "", "joy"),
+            picture("glad", "", "happy"),
+            picture("plain", "armour", ""),
+            picture("aside"),
+        ],
+    )
+    assert sheet_for(character).looks == ["coat", "armour", ""]
+    assert name_unnamed(character, "travelling clothes", look=True)
+    assert [r.look for r in character.reference_images[1:3]] == ["travelling clothes"] * 2
+    sheet = sheet_for(character)
+    assert sheet.looks == ["coat", "armour", "travelling clothes"]
+    assert [r.id for r in sheet.pictures("travelling clothes", "joy")] == ["joy"]
+    # The unnamed column likewise; the picture set aside keeps no label.
+    assert sheet.expressions[-1] == ""
+    assert name_unnamed(character, "calm", look=False)
+    sheet = sheet_for(character)
+    assert sheet.expressions[-1] == "calm" and "" not in sheet.expressions
+    assert [r.id for r in sheet.pictures("armour", "calm")] == ["plain"]
+    assert [r.id for r in sheet.unlabelled] == ["aside"]
+    assert not name_unnamed(character, "  ", look=True)
+
+
+def test_naming_the_empty_row_of_a_sheet_with_nothing_labelled_makes_a_first_look():
+    character = Character(id="c", name="C", reference_images=[picture("a"), picture("b")])
+    assert sheet_for(character).looks == [""]
+    assert name_unnamed(character, "work clothes", look=True)
+    assert character.sheet_looks == ["work clothes"]
+    sheet = sheet_for(character)
+    assert sheet.looks == ["work clothes"] and len(sheet.unlabelled) == 2
+    assert sheet.gap("work clothes", "neutral").source is not None
+
+
+def test_the_unnamed_row_named_as_a_row_already_there_joins_it():
+    character = Character(
+        id="c",
+        name="C",
+        reference_images=[picture("coat", "coat", "neutral"), picture("glad", "", "happy")],
+    )
+    assert name_unnamed(character, "Coat", look=True)
+    sheet = sheet_for(character)
+    assert sheet.looks == ["coat"]
+    assert [r.id for r in sheet.pictures("coat", "happy")] == ["glad"]
+
+
+def test_a_row_or_column_taken_off_with_its_pictures_sets_them_aside():
+    """Nothing is deleted: the pictures go to those set aside, unlabelled."""
+    character = john()
+    assert set_aside(character, look="combat armour") == 1
+    sheet = sheet_for(character)
+    assert "combat armour" not in sheet.looks
+    assert [r.id for r in sheet.unlabelled] == ["armour"]
+    assert len(character.reference_images) == 7
+    # The unnamed row goes once its pictures are set aside.
+    character.reference_images.append(picture("joy", "", "joy"))
+    assert sheet_for(character).looks[-1] == ""
+    assert set_aside(character, look="") == 1
+    assert "" not in sheet_for(character).looks
+    # A column too, its words with it.
+    character.expression_wording["happy"] = "grinning"
+    assert set_aside(character, expression="happy") == 1
+    assert "happy" not in sheet_for(character).expressions
+    assert "happy" not in character.expression_wording

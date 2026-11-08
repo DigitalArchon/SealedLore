@@ -61,6 +61,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMenu,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QStackedWidget,
@@ -83,9 +84,11 @@ from sealedlore.engine.look_sheet import (
     keep_order,
     label_key,
     move,
+    name_unnamed,
     relabel,
     remove_label,
     reorder,
+    set_aside,
     set_wording,
     sheet_for,
     split_wanted,
@@ -112,6 +115,13 @@ EVERYONE = "Everyone"
 NO_LOOK = "No look named"
 # The one row of a character with no picture at all: where a first one goes.
 FIRST_ROW = "Their first picture"
+# The one row of a character whose pictures are all set aside: it holds none,
+# so "No look named" said something untrue of it.
+FIRST_LOOK = "Their first look"
+# The unnamed row's and column's own menu item (Heading and wording… was off
+# for them, so they could never be named: the author, Nov 8 2026).
+NAME_ROW = "Name this row…"
+NAME_COLUMN = "Name this column…"
 PORTRAIT_FIRST = "Draw their portrait…"
 NO_EXPRESSION = "No expression named"
 # A cell's width by the size chosen; its height is the portraits' 2:3.
@@ -1299,9 +1309,7 @@ class CastBoard(QWidget):
         table.setRowCount(len(sheet.looks))
         table.setColumnCount(len(sheet.expressions))
         table.setHorizontalHeaderLabels([e or NO_EXPRESSION for e in sheet.expressions])
-        table.setVerticalHeaderLabels(
-            [look or (FIRST_ROW if not sheet.picture_count else NO_LOOK) for look in sheet.looks]
-        )
+        table.setVerticalHeaderLabels([self._row_heading(sheet, look) for look in sheet.looks])
         for column, expression in enumerate(sheet.expressions):
             table.horizontalHeaderItem(column).setToolTip(self._heading_tip(card, expression))
         for row, look in enumerate(sheet.looks):
@@ -1360,13 +1368,23 @@ class CastBoard(QWidget):
             return ""
         return gap_words(gap, self._texts, card)
 
+    @staticmethod
+    def _row_heading(sheet: Sheet, look: str) -> str:
+        if look:
+            return look
+        if any(sheet.pictures("", expression) for expression in sheet.expressions):
+            return NO_LOOK
+        return FIRST_LOOK if sheet.picture_count else FIRST_ROW
+
     def _heading_tip(self, card: Character, label: str, *, look: bool = False) -> str:
         if not label:
+            if look and self._sheet is not None and self._line_count(look="") == 0:
+                return "Right-click to name this row: their first look."
             return (
                 "Pictures labelled with an expression and no look"
                 if look
                 else "Pictures labelled with a look and no expression"
-            )
+            ) + ": right-click to name it, or to set them aside."
         words = wording(card, label, look=look, texts=self._texts)
         return (
             f"{label}: drawn as “{words}”. Drag to move this "
@@ -1733,13 +1751,14 @@ class CastBoard(QWidget):
                     cells.append(cell.gap)
         return self._with_firsts(cells)
 
-    def _line_has_pictures(self, *, row: int | None = None, column: int | None = None) -> bool:
-        table = self.sheet
-        rows = [row] if row is not None else range(table.rowCount())
-        columns = [column] if column is not None else range(table.columnCount())
-        return any(
-            (cell := table.cell_at(r, c)) is not None and cell.refs for r in rows for c in columns
-        )
+    def _line_count(self, *, look: str | None = None, expression: str | None = None) -> int:
+        """How many pictures a row (`look`) or column holds."""
+        sheet = self._sheet
+        if sheet is None:
+            return 0
+        if look is not None:
+            return sum(len(sheet.pictures(look, e)) for e in sheet.expressions)
+        return sum(len(sheet.pictures(x, expression or "")) for x in sheet.looks)
 
     def _column_menu(self, position) -> None:
         column = self.sheet.horizontalHeader().logicalIndexAt(position)
@@ -1752,8 +1771,8 @@ class CastBoard(QWidget):
         fill = menu.addAction(f"Fill this column ({len(gaps)})…")
         fill.setEnabled(bool(gaps))
         fill.triggered.connect(lambda: self.fill_requested.emit(card.id, gaps))
-        rename = menu.addAction(HEADING_AND_WORDING)
-        rename.setEnabled(self._can_change and bool(expression))
+        rename = menu.addAction(HEADING_AND_WORDING if expression else NAME_COLUMN)
+        rename.setEnabled(self._can_change)
         rename.triggered.connect(lambda: self._rename(card, expression=expression))
         named = [e for e in self._sheet.expressions if e]
         for words, step in (("Move left", -1), ("Move right", 1)):
@@ -1763,12 +1782,9 @@ class CastBoard(QWidget):
             action.triggered.connect(
                 lambda _on=False, step=step: self._move(card, expression, step, look=False)
             )
-        remove = menu.addAction("Remove this column")
-        remove.setEnabled(
-            self._can_change
-            and len(self._sheet.expressions) > 1
-            and not self._line_has_pictures(column=column)
-        )
+        pictures = self._line_count(expression=expression)
+        remove = menu.addAction("Remove this column" + ("…" if pictures else ""))
+        remove.setEnabled(self._can_change and len(self._sheet.expressions) > 1)
         remove.triggered.connect(lambda: self._remove(card, expression=expression))
         menu.exec(self.sheet.horizontalHeader().mapToGlobal(position))
 
@@ -1783,8 +1799,8 @@ class CastBoard(QWidget):
         fill = menu.addAction(f"Fill this row ({len(gaps)})…")
         fill.setEnabled(bool(gaps))
         fill.triggered.connect(lambda: self.fill_requested.emit(card.id, gaps))
-        rename = menu.addAction(HEADING_AND_WORDING)
-        rename.setEnabled(self._can_change and bool(look))
+        rename = menu.addAction(HEADING_AND_WORDING if look else NAME_ROW)
+        rename.setEnabled(self._can_change)
         rename.triggered.connect(lambda: self._rename(card, look=look))
         named = [x for x in self._sheet.looks if x]
         for words, step in (("Move up", -1), ("Move down", 1)):
@@ -1794,8 +1810,11 @@ class CastBoard(QWidget):
             action.triggered.connect(
                 lambda _on=False, step=step: self._move(card, look, step, look=True)
             )
-        remove = menu.addAction("Remove this row")
-        remove.setEnabled(self._can_change and not self._line_has_pictures(row=row))
+        pictures = self._line_count(look=look)
+        remove = menu.addAction("Remove this row" + ("…" if pictures else ""))
+        # The empty row of a sheet with nothing labelled is where pictures go:
+        # it can be named, and would only come back if taken off.
+        remove.setEnabled(self._can_change and bool(look or pictures))
         remove.triggered.connect(lambda: self._remove(card, look=look))
         menu.exec(self.sheet.verticalHeader().mapToGlobal(position))
 
@@ -1894,7 +1913,10 @@ class CastBoard(QWidget):
         is_look = look is not None
         old = (look if is_look else expression) or ""
         what = "look" if is_look else "expression"
-        if not old or not self._can_change:
+        if not self._can_change:
+            return
+        if not old:
+            self._name_unnamed(card, look=is_look)
             return
         asked = self._ask_heading(
             card,
@@ -1917,6 +1939,48 @@ class CastBoard(QWidget):
             changed = True
         changed = set_wording(card, heading or old, words, look=is_look) or changed
         if changed:
+            self._changed(card)
+
+    def _name_unnamed(self, card: Character, *, look: bool) -> None:
+        """Name this row… / Name this column…: the unnamed one's pictures
+        take the heading, or, holding none, it becomes a first named row."""
+        sheet = self._sheet
+        if sheet is None:
+            return
+        count = self._line_count(look="") if look else self._line_count(expression="")
+        have = [x for x in (sheet.looks if look else sheet.expressions) if x]
+        common = COMMON_LOOKS if look else COMMON_EXPRESSIONS
+        offered = [x for x in common if label_key(x) not in map(label_key, have)]
+        pictures = f"{count} of {card.name}'s picture{'s' if count != 1 else ''}"
+        if look and count:
+            about = (
+                f"{pictures} {'have' if count != 1 else 'has'} an expression but no look. "
+                "A heading for this row gives them one; a look the sheet has already "
+                "takes them into its row."
+            )
+        elif look:
+            about = (
+                f"A first look for {card.name}: clothes, armour, an injury, anything that "
+                "lasts. Pictures set aside can then be dropped on its row."
+            )
+        else:
+            about = (
+                f"{pictures} {'have' if count != 1 else 'has'} a look but no expression. "
+                "A heading for this column gives them one; an expression the sheet has "
+                "already takes them into its column."
+            )
+        asked = self._ask_heading(
+            card,
+            title="Name this row" if look else "Name this column",
+            about=about,
+            look=look,
+            offered=offered,
+        )
+        if asked is None:
+            return
+        heading, words = asked
+        if name_unnamed(card, heading, look=look):
+            set_wording(card, heading, words, look=look)
             self._changed(card)
 
     def _move(self, card: Character, label: str, step: int, *, look: bool) -> None:
@@ -1944,5 +2008,27 @@ class CastBoard(QWidget):
     def _remove(
         self, card: Character, *, look: str | None = None, expression: str | None = None
     ) -> None:
-        remove_label(card, look=look, expression=expression)
+        """A row or column taken off the sheet. One holding pictures is asked
+        about first, and its pictures are set aside without labels, never
+        deleted (Remove was off for them, so the unnamed row and column, never
+        empty, couldn't go at all: the author, Nov 8 2026)."""
+        is_look = look is not None
+        count = self._line_count(look=look) if is_look else self._line_count(expression=expression)
+        if count:
+            what = "row" if is_look else "column"
+            name = (look if is_look else expression) or (NO_LOOK if is_look else NO_EXPRESSION)
+            answer = QMessageBox.question(
+                self,
+                f"Remove this {what}",
+                f"Take the {what} “{name}” off {card.name}'s sheet? "
+                f"{'Its picture is' if count == 1 else f'Its {count} pictures are'} set aside "
+                "under the sheet, without labels: nothing is deleted.",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if answer != QMessageBox.Yes:
+                return
+            set_aside(card, look=look, expression=expression)
+        else:
+            remove_label(card, look=look, expression=expression)
         self._changed(card)

@@ -709,3 +709,129 @@ def test_the_wording_dialog_asks_only_about_words_written(app, window, monkeypat
     dialog.reject()
     assert len(asked) == 1 and dialog.isVisible() is False
     dialog.deleteLater()
+
+
+# --- the unnamed row and column (the author, Nov 8 2026) -----------------------------------
+
+
+def menu_of(monkeypatch, opens) -> dict:
+    """A header's menu, opened without showing it: each item's action."""
+    from PySide6.QtWidgets import QMenu
+
+    seen: dict = {}
+
+    class Capturing(QMenu):
+        # QMenu.exec patched on the class still opened Qt's own menu.
+        def exec(self, *_args, **_kwargs):
+            seen.update({action.text(): action for action in self.actions() if action.text()})
+
+    monkeypatch.setattr("sealedlore.gui.cast_board.QMenu", Capturing)
+    opens()
+    return seen
+
+
+def row_menu(monkeypatch, board, row: int) -> dict:
+    from PySide6.QtCore import QPoint
+
+    y = board.sheet.verticalHeader().sectionViewportPosition(row) + 2
+    return menu_of(monkeypatch, lambda: board._row_menu(QPoint(2, y)))
+
+
+def column_menu(monkeypatch, board, column: int) -> dict:
+    from PySide6.QtCore import QPoint
+
+    x = board.sheet.horizontalHeader().sectionViewportPosition(column) + 2
+    return menu_of(monkeypatch, lambda: board._column_menu(QPoint(x, 2)))
+
+
+def add_pictures(window, *labels: tuple[str, str, str]) -> None:
+    for ref_id, look, expression in labels:
+        window.session.pictures.write(f"images/refs/{ref_id}.png", b"picture")
+        serrik(window).reference_images.append(
+            ImageRef(id=ref_id, file=f"images/refs/{ref_id}.png", look=look, expression=expression)
+        )
+
+
+def test_the_unnamed_row_can_be_named_and_taken_off(app, window, monkeypatch):
+    """A row "No look named" could be neither named (Heading and wording…
+    was off) nor removed (Remove was off while it held pictures, and it
+    always does)."""
+    from sealedlore.gui.cast_board import NAME_ROW, NO_LOOK
+
+    add_pictures(window, ("j", "", "joy"))
+    window.show_cast_board(True, "char-serrik")
+    board = window.cast_board
+    last = len(board._sheet.looks) - 1
+    assert board._sheet.looks[last] == ""
+    assert board.sheet.verticalHeaderItem(last).text() == NO_LOOK
+    items = row_menu(monkeypatch, board, last)
+    assert items[NAME_ROW].isEnabled() and items["Remove this row…"].isEnabled()
+
+    asked = answer_heading(monkeypatch, "travelling clothes")
+    items[NAME_ROW].trigger()
+    assert asked[0]["look"] and "travelling clothes" not in asked[0].get("taken", ())
+    assert next(r for r in serrik(window).reference_images if r.id == "j").look == (
+        "travelling clothes"
+    )
+    assert board._sheet.looks[-1] == "travelling clothes" and "" not in board._sheet.looks
+    saved = load_story_bundle(window.session.story.id, root=window.root)
+    card = next(c for c in saved.cast if c.id == "char-serrik")
+    assert next(r for r in card.reference_images if r.id == "j").look == "travelling clothes"
+
+    # Another one, taken off: asked first, its picture set aside, none deleted.
+    add_pictures(window, ("k", "", "joy"))
+    board.show_character("char-serrik")
+    last = len(board._sheet.looks) - 1
+    questions: list = []
+
+    def answer(_parent, title, text, *_args):
+        questions.append(text)
+        return QMessageBox.No if len(questions) == 1 else QMessageBox.Yes
+
+    monkeypatch.setattr(QMessageBox, "question", answer)
+    remove = row_menu(monkeypatch, board, last)["Remove this row…"]
+    remove.trigger()  # No: nothing changes
+    assert "" in board._sheet.looks
+    remove = row_menu(monkeypatch, board, last)["Remove this row…"]
+    remove.trigger()
+    assert "set aside" in questions[-1] and "nothing is deleted" in questions[-1]
+    k = next(r for r in serrik(window).reference_images if r.id == "k")
+    assert (k.look, k.expression) == ("", "")
+    assert "" not in board._sheet.looks
+    assert len(serrik(window).reference_images) == 6
+
+
+def test_the_unnamed_column_can_be_named(app, window, monkeypatch):
+    from sealedlore.gui.cast_board import NAME_COLUMN, NO_EXPRESSION
+
+    add_pictures(window, ("c", "normal clothes", ""))
+    window.show_cast_board(True, "char-serrik")
+    board = window.cast_board
+    last = len(board._sheet.expressions) - 1
+    assert board.sheet.horizontalHeaderItem(last).text() == NO_EXPRESSION
+    items = column_menu(monkeypatch, board, last)
+    assert items[NAME_COLUMN].isEnabled()
+    answer_heading(monkeypatch, "calm")
+    items[NAME_COLUMN].trigger()
+    assert next(r for r in serrik(window).reference_images if r.id == "c").expression == "calm"
+    assert board._sheet.expressions[-1] == "calm" and "" not in board._sheet.expressions
+
+
+def test_a_sheet_with_nothing_labelled_names_its_one_row_a_first_look(app, window, monkeypatch):
+    """Its pictures all set aside, the one row holds none: "No look named"
+    said otherwise. Named, it is their first look; it can't be taken off."""
+    from sealedlore.gui.cast_board import FIRST_LOOK, NAME_ROW
+
+    for ref in serrik(window).reference_images:
+        ref.look = ref.expression = ""
+    window.show_cast_board(True, "char-serrik")
+    board = window.cast_board
+    assert board._sheet.looks == [""]
+    assert board.sheet.verticalHeaderItem(0).text() == FIRST_LOOK
+    items = row_menu(monkeypatch, board, 0)
+    assert items[NAME_ROW].isEnabled() and not items["Remove this row"].isEnabled()
+    answer_heading(monkeypatch, "work clothes")
+    items[NAME_ROW].trigger()
+    assert serrik(window).sheet_looks == ["work clothes"]
+    assert board._sheet.looks == ["work clothes"]
+    assert len(board._sheet.unlabelled) == 4

@@ -1750,7 +1750,14 @@ until you write your own, and one character's "happy" can be "happy but
 reserved, a small smile and bright eyes". Hover over a heading to see its
 words. Right-click a heading to fill its row or column, change its
 **Heading and wording…** (a new heading relabels every picture in it), move
-it, or remove it while it is empty. Rows and columns stay where they are
+it, or remove it. Removing one that holds pictures asks first, then sets its
+pictures aside (below): none is deleted. Pictures with an expression but no
+look sit in a row **No look named**, and those with a look but no expression
+in a column **No expression named**: right-click it and **Name this row…** or
+**Name this column…** gives them one (a name the sheet has already puts them
+in that row or column). A character whose pictures are all set aside has a
+row **Their first look**: name it to start their first look. Rows and
+columns stay where they are
 whatever happens to their pictures; drag a heading, or use **Move up** and
 **Move down** (**Move left** and **Move right** for a column), to put them in
 another order.
