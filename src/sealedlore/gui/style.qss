@@ -733,6 +733,16 @@ QToolButton::menu-indicator:disabled {
   height: 10px;
 }
 
+/* ⋯ says "more" by itself: no chevron beside it. */
+#messageAction[dots="true"][popupMode="2"] {
+  padding-right: 8px;
+}
+
+#messageAction[dots="true"]::menu-indicator {
+  image: none;
+  width: 0px;
+}
+
 #viewToggleButton[popupMode="2"] {
   padding-right: 24px;
 }
@@ -998,6 +1008,10 @@ QStatusBar {
 
 QStatusBar::item {
   border: none;
+}
+
+#statusRow {
+  background: transparent;
 }
 
 /* Busy indicators: background jobs (QProgressDialog) and drafting. */

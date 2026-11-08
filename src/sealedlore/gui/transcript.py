@@ -601,6 +601,8 @@ class MessageWidget(QFrame):
         self.more_button = QToolButton()
         self.more_button.setObjectName("messageAction")
         self.more_button.setText("⋯")
+        # The dots say "more"; a chevron beside them said it twice.
+        self.more_button.setProperty("dots", True)
         self.more_button.setToolTip("More: regenerate or take back, a new branch from here, delete")
         self.more_button.setPopupMode(QToolButton.InstantPopup)
         self.more_button.setMenu(menu)
@@ -1022,6 +1024,7 @@ class ImageMessageWidget(QFrame):
         more = QToolButton()
         more.setObjectName("messageAction")
         more.setText("⋯")
+        more.setProperty("dots", True)
         more.setToolTip("Open, save, use as a reference or a background, generate again or edit")
         more.setPopupMode(QToolButton.InstantPopup)
         more.setMenu(menu)
@@ -2301,7 +2304,8 @@ class TranscriptView(QScrollArea):
         holder = QWidget()
         holder.setObjectName("placeholderBox")
         layout = QVBoxLayout(holder)
-        layout.setContentsMargins(0, 0, 0, 0)
+        # Room under the buttons: they sat on the box's bottom edge.
+        layout.setContentsMargins(0, 0, 0, 24 if actions or more_actions else 0)
         label = QLabel(text)
         label.setWordWrap(True)
         if rich:

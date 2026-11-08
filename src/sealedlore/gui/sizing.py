@@ -30,7 +30,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from math import ceil
 
-from PySide6.QtCore import QObject, QSize, Qt, QTimer
+from PySide6.QtCore import QObject, QRect, QSize, Qt, QTimer
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -143,7 +143,24 @@ class GrowingText(QPlainTextEdit):
                 block = block.next()
         finally:
             self._measuring = False
-        return tall
+        return max(tall, self._placeholder_height())
+
+    def _placeholder_height(self) -> float:
+        """An empty box's placeholder, wrapped as Qt draws it: a one-line box
+        whose placeholder wrapped showed half its second line (Setup's
+        Characters tab, Personality)."""
+        hint = self.placeholderText()
+        width = self.viewport().width() - 2 * self.document().documentMargin()
+        if not hint or not self.document().isEmpty() or width < 40:
+            return 0.0
+        rect = self.fontMetrics().boundingRect(
+            QRect(0, 0, int(width), 100_000), Qt.TextWordWrap, hint
+        )
+        return float(rect.height())
+
+    def setPlaceholderText(self, text: str) -> None:  # noqa: N802 - Qt naming
+        super().setPlaceholderText(text)
+        self.updateGeometry()
 
     def _lines_tall(self, lines: int) -> float:
         return lines * self.fontMetrics().lineSpacing() + self.document().documentMargin()

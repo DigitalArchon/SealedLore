@@ -156,11 +156,29 @@ class SummariesPanel(QWidget):
         layout.addWidget(self.chapters)
         layout.addWidget(self.detail)
         layout.addWidget(self.editor, 1)
+        # Takes the editor's room while there are no chapters (`_sync_empty`).
+        layout.addStretch(0)
         layout.addLayout(edit_row)
         layout.addLayout(chapter_row)
         layout.addWidget(self.recall_note)
 
         self._update_buttons()
+        self._sync_empty()
+
+    def _sync_empty(self) -> None:
+        """Until there is a chapter, the sentence saying when there will be
+        and Archive now: an empty list, an empty editor and four greyed
+        buttons said nothing more."""
+        has = bool(self._summaries)
+        for widget in (
+            self.chapters,
+            self.editor,
+            self.save_button,
+            self.revert_button,
+            self.rebuild_button,
+            self.keep_box,
+        ):
+            widget.setVisible(has)
 
     # --- population -------------------------------------------------------
 
@@ -246,6 +264,7 @@ class SummariesPanel(QWidget):
         self._archivable = archivable_turns
         self._sync_archive()
         self._reload_editor()
+        self._sync_empty()
 
     def set_paused(self, reason: str) -> None:
         """Archive now is off while a private scene is open, with why as its

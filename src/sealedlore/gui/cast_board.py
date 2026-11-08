@@ -1271,7 +1271,9 @@ class CastBoard(QWidget):
             return "no pictures yet: draw their portrait, or add or drop pictures here"
         parts = [f"{sheet.picture_count} picture{'' if sheet.picture_count == 1 else 's'}"]
         parts.append(f"{len(sheet.looks)} look{'' if len(sheet.looks) == 1 else 's'}")
-        gaps = len(sheet.drawable())
+        # Every gap Fill every gap draws, a new look's waiting cells too: the
+        # drawable ones alone said "1 gap to draw" beside "Fill every gap (5)".
+        gaps = len(sheet.fillable())
         if gaps:
             parts.append(f"{gaps} gap{'' if gaps == 1 else 's'} to draw")
         asked = sum(gap.wanted for gap in sheet.gaps.values()) + sum(n for _w, n in sheet.asked)

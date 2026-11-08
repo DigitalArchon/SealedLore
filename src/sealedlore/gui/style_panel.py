@@ -31,7 +31,7 @@ from sealedlore.engine.rules import (
     render_style_block,
     without_length_line,
 )
-from sealedlore.gui.fields import FormScroll, set_field_text
+from sealedlore.gui.fields import FormScroll, SharedLabels, set_field_text
 from sealedlore.gui.sizing import GrowingText
 from sealedlore.models.story import StyleDirectives
 
@@ -166,6 +166,8 @@ class StylePanel(QWidget):
         form.addRow("Content limits", self.limits)
         form.addRow("Avoid", self.forbidden)
         form.addRow("Other notes", self.notes)
+        # Two forms, one label column: the fields line up down the page.
+        SharedLabels(self, length_form, form)
 
         # --- preview -----------------------------------------------------
         caption = QLabel("STYLE BLOCK SENT TO THE MODEL")

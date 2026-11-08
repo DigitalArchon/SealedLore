@@ -66,7 +66,11 @@ class NoticeStatusBar(QStatusBar):
         super().__init__(parent)
         self._stack = QStackedWidget()
         self._stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        # The bar's own colour under them: every QWidget paints @window, and
+        # the left of the bar was a shade darker than its right end.
+        self._stack.setObjectName("statusRow")
         self._widgets = QWidget()
+        self._widgets.setObjectName("statusRow")
         self._row = QHBoxLayout(self._widgets)
         self._row.setContentsMargins(4, 2, 0, 2)
         # The model, route and clock buttons each stand apart.
@@ -87,6 +91,10 @@ class NoticeStatusBar(QStatusBar):
     def add_left(self, widget: QWidget, stretch: int = 0) -> None:
         """A widget on the left, where a notice replaces it while it shows."""
         self._row.addWidget(widget, stretch)
+
+    def end_left(self) -> None:
+        """The room the left-hand widgets don't take, after them."""
+        self._row.addStretch(1)
 
     def showMessage(self, text: str, timeout: int = 0) -> None:  # noqa: N802 - Qt naming
         self._timer.stop()
@@ -193,19 +201,27 @@ class _StatusTips(QObject):
 class BudgetBar(QWidget):
     """A segmented bar: one slice per prompt section, sized by token share."""
 
+    MAX_WIDTH = 360
+
     def __init__(self) -> None:
         super().__init__()
         self.setObjectName("budgetBar")
         self.setFixedHeight(10)
         self.setMinimumWidth(180)
+        # Long enough to read a share at a glance: given the bar's whole
+        # spare width it ran 1,400px at 1920, a sliver of colour on a track.
+        self.setMaximumWidth(self.MAX_WIDTH)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._report: BudgetReport | None = None
+        # No story, no prompt: an empty track said nothing.
+        self.hide()
 
     def sizeHint(self) -> QSize:
         return QSize(240, 10)
 
     def set_report(self, report: BudgetReport | None) -> None:
         self._report = report
+        self.setVisible(report is not None)
         if report is None:
             self.setToolTip("")
         else:
@@ -249,8 +265,16 @@ class ElidingLabel(QLabel):
     for its whole text but can shrink to a few characters, cut with "…";
     the full text is its tooltip unless it has one of its own."""
 
+    def sizeHint(self) -> QSize:  # noqa: N802 - Qt naming
+        hint = super().sizeHint()
+        # Nothing to say, no room taken: four empty readouts held 116px of
+        # padding at the bar's right end before anything was spent.
+        return hint if self.text() else QSize(0, hint.height())
+
     def minimumSizeHint(self) -> QSize:  # noqa: N802 - Qt naming
         hint = super().minimumSizeHint()
+        if not self.text():
+            return QSize(0, hint.height())
         return QSize(
             min(hint.width(), self.fontMetrics().horizontalAdvance("Mmmm…")), hint.height()
         )

@@ -42,6 +42,9 @@ from sealedlore.models.lore import LoreEntry
 
 # The pictures beside the titles in the list.
 LIST_ICON = 28
+# The most entries the list shows before it scrolls, and the report's list.
+LIST_ROWS = 8
+REPORT_ROWS = 6
 
 
 class LorePanel(QWidget):
@@ -102,6 +105,7 @@ class LorePanel(QWidget):
         buttons.addWidget(add_button)
         buttons.addWidget(self.remove_button)
         buttons.addWidget(self.tavern_button)
+        self._list_buttons = (add_button, self.remove_button, self.tavern_button)
 
         top = QWidget()
         top_layout = QVBoxLayout(top)
@@ -109,13 +113,24 @@ class LorePanel(QWidget):
         top_layout.setSpacing(6)
         top_layout.addWidget(self.list, 1)
         top_layout.addLayout(buttons)
+        self._top_layout = top_layout
 
         splitter = QSplitter(Qt.Vertical)
         splitter.addWidget(top)
         splitter.addWidget(self._build_editor())
         splitter.addWidget(self._build_injection_view())
-        # The entry, with its picture at the top, is the long part.
+        # The entry, with its picture at the top, is the long part: it takes
+        # what the list and the report don't need (`_fit_panes`). At fixed
+        # shares the list showed two entries and a half whatever the
+        # lorebook held, and an empty report a third of the page.
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setStretchFactor(2, 0)
         splitter.setSizes([150, 520, 160])
+        self._splitter = splitter
+        # Dragged by the author, the panes stay as they put them.
+        self._dragged = False
+        splitter.splitterMoved.connect(self._on_dragged)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -191,6 +206,7 @@ class LorePanel(QWidget):
 
         caption = QLabel("INJECTED LAST TURN")
         caption.setObjectName("composerCaption")
+        self._caption = caption
 
         self.status = QLabel("Nothing retrieved yet.")
         self.status.setObjectName("hintLabel")
@@ -207,12 +223,65 @@ class LorePanel(QWidget):
             "changed what it serves under the same model id"
         )
         self.reembed_button.clicked.connect(self.reembed_requested)
+        # Beside the caption, not a row of its own the page's width.
+        heading = QHBoxLayout()
+        heading.setContentsMargins(0, 0, 0, 0)
+        heading.addWidget(caption)
+        heading.addStretch(1)
+        heading.addWidget(self.reembed_button)
 
-        layout.addWidget(caption)
+        layout.addLayout(heading)
         layout.addWidget(self.status)
         layout.addWidget(self.injected, 1)
-        layout.addWidget(self.reembed_button)
+        # An empty list under "Nothing retrieved yet." said nothing twice.
+        self.injected.hide()
+        self._report_layout = layout
         return host
+
+    # --- the panes' heights ---------------------------------------------
+
+    def _on_dragged(self, *_args) -> None:
+        self._dragged = True
+
+    def _rows_tall(self, view: QListWidget, rows: int) -> int:
+        row = view.sizeHintForRow(0) if view.count() else -1
+        if row <= 0:
+            row = max(LIST_ICON, view.fontMetrics().height()) + 12
+        return rows * row + 2 * view.frameWidth()
+
+    def _list_height(self) -> int:
+        """The list as tall as its entries, three to eight, and its buttons."""
+        rows = min(max(self.list.count(), 3), LIST_ROWS)
+        buttons = max(button.sizeHint().height() for button in self._list_buttons)
+        return self._rows_tall(self.list, rows) + self._top_layout.spacing() + buttons
+
+    def _report_height(self) -> int:
+        """The report as tall as what it says, its list six rows at most."""
+        layout = self._report_layout
+        width = max(self._splitter.width(), 200)
+        heading = max(self._caption.sizeHint().height(), self.reembed_button.sizeHint().height())
+        tall = layout.contentsMargins().top() + heading + layout.spacing()
+        tall += self.status.heightForWidth(width)
+        if not self.injected.isHidden():
+            tall += layout.spacing() + self._rows_tall(
+                self.injected, min(self.injected.count(), REPORT_ROWS)
+            )
+        return tall
+
+    def _fit_panes(self) -> None:
+        if self._dragged:
+            return
+        total = self._splitter.height() - 2 * self._splitter.handleWidth()
+        if total <= 0:
+            return
+        # Neither may take the entry's room: a third each at most.
+        top = min(self._list_height(), total // 3)
+        bottom = min(self._report_height(), total // 3)
+        self._splitter.setSizes([top, max(total - top - bottom, 0), bottom])
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        super().resizeEvent(event)
+        self._fit_panes()
 
     # --- population -------------------------------------------------------
 
@@ -238,6 +307,7 @@ class LorePanel(QWidget):
             self.list.setCurrentRow(0)
         else:
             self._on_selection_changed(self.list.currentItem(), None)
+        self._fit_panes()
 
     def set_held_back(self, ids: set[str]) -> None:
         """Which "until mentioned" entries you haven't named yet on this branch:
@@ -265,6 +335,11 @@ class LorePanel(QWidget):
 
     def show_retrieval(self, report: RetrievalReport | None) -> None:
         """§7: which entries were injected on the last turn, and why."""
+        self._show_retrieval(report)
+        self.injected.setVisible(self.injected.count() > 0)
+        self._fit_panes()
+
+    def _show_retrieval(self, report: RetrievalReport | None) -> None:
         self.injected.clear()
         if report is None:
             self.status.setText("Nothing retrieved yet.")

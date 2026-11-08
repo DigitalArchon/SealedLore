@@ -712,6 +712,7 @@ class MainWindow(
         bar.add_left(self.clock_button)
         bar.add_left(self.status_strip.budget_label)
         bar.add_left(self.status_strip.bar, 1)
+        bar.end_left()
         # First of the permanent widgets, so a notice never hides it.
         self.phone_status = PhoneStatusButton()
         self.phone_status.clicked.connect(self.open_phone_devices)
@@ -893,6 +894,8 @@ class MainWindow(
         self.edit_plot_action.triggered.connect(self.edit_story_plot)
         story_menu.addAction(self.edit_plot_action)
         # Four ways out of the app, one submenu: the Story menu had seventeen items.
+        # Apart from the plot's four above it, which it ran on from.
+        story_menu.addSeparator()
         self.export_menu = story_menu.addMenu("&Export")
         self.export_action = QAction("&Scenario…", self)
         self.export_action.setStatusTip("The shareable base story, without the playthrough")

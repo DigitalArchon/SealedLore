@@ -90,6 +90,10 @@ class StartPresence(QWidget):
         hint.setObjectName("hintLabel")
         hint.setWordWrap(True)
         layout.addWidget(hint)
+        # The room the rows don't need goes below the hint. With nothing else
+        # to take it the hint label did, and drew its text centred in it:
+        # alone in the middle of Setup's tab and the Start dialog.
+        layout.addStretch(1)
 
     def _lock(self, character_id: str, text: str) -> None:
         combo = self._choices[character_id]

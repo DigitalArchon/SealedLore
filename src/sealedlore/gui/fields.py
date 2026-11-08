@@ -11,13 +11,15 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtCore import QEvent, QObject, QSize, Qt
+from PySide6.QtCore import QEvent, QObject, QSize, Qt, QTimer
 from PySide6.QtWidgets import (
     QAbstractScrollArea,
     QAbstractSpinBox,
     QApplication,
     QComboBox,
+    QFormLayout,
     QFrame,
+    QLabel,
     QLineEdit,
     QProxyStyle,
     QScrollArea,
@@ -43,6 +45,42 @@ def line_edit(text: str = "") -> QLineEdit:
     edit = QLineEdit(text)
     edit.setCursorPosition(0)
     return edit
+
+
+class SharedLabels(QObject):
+    """The labels of several forms one width, so forms stacked one above
+    another line their fields up. Style keeps Length and Perspective in a
+    form of their own (they stay live when the block is hand-edited), and
+    its two label columns were two widths: the fields below started 35px to
+    the right of those above. Measured again whenever a label's font or
+    style changes (View → Text size restyles them)."""
+
+    def __init__(self, parent: QWidget, *forms: QFormLayout) -> None:
+        super().__init__(parent)
+        self._labels: list[QLabel] = []
+        for form in forms:
+            for row in range(form.rowCount()):
+                item = form.itemAt(row, QFormLayout.LabelRole)
+                label = item.widget() if item is not None else None
+                if isinstance(label, QLabel) and label.text():
+                    self._labels.append(label)
+                    label.installEventFilter(self)
+        self._pending = False
+        self.fit()
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802 - Qt naming
+        if event.type() in (QEvent.Polish, QEvent.FontChange, QEvent.StyleChange):
+            # Once the label has its new font: measured now, it has the old.
+            if not self._pending:
+                self._pending = True
+                QTimer.singleShot(0, self, self.fit)
+        return False
+
+    def fit(self) -> None:
+        self._pending = False
+        width = max((label.sizeHint().width() for label in self._labels), default=0)
+        for label in self._labels:
+            label.setMinimumWidth(width)
 
 
 class FormScroll(QScrollArea):

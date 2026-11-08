@@ -200,6 +200,8 @@ class PlotPanel(QWidget):
         body.addWidget(self.held_back_label)
         body.addWidget(self.held_back)
         body.addWidget(self.bring_in_button)
+        # The room the tables would take when they are hidden.
+        body.addStretch(0)
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.empty)
@@ -230,9 +232,18 @@ class PlotPanel(QWidget):
             self.spoilers.setChecked(spoilers)
             for widget in (self.facts_label, self.facts, self.marks):
                 widget.setVisible(spoilers)
-            self.events_label.setText("Events" if spoilers else "What has happened")
             self._started = started
             self._fill_events(plot, chronicle, spoilers, days or {}, armed_ids)
+            # Nothing known yet: a sentence, not an empty table filling the page.
+            known = spoilers or self.events.rowCount() > 0
+            self.events.setVisible(known)
+            self.events_label.setText(
+                "Events"
+                if spoilers
+                else "What has happened"
+                if known
+                else "Nothing has happened yet that your character knows of."
+            )
             been = [p for p in chronicle.visited if p != chronicle.place]
             self.where.setText(
                 f"Where: {chronicle.place or 'none of the named places'}"
