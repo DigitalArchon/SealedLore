@@ -2079,7 +2079,7 @@ marks it "held back" or "mentioned".
 
 ## Pictures
 
-![The picture dialog: a direction, the picture's style, the prompt the story's model wrote from it, the herbwife's and the ranger's portraits as the reference pictures, numbered as the prompt refers to them, and the model, size and price, with Generate](screenshots/picture-dialog.png)
+![The picture dialog: a direction, the picture's style, the prompt the story's model wrote from it, the herbwife's and the ranger's portraits as the reference pictures, numbered, and the model, size and price, with Generate](screenshots/picture-dialog.png)
 
 **Story → Draw a picture…** (Ctrl+Shift+I), the **Picture…** button beside the
 composer, or **Illustrate this passage…** in a passage's ⋯ menu asks the
