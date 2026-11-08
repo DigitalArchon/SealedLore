@@ -4,6 +4,8 @@ Qt's abort naming only the first."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from sealedlore.gui import x11_check
@@ -158,3 +160,30 @@ def test_the_manuals_example_is_what_the_app_prints():
     manual = (Path(__file__).parent.parent / "docs" / "manual.md").read_text()
     printed = message(["libxcb-cursor.so.0"], "debian", {})
     assert f"```text\n{printed}\n```" in manual
+
+
+def fake_appdir(root: Path) -> str:
+    """An AppDir's layout: its AppRun, the X11 libraries it carries, its Python."""
+    (root / "usr" / "lib" / "x11").mkdir(parents=True)
+    (root / "AppRun").write_text("#!/bin/sh\n")
+    python = root / "opt" / "python3.12" / "bin" / "python3.12"
+    python.parent.mkdir(parents=True)
+    python.write_text("")
+    return str(python)
+
+
+def test_the_appimage_says_what_must_come_from_the_system(tmp_path):
+    """The AppImage catalog's test (Ubuntu 22.04, Xvfb) read "The AppImage
+    carries these libraries" from the AppImage itself (Nov 8 2026)."""
+    python = fake_appdir(tmp_path / "squashfs-root")
+    assert x11_check.in_appimage(python)
+    assert not x11_check.in_appimage(str(tmp_path / "python3"))
+    assert not x11_check.in_appimage("python3")
+    missing = loader({"libxcb-shm.so.0"})
+    told = check(X11, load=missing, os_release=UBUNTU, platform="linux", executable=python)
+    assert "sudo apt install libxcb-shm0" in told
+    assert "these come from the system" in told
+    assert "if you'd rather not install them" not in told
+    # From source, the AppImage is still the way round it.
+    told = check(X11, load=loader({"libxcb-shm.so.0"}), os_release=UBUNTU, platform="linux")
+    assert "if you'd rather not install them" in told

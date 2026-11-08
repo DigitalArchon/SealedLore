@@ -77,6 +77,11 @@ DEBIAN_LIBS=(
     # pair keeps xkbcommon-x11 matched to the xkbcommon it was built with.
     "libx/libxkbcommon/libxkbcommon0_1.0.3-2_amd64.deb              d74d0b9f0a6641b44c279644c7ac627fa7a9b92350b7c6ff37da94352885bcfc"
     "libx/libxkbcommon/libxkbcommon-x11-0_1.0.3-2_amd64.deb         c786f80d1a5405e96167ebbebdd7d100b356c0a3ae0f87fb6f65f05f2e723f72"
+    # What xkbcommon-x11 needs of the X server's keyboard extension. Every
+    # full X11 desktop has it, a minimal one doesn't: the AppImage catalog's
+    # test (Ubuntu 22.04, Xvfb) and Ubuntu 26.04 forced onto X11 stopped at
+    # the X11 check for it alone (Nov 8 2026).
+    "libx/libxcb/libxcb-xkb1_1.14-3_amd64.deb                       91d9359576312d2d868114b49d4fddeb264542fe98d5dbb7bd0b7f61cec86562"
 )
 
 # The oldest glibc the AppImage runs on; anything inside needing more fails the build.

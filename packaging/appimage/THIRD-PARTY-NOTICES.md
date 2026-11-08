@@ -94,6 +94,7 @@ copyright file, with its licence (MIT/X11 style), is in
 | libxcb-util1 | 0.4.0-1+b1 |
 | libxkbcommon0 | 1.0.3-2 |
 | libxkbcommon-x11-0 | 1.0.3-2 |
+| libxcb-xkb1 | 1.14-3 |
 
 ## Tor
 

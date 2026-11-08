@@ -140,8 +140,22 @@ def install_command(family: str | None, missing: Sequence[str]) -> str | None:
     return f"{command} {' '.join(packages)}"
 
 
-def message(missing: Sequence[str], family: str | None, env: Mapping[str, str]) -> str:
-    """What to tell someone whose Qt can't start on X11."""
+def in_appimage(executable: str) -> bool:
+    """Whether this Python is the AppImage's own (`opt/python3.12/bin` under
+    an AppDir with its AppRun and the X11 libraries it carries)."""
+    try:
+        root = Path(executable).resolve().parents[3]
+    except IndexError:
+        return False
+    return (root / "AppRun").is_file() and (root / "usr" / "lib" / "x11").is_dir()
+
+
+def message(
+    missing: Sequence[str], family: str | None, env: Mapping[str, str], appimage: bool = False
+) -> str:
+    """What to tell someone whose Qt can't start on X11. From the AppImage,
+    what is missing is what it doesn't carry: it said it carried them (the
+    AppImage catalog's test, Nov 8 2026)."""
     lines = [
         "SealedLore can't start: Qt needs these X11 libraries, and they aren't installed:",
         "  " + ", ".join(missing),
@@ -153,7 +167,10 @@ def message(missing: Sequence[str], family: str | None, env: Mapping[str, str]) 
         lines.append("Install them with your system's package manager.")
     if env.get("WAYLAND_DISPLAY"):
         lines += ["Or start it on Wayland instead:", "  QT_QPA_PLATFORM=wayland sealedlore-gui"]
-    lines.append("The AppImage carries these libraries, if you'd rather not install them.")
+    if appimage:
+        lines.append("The AppImage carries Qt's other X11 libraries; these come from the system.")
+    else:
+        lines.append("The AppImage carries these libraries, if you'd rather not install them.")
     return "\n".join(lines)
 
 
@@ -164,6 +181,7 @@ def check(
     load: Callable[[str], object] = ctypes.CDLL,
     os_release: str | None = None,
     platform: str = sys.platform,
+    executable: str = sys.executable,
 ) -> str | None:
     """The message to print and stop with, or None when Qt can start: not
     Linux, not X11, or every library there."""
@@ -177,4 +195,4 @@ def check(
             os_release = Path("/etc/os-release").read_text(encoding="utf-8", errors="replace")
         except OSError:
             os_release = ""
-    return message(missing, family_of(os_release), env)
+    return message(missing, family_of(os_release), env, appimage=in_appimage(executable))
