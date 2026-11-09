@@ -142,18 +142,26 @@ def _json(value: Any) -> Any:
     return value
 
 
+def _kind_of(model: str) -> str:
+    """The bare id as a model's kind is read from it: the model may name its
+    endpoint ("NanoGPT::TEE/glm-5.3", models/config.py), and a capital or a
+    stray space ("Private/glm-5-3", " private/glm-5-3") never makes a model
+    less private. When in doubt, sealed (as DA Vibe Manager and DA Private
+    Coder read it, Nov 2026): it used to take the exact lowercase prefix, so
+    such a model went to nano-gpt's plain endpoint."""
+    return split_model(str(model or ""))[1].strip().lower()
+
+
 def is_tee(model: str) -> bool:
     """A model that runs in a trusted execution environment: nano-gpt's
-    `TEE/*` (attested and signed) or `private/*` (end-to-end encrypted).
-    Read from the bare id: the model may name its endpoint
-    ("NanoGPT::TEE/glm-5.3", models/config.py)."""
-    return split_model(model)[1].startswith(("TEE/", "private/"))
+    `TEE/*` (attested and signed) or `private/*` (end-to-end encrypted)."""
+    return _kind_of(model).startswith(("tee/", "private/"))
 
 
 def is_private_mode(model: str) -> bool:
     """nano-gpt's Private Mode: end-to-end encrypted to an attested enclave
     (providers/private_mode.py). Never sent any other way."""
-    return split_model(model)[1].startswith("private/")
+    return _kind_of(model).startswith("private/")
 
 
 def move_refusal(current: str, new: str) -> str | None:

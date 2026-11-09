@@ -18,6 +18,7 @@ import httpx
 
 from sealedlore.models.config import split_model
 from sealedlore.providers.http import make_client
+from sealedlore.providers.tee import is_private_mode, is_tee
 
 RELAY_MODELS_PATH = "/api/v1/private/tinfoil/models"
 # nano-gpt's published Private Mode markup (the proxy's README, Sept 2026).
@@ -41,9 +42,11 @@ def _key(model_id: str) -> str:
 
 
 def _kind(model_id: str) -> str:
-    """ "TEE", "private" or "" for a model reference, by its bare id."""
-    bare = split_model(model_id)[1]
-    return bare.split("/", 1)[0] if bare.startswith(("TEE/", "private/")) else ""
+    """ "TEE", "private" or "" for a model reference, as providers/tee.py
+    reads it (its capitals and stray spaces never make it less private)."""
+    if is_private_mode(model_id):
+        return "private"
+    return "TEE" if is_tee(model_id) else ""
 
 
 def _twin(model_id: str, ids: Iterable[str], kind: str) -> str | None:

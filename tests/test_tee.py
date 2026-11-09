@@ -477,6 +477,36 @@ def test_tee_models_are_named_so():
     assert not is_tee("Steelskull/teething")
 
 
+@pytest.mark.parametrize(
+    "model",
+    ["Private/glm-5-3", " private/glm-5-3", "PRIVATE/glm-5-3 ", "NanoGPT:: Private/kimi-k3"],
+)
+def test_a_private_model_however_it_is_written_is_private(model):
+    """When in doubt, sealed: only the exact lowercase prefix counted, so a
+    capital or a stray space sent the model the plain way (DA Vibe Manager
+    and DA Private Coder read it whatever its case, Nov 2026)."""
+    from sealedlore.providers import make_chat_provider
+    from sealedlore.providers.private_catalog import privacy_label
+    from sealedlore.providers.private_mode import PrivateModeProvider
+    from sealedlore.providers.tee import is_private_mode, move_refusal
+
+    assert is_private_mode(model) and is_tee(model)
+    assert privacy_label(model)[0] == "🔐 End-to-end encrypted"
+    assert move_refusal(model, "anthropic/claude-sonnet-4.6") is not None
+    settings = ProviderConfig(name="n", base_url="https://nano-gpt.com/api/v1", model=model)
+    assert isinstance(make_chat_provider(settings), PrivateModeProvider)
+    sent: list = []
+    plain = OpenAICompatibleProvider(
+        settings,
+        client=httpx.Client(transport=httpx.MockTransport(lambda r: sent.append(r))),
+    )
+    with pytest.raises(ProviderError, match="end-to-end encrypted"):
+        list(plain.stream(ChatRequest(model=model, messages=[])))
+    assert sent == []
+    for tee in ("Tee/glm-5.3", " TEE/glm-5.3"):
+        assert is_tee(tee) and not is_private_mode(tee) and privacy_label(tee)[0] == "TEE"
+
+
 def test_the_stream_keeps_the_completion_id():
     body = (
         'data: {"id": "req_42", "choices": [{"delta": {"content": "Hi"}}]}\n\n'
