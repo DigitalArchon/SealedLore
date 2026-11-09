@@ -7,6 +7,13 @@ REPO="$(cd "$HERE/../.." && pwd)"
 BUILD="$REPO/build/appimage"
 CACHE="$BUILD/cache"
 
+# Nothing from this machine's uv settings. UV_NO_CONFIG (fetch_uv) skips only
+# uv's config files: uv reads UV_INDEX_URL, UV_DEFAULT_INDEX, UV_FIND_LINKS,
+# UV_INSECURE_HOST and the rest from the environment as well, so every UV_
+# variable goes before this file sets its own (which are never exported).
+# (DA Assistant's lock script, 9b1d6b8.)
+unset "${!UV_@}"
+
 UV_VERSION="0.13.5"
 UV_URL="https://github.com/astral-sh/uv/releases/download/$UV_VERSION/uv-x86_64-unknown-linux-gnu.tar.gz"
 UV_SHA256="f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
@@ -60,6 +67,7 @@ fetch_uv() {  # sets UV
         tar -xzf "$archive" -C "$CACHE/uv-$UV_VERSION" --strip-components=1
     fi
     # Nothing from this machine's uv or pip settings: no other index, no
-    # other cache, no Python downloads.
+    # other cache, no Python downloads (the environment's UV_ variables went
+    # as this file was read).
     export UV_NO_CONFIG=1 UV_CACHE_DIR="$CACHE/uv" UV_PYTHON_DOWNLOADS=never
 }
