@@ -872,7 +872,9 @@ class AsideWidget(QFrame):
 
     delete_requested = Signal(str)
 
-    def __init__(self, question: str, answer: str = "", *, aside_id: str = "") -> None:
+    def __init__(
+        self, question: str, answer: str = "", *, aside_id: str = "", tee: str | None = None
+    ) -> None:
         super().__init__()
         self.setObjectName("message")
         self.setProperty("kind", "aside")
@@ -882,8 +884,13 @@ class AsideWidget(QFrame):
         layout.setContentsMargins(14, 10, 14, 12)
         layout.setSpacing(6)
 
-        self.header = QLabel("Question  ·  out of character, not part of the story")
+        # An attested TEE/ model's answer says how its check went, as a passage does.
+        self.header = QLabel(
+            "Question  ·  out of character, not part of the story" + TEE_MARKS.get(tee or "", "")
+        )
         self.header.setObjectName("messageHeader")
+        if tee in TEE_MARK_TIPS:
+            self.setToolTip(TEE_MARK_TIPS[tee])
         delete = QToolButton()
         delete.setObjectName("messageAction")
         delete.setText("Delete")
@@ -1739,8 +1746,10 @@ class TranscriptView(QScrollArea):
         self._place(widget)
         return widget
 
-    def add_aside(self, question: str, answer: str = "", *, aside_id: str = "") -> AsideWidget:
-        widget = AsideWidget(question, answer, aside_id=aside_id)
+    def add_aside(
+        self, question: str, answer: str = "", *, aside_id: str = "", tee: str | None = None
+    ) -> AsideWidget:
+        widget = AsideWidget(question, answer, aside_id=aside_id, tee=tee)
         widget.delete_requested.connect(self.delete_aside_requested)
         self._place(widget)
         return widget
@@ -1772,7 +1781,7 @@ class TranscriptView(QScrollArea):
 
         def add_asides(anchor: str | None) -> None:
             for aside in asides_for(anchor) if asides_for else ():
-                self.add_aside(aside.question, aside.answer, aside_id=aside.id)
+                self.add_aside(aside.question, aside.answer, aside_id=aside.id, tee=aside.tee)
             for item in pictures_for(anchor) if pictures_for else ():
                 if isinstance(item, tuple):
                     self.add_picture(*item)

@@ -391,8 +391,10 @@ class ImagesWindow:
         if self._shows_private():
             exclude_from_capture(dialog, True)  # the private model's prompt
         accepted = dialog.exec()
-        # Its prompt writer may have attested a TEE/ model again (window_private).
+        # Its prompt writer may have attested a TEE/ model again, or written a
+        # reply that failed its check (window_private).
         self._take_reattestation()
+        self._say_tee_failures()
         writer = dialog.writer_model()
         request = dialog.request if accepted else None
         if getattr(dialog, "made_place", False):

@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from typing import Any
 from urllib.parse import urlparse
@@ -54,6 +55,7 @@ from sealedlore.engine.prompt import (
 from sealedlore.engine.retrieval import lore_layout
 from sealedlore.engine.scene_state import log_on_path
 from sealedlore.ids import utc_now_iso
+from sealedlore.models.config import split_model
 from sealedlore.models.node import NARRATOR_SPEAKER_ID, Node, NodeMeta, Usage
 from sealedlore.models.private import PrivateKeep, PrivateSpan
 from sealedlore.models.summary import Summary
@@ -83,6 +85,34 @@ _MARK_ORDER = ("encrypted", "verified", "signed", "unchecked", "failed")
 # Held while a job decides whether it attests a TEE/ model again
 # (`_attest_again`), so that two never do it at once.
 _REATTESTING = threading.Lock()
+# Set on a thread while it makes a call whose reply is checked where it is
+# marked (a passage, an aside, the scene's summary: `_checked_where_marked`),
+# so the watch every other reply goes through (`_watch_tee`) leaves it.
+_MARKED_HERE = threading.local()
+
+
+@contextmanager
+def _checked_where_marked() -> Iterator[None]:
+    before = getattr(_MARKED_HERE, "active", False)
+    _MARKED_HERE.active = True
+    try:
+        yield
+    finally:
+        _MARKED_HERE.active = before
+
+
+def checked_where_marked(events: Iterator[Any]) -> Iterator[Any]:
+    """A stream whose reply is checked where it is marked: the watch leaves it
+    (`_checked_where_marked`), only while the provider runs, never while the
+    caller holds an event."""
+    iterator = iter(events)
+    while True:
+        with _checked_where_marked():
+            try:
+                event = next(iterator)
+            except StopIteration:
+                return
+        yield event
 
 
 @dataclass(frozen=True)
@@ -101,7 +131,30 @@ class PrivateFit:
 
 class PrivateRuntime:
     # Set by the window when a scene opens; never the story's own provider.
-    private_provider: ChatProvider | None = None
+    _private_provider: ChatProvider | None = None
+    # A reply of the attested TEE/ model that failed its check where nothing
+    # shows a mark (a chapter, a condensed part, a picture's prompt): said by
+    # the window once the job is done (`take_tee_notices`).
+    _tee_notices: list[str] | None = None
+    _tee_notices_lock = threading.Lock()
+
+    @property
+    def private_provider(self) -> ChatProvider | None:
+        return self._private_provider
+
+    @private_provider.setter
+    def private_provider(self, provider: ChatProvider | None) -> None:
+        """The scene's provider reports every reply for its TEE check, as the
+        story's does (`_watch_tee`)."""
+        from sealedlore.engine.session import _weak_watch
+
+        self._private_provider = provider
+        if provider is not None:
+            try:
+                provider.tee_watch = _weak_watch(self._watch_tee)
+            except AttributeError:  # a stand-in that takes no attributes
+                pass
+
     # Checks each reply's signature on a TEE model (providers/tee.py); None
     # when the model isn't one or checking is off.
     private_tee: Any = None
@@ -171,6 +224,72 @@ class PrivateRuntime:
         """What attesting a TEE/ model again last found, once: ("attested",
         the attestation) or ("refused", why); None when it hasn't since."""
         found, self._reattested = self._reattested, None
+        return found
+
+    # --- every reply of the attested TEE/ model -------------------------------------
+
+    def _tee_mark(self, completed: Any, model: str | None = None) -> str | None:
+        """How a TEE/ model's reply checks out against the record its attested
+        key signs (providers/tee.py `check_reply`): "verified", "signed",
+        "failed", or "unchecked" when no record could be read. None when there
+        is nothing attested to check it with: no TEE/ model attested (or Check
+        TEE models off), the reply of a `model` other than the attested one,
+        or a private/ model's, sealed and so proved by its seal. A failed one
+        makes the model attested again before its next request (`_tee_guard`:
+        TeeClient.doubt)."""
+        tee = self.private_tee
+        if tee is None or completed is None or getattr(completed, "sealed", False):
+            return None
+        if model is not None and split_model(model)[1] != getattr(tee, "model", None):
+            return None
+        try:
+            mark = tee.check_reply(
+                getattr(completed, "response_id", None), **_reply_record(completed)
+            )
+        except Exception:  # noqa: BLE001 - an unreachable check is not a failed one
+            mark = "unchecked"
+        if mark == "failed":
+            doubt = getattr(tee, "doubt", None)
+            if callable(doubt):
+                doubt()
+        return mark
+
+    def _watch_tee(self, request: ChatRequest, completed: Any) -> None:
+        """Every reply comes here, on the thread it came back on and before
+        its caller has it (the providers' `tee_watch`). One the attested TEE/
+        model wrote that isn't checked where it is marked (a passage, an aside,
+        the scene's summary) is checked as those are: a chapter or a merge, a
+        card condensed, the condensed part of a scene, a picture's or a
+        video's prompt, the looks, the handoff, whatever else reaches the
+        model. Its mark goes into the API log (`tee_check`; never in a scene
+        kept in memory only, whose log holds nothing but its calls'), and a
+        failure is said once the job is done (`take_tee_notices`)."""
+        if getattr(_MARKED_HERE, "active", False):
+            return
+        mark = self._tee_mark(completed, request.model)
+        if mark is None:
+            return
+        span = self.open_span
+        if span is None or span.keep == "disk":
+            entry: dict[str, Any] = {"model": request.model, "mark": mark}
+            if span is not None:
+                entry["private"] = True
+            self._log("tee_check", entry)
+        if mark == "failed":
+            with self._tee_notices_lock:
+                if self._tee_notices is None:
+                    self._tee_notices = []
+                self._tee_notices.append(
+                    f"A reply from {request.model} failed its TEE check: it doesn't match "
+                    "the record the attested key signed. The model is attested again before "
+                    "anything more is sent to it."
+                )
+
+    def take_tee_notices(self) -> list[str]:
+        """What the TEE checks of replies with no mark of their own found
+        wrong since this was last asked, once."""
+        with self._tee_notices_lock:
+            found, self._tee_notices = list(self._tee_notices or []), None
         return found
 
     # --- the span ------------------------------------------------------------
@@ -636,13 +755,7 @@ class PrivateRuntime:
         # refuses otherwise): marked too, or it looked less protected than the
         # reply (the author, Sept 2026). Not "signed": that is the reply's.
         self._mark_sent(node, "attested")
-        completed = getattr(self, "_last_completed", None)
-        try:
-            mark = self.private_tee.check_reply(
-                getattr(self, "_last_response_id", None), **_reply_record(completed)
-            )
-        except Exception:  # an unreachable check is not a failed one
-            mark = "unchecked"
+        mark = self._tee_mark(getattr(self, "_last_completed", None)) or "unchecked"
         node.meta.tee = self._with_carried(node, mark)
 
     def _with_carried(self, node: Node, mark: str) -> str | None:
@@ -701,7 +814,8 @@ class PrivateRuntime:
             {"summary": True, "payload": self.private_provider.build_payload(request)},
             span,
         )
-        text, completed = self.private_provider.complete(request)
+        with _checked_where_marked():  # span.summary_tee, below
+            text, completed = self.private_provider.complete(request)
         self._log_turn(
             "response",
             {"request_log_ref": log_ref, "text": text, "usage": completed.raw_usage},
@@ -722,12 +836,7 @@ class PrivateRuntime:
         elif self.private_tee is not None:
             # The summary is the one reply that goes back into the story: was
             # it signed by the enclave that was attested?
-            try:
-                span.summary_tee = self.private_tee.check_reply(
-                    completed.response_id, **_reply_record(completed)
-                )
-            except Exception:  # an unreachable check is not a failed one
-                span.summary_tee = "unchecked"
+            span.summary_tee = self._tee_mark(completed) or "unchecked"
         return text
 
     def _scene_text_for_summary(self, span: PrivateSpan, nodes: Sequence[Node]) -> str:

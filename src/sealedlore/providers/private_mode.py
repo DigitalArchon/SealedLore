@@ -348,11 +348,13 @@ class PrivateModeProvider(OpenAICompatibleProvider):
         if self._sibling is None:
             self._sibling = self._twin()
         self._sibling.reasoning_watch = self.reasoning_watch
+        self._sibling.tee_watch = self.tee_watch
         return self._sibling
 
     def detached(self) -> PrivateModeProvider:
         twin = self._twin()
         twin.reasoning_watch = self.reasoning_watch
+        twin.tee_watch = self.tee_watch
         return twin
 
     def _twin(self) -> PrivateModeProvider:

@@ -101,6 +101,20 @@ class ChatProvider(ABC):
     # length, so the next request asks for its lowest level.
     reasoning_watch: Callable[[ChatRequest, StreamCompleted], None] | None = None
 
+    # Told of every finished reply: the session checks a TEE/ model's against
+    # the record its attested key signs (engine/session_private.py `_watch_tee`),
+    # on the thread the reply came back on, before the caller has it.
+    tee_watch: Callable[[ChatRequest, StreamCompleted], None] | None = None
+
+    def _report_tee(self, request: ChatRequest, completed: StreamCompleted) -> None:
+        watch = self.tee_watch
+        if watch is None:
+            return
+        try:
+            watch(request, completed)
+        except Exception:  # noqa: BLE001 - a report never costs the reply
+            pass
+
     def _report_reasoning(self, request: ChatRequest, completed: StreamCompleted) -> None:
         watch = self.reasoning_watch
         asked = request.params.reasoning

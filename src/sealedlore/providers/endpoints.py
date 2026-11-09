@@ -73,6 +73,7 @@ class EndpointsProvider(ChatProvider):
         self._sibling: EndpointsProvider | None = None
         self._route_watch: Watch = None
         self._reasoning_watch: Watch = None
+        self._tee_watch: Watch = None
         # Why an endpoint's listing couldn't be fetched, by name, after a
         # fetch (`fetch_model_prices`): the others' models are still listed.
         self.listing_problems: dict[str, str] = {}
@@ -100,6 +101,17 @@ class EndpointsProvider(ChatProvider):
         with self._lock:
             for (name, _sealed), provider in self._providers.items():
                 provider.reasoning_watch = self._wrapped(name, watch)
+
+    @property
+    def tee_watch(self) -> Watch:  # type: ignore[override]
+        return self._tee_watch
+
+    @tee_watch.setter
+    def tee_watch(self, watch: Watch) -> None:
+        self._tee_watch = watch
+        with self._lock:
+            for (name, _sealed), provider in self._providers.items():
+                provider.tee_watch = self._wrapped(name, watch)
 
     def _wrapped(self, endpoint: str, watch: Watch) -> Watch:
         """The watch as a client calls it, with its request's model put back
@@ -158,6 +170,7 @@ class EndpointsProvider(ChatProvider):
             self._made_for[key] = settings
             provider.route_watch = self._wrapped(settings.name, self._route_watch)
             provider.reasoning_watch = self._wrapped(settings.name, self._reasoning_watch)
+            provider.tee_watch = self._wrapped(settings.name, self._tee_watch)
             if self._cancelled:
                 provider.cancel()  # a Stop pressed before any client existed still holds
         return provider
@@ -222,6 +235,7 @@ class EndpointsProvider(ChatProvider):
             self._sibling = EndpointsProvider(self.config, make=self._make_sibling)
         self._sibling.route_watch = self._route_watch
         self._sibling.reasoning_watch = self._reasoning_watch
+        self._sibling.tee_watch = self._tee_watch
         return self._sibling
 
     def detached(self) -> EndpointsProvider:
@@ -231,6 +245,7 @@ class EndpointsProvider(ChatProvider):
         detached = EndpointsProvider(self.config, make=self._make_detached)
         detached.route_watch = self._route_watch
         detached.reasoning_watch = self._reasoning_watch
+        detached.tee_watch = self._tee_watch
         return detached
 
     def _make_sibling(self, settings: ProviderConfig) -> ChatProvider:

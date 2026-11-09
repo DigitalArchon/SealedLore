@@ -526,6 +526,14 @@ class PrivateWindow:
         self._tee_state = "⚠ refused" if kind == "refused" else self._attested_state(value)
         self._refresh_model_button()
 
+    def _say_tee_failures(self) -> None:
+        """After a job, or a dialog's: a reply of the attested TEE/ model that
+        failed its check where nothing shows a mark (a chapter, a condensed
+        part, a picture's prompt) is said, once (engine `_watch_tee`)."""
+        said = self.session.take_tee_notices() if self.session is not None else []
+        if said:
+            self.statusBar().showMessage(" ".join(dict.fromkeys(said)), 20000)
+
     def _offer_reattest(self, reason: str, for_chat: bool) -> None:
         """A refused enclave: nothing is sent to it. Try again, leave, or stay."""
         box = QMessageBox(

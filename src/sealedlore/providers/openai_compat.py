@@ -249,6 +249,7 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
         )
         self._report_route(request, completed)
         self._report_reasoning(request, completed)
+        self._report_tee(request, completed)
         yield completed
 
 

@@ -333,6 +333,11 @@ class TeeClient:
             return True
         return not 0 <= self._clock() - self.attested_at < REATTEST_SECONDS
 
+    def doubt(self) -> None:
+        """A reply failed its check (`check_reply`): the enclave is attested
+        again before anything more is sent to it (`due`)."""
+        self.attested_at = None
+
     def _get(
         self, path: str, params: dict[str, str], *, route: str | None = None
     ) -> dict[str, Any]:

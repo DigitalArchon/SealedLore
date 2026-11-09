@@ -31,3 +31,6 @@ class Aside(BaseModel):
     # What recall brought back for it (`RecallItem.id`s): carried into the
     # turns that follow it (`RecallRuntime._carried`).
     recalled: list[str] = Field(default_factory=list)
+    # Answered by an attested TEE/ model: how its check went, as a passage's
+    # (`NodeMeta.tee`: "verified", "signed", "failed", "unchecked").
+    tee: str | None = None

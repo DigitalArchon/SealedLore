@@ -168,7 +168,7 @@ from sealedlore.engine.session_merge import MergeRuntime, _close
 from sealedlore.engine.session_plot import NoticeSeverity, PlotRuntime, SessionNotice
 from sealedlore.engine.session_plot_draft import PlotDraftRuntime
 from sealedlore.engine.session_portraits import PortraitRuntime
-from sealedlore.engine.session_private import PrivateRuntime
+from sealedlore.engine.session_private import PrivateRuntime, checked_where_marked
 from sealedlore.engine.session_reasoning import ReasoningRuntime
 from sealedlore.engine.session_rebuild import RebuildRuntime
 from sealedlore.engine.session_recall import RecallRuntime
@@ -721,12 +721,14 @@ class StorySession(
 
     @provider.setter
     def provider(self, provider: ChatProvider) -> None:
-        """Every provider the session is given reports its routed replies, and
-        replies that reasoned unasked, here (held weakly: a provider outlives
-        the session that set it)."""
+        """Every provider the session is given reports its routed replies,
+        replies that reasoned unasked, and every reply for a TEE/ model's check
+        (`_watch_tee`), here (held weakly: a provider outlives the session that
+        set it)."""
         self._provider = provider
         provider.route_watch = _weak_watch(self._watch_route)
         provider.reasoning_watch = _weak_watch(self._watch_reasoning)
+        provider.tee_watch = _weak_watch(self._watch_tee)
 
     def _watch_route(self, request: ChatRequest, completed: StreamCompleted) -> None:
         """On whichever thread the reply came back: record what its bill says."""
@@ -2182,7 +2184,8 @@ class StorySession(
         # by the first text that comes (the window shows it as it streams).
         before = extend.content.rstrip() if extend is not None else None
         try:
-            for event in provider.stream(request):
+            # Checked where it is marked, on the passage (`_check_tee`).
+            for event in checked_where_marked(provider.stream(request)):
                 if isinstance(event, TextDelta):
                     if before is not None and not text and event.text:
                         event = TextDelta(joiner(before, event.text) + event.text)
@@ -4102,7 +4105,8 @@ class StorySession(
         text: list[str] = []
         completed: StreamCompleted | None = None
         try:
-            for event in provider.stream(request):
+            # Checked where it is marked, on the aside (below).
+            for event in checked_where_marked(provider.stream(request)):
                 if isinstance(event, TextDelta):
                     text.append(event.text)
                 elif isinstance(event, StreamCompleted):
@@ -4122,6 +4126,8 @@ class StorySession(
                         request_log_ref=log_ref,
                         private_span=span.id if span is not None else None,
                         recalled=[item.id for item in recall],
+                        # A TEE/ model's answer, checked as a passage is.
+                        tee=self._tee_mark(completed, model),
                     )
                 )
             self._log_turn(

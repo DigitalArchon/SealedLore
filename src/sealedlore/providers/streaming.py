@@ -108,6 +108,7 @@ class StreamingHttpProvider(ChatProvider):
             self._sibling = self._twin()
         self._sibling.route_watch = self.route_watch
         self._sibling.reasoning_watch = self.reasoning_watch
+        self._sibling.tee_watch = self.tee_watch
         return self._sibling
 
     def detached(self) -> StreamingHttpProvider:
@@ -118,6 +119,7 @@ class StreamingHttpProvider(ChatProvider):
         detached = self._twin()
         detached.route_watch = self.route_watch
         detached.reasoning_watch = self.reasoning_watch
+        detached.tee_watch = self.tee_watch
         return detached
 
     def _get_client(self) -> httpx.Client:

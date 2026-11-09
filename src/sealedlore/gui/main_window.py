@@ -3955,8 +3955,10 @@ class MainWindow(
         self._absorb_summary_costs()
         # The log is the complete record: turns, summaries, asides and scans.
         self._refresh_story_cost()
-        # A TEE/ model the job attested again first (window_private).
+        # A TEE/ model the job attested again first, and replies of it that
+        # failed their check with nothing to mark (window_private).
         self._take_reattestation()
+        self._say_tee_failures()
         if self.session is not None:
             for usage in self.session.unreported_usage:
                 self.status_strip.add_cost(usage)

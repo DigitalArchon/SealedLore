@@ -154,8 +154,10 @@ class VideosWindow:
         if self._shows_private():
             exclude_from_capture(dialog, True)
         accepted = dialog.exec()
-        # Its prompt writer may have attested a TEE/ model again (window_private).
+        # Its prompt writer may have attested a TEE/ model again, or written a
+        # reply that failed its check (window_private).
         self._take_reattestation()
+        self._say_tee_failures()
         private = self.session.in_private or self.session.tee_chat or self.session.memory_only
         # The prompt writer's call, paid whether or not a video follows.
         for usage in self.session.unreported_usage:
