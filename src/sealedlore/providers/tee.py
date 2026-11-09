@@ -51,7 +51,7 @@ import httpx
 from sealedlore.models.config import split_model
 from sealedlore.models.private import Attestation
 from sealedlore.providers import dcap, nras
-from sealedlore.providers.base import ProviderError, relay_said
+from sealedlore.providers.base import ProviderError, checked_key, relay_said
 from sealedlore.providers.ethsig import keccak256, recover_personal
 from sealedlore.providers.http import make_client
 from sealedlore.threads import thread_pool
@@ -327,7 +327,11 @@ class TeeClient:
     def _get(
         self, path: str, params: dict[str, str], *, route: str | None = None
     ) -> dict[str, Any]:
-        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        headers = (
+            {"Authorization": f"Bearer {checked_key(self.api_key, 'nano-gpt')}"}
+            if self.api_key
+            else {}
+        )
         if route:
             # nano-gpt names a route on a reply now and then: its checks name it too.
             headers["X-TEE-Verification-Route"] = route

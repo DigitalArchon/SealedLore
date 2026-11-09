@@ -21,11 +21,12 @@ from __future__ import annotations
 import socket
 import threading
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
 from sealedlore.models.config import _same_host
-from sealedlore.providers.base import ProviderError, StreamCancelled
+from sealedlore.providers.base import ProviderError, StreamCancelled, checked_key
 from sealedlore.providers.http import make_client
 from sealedlore.providers.streaming import (
     RETRY_ATTEMPTS,
@@ -99,7 +100,8 @@ class MediaHttp:
     def headers(self, extra: dict[str, str] | None = None) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
         if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
+            whose = urlparse(self.base_url).hostname or "this endpoint"
+            headers["Authorization"] = f"Bearer {checked_key(self.api_key, whose)}"
         headers.update(extra or {})
         return headers
 

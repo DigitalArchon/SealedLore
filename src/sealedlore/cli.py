@@ -37,6 +37,7 @@ from sealedlore.models.config import (
     _same_host,
     is_local_host,
     is_loopback_host,
+    key_problem,
     recommended_models,
     require_https,
     shown,
@@ -155,6 +156,9 @@ def cmd_configure(args: argparse.Namespace) -> int:
         require_https(args.base_url)
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
+    # A key no header can carry: said, never echoed (models/config.py).
+    if args.api_key is not None and (problem := key_problem(args.api_key, name)):
+        raise SystemExit(problem)
     existing = next((p for p in config.providers if p.name == name), None)
     # Where each saved key goes before this changes any (`warn_if_plain`).
     before = [(p.base_url, p.api_key) for p in config.providers]

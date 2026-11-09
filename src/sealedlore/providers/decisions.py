@@ -20,7 +20,7 @@ from typing import Any
 
 import httpx
 
-from sealedlore.providers.base import ProviderError
+from sealedlore.providers.base import ProviderError, checked_key
 from sealedlore.providers.http import make_client
 
 
@@ -93,7 +93,7 @@ class DecisionsClient:
         payload = build_decisions_payload(model, state, questions)
         headers = {"Content-Type": "application/json"}
         if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
+            headers["Authorization"] = f"Bearer {checked_key(self.api_key, 'decisions')}"
         try:
             response = self._get_client().post(self.endpoint, json=payload, headers=headers)
         except httpx.HTTPError as exc:

@@ -391,6 +391,26 @@ def without_password(url: str) -> str:
     return parsed._replace(netloc=parsed.netloc.rsplit("@", 1)[1]).geturl()
 
 
+# What no API key has in it, and no HTTP header can carry: whitespace (a line
+# break, a space), control characters, a backslash.
+_NOT_IN_A_KEY = re.compile(r"[\\\s\x00-\x1f\x7f]")
+
+
+def key_problem(key: str, whose: str = "this endpoint") -> str | None:
+    """Why `key` can't be sent as an API key, or None. One pasted with a line
+    break, a zero-width space from a web page or another character beyond
+    ASCII was refused by httpx's h11 in words that quoted the header whole,
+    key and all, and those were shown. This says what is wrong, and nothing
+    of the key. (DA Assistant's netguard.key_problem, Nov 2026.)"""
+    if key and (not key.isascii() or _NOT_IN_A_KEY.search(key)):
+        return (
+            f"The API key for {whose} has a space, a line break or another character no API "
+            "key has in it, picked up where it was copied from, perhaps: enter it again in "
+            "Settings."
+        )
+    return None
+
+
 def addresses_shown(text: str) -> str:
     """`text` with every address in it shown as `shown` shows one: for an
     error that quotes a request's URL, httpx's own included."""

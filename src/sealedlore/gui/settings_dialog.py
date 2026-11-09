@@ -82,6 +82,7 @@ from sealedlore.models.config import (
     chat_api,
     is_local_host,
     is_loopback_host,
+    key_problem,
     on_nanogpt,
     qualify,
     recommended_model,
@@ -198,6 +199,18 @@ def endpoint_keys(providers: list[ProviderConfig]) -> list[SentPlain]:
             for p in providers
         ]
     )
+
+
+def typed_keys(config: Config) -> list[tuple[str, str, str]]:
+    """(page, whose, key) for every key `config` would send."""
+    keys = [("Endpoints", p.name or "the new endpoint", p.api_key) for p in config.providers]
+    if config.embedding_provider is not None:
+        keys.append(("Lore", "embeddings", config.embedding_provider.api_key))
+    keys.append(("Images", "pictures", config.image_endpoint.api_key))
+    keys.append(("Video", "video", config.video_endpoint.api_key))
+    if config.private_provider is not None:
+        keys.append(("Private", "private scenes", config.private_provider.api_key))
+    return keys
 
 
 def _plain(sent: list[SentPlain]) -> list[SentPlain]:
@@ -1701,6 +1714,9 @@ class SettingsDialog(QDialog):
         # The key as everything else here sends it: a blank one is the
         # default endpoint's on its own host, not the endpoint shown's.
         _url, key = self._private_typed()
+        if problem := key_problem(key, "private scenes"):
+            self.detect_note.setText(problem)
+            return
         if not self._may_send(self._private_keys()):
             self.detect_note.setText("Not asked: its key would have gone unencrypted.")
             return
@@ -2197,6 +2213,11 @@ class SettingsDialog(QDialog):
                         raise SettingsProblem(page, f"{field} {exc}") from exc
             self._carry_keys(endpoints)
             typed = self._as_typed(endpoints, embed_url)
+            # A key no header can carry (a line break, a zero-width space from
+            # a web page) is said here, where it is, and never shown.
+            for page, whose, key in typed_keys(typed):
+                if problem := key_problem(key, whose):
+                    raise SettingsProblem(page, problem)
             self._ask_before_plain(typed)
         except ValueError as exc:
             # Said where it is, and that page shown: a bad address on another

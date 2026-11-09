@@ -20,7 +20,7 @@ import httpx
 
 from sealedlore.models.config import EmbeddingProviderConfig
 from sealedlore.models.node import Usage
-from sealedlore.providers.base import ProviderError
+from sealedlore.providers.base import ProviderError, checked_key
 from sealedlore.providers.http import make_client
 
 
@@ -114,7 +114,7 @@ class OpenAICompatibleEmbeddings:
     def _headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
         if self.config.api_key:
-            headers["Authorization"] = f"Bearer {self.config.api_key}"
+            headers["Authorization"] = f"Bearer {checked_key(self.config.api_key, 'embeddings')}"
         return headers
 
     def embed(self, texts: Sequence[str], *, as_query: bool = False) -> EmbeddingResult:

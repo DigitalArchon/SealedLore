@@ -27,6 +27,7 @@ from sealedlore.providers.base import (
     StreamCompleted,
     StreamEvent,
     TextDelta,
+    checked_key,
     parse_usage,
 )
 from sealedlore.providers.private_catalog import (
@@ -115,7 +116,8 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
     def _headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
         if self.config.api_key:
-            headers["Authorization"] = f"Bearer {self.config.api_key}"
+            key = checked_key(self.config.api_key, self.config.name or "this endpoint")
+            headers["Authorization"] = f"Bearer {key}"
         return headers
 
     def build_payload(self, request: ChatRequest) -> dict[str, Any]:

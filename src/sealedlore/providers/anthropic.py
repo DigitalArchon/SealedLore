@@ -42,6 +42,7 @@ from sealedlore.providers.base import (
     StreamCompleted,
     StreamEvent,
     TextDelta,
+    checked_key,
     parse_usage,
 )
 from sealedlore.providers.streaming import StreamingHttpProvider
@@ -195,7 +196,7 @@ class AnthropicProvider(StreamingHttpProvider):
     def _headers(self) -> dict[str, str]:
         headers = {"content-type": "application/json", "anthropic-version": API_VERSION}
         if self.config.api_key:
-            headers["x-api-key"] = self.config.api_key
+            headers["x-api-key"] = checked_key(self.config.api_key, self.config.name or "Anthropic")
         return headers
 
     def build_payload(self, request: ChatRequest) -> dict[str, Any]:

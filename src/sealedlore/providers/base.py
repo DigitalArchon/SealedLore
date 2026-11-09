@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from sealedlore.messages import PromptMessage
-from sealedlore.models.config import addresses_shown
+from sealedlore.models.config import addresses_shown, key_problem
 from sealedlore.models.generation import GenerationParams
 from sealedlore.models.node import Usage
 
@@ -224,6 +224,16 @@ def parse_usage(raw: dict[str, Any] | None) -> Usage:
         cost=float(cost),
         cost_reported=reported,
     )
+
+
+def checked_key(key: str, whose: str) -> str:
+    """`key`, once it is one a header can carry (models/config.py
+    `key_problem`): otherwise refused before anything is sent, in words that
+    never quote it."""
+    problem = key_problem(key, whose)
+    if problem:
+        raise ProviderError(problem)
+    return key
 
 
 def relay_said(text: str, limit: int = 200) -> str:

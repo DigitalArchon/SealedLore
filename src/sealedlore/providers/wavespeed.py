@@ -64,7 +64,8 @@ def _prediction(data: dict) -> Prediction:
 def upload(http: MediaHttp, data: bytes, name: str, media_type: str) -> str:
     """Put a picture where the model can fetch it; its URL."""
     url = f"{http.base_url.rstrip('/')}/media/upload/binary"
-    headers = {"Authorization": f"Bearer {http.api_key}"} if http.api_key else {}
+    # The headers the client makes, the key checked, less its JSON content type.
+    headers = {k: v for k, v in http.headers().items() if k != "Content-Type"}
     body = http.json("POST", url, files={"file": (name, data, media_type)}, headers=headers)
     link = _data(body, "upload").get("download_url")
     if not isinstance(link, str) or not link.startswith("https://"):
