@@ -206,12 +206,12 @@ def test_nvidia_unreachable_is_partial_and_nvidia_rejecting_is_refused():
     down = client_for(nras_status=503).attest()
     assert down.level == "partial" and besides_receipts(down) == ["GPUs unverified"]
     assert "couldn't be reached" in down.detail
+    # nras held the verdict to all but NVIDIA's signature before saying it had
+    # no keys (test_nras.py): only the signature is unchecked.
     keys = client_for(nvidia=nras.KeysUnavailable("keys could not be fetched")).attest()
     assert besides_receipts(keys) == ["NVIDIA signature unchecked"]
     with pytest.raises(TeeRefused, match="NVIDIA rejected"):
         client_for(nras_status=400).attest()
-    with pytest.raises(TeeRefused, match="NVIDIA rejected"):
-        client_for(gpu=False, nvidia=nras.KeysUnavailable("no keys")).attest()
     with pytest.raises(TeeRefused, match="GPU attestation failed: .*nonce"):
         client_for(nvidia=nras.NrasError("not made for this request's nonce")).attest()
 

@@ -1,7 +1,9 @@
 """NVIDIA's verdict on a TEE/ model's GPUs, with NVIDIA's signature checked.
 
-Ported from the author's AI-Assistant app (assistant/nras.py, Sept 2026), with httpx
-for requests; the checks are the same.
+The same checks in each of the author's apps that attest TEE models (DA Assistant, DA Vibe
+Manager, DA Private Coder, DA Toolkit, SealedLore), kept alike since Nov 2026; first written
+for the AI-Assistant app (assistant/nras.py), with httpx for requests here. NVIDIA's keys are
+cached on dcap.since_boot, a clock that runs on while the machine sleeps.
 
 A TEE/ model's attestation carries NVIDIA GPU evidence, made with our nonce.
 providers/tee.py sends it to NVIDIA's Remote Attestation Service (NRAS), which answers with signed
@@ -35,6 +37,7 @@ from typing import Any
 
 import httpx
 
+from sealedlore.providers.dcap import since_boot
 from sealedlore.providers.http import make_client
 
 JWKS_URL = "https://nras.attestation.nvidia.com/.well-known/jwks.json"
@@ -62,18 +65,23 @@ _keys_lock = threading.Lock()
 
 def _jwks(session: httpx.Client, refresh: bool = False) -> dict[str, dict[str, Any]]:
     with _keys_lock:
-        if not refresh and _keys["keys"] and time.monotonic() - _keys["at"] < KEYS_TTL:
+        if not refresh and _keys["keys"] and since_boot() - _keys["at"] < KEYS_TTL:
             return _keys["keys"]
     try:
         response = session.get(JWKS_URL, timeout=TIMEOUT_SECONDS)
         body = response.json() if response.status_code == 200 else None
     except (httpx.HTTPError, ValueError) as e:
-        raise KeysUnavailable(f"NVIDIA's signing keys could not be fetched ({e})") from e
+        body, error = None, f"NVIDIA's signing keys could not be fetched ({e})"
+    else:
+        error = "NVIDIA's signing keys could not be read"
     if not isinstance(body, dict) or not isinstance(body.get("keys"), list):
-        raise KeysUnavailable("NVIDIA's signing keys could not be read")
+        with _keys_lock:
+            if _keys["keys"] and not refresh:
+                return _keys["keys"]            # older than an hour, but NVIDIA's: better than none
+        raise KeysUnavailable(error)
     keys = {k["kid"]: k for k in body["keys"] if isinstance(k, dict) and k.get("kid")}
     with _keys_lock:
-        _keys.update(at=time.monotonic(), keys=keys)
+        _keys.update(at=since_boot(), keys=keys)
     return keys
 
 
@@ -87,8 +95,9 @@ def _public_key(jwk: dict[str, Any]) -> Any:
     ).public_key()
 
 
-def verify_token(token: str, session: httpx.Client, nonce: str, now: float) -> dict[str, Any]:
-    """The claims of one NRAS token, once its signature, issuer, time and nonce hold."""
+def verify_token(token: str, session: httpx.Client, nonce: str, now: float, signed: bool = True) -> dict[str, Any]:
+    """The claims of one NRAS token, once its signature, issuer, time and nonce hold (`signed`: False,
+    when NVIDIA's keys can't be had, all but its signature)."""
     from cryptography.exceptions import InvalidSignature
     from cryptography.hazmat.primitives import hashes
     from cryptography.hazmat.primitives.asymmetric import ec
@@ -103,6 +112,8 @@ def verify_token(token: str, session: httpx.Client, nonce: str, now: float) -> d
         raise NrasError("NVIDIA's answer held a malformed token") from None
     if header.get("alg") != "ES384" or len(signature) != 96:
         raise NrasError(f"a token is signed with {header.get('alg')}, not ES384")
+    if not signed:
+        return _claims_hold(claims, nonce, now)
     keys = _jwks(session)
     if header.get("kid") not in keys:
         keys = _jwks(session, refresh=True)
@@ -118,6 +129,10 @@ def verify_token(token: str, session: httpx.Client, nonce: str, now: float) -> d
         )
     except InvalidSignature:
         raise NrasError("a token's signature does not verify against NVIDIA's key") from None
+    return _claims_hold(claims, nonce, now)
+
+
+def _claims_hold(claims: dict[str, Any], nonce: str, now: float) -> dict[str, Any]:
     if claims.get("iss") != ISSUER:
         raise NrasError(f"a token was issued by {claims.get('iss')}, not NVIDIA's service")
     if not (claims.get("nbf", 0) - LEEWAY_SECONDS <= now <= claims.get("exp", 0) + LEEWAY_SECONDS):
@@ -138,13 +153,19 @@ def verify(
     session = session or make_client(JWKS_URL, timeout=httpx.Timeout(TIMEOUT_SECONDS))
     now = now if now is not None else time.time()
     try:
-        return _verify(answer, nonce, session, now)
+        try:
+            return _verify(answer, nonce, session, now)
+        except KeysUnavailable:
+            # what holds without NVIDIA's keys must hold all the same (evidence made for another nonce,
+            # a GPU failing, is refused), and only the signature is left unchecked
+            _verify(answer, nonce, session, now, signed=False)
+            raise
     finally:
         if own:
             session.close()
 
 
-def _verify(answer: Any, nonce: str, session: httpx.Client, now: float) -> int:
+def _verify(answer: Any, nonce: str, session: httpx.Client, now: float, signed: bool = True) -> int:
     try:
         label, overall = answer[0]
         tokens = answer[1] if len(answer) > 1 else {}
@@ -153,7 +174,7 @@ def _verify(answer: Any, nonce: str, session: httpx.Client, now: float) -> int:
     if label != "JWT" or not isinstance(tokens, dict):
         raise NrasError("NVIDIA's answer was not in the expected shape")
 
-    claims = verify_token(overall, session, nonce, now)
+    claims = verify_token(overall, session, nonce, now, signed)
     if claims.get("x-nvidia-overall-att-result") is not True:
         raise NrasError("NVIDIA rejected the GPU evidence")
     listed = claims.get("submods")
@@ -166,7 +187,7 @@ def _verify(answer: Any, nonce: str, session: httpx.Client, now: float) -> int:
             raise NrasError(f"NVIDIA's verdict gives no digest for {gpu}") from None
         if hashlib.sha256(token.encode("ascii")).hexdigest() != digest:
             raise NrasError(f"{gpu}'s token is not the one NVIDIA's verdict lists")
-        gpu_claims = verify_token(token, session, nonce, now)
+        gpu_claims = verify_token(token, session, nonce, now, signed)
         failed = [
             name
             for name, ok in (

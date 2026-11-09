@@ -133,26 +133,6 @@ def _json(value: Any) -> Any:
     return value
 
 
-def _jwt_claims(value: Any) -> list[dict[str, Any]]:
-    """Every JWT's payload found in a JSON value, in order."""
-    found: list[dict[str, Any]] = []
-    if isinstance(value, str) and value.count(".") == 2:
-        part = value.split(".")[1]
-        try:
-            claims = json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))
-        except (ValueError, binascii.Error):
-            return found
-        if isinstance(claims, dict):
-            found.append(claims)
-    elif isinstance(value, list):
-        for item in value:
-            found.extend(_jwt_claims(item))
-    elif isinstance(value, dict):
-        for item in value.values():
-            found.extend(_jwt_claims(item))
-    return found
-
-
 def is_tee(model: str) -> bool:
     """A model that runs in a trusted execution environment: nano-gpt's
     `TEE/*` (attested and signed) or `private/*` (end-to-end encrypted).
@@ -371,9 +351,12 @@ class TeeClient:
         (a request could be routed to it), or evidence relayed for a nonce the
         relay chose (RedPill: replayable).
 
-        What merely couldn't be checked (Intel's collateral or NVIDIA's service out
-        of reach, no GPU evidence offered) or isn't current (any Intel TCB status
-        but UpToDate) makes the attestation "partial", each reason in `shortfalls`.
+        What merely couldn't be checked (Intel's collateral, NVIDIA's service or
+        NVIDIA's signing keys out of reach, no GPU evidence offered) or isn't
+        current (any Intel TCB status but UpToDate) makes the attestation
+        "partial", each reason in `shortfalls`. Without NVIDIA's keys only its
+        signature goes unchecked: its verdict is still held to our nonce, its
+        time and every GPU's results.
 
         Until Sept 2026 a nonce that merely came back in nano-gpt's JSON counted,
         the report data was read from nano-gpt's copy, and neither Intel's nor
@@ -609,11 +592,10 @@ class TeeClient:
         try:
             gpus = self._nvidia(answer, nonce, self._client)
         except nras.KeysUnavailable as exc:
-            # Unchecked, but a verdict that says no is still believed.
-            if not any(
-                claims.get("x-nvidia-overall-att-result") is True for claims in _jwt_claims(answer)
-            ):
-                raise TeeRefused(f"NVIDIA rejected {self.model}'s GPU evidence") from exc
+            # Only NVIDIA's signature is unchecked: nras held everything else
+            # to our nonce, its issuer, its time and each GPU's results first,
+            # and refused (NrasError) a verdict that says no or was made for
+            # another request.
             check.fall_short("NVIDIA signature unchecked")
             check.note(f"{exc}, so NVIDIA's verdict is unchecked")
         except nras.NrasError as exc:
