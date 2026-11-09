@@ -2399,19 +2399,27 @@ itself) are supported.
 The **Private** button beside the composer plays a span of the story on a
 separate model that nothing else ever hears about: a local server (Ollama, LM
 Studio, llama.cpp), or a NanoGPT `TEE/` model. For a TEE model the app
-attests the enclave when the scene begins, before anything is sent:
+attests the enclave when the scene begins, before anything is sent, and again
+before the next message once that attestation is 15 minutes old (time the
+computer spends asleep counts):
 - the Intel TDX quote, read from its own signed bytes, must bind the enclave's
   signing key to a fresh nonce of ours;
-- the quote must verify up to Intel's root, not be revoked or a debug
-  enclave, and Intel rates the machine's firmware;
-- NVIDIA's signed verdict on the GPUs must be for our nonce and pass.
+- the quote must verify up to Intel's root, be signed by Intel's own quoting
+  enclave, not be revoked or a debug enclave, and Intel rates the machine's
+  firmware;
+- NVIDIA's signed verdict on the GPUs must be for our nonce and pass. If
+  NVIDIA's signing keys can't be fetched, the verdict is still held to our
+  nonce, its time and every GPU's results, and only its signature goes
+  unchecked.
 
 Providers that run several instances (such as `TEE/kimi-k3`) have every
 instance checked the same way. Anything forged, revoked, for another nonce,
 or a model that offers no attestation is **refused**, and nothing is sent to
-it. What couldn't be checked (no GPU evidence offered, Intel's or NVIDIA's
-service out of reach, a rating below up to date, receipt keys the quote
-doesn't bind) is shown as **⚠ partial**, with the reasons on the model button
+it. Refused when it is attested again, nothing more is sent until you choose
+**Try again**, and the message that found it so comes back to the box you
+type in. What couldn't be checked (no GPU evidence offered, Intel's or NVIDIA's
+service out of reach, NVIDIA's signing keys out of reach, a rating below up
+to date, receipt keys the quote doesn't bind) is shown as **⚠ partial**, with the reasons on the model button
 and what each one means in its tooltip. Sending still goes ahead.
 
 After each reply the app fetches the record NanoGPT keeps for it, signed by
@@ -2490,7 +2498,13 @@ verifier:
   button says "⚠ older release".
 
 Replies are marked "end-to-end encrypted", and the attestation is redone
-every five minutes. Wherever you choose a model, the model list's Privacy
+every five minutes (time the computer spends asleep counts). Tinfoil's
+verifier follows no redirect off https, nor one from the internet into your
+own network. A model written with a capital or a stray space
+(`Private/glm-5-3`) is still end-to-end encrypted, never sent the plain way.
+What NanoGPT's relay writes in an error is shown as its own ("NanoGPT's relay
+said (unauthenticated)"), on one line and without characters you can't see.
+Wherever you choose a model, the model list's Privacy
 column and the label beside the model field say which kind a model is: "🔐
 Encrypted" in the list and "🔐 E2EE" beside the field, or "TEE" (and, for a
 TEE model with an encrypted version, "TEE · 🔐 version").
@@ -2575,7 +2589,8 @@ story is (Settings → Context), with a plain summariser.
   paused. A chat on a TEE model has no Private button: all of it is private
   already.
 - **On a NanoGPT `TEE/` model** the chat is private as a private scene is:
-  the enclave is attested when the chat opens (unless Check TEE models is off
+  the enclave is attested when the chat opens, and again before a message
+  once that is 15 minutes old (unless Check TEE models is off
   under Settings → Private, which the model button then says), each reply is
   checked against the record the attested key signs and marked with what the
   check showed (see "Private scenes"), every call (summaries and
@@ -2899,7 +2914,15 @@ in plain text" under File → Settings → Endpoints → Keep API keys in (for t
 command line or a test setup: `sealedlore configure --key-storage file`).
 The note under each key field says where that key goes. A key already in
 `config.json` from an older version moves into the keychain the first time
-the window opens. The
+the window opens. A password written into an endpoint's address
+(`https://user:password@host/v1`) goes the same way: `config.json` keeps the
+address without it, the keychain the address as typed, and the two come
+together again only while `config.json` still has that address. Taking the
+password out of the address takes it out of the keychain. An address is
+never shown with its password, in a message or by the command line. A key
+with a space, a line break or another character no API key has in it (picked
+up where it was copied from, perhaps) is refused when you save it, and before
+anything would be sent with it, saying so without showing the key. The
 folder and everything the app writes in it are readable by your user only.
 Each story keeps every request and reply in its `api_log.jsonl`, so a story
 backup (Story → Export → Story backup…) carries every prompt sent for it; a

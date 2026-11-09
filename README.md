@@ -250,7 +250,8 @@ Of NanoGPT's models, the end-to-end encrypted `private/` ones are the
 stronger choice. A `TEE/` model's text still passes NanoGPT's gateway in the
 clear, and for now some of what its checks should prove can't be checked
 through NanoGPT. The app says what fell short on the model button and under
-each reply, and refuses the TEE models it can't attest at all.
+each reply, attests a TEE model again before a message once 15 minutes have
+passed, and refuses the TEE models it can't attest at all.
 
 ### Author-driven plots
 
@@ -585,7 +586,8 @@ encrypts the whole way.
   browser would; nothing from your stories goes with it.
 - **On disk**, settings and stories live in a data folder only your user
   can read. API keys go to the system keychain, or into that folder's
-  `config.json` in plain text where there is no keychain or you choose it. Each story keeps every
+  `config.json` in plain text where there is no keychain or you choose it,
+  and so does a password written into an endpoint's address. Each story keeps every
   request and reply in its `api_log.jsonl`, so a story backup carries every
   prompt sent for it. An "in memory" private scene keeps its messages off
   the disk (only a content-free record of each call is kept, for the cost);
