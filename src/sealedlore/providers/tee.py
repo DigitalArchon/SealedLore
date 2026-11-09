@@ -88,6 +88,15 @@ def _digest(data: bytes) -> str:
     return "sha256:" + hashlib.sha256(data).hexdigest()
 
 
+def _day(seconds: float) -> str:
+    """A time as the day it falls on (UTC), or "a day long past" for one no
+    calendar holds."""
+    try:
+        return time.strftime("%Y-%m-%d", time.gmtime(seconds))
+    except (OverflowError, OSError, ValueError):
+        return "a day long past"
+
+
 def _hex(value: Any) -> bytes:
     if not isinstance(value, str):
         raise ValueError("not hex")
@@ -384,8 +393,9 @@ class TeeClient:
         revoked, a debug TD, a TCB Intel revoked or never listed), GPU evidence
         whose NVIDIA verdict is unsigned, stale, for another nonce or negative
         (providers/dcap.py, providers/nras.py), any instance that failed to attest
-        (a request could be routed to it), or evidence relayed for a nonce the
-        relay chose (RedPill: replayable).
+        (a request could be routed to it), evidence relayed for a nonce the relay
+        chose (RedPill: replayable), or a gateway's keys past the time its keyset
+        holds them until.
 
         What merely couldn't be checked (Intel's collateral, NVIDIA's service or
         NVIDIA's signing keys out of reach, no GPU evidence offered) or isn't
@@ -498,6 +508,17 @@ class TeeClient:
             tie = "the quote binds its receipt keys"
         else:
             raise TeeRefused(f"{self.model}'s attestation didn't bind its signing key to our nonce")
+        # Keys the gateway's keyset holds only until a time now past are refused,
+        # as the author's other apps refuse them (DA Assistant's, Nov 2026): what
+        # was attested is keys no longer in force. A keyset that names no such
+        # time isn't used for the receipts, and falls short (`_take_keyset`).
+        expires = keyset.get("not_after") if keyset is not None else None
+        if (
+            isinstance(expires, (int, float))
+            and not isinstance(expires, bool)
+            and expires < time.time()
+        ):
+            raise TeeRefused(f"{self.model}'s attested keys expired on {_day(expires)}")
         self._check_quote(raw, check)
         payload = _json(body.get("nvidia_payload"))
         self._check_gpus(
@@ -513,13 +534,15 @@ class TeeClient:
         commits to them (RedPill's statement), or they are published with the
         signing key it binds (nano-gpt, Nov 2026). The second is the weaker tie:
         the quote binds that key, not the keyset around it. A keyset tied
-        neither way, or expired, is not used, and receipts go unread."""
+        neither way is not used, and receipts go unread; nor is one that names
+        no whole second it holds until (one past it was refused already), which
+        falls short."""
         self.keyset = self.keyset_digest = None
         if keyset is None:
             return
         not_after = keyset.get("not_after")
         if not isinstance(not_after, int) or not_after <= time.time():
-            check.note("its receipt keys have expired, so receipts aren't checked")
+            check.note("its receipt keys name no time they hold until, so receipts aren't checked")
             check.fall_short("receipt keys expired")
             return
         self.keyset, self.keyset_digest = keyset, _digest(_canonical(keyset))

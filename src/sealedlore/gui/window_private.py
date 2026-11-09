@@ -41,7 +41,10 @@ SHORTFALL_TIPS = {
         "each reply's record, not the key of the gateway's receipts, so a receipt's "
         "word that the model was verified rests on NanoGPT's relay."
     ),
-    "receipt keys expired": "Receipt keys expired: the gateway's receipts aren't read.",
+    "receipt keys expired": (
+        "Receipt keys expired: the gateway's keyset names no time its keys hold until, so "
+        "its receipts aren't read. (Keys past their time are refused.)"
+    ),
     "no GPU evidence": "No GPU evidence: none was offered, so no GPU was checked.",
     "GPUs unverified": "GPUs unverified: NVIDIA's attestation service couldn't be reached.",
     "NVIDIA signature unchecked": (

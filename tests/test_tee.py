@@ -807,7 +807,7 @@ def receipt_server(
     digest: str | None = None,
     not_ready: int = 0,
     seen: list | None = None,
-    not_after: int = 4_000_000_000,
+    not_after: object = 4_000_000_000,
 ):
     """nano-gpt as live (Nov 4 2026): the attestation's quote binds the signing
     key; the keyset beside it lists that key as its e2ee key ("e2ee"), or the
@@ -1025,7 +1025,22 @@ def test_the_receipt_keys_are_named_short_whether_a_keyset_comes_or_not():
     assert RECEIPT_KEYS_LOOSE in without.attest().shortfalls
 
 
-def test_expired_receipt_keys_are_named_short():
-    client = receipt_client(tied="statement", not_after=1)
-    result = client.attest()
-    assert client.keyset is None and result.shortfalls == ["receipt keys expired"]
+def test_keys_past_their_time_are_refused_as_the_other_apps_refuse_them():
+    """They used to fall short ("receipt keys expired") and the attestation went
+    ahead: what was attested was keys the gateway no longer holds. The author's
+    other apps refuse them (DA Assistant's, Nov 2026), and so does this one, tied
+    to the quote either way."""
+    for tied in ("statement", "e2ee"):
+        with pytest.raises(TeeRefused, match="attested keys expired on 1970-01-01"):
+            receipt_client(tied=tied, not_after=1)
+    with pytest.raises(TeeRefused, match="attested keys expired on a day long past"):
+        receipt_client(not_after=-(10**30))
+
+
+def test_a_keyset_that_names_no_time_it_holds_until_falls_short_unused():
+    for undated in (None, "4000000000", True, 4.0e9):
+        client = receipt_client(tied="statement", not_after=undated)
+        result = client.attest()
+        assert client.keyset is None, undated
+        assert result.shortfalls == ["receipt keys expired"], undated
+        assert "name no time they hold until" in result.detail
