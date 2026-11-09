@@ -30,3 +30,15 @@ keyring==25.7.0
 # by hash below like everything else. The AppImage prefers the host's own CA
 # store (AppRun) and falls back to this.
 certifi>=2026.10.19
+# Floors past advisories, which a relock otherwise never crosses (uv keeps
+# what the lock pins; lock.sh's UPGRADE=1 re-resolves everything). pyasn1,
+# which tinfoil and sigstore decode attestation certificates' extensions
+# with: 0.6.5 fixes four denials of service in its decoders
+# (GHSA-2qm8-x737-gmw5, GHSA-fm9c-5rcf-2q5p, GHSA-mm57-4v3p-rchx,
+# GHSA-9m75-vc3g-4x39; Oct 2026). dnspython: 2.9.0 fixes one in its name
+# parser (GHSA-45c3-73f7-pv4m). cryptography: 50.0.2, as the author's other
+# apps have it (1.0.0b1 to 3.1.0b5 shipped 50.0.1). As DA Assistant floors
+# them (9b1d6b8, Nov 2026).
+pyasn1>=0.6.5
+dnspython>=2.9.0
+cryptography>=50.0.2

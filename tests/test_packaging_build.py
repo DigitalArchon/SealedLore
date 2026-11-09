@@ -46,6 +46,22 @@ def _locked() -> dict[str, str]:
     }
 
 
+def test_the_lock_meets_every_floor_the_in_file_sets():
+    """A relock keeps what the lock already pins, so a floor set for an advisory
+    (certifi's root; pyasn1's and dnspython's denials of service; cryptography's
+    50.0.2, the other apps' version) is only as good as the relock after it."""
+    floors = re.findall(
+        r"^([A-Za-z0-9_.-]+)>=([0-9.]+)$", (APPIMAGE / "requirements.in").read_text(), re.M
+    )
+    named = dict(floors)
+    assert named["pyasn1"] == "0.6.5" and named["dnspython"] == "2.9.0"
+    assert named["cryptography"] == "50.0.2" and named["certifi"] == "2026.10.19"
+    locked = _locked()
+    for name, floor in floors:
+        version = locked[re.sub(r"[-_.]+", "-", name).lower()]
+        assert _version(version) >= _version(floor), f"{name}=={version}, below {floor}"
+
+
 def test_a_source_install_has_the_same_floors():
     """pip install reads pyproject.toml, never the AppImage's lock."""
     deps = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["dependencies"]
@@ -81,3 +97,32 @@ def test_a_lock_or_a_build_takes_no_uv_setting_from_this_machine():
     ).stdout.split()
     version = re.search(r'^UV_VERSION="([^"]+)"', (APPIMAGE / "tools.sh").read_text(), re.M)
     assert said == ["pinned", version.group(1)], said
+
+
+@needs_bash_and_git
+def test_upgrade_re_resolves_the_lot_and_nothing_else_does():
+    lock = (APPIMAGE / "lock.sh").read_text()
+    chooses = block(lock, 'upgrade=""', "\nfi\n")
+    for value, flag in (("", ""), ("0", ""), ("1", "--upgrade")):
+        env = {"PATH": os.environ.get("PATH", ""), "UPGRADE": value}
+        said = subprocess.run(
+            ["bash", "-c", f'set -euo pipefail\n{chooses}echo "[${{upgrade:+$upgrade}}]"'],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        assert said == f"[{flag}]"
+    assert '${upgrade:+"$upgrade"}' in lock
+
+
+def test_the_encryption_stack_moves_with_no_relock():
+    """tinfoil, tinfoil-ehbp and pyhpke stay exactly as pinned, whatever a relock
+    does (test_private_mode.py holds them to pyproject.toml)."""
+    locked = _locked()
+    wanted = (APPIMAGE / "requirements.in").read_text()
+    for name in ("tinfoil", "tinfoil-ehbp", "pyhpke"):
+        assert f"{name}=={locked[name]}" in wanted
+
+
+# --- the tokenizer ------------------------------------------------------------------------

@@ -45,9 +45,14 @@ dependencies = [
     # API keys in the system keychain (storage/keychain.py): the Secret
     # Service on Linux, Credential Manager on Windows.
     "keyring>=25",
-    # certifi floored as the AppImage's requirements.in floors it, for a source
-    # install too: without the eMudhra root (emSign ECC Root CA - G3, Oct 2026).
+    # Floors, as the AppImage's requirements.in sets them, for a source install
+    # too: certifi without the eMudhra root (emSign ECC Root CA - G3, Oct 2026);
+    # cryptography (the TEE checks use it), pyasn1 and dnspython past their
+    # advisories (packaging/appimage/requirements.in says which).
     "certifi>=2026.10.19",
+    "cryptography>=50.0.2",
+    "pyasn1>=0.6.5",
+    "dnspython>=2.9.0",
 ]
 
 [project.urls]

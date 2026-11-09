@@ -6,6 +6,14 @@
 # Uses the same pinned uv as build.sh (fetched into build/appimage/cache).
 # Run after changing either .in file, and commit the .lock files with it: the
 # build installs only what they name, and only if every hash matches.
+#
+#   packaging/appimage/lock.sh             lock what the .in files add or change
+#   UPGRADE=1 packaging/appimage/lock.sh   re-resolve everything to today's newest
+#
+# uv keeps the versions a lock it writes over already pins, so a package added
+# or floored in an .in file moves without everything else moving to whatever
+# is newest today; and nothing moves otherwise, a version with an advisory
+# included, until an .in file floors it or UPGRADE=1 re-resolves the lot.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -13,12 +21,17 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 source "$HERE/tools.sh"
 fetch_uv
 
+upgrade=""
+if [ "${UPGRADE:-0}" = 1 ]; then
+    upgrade="--upgrade"
+fi
+
 cd "$HERE"
 compile() {  # compile <in> <out>
     "$UV" pip compile --quiet "$1" -o "$2" \
         --python-version 3.12 --python-platform x86_64-manylinux_2_34 \
         --only-binary :all: --generate-hashes \
-        --custom-compile-command "packaging/appimage/lock.sh"
+        --custom-compile-command "packaging/appimage/lock.sh" ${upgrade:+"$upgrade"}
 }
 compile requirements.in requirements.lock
 # setuptools is only published as a wheel for every Python; the backend's own
