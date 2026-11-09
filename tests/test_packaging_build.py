@@ -11,6 +11,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -43,6 +44,16 @@ def _locked() -> dict[str, str]:
         name.lower(): version
         for name, version in re.findall(r"^([A-Za-z0-9_.-]+)==(\S+)", lock, re.MULTILINE)
     }
+
+
+def test_a_source_install_has_the_same_floors():
+    """pip install reads pyproject.toml, never the AppImage's lock."""
+    deps = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["dependencies"]
+    floors = re.findall(
+        r"^([A-Za-z0-9_.-]+)>=([0-9.]+)$", (APPIMAGE / "requirements.in").read_text(), re.M
+    )
+    for name, floor in floors:
+        assert f"{name}>={floor}" in deps, f"pyproject.toml lacks {name}>={floor}"
 
 
 @needs_bash_and_git
