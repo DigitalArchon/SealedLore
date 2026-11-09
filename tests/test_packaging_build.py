@@ -211,3 +211,52 @@ def test_the_tokenizer_is_fetched_as_every_other_download_is():
 
 
 # --- build.sh check -----------------------------------------------------------------------
+
+
+def _check(tmp_path: Path, same: bool) -> subprocess.CompletedProcess:
+    """build.sh's check, its two builds stand-ins that write an AppImage and its sum:
+    the same bytes each time, or not."""
+    check = block(BUILD, "    check)\n", "        exit 1\n")
+    here = tmp_path / "here"
+    here.mkdir(parents=True)
+    (here / "build.sh").write_text(
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        'test "$1" = build\nmkdir -p "$DIST"\n'
+        'if [ -e "$CACHE_DIR/pip" ] && [ "$BUILD_DIR" != "${BUILD_DIR%/b}" ]; then\n'
+        '    echo "the second build had the first one\'s package cache" >&2; exit 3\nfi\n'
+        + (
+            'printf same > "$DIST/SealedLore-1-x86_64.AppImage"\n'
+            if same
+            else 'printf "%s" "$BUILD_DIR" > "$DIST/SealedLore-1-x86_64.AppImage"\n'
+        )
+        + 'cd "$DIST" && name=SealedLore-1-x86_64.AppImage && sha256sum "$name" > "$name.sha256"\n'
+    )
+    (here / "build.sh").chmod(0o755)
+    cache = tmp_path / "cache"
+    (cache / "pip").mkdir(parents=True)
+    (cache / "uv").mkdir()
+    (cache / "debs").mkdir()
+    (cache / "debs" / "x.deb").write_bytes(b"deb")
+    (cache / "python.AppImage").write_bytes(b"base")
+    dist = tmp_path / "dist"
+    script = (
+        f"set -euo pipefail\nHERE={shlex.quote(str(here))}\nCACHE={shlex.quote(str(cache))}\n"
+        f'DIST={shlex.quote(str(dist))}\ncase "check" in\n{check};;\nesac\n'
+    )
+    return subprocess.run(
+        ["bash", "-c", script], env={"PATH": os.environ.get("PATH", "")}, capture_output=True,
+        text=True,
+    )  # fmt: skip
+
+
+@needs_bash_and_git
+def test_check_builds_twice_apart_and_compares(tmp_path: Path):
+    passed = _check(tmp_path / "one", same=True)
+    assert passed.returncode == 0, passed.stderr
+    assert "Reproducible: both builds are" in passed.stdout
+    assert (tmp_path / "one/dist/SealedLore-1-x86_64.AppImage").read_text() == "same"
+    failed = _check(tmp_path / "two", same=False)
+    assert failed.returncode == 1 and "NOT reproducible" in failed.stderr
+    a = (tmp_path / "two/dist/check-a/SealedLore-1-x86_64.AppImage").read_text()
+    b = (tmp_path / "two/dist/check-b/SealedLore-1-x86_64.AppImage").read_text()
+    assert a.endswith("/a") and b.endswith("/b"), "each in a folder of its own"

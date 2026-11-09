@@ -2,6 +2,13 @@
 # Build SealedLore as a single-file AppImage: dist/SealedLore-<version>-x86_64.AppImage
 # and its checksum beside it (….AppImage.sha256).
 #
+#   packaging/appimage/build.sh         build HEAD
+#   packaging/appimage/build.sh check   build HEAD twice from scratch, each in a folder of
+#                                       its own, and compare the two (see "check" below)
+#
+# DIST=dir puts the AppImage somewhere other than dist/; BUILD_DIR and CACHE_DIR
+# move the working folder (build/appimage) and its downloads (its cache).
+#
 # Runs on any x86_64 Linux with bash, git, curl, tar, dpkg-deb, sha256sum,
 # file, objdump (binutils) and ldd. Downloads (HTTPS only, every one checked
 # against a pinned sum or hash) are cached in build/appimage/cache, so a
@@ -61,7 +68,45 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 source "$HERE/tools.sh"
 APPDIR="$BUILD/SealedLore.AppDir"
 SRC="$BUILD/source"
-DIST="$REPO/dist"
+DIST="${DIST:-$REPO/dist}"
+
+case "${1:-build}" in
+    build) ;;
+    check)
+        # Is the build reproducible here? HEAD built twice from scratch, each in a
+        # folder of its own: the first with this cache, the second with none of its
+        # package caches (pip's wheels are fetched again, uv builds SealedLore's own
+        # anew), only the pinned downloads, each checked by its sum as it is used.
+        # The same bytes, or it isn't. (As the author's DA apps' build-appimage.sh
+        # check does.)
+        WORK="$(mktemp -d)"
+        trap 'rm -rf "$WORK"' EXIT
+        BUILD_DIR="$WORK/a" CACHE_DIR="$CACHE" DIST="$WORK/a/dist" "$HERE/build.sh" build
+        mkdir -p "$WORK/b/cache"
+        find "$CACHE" -maxdepth 1 -type f ! -name '*.part' -exec cp {} "$WORK/b/cache/" \;
+        if [ -d "$CACHE/debs" ]; then
+            cp -r "$CACHE/debs" "$WORK/b/cache/debs"
+        fi
+        BUILD_DIR="$WORK/b" CACHE_DIR="$WORK/b/cache" DIST="$WORK/b/dist" "$HERE/build.sh" build
+        a="$(cut -d' ' -f1 "$WORK"/a/dist/*.sha256)"
+        b="$(cut -d' ' -f1 "$WORK"/b/dist/*.sha256)"
+        mkdir -p "$DIST"
+        if [ "$a" = "$b" ]; then
+            cp "$WORK"/a/dist/* "$DIST/"
+            echo "Reproducible: both builds are $a"
+            exit 0
+        fi
+        rm -rf "$DIST/check-a" "$DIST/check-b"
+        cp -r "$WORK/a/dist" "$DIST/check-a"
+        cp -r "$WORK/b/dist" "$DIST/check-b"
+        echo "NOT reproducible: $a vs $b (compare them with diffoscope: $DIST/check-a, $DIST/check-b)" >&2
+        exit 1
+        ;;
+    *)
+        echo "usage: $0 [build|check]" >&2
+        exit 2
+        ;;
+esac
 
 PYTHON_APPIMAGE="python3.12.15-cp312-cp312-manylinux_2_28_x86_64.AppImage"
 PYTHON_URL="https://github.com/niess/python-appimage/releases/download/python3.12/$PYTHON_APPIMAGE"
@@ -447,11 +492,11 @@ if [ -n "$missing" ]; then
     exit 1
 fi
 
-# Nothing inside may name the folder it was built in: that is the builder's
-# machine showing through, and a rebuild elsewhere would differ.
-leaks="$(grep -rlF "$REPO" "$APPDIR" || true)"
+# Nothing inside may name the folder it was built in, or the checkout: that is
+# the builder's machine showing through, and a rebuild elsewhere would differ.
+leaks="$(grep -rlF -e "$REPO" -e "$BUILD" "$APPDIR" || true)"
 if [ -n "$leaks" ]; then
-    echo "files carry the build folder's path ($REPO):" >&2
+    echo "files carry the build folder's path ($REPO or $BUILD):" >&2
     echo "$leaks" >&2
     exit 1
 fi

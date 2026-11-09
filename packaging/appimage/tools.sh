@@ -4,8 +4,11 @@
 
 HERE="${HERE:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 REPO="$(cd "$HERE/../.." && pwd)"
-BUILD="$REPO/build/appimage"
-CACHE="$BUILD/cache"
+# Where the build works and keeps its downloads: build/appimage and its cache
+# unless BUILD_DIR or CACHE_DIR say otherwise (build.sh check builds twice,
+# each in a folder of its own).
+BUILD="${BUILD_DIR:-$REPO/build/appimage}"
+CACHE="${CACHE_DIR:-$BUILD/cache}"
 
 # Nothing from this machine's uv settings. UV_NO_CONFIG (fetch_uv) skips only
 # uv's config files: uv reads UV_INDEX_URL, UV_DEFAULT_INDEX, UV_FIND_LINKS,
