@@ -6,6 +6,7 @@ the scripts' own blocks are run on stand-ins."""
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import shlex
@@ -188,3 +189,25 @@ def test_the_encryption_stack_moves_with_no_relock():
 
 
 # --- the tokenizer ------------------------------------------------------------------------
+
+
+def test_the_tokenizer_is_fetched_as_every_other_download_is():
+    """tiktoken's own fetch is requests.get, which follows a redirect anywhere, plain
+    http included. The build fetches the file with tools.sh's fetch (curl, https
+    only, its sum checked) into the name tiktoken caches it under, so nothing in the
+    AppImage differs from what tiktoken wrote."""
+    tiktoken = pytest.importorskip("tiktoken_ext.openai_public")
+    from sealedlore.engine.tokens import DEFAULT_ENCODING
+
+    url = re.search(r'^TIKTOKEN_URL="([^"]+)"', BUILD, re.M).group(1)
+    pinned = re.search(r'^TIKTOKEN_SHA256="([^"]+)"', BUILD, re.M).group(1)
+    source = Path(tiktoken.__file__).read_text()
+    assert url.startswith("https://") and url.endswith(f"/{DEFAULT_ENCODING}.tiktoken")
+    assert f'"{url}",\n        expected_hash="{pinned}"' in source, "tiktoken's own sum"
+    step = block(BUILD, 'log "Tokenizer data"', 'log "Licences and third-party notices"')
+    assert 'fetch "$TIKTOKEN_URL"' in step and "sha1sum" in step
+    assert "requests" not in step
+    assert hashlib.sha1(url.encode()).hexdigest()  # the name tiktoken looks for
+
+
+# --- build.sh check -----------------------------------------------------------------------

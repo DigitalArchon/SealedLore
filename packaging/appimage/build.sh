@@ -15,7 +15,8 @@
 #     build), and every timestamp inside is the commit's time
 #     (SOURCE_DATE_EPOCH);
 #   - every input is pinned by checksum: the Python base, the Debian
-#     libraries, uv, appimagetool and the AppImage runtime (tools.sh), every
+#     libraries, the tokenizer's data, uv, appimagetool and the AppImage
+#     runtime (tools.sh), every
 #     package by hash (requirements.lock, from requirements.in by lock.sh),
 #     and the build backend (build-requirements.lock);
 #   - nothing of the builder's machine gets in: no file owners, modes or
@@ -65,6 +66,13 @@ DIST="$REPO/dist"
 PYTHON_APPIMAGE="python3.12.15-cp312-cp312-manylinux_2_28_x86_64.AppImage"
 PYTHON_URL="https://github.com/niess/python-appimage/releases/download/python3.12/$PYTHON_APPIMAGE"
 PYTHON_SHA256="929ce69b45955bfc74af81fd65a65c3ad240593c99b3574466a94ebf0f987ebf"
+# The tokenizer's data (engine/tokens.py DEFAULT_ENCODING), fetched as every
+# other download is: tiktoken's own fetch is requests.get, which follows a
+# redirect anywhere, plain http included. Its sum is the one tiktoken checks
+# (tiktoken_ext/openai_public.py), and its name in the AppImage the one
+# tiktoken caches it under (the sha1 of its address), so nothing inside differs.
+TIKTOKEN_URL="https://openaipublic.blob.core.windows.net/encodings/o200k_base.tiktoken"
+TIKTOKEN_SHA256="446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d"
 DEBIAN_POOL="https://deb.debian.org/debian/pool/main"
 DEBIAN_LIBS=(
     # path in the pool                                              sha256
@@ -321,9 +329,20 @@ install -m 644 "$CACHE"/tor-x/docs/{tor,libevent,openssl}.txt "$LICENCES/tor/"
 rm -rf "$CACHE/tor-x"
 
 log "Tokenizer data"
-mkdir -p "$APPDIR/usr/share/sealedlore/tiktoken"
-TIKTOKEN_CACHE_DIR="$APPDIR/usr/share/sealedlore/tiktoken" "$PYTHON" -s -c \
+TIKTOKEN_DIR="$APPDIR/usr/share/sealedlore/tiktoken"
+fetch "$TIKTOKEN_URL" "$CACHE/o200k_base.tiktoken" "$TIKTOKEN_SHA256"
+install -D -m 644 "$CACHE/o200k_base.tiktoken" \
+    "$TIKTOKEN_DIR/$(printf '%s' "$TIKTOKEN_URL" | sha1sum | cut -d' ' -f1)"
+# tiktoken finds it there, and fetches nothing: any request would go to a
+# proxy that isn't there, and fail the build.
+HTTPS_PROXY=http://127.0.0.1:9 HTTP_PROXY=http://127.0.0.1:9 NO_PROXY= \
+    TIKTOKEN_CACHE_DIR="$TIKTOKEN_DIR" "$PYTHON" -s -c \
     "from sealedlore.engine.tokens import DEFAULT_ENCODING; import tiktoken; tiktoken.get_encoding(DEFAULT_ENCODING)"
+if [ "$(find "$TIKTOKEN_DIR" -type f | wc -l)" != 1 ]; then
+    echo "tiktoken wrote a file of its own beside the pinned one:" >&2
+    ls -l "$TIKTOKEN_DIR" >&2
+    exit 1
+fi
 
 log "Licences and third-party notices"
 install -m 644 "$SRC/LICENSE" "$LICENCES/LICENSE"
