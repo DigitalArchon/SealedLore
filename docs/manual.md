@@ -2444,6 +2444,14 @@ Each reply is marked with what its check showed:
 Your own messages are marked with how they were sent: "sent to the attested
 TEE", or "end-to-end encrypted" on a `private/` model.
 
+Every reply of the attested model is checked this way, not only the
+passages: a Question's answer carries its mark beside it, as a passage does.
+A reply with no place for a mark (a TEE chat's chapters, a private scene's
+condensed part, a picture's or a video's prompt) is checked all the same and
+recorded in the story's log, and if it doesn't match its record the status
+bar says so. A reply that fails its check, of any kind, has the model
+attested again before anything more is sent to it.
+
 **Through NanoGPT, the receipt keys aren't in the quote** (November 2026),
 and the model button says so ("receipt keys not in the quote"). The quote
 binds the key that signs each reply's record, so the record's tie to the
