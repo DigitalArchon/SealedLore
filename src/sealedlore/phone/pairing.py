@@ -144,7 +144,11 @@ class Pairing:
             raise PairingRefused(
                 410, "Pairing isn't open on the desktop. Show the code there and scan it again."
             )
-        if not isinstance(code, str) or not hmac.compare_digest(code.strip().lower(), self._code):
+        # As bytes: compare_digest refuses a str with anything beyond ASCII in
+        # it (TypeError, a 500, and the try went uncounted).
+        if not isinstance(code, str) or not hmac.compare_digest(
+            code.strip().lower().encode("utf-8", "surrogatepass"), self._code.encode("ascii")
+        ):
             self._failures += 1
             if self._failures >= CODE_FAILURES:
                 self._code = None
