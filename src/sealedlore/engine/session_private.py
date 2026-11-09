@@ -25,6 +25,7 @@ TEE model is private throughout and has none.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
@@ -79,6 +80,9 @@ PRIVATE_CONDENSE_WORDS = 600
 CONDENSED_LEAD = "Earlier in this scene (condensed):"
 # A reply's TEE marks (NodeMeta.tee), the most proven first.
 _MARK_ORDER = ("encrypted", "verified", "signed", "unchecked", "failed")
+# Held while a job decides whether it attests a TEE/ model again
+# (`_attest_again`), so that two never do it at once.
+_REATTESTING = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -104,17 +108,70 @@ class PrivateRuntime:
     # Set by the window while a TEE/ model is being attested, or with the
     # reason it was refused: every call that would reach that model refuses
     # before sending (_tee_guard). None when there's nothing to wait for.
+    # The session sets it too while it attests the model again (_attest_again).
     tee_block: str | None = None
+    # True while the session attests a TEE/ model again.
+    tee_attesting: bool = False
+    # What that last found, for the window once the job is done
+    # (`take_reattestation`): ("attested", the attestation) or ("refused", why).
+    _reattested: tuple[str, Any] | None = None
     # What happened to a scene the app closed in the middle of, for a notice.
     private_notice: str | None = None
 
     def _tee_guard(self) -> None:
         """Nothing goes to a TEE/ model whose enclave is still being attested,
-        or was refused (providers/tee.TeeClient.attest)."""
-        if self.tee_block:
-            from sealedlore.providers.tee import TeeRefused
+        or was refused (providers/tee.TeeClient.attest); and one whose
+        attestation is REATTEST_SECONDS old (providers/tee.py) is attested
+        again first. Every call that reaches the model comes here first, on
+        its job's thread."""
+        from sealedlore.providers.tee import TeeClient, TeeRefused
 
+        if self.tee_block:
             raise TeeRefused(f"{self.tee_block}; nothing was sent")
+        tee = self.private_tee
+        if isinstance(tee, TeeClient) and tee.due():
+            self._attest_again(tee)
+
+    def _attest_again(self, tee: Any) -> None:
+        """Attest a TEE/ model again before the request that found its
+        attestation old, on that request's thread (a job's, never the
+        window's), as the window attested it first: everything else that
+        would reach the model refuses meanwhile (`tee_block`), and a refusal
+        stands until the window attests it anew (Try again). Without this a
+        TEE/ model was attested only as a scene or chat began or its model
+        changed: an instance Chutes started later, whose replies are signed
+        by none, was never checked, nor a revocation seen."""
+        from sealedlore.providers.tee import TeeRefused
+
+        with _REATTESTING:
+            if self.tee_block:
+                raise TeeRefused(f"{self.tee_block}; nothing was sent")
+            if self.private_tee is not tee or not tee.due():
+                return  # attested again, or replaced, meanwhile
+            self.tee_block = f"{tee.model}'s enclave is still being attested"
+            self.tee_attesting = True
+        try:
+            attestation = tee.attest()
+        except Exception as exc:  # refused, or out of reach: either way nothing goes
+            reason = str(exc) or "the enclave's attestation didn't hold"
+            self.tee_block = f"The attestation was refused: {reason}"
+            self._reattested = ("refused", reason)
+            raise TeeRefused(f"{self.tee_block}; nothing was sent") from exc
+        finally:
+            self.tee_attesting = False
+        span = self.open_span
+        if span is not None:
+            span.attestation = attestation
+        else:
+            self.story.chat_attestation = attestation
+        self._reattested = ("attested", attestation)
+        self.tee_block = None
+
+    def take_reattestation(self) -> tuple[str, Any] | None:
+        """What attesting a TEE/ model again last found, once: ("attested",
+        the attestation) or ("refused", why); None when it hasn't since."""
+        found, self._reattested = self._reattested, None
+        return found
 
     # --- the span ------------------------------------------------------------
 

@@ -491,9 +491,7 @@ class PrivateWindow:
             return
         self.session.tee_block = None
         shortfalls = ", ".join(attestation.shortfalls)
-        self._tee_state = f"attested (⚠ partial: {shortfalls})" if shortfalls else "attested"
-        if attestation.instances > 1:
-            self._tee_state += f", {attestation.instances} instances"
+        self._tee_state = self._attested_state(attestation)
         self._refresh_model_button()
         self.statusBar().showMessage(
             f"TEE attested{' (partial: ' + shortfalls + ')' if shortfalls else ''}: "
@@ -501,6 +499,29 @@ class PrivateWindow:
             "key signs for it.",
             15000,
         )
+
+    @staticmethod
+    def _attested_state(attestation) -> str:
+        """The model button's word for an attestation that held."""
+        shortfalls = ", ".join(attestation.shortfalls)
+        state = f"attested (⚠ partial: {shortfalls})" if shortfalls else "attested"
+        if attestation.instances > 1:
+            state += f", {attestation.instances} instances"
+        return state
+
+    def _take_reattestation(self) -> None:
+        """After a job, or a dialog's: the session attests a TEE/ model again
+        on its own before a request once its attestation is old (engine
+        `_tee_guard`), and the model button says what that found, as after the
+        first. A refusal is the job's failure to say; the next send offers Try
+        again (`_tee_allows_send`)."""
+        session = self.session
+        found = session.take_reattestation() if session is not None else None
+        if found is None:
+            return
+        kind, value = found
+        self._tee_state = "⚠ refused" if kind == "refused" else self._attested_state(value)
+        self._refresh_model_button()
 
     def _offer_reattest(self, reason: str, for_chat: bool) -> None:
         """A refused enclave: nothing is sent to it. Try again, leave, or stay."""
@@ -537,7 +558,7 @@ class PrivateWindow:
         block = self.session.tee_block if self.session is not None else None
         if not block:
             return True
-        if self._tee_thread is not None:
+        if self._tee_thread is not None or self.session.tee_attesting:
             self.statusBar().showMessage(
                 "Waiting for the enclave's attestation: send again in a moment.", 6000
             )

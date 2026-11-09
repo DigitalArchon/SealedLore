@@ -679,6 +679,45 @@ def test_a_refused_tee_chat_sends_nothing_until_attested_again(app, window, monk
     assert session.provider.requests
 
 
+def test_a_tee_chat_attested_again_before_a_message_says_what_it_found(app, window, monkeypatch):
+    """Once a TEE chat's attestation is fifteen minutes old, the message that
+    finds it so attests the model again first, on the job's thread (engine
+    `_tee_guard`); the model button then says what that found, as after the
+    first, and a refusal holds every later message back until Try again."""
+    from sealedlore.providers.tee import REATTEST_SECONDS, TeeRefused
+    from tests.test_private import AttestedTee, _attestation
+
+    monkeypatch.setattr(window, "_attest_chat", lambda: None)
+    make_chat(window, monkeypatch, model="TEE/gemma-3-27b")
+    session = window.session
+    session.provider.responses = ["Hi.", "Again."]
+    clock = [1000.0]
+    unbound = TeeRefused("TEE/x's attestation didn't bind its signing key to our nonce")
+    tee = AttestedTee(session, clock, [_attestation(), _attestation("no GPU evidence"), unbound])
+    window._on_attested(None, tee.client, [tee.attested[0]], [])
+    assert window._tee_state == "attested"
+    send(app, window, "Hello")
+    clock[0] += REATTEST_SECONDS
+    send(app, window, "Hello again")
+    assert len(tee.attested) == 2 and len(session.provider.requests) == 2
+    assert window._tee_state == "attested (⚠ partial: no GPU evidence)"
+    assert "partial: no GPU evidence" in window._private_model_text()
+    assert session.story.chat_attestation.shortfalls == ["no GPU evidence"]
+
+    warned: list[str] = []
+    monkeypatch.setattr(window, "_warn_plain", lambda title, text: warned.append(text))
+    clock[0] += REATTEST_SECONDS
+    send(app, window, "A third")
+    assert len(tee.attested) == 3 and len(session.provider.requests) == 2
+    assert window._tee_state == "⚠ refused"
+    assert "The attestation was refused: TEE/x's attestation didn't bind" in warned[0]
+    assert "nothing was sent" in warned[0]
+    offered: list[str] = []
+    monkeypatch.setattr(window, "_offer_reattest", lambda reason, for_chat: offered.append(reason))
+    send(app, window, "A fourth")
+    assert offered and "didn't bind" in offered[0] and len(session.provider.requests) == 2
+
+
 class _FakeTee:
     def close(self):
         pass

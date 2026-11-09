@@ -648,6 +648,138 @@ def test_a_refused_enclave_gets_nothing_from_a_private_scene(tmp_path: Path):
     assert session.tee_block is None, "ending the scene lifts it"
 
 
+class AttestedTee:
+    """A TEE/ model's TeeClient as the window leaves it once its enclave has
+    attested, the network stood in for (providers/tee.py's own tests check
+    the real thing): each attestation's answer comes from `answers`, an
+    Attestation or an exception. While the session attests it again, what
+    `_tee_guard` (where every call that reaches the model begins) says is kept."""
+
+    def __init__(self, session, clock: list[float], answers: list) -> None:
+        import httpx
+
+        from sealedlore.providers.tee import TeeClient
+
+        class Client(TeeClient):
+            def _attest(inner):
+                answer = answers.pop(0)
+                if len(self.attested) > 0:  # the session's, not the window's first
+                    self.blocks.append(session.tee_block)
+                    try:
+                        session._tee_guard()
+                    except Exception as exc:  # noqa: BLE001 - what it refused with
+                        self.meanwhile.append(str(exc))
+                self.attested.append(answer)
+                if isinstance(answer, Exception):
+                    raise answer
+                return answer
+
+            def check_reply(inner, *_args, **_kwargs):
+                return "verified"
+
+        self.attested: list = []
+        self.blocks: list = []
+        self.meanwhile: list[str] = []
+        self.client = Client(
+            "https://nano-gpt.com/api/v1",
+            "k",
+            "TEE/x",
+            client=httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(404))),
+            clock=lambda: clock[0],
+        )
+        self.client.attest()  # as the window does when the scene begins
+        session.private_tee = self.client
+
+
+def _attestation(*shortfalls: str):
+    from sealedlore.models.private import Attestation
+
+    return Attestation(
+        verified=True,
+        level="partial" if shortfalls else "full",
+        shortfalls=list(shortfalls),
+        signing_address="0xab",
+    )
+
+
+def test_a_tee_model_is_attested_again_once_its_attestation_is_fifteen_minutes_old(
+    tmp_path: Path,
+):
+    """It was attested only as the scene (or chat) began, or its model changed:
+    an instance Chutes started later, whose replies are signed by none, was
+    never checked, nor a revocation seen. Now the request that finds the
+    attestation REATTEST_SECONDS old attests it again first, as the other
+    apps do, and everything else that would reach the model refuses
+    meanwhile, as during the first."""
+    from sealedlore.providers.tee import REATTEST_SECONDS
+
+    session, _main, held = build(tmp_path)
+    private = enter(session)
+    clock = [1000.0]
+    first, again = _attestation(), _attestation("no GPU evidence")
+    tee = AttestedTee(session, clock, [first, again])
+    session.open_span.attestation = first
+    play(session, turn(held, "One."))
+    clock[0] += REATTEST_SECONDS - 1
+    play(session, turn(held, "Two."))
+    assert len(tee.attested) == 1 and session.take_reattestation() is None
+    clock[0] += 1
+    play(session, turn(held, "Three."))
+    assert tee.attested == [first, again] and len(private.payloads) == 3
+    assert tee.blocks == ["TEE/x's enclave is still being attested"]
+    assert tee.meanwhile == ["TEE/x's enclave is still being attested; nothing was sent"]
+    assert session.tee_block is None and not session.tee_attesting
+    assert session.open_span.attestation is again
+    assert session.take_reattestation() == ("attested", again)
+    assert session.take_reattestation() is None, "said once"
+    play(session, turn(held, "Four."))
+    assert len(tee.attested) == 2, "in force for another fifteen minutes"
+
+
+def test_a_tee_model_refused_when_attested_again_is_sent_nothing_more(tmp_path: Path):
+    from sealedlore.providers.tee import REATTEST_SECONDS, TeeRefused
+
+    session, _main, held = build(tmp_path)
+    private = enter(session)
+    clock = [1000.0]
+    revoked = TeeRefused("TEE/x's Intel TDX quote failed verification: Intel has revoked it")
+    tee = AttestedTee(session, clock, [_attestation(), revoked])
+    play(session, turn(held, "One."))
+    clock[0] += REATTEST_SECONDS
+    with pytest.raises(TeeRefused, match="refused: .*revoked it; nothing was sent"):
+        play(session, turn(held, "Two, never sent."))
+    assert len(private.payloads) == 1
+    assert "never sent" not in json.dumps([n.content for n in session.nodes]), "not attached"
+    assert session.tee_block.startswith("The attestation was refused: ")
+    assert session.take_reattestation() == ("refused", str(revoked))
+    with pytest.raises(TeeRefused, match="refused"):
+        session.summarise_private()
+    assert len(tee.attested) == 2, "not attested again on its own: the window's Try again does"
+
+
+@pytest.mark.parametrize("entry", ["send", "regenerate", "ask", "summary", "image prompt"])
+def test_every_call_that_reaches_a_tee_model_attests_it_again_first(tmp_path: Path, entry):
+    from sealedlore.providers.tee import REATTEST_SECONDS
+
+    session, _main, held = build(tmp_path)
+    private = enter(session)
+    clock = [1000.0]
+    tee = AttestedTee(session, clock, [_attestation(), _attestation()])
+    play(session, turn(held, "One."))
+    clock[0] += REATTEST_SECONDS
+    sent = len(private.payloads)
+    calls = {
+        "send": lambda: play(session, turn(held, "Two.")),
+        "regenerate": lambda: list(session.regenerate()),
+        "ask": lambda: list(session.ask("Who is here?")),
+        "summary": session.summarise_private,
+        "image prompt": lambda: session.write_image_prompt(""),
+    }
+    private.responses = ['{"references": [], "prompt": "A lamp by the window."}']
+    calls[entry]()
+    assert len(tee.attested) == 2 and len(private.payloads) == sent + 1
+
+
 @pytest.mark.parametrize("keep", ["memory", "disk"])
 def test_a_questions_recall_carries_nothing_from_a_private_scene(tmp_path: Path, keep: str):
     """What a Question recalled rides the turns after it (Oct 2026). A

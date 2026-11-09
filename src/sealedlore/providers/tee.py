@@ -1,5 +1,6 @@
-"""TEE models on nano-gpt: attestation when a private scene or TEE chat begins,
-and a signature check on every reply.
+"""TEE models on nano-gpt: attestation when a private scene or TEE chat begins
+(and again before a request once it is REATTEST_SECONDS old), and a signature
+check on every reply.
 
 nano-gpt's `TEE/*` models run inside a trusted execution environment. Two
 calls let a client check that (docs.nano-gpt.com/api-reference/tee-verification):
@@ -67,6 +68,14 @@ REBUILT_STREAMS = frozenset({"TEE/gemma-4-31b-it"})
 # Named on the model button (a shortfall): the quote binds the key that signs
 # each reply's record, not the receipt keys around it.
 RECEIPT_KEYS_LOOSE = "receipt keys not in the quote"
+# An attestation this old is made again before the next request to the model
+# (engine/session_private.py `_tee_guard`), on dcap.since_boot, a clock that
+# runs on while the machine sleeps. It matters most for a per-instance
+# provider (Chutes), which signs no replies: an instance started after the
+# attestation would otherwise never be checked, nor a revocation seen. As the
+# author's other apps do (DA Assistant's TEE_MAX_AGE_SECONDS, DA Vibe
+# Manager's TEE_REATTEST_SECONDS, Nov 2026).
+REATTEST_SECONDS = 15 * 60
 
 
 def _canonical(value: Any) -> bytes:
@@ -273,6 +282,7 @@ class TeeClient:
         client: httpx.Client | None = None,
         intel: Callable[..., dcap.Result] | None = None,
         nvidia: Callable[..., int] | None = None,
+        clock: Callable[[], float] = dcap.since_boot,
     ) -> None:
         self.base_url = base_url
         self.api_key = api_key
@@ -287,10 +297,21 @@ class TeeClient:
         # The two verifiers, replaceable so tests can stand in for Intel and NVIDIA.
         self._intel = intel or dcap.verify
         self._nvidia = nvidia or nras.verify
+        # When the attestation in force began, on `clock`; None until one holds.
+        self._clock = clock
+        self.attested_at: float | None = None
 
     def close(self) -> None:
         if self._owns:
             self._client.close()
+
+    def due(self) -> bool:
+        """Whether the enclave must be attested again before anything more is
+        sent to it: no attestation has held, or the one in force is
+        REATTEST_SECONDS old."""
+        if self.attested_at is None:
+            return True
+        return not 0 <= self._clock() - self.attested_at < REATTEST_SECONDS
 
     def _get(
         self, path: str, params: dict[str, str], *, route: str | None = None
@@ -361,7 +382,16 @@ class TeeClient:
         Until Sept 2026 a nonce that merely came back in nano-gpt's JSON counted,
         the report data was read from nano-gpt's copy, and neither Intel's nor
         NVIDIA's signatures were checked. Anything can echo a string.
+
+        One that holds is in force from when it began (`attested_at`) until
+        REATTEST_SECONDS later (`due`).
         """
+        started = self._clock()
+        attestation = self._attest()
+        self.attested_at = started
+        return attestation
+
+    def _attest(self) -> Attestation:
         nonce = secrets.token_hex(32)
         try:
             body = self._get("/tee/attestation", {"model": self.model, "nonce": nonce})

@@ -26,6 +26,7 @@ from sealedlore.providers.ethsig import (
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
 from sealedlore.providers.tee import (
     NRAS_URL,
+    REATTEST_SECONDS,
     RECEIPT_KEYS_LOOSE,
     TeeClient,
     TeeRefused,
@@ -136,7 +137,7 @@ def tee_server(
     return httpx.Client(transport=httpx.MockTransport(handler))
 
 
-def client_for(*, intel=UP_TO_DATE, nvidia=8, **server) -> TeeClient:
+def client_for(*, intel=UP_TO_DATE, nvidia=8, clock=None, **server) -> TeeClient:
     """A TeeClient on the fake server, Intel's and NVIDIA's checks stood in for
     (a result to return, or an exception to raise); the real ones are checked
     against real evidence below."""
@@ -158,6 +159,7 @@ def client_for(*, intel=UP_TO_DATE, nvidia=8, **server) -> TeeClient:
         client=tee_server(**server),
         intel=intel_verify,
         nvidia=nvidia_verify,
+        **({"clock": clock} if clock is not None else {}),
     )
 
 
@@ -225,6 +227,34 @@ def test_a_reply_signed_by_another_key_fails():
     client = client_for(signer=1)
     client.attest()
     assert client.verify_reply("req_1") is False
+
+
+def test_an_attestation_is_due_again_fifteen_minutes_after_it_began():
+    """The session attests again before a request once it is (engine
+    `_tee_guard`), as the author's other apps do: a TEE/ model used to be
+    attested only as a scene or chat began."""
+    now = [1000.0]
+
+    def slow(_request):
+        now[0] += 5  # the attestation takes a while: it counts from its start
+        return None
+
+    client = client_for(clock=lambda: now[0])
+    client._client.event_hooks["request"] = [slow]
+    assert client.due() and client.attested_at is None, "never attested"
+    client.attest()
+    assert client.attested_at == 1000.0 < now[0]
+    now[0] = 1000.0 + REATTEST_SECONDS - 1
+    assert not client.due()
+    now[0] += 1
+    assert client.due()
+    # Refused, it stays due: the attestation in force is still the old one.
+    refusing = client_for(clock=lambda: now[0], attestation_status=400)
+    with pytest.raises(TeeRefused):
+        refusing.attest()
+    assert refusing.attested_at is None and refusing.due()
+    # On a clock that runs on while the machine sleeps.
+    assert TeeClient("https://nano-gpt.com/api/v1", "k", "TEE/x")._clock is dcap.since_boot
 
 
 # --- real evidence: Intel's and NVIDIA's own signatures ---------------------------------
