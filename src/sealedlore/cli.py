@@ -39,6 +39,7 @@ from sealedlore.models.config import (
     is_loopback_host,
     recommended_models,
     require_https,
+    shown,
 )
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.node import (
@@ -183,7 +184,7 @@ def cmd_configure(args: argparse.Namespace) -> int:
     save_config(config, root=root)
     default = " (the default endpoint)" if config.active_provider_name == name else ""
     print(
-        f"Saved endpoint {name!r}{default} -> {provider.base_url} "
+        f"Saved endpoint {name!r}{default} -> {shown(provider.base_url)} "
         f"(model: {provider.model or 'unset'})"
     )
     if not default:
@@ -212,16 +213,16 @@ def warn_if_plain(provider: ProviderConfig, before: list[tuple[str, str]], *, ke
     if kept:
         print(
             f"Warning: the API key already saved for {provider.name!r} is kept, and now goes "
-            f"unencrypted to {provider.base_url}, another machine on your network, where "
+            f"unencrypted to {shown(provider.base_url)}, another machine on your network, where "
             "anyone on that network can read it (a café's or a hotel's Wi-Fi too). Give "
             '--api-key "" if this server needs no key, or its own key with --api-key.',
             file=sys.stderr,
         )
     else:
         print(
-            f"Warning: {provider.base_url} is plain http to another machine on your network: "
-            "the API key goes unencrypted, and anyone on that network can read it (a café's or "
-            "a hotel's Wi-Fi too). Use the server's https:// address if it has one.",
+            f"Warning: {shown(provider.base_url)} is plain http to another machine on your "
+            "network: the API key goes unencrypted, and anyone on that network can read it (a "
+            "café's or a hotel's Wi-Fi too). Use the server's https:// address if it has one.",
             file=sys.stderr,
         )
 

@@ -342,9 +342,65 @@ def is_loopback_host(host: str) -> bool:
     return (mapped or address).is_loopback
 
 
+# Everything of a text up to its last "@" before a query or a fragment, the
+# scheme and "//" aside: where an address that can't be read as one may have
+# a user name and password.
+_UP_TO_AT = re.compile(r"^((?:[^:/?#]+:)?//)?[^?#]*@")
+# The user name and password of an address anywhere in a text.
+_USERINFO = re.compile(r"([A-Za-z][A-Za-z0-9+.-]*://)[^\s/?#]*@")
+
+
+def shown(url: str) -> str:
+    """`url` as it may be shown, logged or printed: without the user name and
+    password an address may carry (https://alice:secret@host/v1 becomes
+    https://…@host/v1). For any text, and never raising: one that can't be
+    read as an address (half typed, no scheme, a port that isn't a number)
+    says nothing certain of where its host begins, so everything up to its
+    last "@" goes. (DA Assistant's netguard.shown, Nov 2026.)"""
+    text = str(url or "")
+    try:
+        parsed = urlparse(text)
+        _ = parsed.port  # raises on a port that isn't a number
+    except ValueError:
+        parsed = None
+    if parsed is None or not parsed.netloc:
+        return _UP_TO_AT.sub(r"\1…@", text, count=1)
+    if "@" not in parsed.netloc:
+        return text
+    return parsed._replace(netloc="…@" + parsed.netloc.rsplit("@", 1)[1]).geturl()
+
+
+def without_password(url: str) -> str:
+    """`url` with the user name and password written into it taken out, as
+    `shown` does but leaving an address where they were: what config.json
+    keeps of an address whose password is in the keychain
+    (storage/repository.py). Text with neither comes back as it is.
+    (DA Assistant's netguard.without_password, Nov 2026.)"""
+    text = str(url or "")
+    if "@" not in text:
+        return text
+    try:
+        parsed = urlparse(text)
+        _ = parsed.port  # raises on a port that isn't a number
+    except ValueError:
+        parsed = None
+    if parsed is None or not parsed.netloc:
+        return _UP_TO_AT.sub(r"\1", text, count=1)
+    if "@" not in parsed.netloc:
+        return text
+    return parsed._replace(netloc=parsed.netloc.rsplit("@", 1)[1]).geturl()
+
+
+def addresses_shown(text: str) -> str:
+    """`text` with every address in it shown as `shown` shows one: for an
+    error that quotes a request's URL, httpx's own included."""
+    return _USERINFO.sub(r"\1…@", str(text))
+
+
 def require_https(url: str) -> str:
     """`url` when it is https, or http to this computer or the local network;
-    refused in words a person can act on otherwise."""
+    refused in words a person can act on otherwise (the address as `shown`:
+    never a password typed into it)."""
     parsed = urlparse(url)
     if parsed.scheme == "https":
         return url
@@ -353,17 +409,17 @@ def require_https(url: str) -> str:
     if not url.strip():
         raise ValueError("needs an address (https://…)")
     if not parsed.scheme or not parsed.netloc:
-        raise ValueError(f"{url!r} needs to begin with https://")
+        raise ValueError(f"{shown(url)!r} needs to begin with https://")
     if (parsed.hostname or "") in ("0.0.0.0", "::"):
         # The address a server listens on (Ollama prints it), not one to
         # reach it at.
         raise ValueError(
-            f"{url!r} is the address a server listens on, not one to reach it at: use "
+            f"{shown(url)!r} is the address a server listens on, not one to reach it at: use "
             "127.0.0.1 for this computer, or the server's own address on your network"
         )
     raise ValueError(
-        f"must use https: {url!r} isn't (plain http is allowed only for a server on this "
-        "computer or your local network)"
+        f"must use https: {shown(url)!r} isn't (plain http is allowed only for a server on "
+        "this computer or your local network)"
     )
 
 

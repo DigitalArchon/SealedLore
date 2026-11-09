@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from sealedlore.ids import utc_now_iso
+from sealedlore.models.config import without_password
 from sealedlore.models.image import RefUse
 from sealedlore.models.video import GeneratedVideo
 from sealedlore.providers.base import ProviderError
@@ -131,7 +132,9 @@ def submit_video(client: VideoClient, request: VideoRequest, store: PictureStore
         start_frame=request.start_frame,
         end_frame=request.end_frame,
         api=job.api,
-        base_url=job.base_url,
+        # Kept with the story, and a backup of it: never a password typed
+        # into the address (gui/window_videos.py puts it back from Settings).
+        base_url=without_password(job.base_url),
         job_id=job.id,
         poll_url=job.poll_url,
         quote=request.quote,

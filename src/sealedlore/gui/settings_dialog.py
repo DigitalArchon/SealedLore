@@ -87,7 +87,9 @@ from sealedlore.models.config import (
     recommended_model,
     recommended_models,
     require_https,
+    shown,
     split_model,
+    without_password,
 )
 from sealedlore.models.generation import (
     REASONING_LEVELS,
@@ -603,7 +605,10 @@ class SettingsDialog(QDialog):
         couldn't give back this session is read now, or the rename refused,
         rather than lost with the old slot."""
         for origin, settings in zip(self._origins, endpoints, strict=True):
-            if origin is None or origin == settings.name or settings.api_key:
+            if origin is None or origin == settings.name:
+                continue
+            self._carry_address(origin, settings)
+            if settings.api_key:
                 continue
             slot = f"provider:{origin}"
             if slot not in self.config.keychain_slots:
@@ -619,6 +624,26 @@ class SettingsDialog(QDialog):
                     "keep the name."
                 )
             settings.api_key = value
+
+    def _carry_address(self, origin: str, settings: ProviderConfig) -> None:
+        """As `_carry_keys` does a key: the password written into a renamed
+        endpoint's address, kept in the keychain under its name, follows it
+        when this session couldn't read it back (the field then shows the
+        address without it)."""
+        slot = f"{keychain.ADDRESS}provider:{origin}"
+        typed = settings.base_url.strip()
+        if slot not in self.config.keychain_slots or without_password(typed) != typed:
+            return
+        try:
+            stored = keychain.read(slot, self._root)
+        except keychain.KeychainError as exc:
+            raise ValueError(
+                f"The password in {origin!r}'s address is in {keychain.where()} and couldn't be "
+                f"read ({exc}), so renaming it to {settings.name!r} would lose it: type it into "
+                "the address again, or keep the name."
+            ) from exc
+        if stored and without_password(stored) == typed:
+            settings.base_url = stored
 
     def _endpoint_tab(self) -> QWidget:
         """Where the story's calls go: every endpoint with its key, one the
@@ -2103,7 +2128,7 @@ class SettingsDialog(QDialog):
         """The question, every key in `new` at once; True on Yes, which is
         kept (`_plain_allowed`). `after_no`: what No does."""
         one = len(new) == 1
-        listed = "\n".join(f"•  {sent.whose}: {sent.address}" for sent in new)
+        listed = "\n".join(f"•  {sent.whose}: {shown(sent.address)}" for sent in new)
         answer = QMessageBox.question(
             self,
             "Send the key unencrypted?" if one else "Send the keys unencrypted?",
@@ -2145,7 +2170,7 @@ class SettingsDialog(QDialog):
                 self.endpoint_list.setCurrentRow(row)
         raise SettingsProblem(
             first.page,
-            f"the key for {first.address} would go unencrypted. Use the server's https:// "
+            f"the key for {shown(first.address)} would go unencrypted. Use the server's https:// "
             "address, leave its key blank if it needs none, or Save again and choose Yes.",
         )
 

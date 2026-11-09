@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from sealedlore.messages import PromptMessage
+from sealedlore.models.config import addresses_shown
 from sealedlore.models.generation import GenerationParams
 from sealedlore.models.node import Usage
 
@@ -68,7 +69,10 @@ StreamEvent = TextDelta | ReasoningDelta | StreamCompleted
 
 class ProviderError(RuntimeError):
     def __init__(self, message: str, *, status_code: int | None = None, body: str | None = None):
-        super().__init__(message)
+        # Said in dialogs, notices and the CLI: never with a password written
+        # into an address (models/config.py `addresses_shown`), whoever built
+        # the message, httpx included.
+        super().__init__(addresses_shown(message))
         self.status_code = status_code
         self.body = body
         # Seconds the endpoint asked us to wait (Retry-After), if it said.

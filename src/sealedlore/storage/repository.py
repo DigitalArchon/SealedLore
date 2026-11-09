@@ -18,7 +18,7 @@ from sealedlore.ids import new_id, utc_now_iso
 from sealedlore.models.aside import Aside
 from sealedlore.models.authoring import ReviewRecord
 from sealedlore.models.character import Character
-from sealedlore.models.config import Config
+from sealedlore.models.config import Config, without_password
 from sealedlore.models.embedding import EmbeddingCacheEntry
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.node import Node
@@ -101,6 +101,26 @@ def _as_written(config: Config, root: Path | None) -> dict[str, Any]:
             kept.append(slot)
         elif slot in listed:
             keychain.remove(slot, root)  # the author emptied the field
+    # A password written into an address goes as a key does: the keychain
+    # has the address as typed, the file the address without it.
+    for slot, holder in keychain.address_slots(config):
+        present.add(slot)
+        typed = holder.base_url
+        if without_password(typed) == typed:
+            if slot in listed and not keychain.known(slot, root):
+                kept.append(slot)  # still there, out of reach: never lost
+            elif slot in listed and reachable:
+                keychain.remove(slot, root)  # the password taken out, or another address
+        elif not use:
+            if slot in listed and reachable:
+                keychain.remove(slot, root)  # in the file as typed, by choice
+        else:
+            try:
+                keychain.write(slot, root, typed)
+            except keychain.KeychainError as exc:
+                keychain.last_problem = f"the keychain refused an address's password ({exc})"
+                continue  # in the file as typed this time, never lost
+            kept.append(slot)
     if reachable:
         for slot in listed - present:
             keychain.remove(slot, root)  # a provider renamed or gone
@@ -109,22 +129,33 @@ def _as_written(config: Config, root: Path | None) -> dict[str, Any]:
     for slot, holder in keychain.slots(written):
         if slot in kept:
             holder.api_key = ""
+    for slot, holder in keychain.address_slots(written):
+        if slot in kept:
+            holder.base_url = without_password(holder.base_url)
     return written.model_dump()
 
 
 def _fill_keys(config: Config, root: Path | None) -> str | None:
-    """Each key the keychain holds, put back; what went wrong, if anything."""
+    """Each key the keychain holds, put back, and each address's password;
+    what went wrong, if anything."""
+    try:
+        notes = [_fill_api_keys(config, root), _fill_addresses(config, root)]
+    except keychain.KeychainError as exc:
+        return (
+            f"Your API keys are kept in {keychain.where()}, which couldn't be read "
+            f"({exc}). Unlock it and restart, or enter the keys again in Settings."
+        )
+    return " ".join(note for note in notes if note) or None
+
+
+def _fill_api_keys(config: Config, root: Path | None) -> str | None:
+    """Each key the keychain holds, put back; what is missing, if anything.
+    Raises KeychainError."""
     missing: list[str] = []
     for slot, holder in keychain.slots(config):
         if slot not in config.keychain_slots or holder.api_key:
             continue
-        try:
-            value = keychain.read(slot, root)
-        except keychain.KeychainError as exc:
-            return (
-                f"Your API keys are kept in {keychain.where()}, which couldn't be read "
-                f"({exc}). Unlock it and restart, or enter the keys again in Settings."
-            )
+        value = keychain.read(slot, root)
         if value is None:
             missing.append(slot)
         else:
@@ -145,6 +176,31 @@ def _fill_keys(config: Config, root: Path | None) -> str | None:
             "New address…), and then they pair again."
         )
     return " ".join(notes) or None
+
+
+def _fill_addresses(config: Config, root: Path | None) -> str | None:
+    """Each address as it was typed, from the keychain: only while the
+    file's address is that one less its password, so the password goes to
+    no address but the one it was typed for, however the file is edited.
+    One the file has a password in already (kept there by choice, or a save
+    the keychain refused) is used as it is. What is lost, if anything;
+    raises KeychainError."""
+    lost: list[str] = []
+    for slot, holder in keychain.address_slots(config):
+        written = holder.base_url
+        if slot not in config.keychain_slots or without_password(written) != written:
+            continue
+        stored = keychain.read(slot, root)  # KeychainError: said as for a key
+        if stored is None:
+            lost.append(slot.removeprefix(keychain.ADDRESS))
+        elif without_password(stored) == written:
+            holder.base_url = stored
+    if lost:
+        return (
+            f"{keychain.where().capitalize()} has lost the password written into the address "
+            f"for {', '.join(lost)}: type it in again in Settings."
+        )
+    return None
 
 
 def _load_config(root: Path | None) -> tuple[Config, str | None]:

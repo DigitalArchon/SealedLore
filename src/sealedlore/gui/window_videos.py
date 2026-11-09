@@ -23,7 +23,7 @@ from sealedlore.gui.video_dialog import VideoDialog
 from sealedlore.gui.video_jobs import VideoCatalog, VideoJobs
 from sealedlore.gui.video_view import FrameGrabber, VideoItem, multimedia_available, stop_playback
 from sealedlore.gui.winprivacy import exclude_from_capture
-from sealedlore.models.config import _same_host
+from sealedlore.models.config import _same_host, shown, without_password
 from sealedlore.models.image import RefUse
 from sealedlore.models.node import Usage
 from sealedlore.models.video import GeneratedVideo
@@ -283,8 +283,11 @@ class VideosWindow:
         if media is None or not _same_host(media.base_url, video.base_url):
             return None
         # The service as Settings has it, not as the record says: videos.json
-        # comes back with a story backup, which may be anyone's.
-        return VideoClient(video.base_url, media.api_key, api=media.api)
+        # comes back with a story backup, which may be anyone's. The record
+        # keeps the address without a password typed into it (engine/videos.py):
+        # the video endpoint's own gives it back, only while it is that address.
+        address = media.base_url if without_password(media.base_url) == video.base_url else ""
+        return VideoClient(address or video.base_url, media.api_key, api=media.api)
 
     def _resume_videos(self) -> None:
         """Ask after every video of the open story that is still being made
@@ -376,7 +379,8 @@ class VideosWindow:
             if client is None:
                 self._warn_plain(
                     "Can't ask after it",
-                    f"The video was sent to {video.base_url}, but Settings → Video has no key for "
+                    f"The video was sent to {shown(video.base_url)}, but Settings → Video has no "
+                    "key for "
                     "that address now. Put it back to fetch the video.",
                 )
                 return

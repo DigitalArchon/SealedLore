@@ -5493,7 +5493,9 @@ class MainWindow(
         save_config(self.config, root=self.root)
         if not keychain.keys_in_file(self.config):
             self.statusBar().showMessage(
-                f"Your API keys were moved out of config.json into {keychain.where()}.", 15000
+                f"Your API keys and passwords were moved out of config.json into "
+                f"{keychain.where()}.",
+                15000,
             )
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt naming

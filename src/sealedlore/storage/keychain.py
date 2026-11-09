@@ -14,6 +14,15 @@ knows what it was.
 
 `Config.key_storage = "file"` keeps keys in config.json by choice: for the
 CLI and test setups (the author's call).
+
+A password written into an endpoint's address (https://user:pass@host/v1) is
+as secret as a key, and goes the same way (`address_slots`): config.json
+has the address without it (`models.config.without_password`), the keychain
+the address as typed, under the slot's name with "address:" before it.
+`load_config` puts the two together again only while the file's address is
+that one less its password, so a password goes to no address but the one it
+was typed for, whatever the file is edited to. (DA Assistant's, Nov 2026:
+until then the address went into config.json as typed, password and all.)
 """
 
 from __future__ import annotations
@@ -24,7 +33,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, Protocol
 
-from sealedlore.models.config import Config
+from sealedlore.models.config import Config, without_password
 from sealedlore.storage.paths import data_home
 
 SERVICE = "SealedLore"
@@ -36,6 +45,14 @@ class KeychainError(Exception):
 
 class HasKey(Protocol):
     api_key: str
+
+
+class HasAddress(Protocol):
+    base_url: str
+
+
+# Before an address's slot: the keychain holds the address as typed there.
+ADDRESS = "address:"
 
 
 def slots(config: Config) -> Iterator[tuple[str, HasKey]]:
@@ -52,13 +69,30 @@ def slots(config: Config) -> Iterator[tuple[str, HasKey]]:
     yield "phone", config.phone.onion
 
 
+def address_slots(config: Config) -> Iterator[tuple[str, HasAddress]]:
+    """Every address the config holds, by the slot its password is kept
+    under in the keychain (`ADDRESS` and the key's own slot)."""
+    for provider in config.providers:
+        yield f"{ADDRESS}provider:{provider.name}", provider
+    if config.embedding_provider is not None:
+        yield f"{ADDRESS}embeddings", config.embedding_provider
+    yield f"{ADDRESS}images", config.image_endpoint
+    yield f"{ADDRESS}videos", config.video_endpoint
+    if config.private_provider is not None:
+        yield f"{ADDRESS}private", config.private_provider
+
+
 def keys_in_file(config: Config) -> bool:
     """Keys config.json still holds though the keychain is chosen: from
-    before the keychain, or a save it refused."""
+    before the keychain, or a save it refused. A password written into an
+    address counts as one."""
     if config.key_storage != "keychain":
         return False
     return any(
         holder.api_key and slot not in config.keychain_slots for slot, holder in slots(config)
+    ) or any(
+        without_password(holder.base_url) != holder.base_url and slot not in config.keychain_slots
+        for slot, holder in address_slots(config)
     )
 
 
