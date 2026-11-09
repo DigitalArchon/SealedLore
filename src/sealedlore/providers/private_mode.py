@@ -309,8 +309,21 @@ def _sealing_transport(public_key: str) -> httpx.BaseTransport:
     # A fresh connection per request, as the plain client does, so the trace
     # hook sees each socket and Stop can shut it down (the EHBP transport
     # passes the request's extensions through to this one).
-    inner = httpx.HTTPTransport(limits=httpx.Limits(max_keepalive_connections=0))
+    inner = _NonEmptyBodyTransport(limits=httpx.Limits(max_keepalive_connections=0))
     return EHBPTransport.from_public_key_hex(public_key, inner=inner)
+
+
+class _NonEmptyBodyTransport(httpx.HTTPTransport):
+    """EHBP passes a request with an empty body through as it came, unsealed:
+    under it, nothing goes to the relay that EHBP didn't seal. (DA Vibe
+    Manager's, DA Private Coder's and DA Toolkit's, Nov 2026.)"""
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        from ehbp.protocol import ENCAPSULATED_KEY_HEADER
+
+        if ENCAPSULATED_KEY_HEADER not in request.headers:  # httpx's headers ignore case
+            raise ProviderError("refusing to send an unsealed request to the enclave")
+        return super().handle_request(request)
 
 
 class PrivateModeProvider(OpenAICompatibleProvider):

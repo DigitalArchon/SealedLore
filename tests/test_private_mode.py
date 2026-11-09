@@ -823,3 +823,26 @@ def test_what_the_relay_writes_hides_nothing_where_an_error_quotes_it(fake, setu
     with pytest.raises(ProviderError, match="refused our key twice") as twice:
         list(provider.stream(request()))
     assert "\n" not in visible(twice.value)
+
+
+def test_nothing_goes_to_the_relay_that_ehbp_did_not_seal(fake, monkeypatch):
+    """EHBP passes a request with an empty body through as it came, unsealed,
+    and the transport under it sent whatever it was given. Now that one
+    refuses any request without EHBP's encapsulated key (DA Vibe Manager's, DA
+    Private Coder's and DA Toolkit's, Nov 2026)."""
+    reached: list[httpx.Request] = []
+
+    def network(transport, request: httpx.Request) -> httpx.Response:
+        reached.append(request)
+        return httpx.Response(404)  # passed back as it came: not a success
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", network)
+    client = httpx.Client(transport=_private_mode._sealing_transport(fake.public_hex))
+    with pytest.raises(ProviderError, match="refusing to send an unsealed request"):
+        client.post(RELAY + "/v1/chat/completions")
+    with pytest.raises(ProviderError, match="refusing to send an unsealed request"):
+        client.get(RELAY + "/v1/chat/completions")
+    assert reached == []
+    client.post(RELAY + "/v1/chat/completions", content=b'{"model": "glm-5-3"}')
+    assert len(reached) == 1 and ENCAPSULATED_KEY_HEADER in reached[0].headers
+    assert b"glm-5-3" not in reached[0].read()
