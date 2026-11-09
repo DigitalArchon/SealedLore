@@ -49,7 +49,7 @@ def test_replies_are_read_whole_as_bytes_come():
     assert [r.status for r in replies] == [250, 650]
     assert replies[0].lines[1].startswith("AUTH ")
     assert replies[1].event and tor_control.bootstrap_of(replies[1].text()).progress == 45
-    assert tor_control.cookie_file(replies[0]) == "/a b/control_auth_cookie"
+    tor_control.offers_safecookie(replies[0])  # where the cookie is, it is never asked
 
 
 def test_a_data_block_is_read_to_its_dot():
@@ -78,7 +78,7 @@ def test_safecookie_both_ways():
 def test_no_safecookie_no_login():
     reply = Reply(250, ["PROTOCOLINFO 1", 'AUTH METHODS=NULL,COOKIE COOKIEFILE="/x"', "OK"])
     with pytest.raises(ControlError, match="SAFECOOKIE"):
-        tor_control.cookie_file(reply)
+        tor_control.offers_safecookie(reply)
 
 
 def test_the_onion_service_command_and_answer():
@@ -358,6 +358,18 @@ def test_something_that_isnt_tor_on_the_socket_is_never_logged_into(app, place, 
     wait_for(app, lambda: service.step == "failed")
     assert "didn't prove it is tor" in service.words
     assert "AUTHENTICATE" not in commands(log)
+
+
+def test_a_cookie_where_the_socket_says_is_never_read(app, place, monkeypatch):
+    """SAFECOOKIE proves the socket holds tor's cookie, but the cookie was read
+    from the file PROTOCOLINFO named: something on the socket that isn't our
+    tor could name a file of its own and prove it held its bytes. The cookie is
+    read from the DataDirectory SealedLore gave tor, so it can't."""
+    monkeypatch.setattr(tor_service_module, "RESTART_SECONDS", ())
+    service, _, log = run(app, place, "impostor")
+    wait_for(app, lambda: service.step == "failed")
+    assert "didn't prove it is tor" in service.words
+    assert "AUTHENTICATE" not in commands(log) and "ADD_ONION" not in commands(log)
 
 
 def test_a_refused_onion_is_said(app, place, monkeypatch):

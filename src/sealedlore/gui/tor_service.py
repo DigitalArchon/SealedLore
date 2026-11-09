@@ -40,6 +40,7 @@ from sealedlore.phone.tor_control import OUT_OF_DATE, ControlError, Reply, Reply
 from sealedlore.phone.torrc import (
     PhonePaths,
     bundled,
+    cookie_path,
     make_folders,
     onion_target,
     render_torrc,
@@ -220,8 +221,10 @@ class TorService(QObject):
 
     def _on_protocolinfo(self, reply: Reply) -> None:
         self.version = tor_control.version_of(reply)
-        cookie_path = tor_control.cookie_file(reply)
-        with open(cookie_path, "rb") as cookie:
+        tor_control.offers_safecookie(reply)
+        # From the DataDirectory we gave tor, never from where the socket
+        # says: an impostor could name a file it knows, and prove it.
+        with open(cookie_path(self.paths), "rb") as cookie:
             self._cookie = cookie.read(tor_control.COOKIE_LENGTH + 1)
         if len(self._cookie) != tor_control.COOKIE_LENGTH:
             raise ControlError("tor's cookie isn't 32 bytes")

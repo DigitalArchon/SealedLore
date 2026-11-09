@@ -172,18 +172,21 @@ def add_onion(key: str | None, target: str) -> str:
 # --- what tor says ----------------------------------------------------------------------
 
 
-def cookie_file(protocolinfo: Reply) -> str:
-    """Where tor keeps the cookie, from PROTOCOLINFO; SAFECOOKIE must be offered."""
+def offers_safecookie(protocolinfo: Reply) -> None:
+    """Raises ControlError unless PROTOCOLINFO offers the SAFECOOKIE login.
+    Where the cookie is, it is never asked (its COOKIEFILE): the control
+    socket's answer is what SAFECOOKIE is there to check, and something on
+    that socket that isn't our tor could name a file whose bytes it knows,
+    then prove it holds them. The cookie is read from the DataDirectory
+    SealedLore gave tor (phone/torrc.py `cookie_path`)."""
     for line in protocolinfo.lines:
         if line.startswith("AUTH "):
             fields = _fields(line[5:])
             methods = fields.get("METHODS", "").split(",")
             if "SAFECOOKIE" not in methods:
                 raise ControlError(f"tor offers no SAFECOOKIE login ({fields.get('METHODS')})")
-            path = fields.get("COOKIEFILE")
-            if path:
-                return path
-    raise ControlError("tor didn't say where its cookie is")
+            return
+    raise ControlError("tor didn't say how to log in")
 
 
 def version_of(protocolinfo: Reply) -> str:

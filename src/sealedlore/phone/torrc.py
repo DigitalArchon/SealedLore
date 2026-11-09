@@ -87,6 +87,13 @@ def render_torrc(paths: PhonePaths, owner_pid: int) -> str:
     return "\n".join(lines) + "\n"
 
 
+def cookie_path(paths: PhonePaths) -> Path:
+    """Where tor writes its control cookie: in the DataDirectory it is given
+    (CookieAuthentication 1, no CookieAuthFile), 0700 and SealedLore's own.
+    Read from here, never from where the control socket says it is."""
+    return paths.data / "control_auth_cookie"
+
+
 def onion_target(paths: PhonePaths) -> str:
     """ADD_ONION's target. Its arguments are split on spaces, so the socket
     path must have none: phone_paths moves the sockets where that holds."""

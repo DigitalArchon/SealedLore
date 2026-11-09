@@ -8,6 +8,8 @@ FAKE_TOR_MODE (environment):
   crash         exits after bootstrapping, every time
   crash_once    exits after bootstrapping the first time (a file marks it)
   liar          a wrong SAFECOOKIE server hash: not tor
+  impostor      not tor either, but its PROTOCOLINFO names a cookie file of its
+                own, whose bytes it proves it holds
   refuse        refuses ADD_ONION
   obsolete, unrecommended, new
                 what status/version/current says (else "recommended")
@@ -69,6 +71,12 @@ def main() -> None:
     cookie = secrets.token_bytes(32)
     with open(cookie_path, "wb") as f:
         f.write(cookie)
+    if mode == "impostor":
+        # Not the cookie tor would write: one of its own, beside the folder.
+        cookie_path = os.path.join(os.path.dirname(data), "impostors_cookie")
+        cookie = secrets.token_bytes(32)
+        with open(cookie_path, "wb") as f:
+            f.write(cookie)
     marker = os.path.join(data, "crashed-once")
     print("Oct 19 00:00:00.000 [notice] Tor 0.4.9.14 (fake) starting", flush=True)
 
