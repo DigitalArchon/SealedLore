@@ -5,20 +5,33 @@ install (see [the manual](manual.md#linux-the-appimage) for running it). To buil
 one from a checkout:
 
 ```bash
-packaging/appimage/build.sh     # -> dist/SealedLore-<version>-x86_64.AppImage (+ .sha256)
+packaging/appimage/build.sh         # -> dist/SealedLore-<version>-x86_64.AppImage (+ .sha256)
+packaging/appimage/build.sh check   # build it twice and compare (below)
 ```
 
 It builds the current commit, not uncommitted changes (it stops if there are
-any). It needs `git`, `curl`, `tar`, `dpkg-deb`, `sha256sum`, `file`, `objdump`
-(binutils) and `ldd`.
+any): each file as committed, read from git's own store, so no setting of
+yours (`core.autocrlf`, a filter, `tar.umask`) changes what goes in. It needs
+`git`, `curl`, `tar`, `dpkg-deb`, `sha256sum`, `file`, `objdump` (binutils)
+and `ldd`. `DIST=folder` puts the AppImage somewhere other than `dist/`;
+`BUILD_DIR` and `CACHE_DIR` move its working folder (`build/appimage`) and its
+downloads.
 
 The build downloads, over HTTPS, a relocatable Python (python-appimage), the
-pinned packages from PyPI, eight small libraries from Debian 11's archive,
-the Tor Expert Bundle from the Tor Project's archive (checked against pinned
-checksums), and `appimagetool`. They are cached in `build/appimage/cache`.
+pinned packages from PyPI, nine small libraries from Debian 11's archive,
+the Tor Expert Bundle from the Tor Project's archive, the tokenizer's data
+from OpenAI's public file store (each checked against a pinned checksum), and
+`appimagetool`. They are cached in `build/appimage/cache`. Nothing of your
+uv or pip settings is used, the `UV_` variables in your environment
+included.
 
 To change a package version, edit `packaging/appimage/requirements.in` and
 run `packaging/appimage/lock.sh` (it uses the same pinned `uv` as the build).
+A relock keeps every version the lock already pins, so only what you added
+or floored moves; `UPGRADE=1 packaging/appimage/lock.sh` re-resolves
+everything to the newest versions. A version with an advisory moves only
+when `requirements.in` floors it past the fix (as it does pyasn1, dnspython
+and cryptography) or the lock is re-resolved.
 
 ## Tor, for phone access
 
@@ -76,6 +89,21 @@ sha256sum dist/SealedLore-*-x86_64.AppImage /path/to/the/downloaded.AppImage
 The two sums match only if the download holds exactly that commit's code.
 Checking the published `.sha256` alone (`sha256sum -c`) catches a damaged
 download, but not a replaced one if the sum came from the same place.
+
+To check that the build is reproducible on your own machine, without a
+download to compare with:
+
+```bash
+packaging/appimage/build.sh check
+```
+
+It builds the commit twice, from scratch, each in a temporary folder of its
+own: the first with the usual cache, the second with none of its package
+caches (the Python packages are downloaded again and SealedLore's own package
+built anew), only the pinned downloads, each checked by its checksum as it is
+used. If the two AppImages are the same, byte for byte, it says so and puts
+the AppImage in `dist/`; if not, it keeps both in `dist/check-a` and
+`dist/check-b` for comparing (with `diffoscope`, say) and fails.
 
 Releases are built by GitHub Actions from the tag ([`.github/workflows/release.yml`](../.github/workflows/release.yml))
 and carry a signed build attestation, which says that workflow made that file
