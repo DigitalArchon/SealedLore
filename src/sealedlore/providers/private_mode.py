@@ -36,8 +36,9 @@ runs no code from nano-gpt (Sept 2026):
    `private/*` model outright.
 
 The attestation is redone before a request once it is `MAX_AGE_SECONDS` old
-(the proxy's five minutes: laptop sleep, a key rotated underneath us), and
-once more when the enclave says the key has changed.
+(the proxy's five minutes: laptop sleep, a key rotated underneath us), on a
+clock that runs on while the machine sleeps (`dcap.since_boot`), and once more
+when the enclave says the key has changed.
 """
 
 from __future__ import annotations
@@ -47,7 +48,6 @@ import json
 import re
 import secrets
 import threading
-import time
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -58,6 +58,7 @@ import httpx
 from sealedlore.models.config import ProviderConfig
 from sealedlore.models.private import Attestation
 from sealedlore.providers.base import ChatRequest, ProviderError, StreamEvent
+from sealedlore.providers.dcap import since_boot
 from sealedlore.providers.http import make_client
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
 from sealedlore.providers.private_catalog import fetch_private_ids, offered
@@ -252,7 +253,9 @@ class Enclave:
         relay: str,
         *,
         verifier: Verifier = tinfoil_verify,
-        clock: Callable[[], float] = time.monotonic,
+        # A clock that runs on while the machine sleeps (time.monotonic stops):
+        # after a night's suspend the attestation is hours old, not minutes.
+        clock: Callable[[], float] = since_boot,
     ) -> None:
         self.relay = relay
         # Ours, not nano-gpt's: see the module docstring. One per provider,

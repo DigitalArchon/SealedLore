@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import struct
+import time
 from pathlib import Path
 
 import httpx
@@ -297,6 +298,31 @@ def test_an_attestation_is_redone_once_it_has_aged(fake, setup):
     assert len(attested) == 1
     clock.now += 2
     list(provider.stream(request()))
+    assert len(attested) == 2
+
+
+def test_the_enclave_is_attested_again_after_the_machine_slept(fake, monkeypatch):
+    """Its five minutes were counted on time.monotonic, which stops while the
+    machine is suspended: a laptop that slept for hours took its attestation for
+    as fresh as when it went to sleep. The boot clock runs on (from DA Assistant's
+    copy, Nov 2026); here it moves while the monotonic one stands still."""
+    if not hasattr(time, "CLOCK_BOOTTIME"):
+        pytest.skip("no CLOCK_BOOTTIME here")
+    boot = [1000.0]
+    real_gettime = time.clock_gettime
+    monkeypatch.setattr(
+        time,
+        "clock_gettime",
+        lambda which: boot[0] if which == time.CLOCK_BOOTTIME else real_gettime(which),
+    )
+    monkeypatch.setattr(time, "monotonic", lambda: 50.0)
+    attested: list[str] = []
+    enclave = Enclave(RELAY, verifier=lambda relay, secret: attested.append(relay) or record(fake))
+    enclave.current()
+    enclave.current()
+    assert len(attested) == 1
+    boot[0] += 2 * 3600
+    enclave.current()
     assert len(attested) == 2
 
 
