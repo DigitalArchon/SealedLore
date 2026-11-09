@@ -70,6 +70,9 @@ sealedlore = ["gui/*.qss", "phone/static/*"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# The excludes below hold for a file named on the command line too (an
+# editor formatting on save).
+force-exclude = true
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
@@ -77,6 +80,13 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.ruff.lint.per-file-ignores]
 # Dev tooling: long prompt strings and one-line reports.
 "tools/*" = ["E501"]
+# Intel's checks, word for word as in the author's other apps that attest
+# TEE models (only the import lines differ), so that a diff shows they are
+# alike: neither reformatted nor rewrapped here.
+"src/sealedlore/providers/dcap.py" = ["E501"]
+
+[tool.ruff.format]
+exclude = ["src/sealedlore/providers/dcap.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
