@@ -2414,13 +2414,15 @@ computer spends asleep counts):
 
 Providers that run several instances (such as `TEE/kimi-k3`) have every
 instance checked the same way. Anything forged, revoked, for another nonce,
-or a model that offers no attestation is **refused**, and nothing is sent to
-it. Refused when it is attested again, nothing more is sent until you choose
-**Try again**, and the message that found it so comes back to the box you
-type in. What couldn't be checked (no GPU evidence offered, Intel's or NVIDIA's
-service out of reach, NVIDIA's signing keys out of reach, a rating below up
-to date, receipt keys the quote doesn't bind) is shown as **⚠ partial**, with the reasons on the model button
-and what each one means in its tooltip. Sending still goes ahead.
+keys past the time the gateway holds them until, or a model that offers no
+attestation is **refused**, and nothing is sent to it. Refused when it is
+attested again, nothing more is sent until you choose **Try again**, and the
+message that found it so comes back to the box you type in. What couldn't be
+checked (no GPU evidence offered, Intel's or NVIDIA's service out of reach,
+NVIDIA's signing keys out of reach, a rating below up to date, receipt keys
+the quote doesn't bind, receipt keys that name no time they hold until) is
+shown as **⚠ partial**, with the reasons on the model button and what each
+one means in its tooltip. Sending still goes ahead.
 
 After each reply the app fetches the record NanoGPT keeps for it, signed by
 the attested key. The record holds a hash of the reply as the enclave's
