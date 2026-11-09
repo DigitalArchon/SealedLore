@@ -8,6 +8,7 @@ is all the concurrency this app needs.
 
 from __future__ import annotations
 
+import unicodedata
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
@@ -219,6 +220,19 @@ def parse_usage(raw: dict[str, Any] | None) -> Usage:
         cost=float(cost),
         cost_reported=reported,
     )
+
+
+def relay_said(text: str, limit: int = 200) -> str:
+    """What NanoGPT's relay wrote (never sealed) as an error may quote it: one line, short, and
+    without what a reader can't see. Controls and line separators become spaces, format
+    characters (Unicode Cf: bidi overrides, zero-width and tag characters) go. Cut before it is
+    cleaned: an error body can be large. (DA Toolkit's relay_said, Nov 2026.)"""
+    kept = []
+    for ch in str(text or "")[:4096]:
+        category = unicodedata.category(ch)
+        if category != "Cf":
+            kept.append(" " if category in ("Cc", "Zl", "Zp") else ch)
+    return " ".join("".join(kept).split())[:limit]
 
 
 def error_detail(exc: BaseException, *, body_chars: int = 300) -> str:

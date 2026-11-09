@@ -747,6 +747,26 @@ def test_an_unknown_shape_names_what_it_held():
         shaped(lambda nonce: (200, {"novel": 1})).attest()
 
 
+# Nobody reads these: a bidi override, zero-width and tag characters, line and
+# paragraph separators, NEL. In an error they would hide or reorder its words.
+HIDDEN = "\u202e\u200b\U000e0041\u2028\u2029\x85"
+
+
+def test_what_nano_gpts_gateway_writes_is_quoted_on_one_line_and_hides_nothing():
+    """The gateway's words go into a TeeRefused and on to a dialog: only
+    controls were taken out, so bidi overrides, zero-width and tag
+    characters, U+2028/2029 and NEL went through as written."""
+    words = f"Fresh attestation{HIDDEN}\nis not available"
+    for status, body in ((400, {"error": words}), (200, {"error": words})):
+        with pytest.raises(TeeRefused) as caught:
+            shaped(lambda nonce, s=status, b=body: (s, b), model="TEE/gemma4-31b").attest()
+        assert "Fresh attestation is not available" in str(caught.value)
+        assert not any(ch in str(caught.value) for ch in HIDDEN + "\n")
+    with pytest.raises(TeeRefused) as caught:
+        shaped(lambda nonce: (200, {f"novel{HIDDEN}": 1})).attest()
+    assert "holds novel" in str(caught.value) and not any(ch in str(caught.value) for ch in HIDDEN)
+
+
 def test_intels_collateral_that_arrived_but_cant_be_read_refuses(real):
     """An outage is "partial"; an answer that doesn't parse is not an outage."""
     from sealedlore.providers import dcap

@@ -51,7 +51,7 @@ import httpx
 from sealedlore.models.config import split_model
 from sealedlore.models.private import Attestation
 from sealedlore.providers import dcap, nras
-from sealedlore.providers.base import ProviderError
+from sealedlore.providers.base import ProviderError, relay_said
 from sealedlore.providers.ethsig import keccak256, recover_personal
 from sealedlore.providers.http import make_client
 from sealedlore.threads import thread_pool
@@ -190,16 +190,19 @@ def _bases(base_url: str) -> list[str]:
 
 
 def _error_text(response: httpx.Response) -> str:
-    """The provider's message from an error response, or ""."""
+    """The provider's message from an error response, or "": nano-gpt's
+    gateway's words, never the enclave's, so said on one line and without
+    what a reader can't see (`relay_said`), as everything of the gateway's
+    quoted here is."""
     try:
         body = response.json()
     except ValueError:
-        return (response.text or "").strip()[:200]
+        return relay_said(response.text or "")
     if isinstance(body, dict):
         error = body.get("error")
         if isinstance(error, dict):
             error = error.get("message")
-        return str(error or body.get("message") or "")[:200]
+        return relay_said(str(error or body.get("message") or ""))
     return ""
 
 
@@ -440,16 +443,17 @@ class TeeClient:
             )
             raise TeeRefused(
                 f"{self.model}'s attestation, relayed by its provider "
-                f"({body.get('attestation_type') or 'unnamed'}), was {why}, so it can't "
-                "show the enclave is live for this request"
+                f"({relay_said(str(body.get('attestation_type') or ''), 60) or 'unnamed'}), "
+                f"was {why}, so it can't show the enclave is live for this request"
             )
         if body.get("signing_address") or body.get("intel_quote"):
             return self._attest_signing_key(body, nonce)
         if body.get("error"):
-            raise TeeRefused(f"nano-gpt couldn't attest {self.model}: {body['error']}")
+            said = relay_said(str(body["error"]))
+            raise TeeRefused(f"nano-gpt couldn't attest {self.model}: {said}")
         raise TeeRefused(
             f"{self.model}'s attestation is in a shape this app doesn't recognise "
-            f"(it holds {', '.join(sorted(body)) or 'nothing'})"
+            f"(it holds {relay_said(', '.join(sorted(body))) or 'nothing'})"
         )
 
     def _attest_signing_key(self, body: dict[str, Any], nonce: str) -> Attestation:
@@ -555,7 +559,7 @@ class TeeClient:
         return attestation
 
     def _check_instance(self, item: dict[str, Any], nonce: str) -> _Checks:
-        name = str(item.get("instance_id") or "an instance")[:8]
+        name = relay_said(str(item.get("instance_id") or ""), 8) or "an instance"
         try:
             raw = base64.b64decode(item["quote"])
             quote = dcap.parse_quote(raw)

@@ -47,7 +47,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 import secrets
 import threading
 from collections.abc import Callable, Iterator, Sequence
@@ -59,7 +58,7 @@ import httpx
 
 from sealedlore.models.config import ProviderConfig, is_local_host
 from sealedlore.models.private import Attestation
-from sealedlore.providers.base import ChatRequest, ProviderError, StreamEvent
+from sealedlore.providers.base import ChatRequest, ProviderError, StreamEvent, relay_said
 from sealedlore.providers.dcap import since_boot
 from sealedlore.providers.http import make_client
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
@@ -72,10 +71,9 @@ ROUTER_REPO = "tinfoilsh/confidential-model-router"
 MAX_AGE_SECONDS = 5 * 60
 PREFLIGHT_TIMEOUT_SECONDS = 30.0
 ENCLAVE_URL_HEADER = "X-Tinfoil-Enclave-Url"
-# What the relay writes in an error, as much as is said of it, and what it
-# may not carry into the message.
+# What the relay writes in an error, as much as is said of it (`relay_said`:
+# on one line, without what a reader can't see).
 RELAY_SAID_CHARS = 200
-_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 
 # The request fields Tinfoil's router takes (the proxy's
 # PRIVATE_TINFOIL_CHAT_COMPLETION_BODY_FIELDS, less tools and search, which
@@ -290,8 +288,10 @@ class Enclave:
                 except ProviderError:
                     raise
                 except Exception as exc:  # noqa: BLE001 - the SDK's own errors
+                    # They can quote the bundle, which came through the relay.
                     raise ProviderError(
-                        f"the private model's enclave couldn't be attested: {exc}; nothing was sent"
+                        "the private model's enclave couldn't be attested: "
+                        f"{relay_said(str(exc), 500)}; nothing was sent"
                     ) from exc
                 self._at = self._clock()
             return self._verified
@@ -428,11 +428,14 @@ class PrivateModeProvider(OpenAICompatibleProvider):
             if self.still_offered(model) is False:
                 # Every path's backstop (a resumed scene, a summary, Test speed…):
                 # say why, not just that it was refused.
-                raise ModelRetired(model, status_code=response.status_code, body=response.text)
+                raise ModelRetired(model, status_code=response.status_code)
+            # The relay's own words, said as its (error_detail would add them
+            # to a dialog as they came).
+            said = relay_said(response.text, RELAY_SAID_CHARS)
             raise ProviderError(
-                f"nano-gpt refused the Private Mode request (HTTP {response.status_code})",
+                f"nano-gpt refused the Private Mode request (HTTP {response.status_code})"
+                + (f"; NanoGPT's relay said (unauthenticated): {said}" if said else ""),
                 status_code=response.status_code,
-                body=response.text,
             )
         try:
             data = response.json()
@@ -488,11 +491,12 @@ class PrivateModeProvider(OpenAICompatibleProvider):
     def _http_error(self, url: str, response: httpx.Response) -> ProviderError:
         """What the relay wrote in refusing: never sealed, so never taken for
         the model's words (an instruction to the reader in it, say). Said as
-        the relay's, on one line, without control characters, and short; the
-        words themselves are kept only for `_missing_seal`."""
+        the relay's, on one line, without control or invisible characters
+        (`relay_said`), and short; the words themselves are kept only for
+        `_missing_seal`."""
         error = super()._http_error(url, response)
         written = error.body or ""
-        said = " ".join(_CONTROL.sub(" ", written).split())[:RELAY_SAID_CHARS]
+        said = relay_said(written, RELAY_SAID_CHARS)
         labelled = ProviderError(
             f"{error}; NanoGPT's relay said (unauthenticated): {said}" if said else str(error),
             status_code=error.status_code,
@@ -518,7 +522,10 @@ class PrivateModeProvider(OpenAICompatibleProvider):
                 return
             except KeyConfigMismatchError as exc:
                 if started or attempt:
-                    raise ProviderError(f"the enclave refused our key twice: {exc}") from exc
+                    # Its title is the relay's: the 422 that says so isn't sealed.
+                    raise ProviderError(
+                        f"the enclave refused our key twice: {relay_said(str(exc))}"
+                    ) from exc
             except ProviderError as exc:
                 if started or attempt or not _missing_seal(exc):
                     raise
