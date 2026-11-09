@@ -18,7 +18,9 @@ runs no code from nano-gpt (Sept 2026):
    of the router release (`tinfoilsh/confidential-model-router`). The report
    binds the enclave's HPKE key. Through a relay the SDK accepts any genuine
    release, so the latest one is looked up from Tinfoil directly and an older
-   one is reported (`latest_release`), not refused: rollouts lag.
+   one is reported (`latest_release`), not refused: rollouts lag. The SDK's
+   fetches follow no redirect off https, nor one from the internet into this
+   computer or its network (providers/sdk_guard.py).
 2. **Preflight**: nano-gpt checks balance and reserves a charge, and says the
    upstream model's name. It issues a cache scope; we send its sha256 as the
    header nano-gpt wants, but the body carries **our own** random secret, so
@@ -55,7 +57,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from sealedlore.models.config import ProviderConfig
+from sealedlore.models.config import ProviderConfig, is_local_host
 from sealedlore.models.private import Attestation
 from sealedlore.providers.base import ChatRequest, ProviderError, StreamEvent
 from sealedlore.providers.dcap import since_boot
@@ -155,6 +157,12 @@ def tinfoil_verify(relay: str, cache_secret: str) -> Verified:
     # nothing else needs, and the app shouldn't pay for them at startup.
     from tinfoil import SecureClient
     from tinfoil.github import fetch_latest_release
+
+    from sealedlore.providers import sdk_guard
+
+    # Before it fetches anything: its requests follow a redirect anywhere,
+    # https to plain http included (providers/sdk_guard.py).
+    sdk_guard.guard(is_local_host)
 
     # The secret is passed explicitly, or the SDK would create one in
     # ~/.tinfoil; this client only verifies, it never sends a request.
