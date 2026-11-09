@@ -10,9 +10,10 @@
 # The build is reproducible: the same commit gives the same bytes, on any
 # machine, in any folder, so anyone can rebuild a release and compare its
 # checksum with the published one. What makes it so:
-#   - it builds the commit, not the working tree (git archive; uncommitted
-#     changes to tracked files stop the build), and every timestamp inside is
-#     the commit's time (SOURCE_DATE_EPOCH);
+#   - it builds the commit, not the working tree: HEAD's files as committed,
+#     read from git's objects (uncommitted changes to tracked files stop the
+#     build), and every timestamp inside is the commit's time
+#     (SOURCE_DATE_EPOCH);
 #   - every input is pinned by checksum: the Python base, the Debian
 #     libraries, uv, appimagetool and the AppImage runtime (tools.sh), every
 #     package by hash (requirements.lock, from requirements.in by lock.sh),
@@ -100,7 +101,25 @@ SOURCE_DATE_EPOCH="$(git -C "$REPO" log -1 --format=%ct HEAD)"
 export SOURCE_DATE_EPOCH
 rm -rf "$SRC" "$APPDIR" "$BUILD/wheel"
 mkdir -p "$SRC" "$CACHE" "$DIST"
-git -C "$REPO" archive HEAD | tar -x -C "$SRC"
+# HEAD's files exactly as committed, from git's object store. git archive would
+# pass each through this machine's git settings first (core.autocrlf, core.eol,
+# the filters and ident its attributes name, tar.umask), and a verifier's own
+# settings would change the AppImage, or stop it. Only plain files are taken:
+# the tree has nothing else. (DA Assistant's build, d4153ff.)
+git -C "$REPO" ls-tree -r -z HEAD | while IFS= read -r -d '' entry; do
+    read -r fmode ftype oid <<<"${entry%%$'\t'*}"
+    path="${entry#*$'\t'}"
+    case "$fmode" in
+        100644 | 100755) ;;
+        *)
+            echo "$path is a $ftype of mode $fmode, which the build does not take" >&2
+            exit 1
+            ;;
+    esac
+    mkdir -p "$SRC/$(dirname "$path")"
+    git -C "$REPO" cat-file blob "$oid" >"$SRC/$path"
+    chmod "${fmode#100}" "$SRC/$path"
+done
 VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' "$SRC/pyproject.toml" | head -1)"
 OUTPUT="$DIST/SealedLore-$VERSION-x86_64.AppImage"
 echo "$COMMIT, version $VERSION"

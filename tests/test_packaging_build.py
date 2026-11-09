@@ -34,6 +34,68 @@ def block(text: str, start: str, end: str) -> str:
 # --- the commit, as committed ------------------------------------------------------------
 
 
+@needs_bash_and_git
+def test_the_commit_is_built_as_committed_whatever_gits_settings(tmp_path: Path):
+    """A verifier's core.autocrlf, a smudge filter their attributes name: git archive
+    hands each file through them, so the same commit made a different AppImage. The
+    build reads the files from git's objects instead, and sets their modes itself
+    whatever the umask. (DA Assistant's test of its copy, d4153ff.)"""
+    export = block(BUILD, 'git -C "$REPO" ls-tree -r -z HEAD', "\ndone\n")
+    (tmp_path / "attributes").write_text("*.txt filter=pear\n")
+    (tmp_path / "gitconfig").write_text(
+        f"[core]\n\tautocrlf = true\n\tattributesFile = {tmp_path}/attributes\n"
+        '[filter "pear"]\n\tsmudge = sed s/apple/pear/\n\tclean = cat\n'
+        "[user]\n\tname = T\n\temail = t@example.org\n"
+    )
+    env = {
+        "PATH": os.environ.get("PATH", ""),
+        "HOME": str(tmp_path),
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": str(tmp_path / "gitconfig"),
+    }
+    repo = tmp_path / "repo"
+    committed = {"notes.txt": b"apple\nbanana\n", "tools/run.sh": b"#!/bin/sh\necho a\n"}
+
+    def git(*args: str) -> bytes:
+        return subprocess.run(
+            ["git", *args], cwd=repo, env=env, check=True, capture_output=True
+        ).stdout
+
+    repo.mkdir()
+    git("init", "-q")
+    for name, data in committed.items():
+        (repo / name).parent.mkdir(parents=True, exist_ok=True)
+        (repo / name).write_bytes(data)
+    (repo / "tools/run.sh").chmod(0o755)
+    git("add", "-A")
+    git("commit", "-q", "-m", "files")
+
+    archived = tmp_path / "archived"
+    archived.mkdir()
+    subprocess.run(["tar", "-x", "-C", str(archived)], input=git("archive", "HEAD"), check=True)
+    assert (archived / "notes.txt").read_bytes() != committed["notes.txt"], "git archive changes it"
+
+    def export_into(out: Path) -> subprocess.CompletedProcess:
+        script = f"set -euo pipefail\numask 077\nREPO={shlex.quote(str(repo))}\n"
+        script += f"SRC={shlex.quote(str(out))}\n{export}"
+        return subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True)
+
+    out = tmp_path / "source"
+    assert export_into(out).returncode == 0
+    assert {name: (out / name).read_bytes() for name in committed} == committed
+    modes = {name: (out / name).stat().st_mode & 0o777 for name in committed}
+    assert modes == {"notes.txt": 0o644, "tools/run.sh": 0o755}
+
+    (repo / "link").symlink_to("notes.txt")
+    git("add", "-A")
+    git("commit", "-q", "-m", "a link")
+    refused = export_into(tmp_path / "again")
+    assert refused.returncode != 0 and "link is a blob of mode 120000" in refused.stderr
+
+
+# --- the locks ----------------------------------------------------------------------------
+
+
 def _version(text: str) -> tuple[int, ...]:
     return tuple(int(part) for part in re.findall(r"\d+", text))
 
