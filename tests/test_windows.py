@@ -337,8 +337,9 @@ def test_the_window_warns_at_every_start_on_the_stores_python(monkeypatch, tmp_p
 
     box = main_window.MainWindow._store_python_box(window, tmp_path, hidden)
     assert box.windowTitle() == "Python from the Microsoft Store"
-    assert str(tmp_path) in box.text() and str(hidden) in box.text()
-    assert "Uninstalling or resetting that Python deletes them" in box.text()
+    text = box.text().replace("\u200b", "")  # where a long path may wrap, on Windows
+    assert str(tmp_path) in text and str(hidden) in text
+    assert "Uninstalling or resetting that Python deletes them" in text
     assert box.property("open_button").text() == "Open that folder"
     window.close()
 
