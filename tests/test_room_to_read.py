@@ -111,7 +111,7 @@ def test_every_arrow_is_a_mark_in_the_theme_s_colours(app):
         for shape, colour in theme.ICONS.values():
             url = theme.icon_url(shape, choice.colours[colour])
             path = Path(re.match(r'url\("(.*)"\)', url).group(1))
-            assert path.is_file() and choice.colours[colour] in path.read_text()
+            assert path.is_file() and choice.colours[colour] in path.read_text(encoding="utf-8")
         assert "QSpinBox::up-arrow" in sheet and "QToolButton::menu-indicator" in sheet
     # Qt's palette follows the theme: arrows left to the style were black.
     palette = theme.palette(theme.THEMES["dark"])

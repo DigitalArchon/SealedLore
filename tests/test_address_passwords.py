@@ -48,7 +48,7 @@ def configured(base_url: str = ENDPOINT, **fields) -> Config:
 
 
 def on_disk(root: Path) -> str:
-    return (root / "config.json").read_text()
+    return (root / "config.json").read_text(encoding="utf-8")
 
 
 def as_new_process(root: Path) -> Config:

@@ -31,12 +31,12 @@ DATA = Path(__file__).parent / "data"
 
 
 def nanogpt_models():
-    listing = json.loads((DATA / "video_models_nanogpt.json").read_text())
+    listing = json.loads((DATA / "video_models_nanogpt.json").read_text(encoding="utf-8"))
     return {m.id: m for m in parse_nanogpt_video_models(listing)}
 
 
 def openrouter_models():
-    listing = json.loads((DATA / "video_models_openrouter.json").read_text())
+    listing = json.loads((DATA / "video_models_openrouter.json").read_text(encoding="utf-8"))
     return {m.id: m for m in parse_openrouter_video_models(listing)}
 
 

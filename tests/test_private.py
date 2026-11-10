@@ -31,7 +31,9 @@ from sealedlore.storage.repository import load_story_bundle, read_api_log, save_
 from sealedlore.storage.scenario import bundle_from_scenario
 
 MARKER = "ZQX-PRIVATE"
-PLOT = (Path(__file__).resolve().parent.parent / "SampleStories" / "Doomsville.md").read_text()
+PLOT = (Path(__file__).resolve().parent.parent / "SampleStories" / "Doomsville.md").read_text(
+    encoding="utf-8"
+)
 
 
 def make_config() -> Config:

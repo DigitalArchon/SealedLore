@@ -769,7 +769,8 @@ def test_the_story_list_opens_a_story_s_folder(app, window, monkeypatch, tmp_pat
     )
     menu = window.stories.menu_for(story_id)
     next(action for action in menu.actions() if action.text() == "Open folder").trigger()
-    assert opened == [str(tmp_path / "stories" / story_id)]
+    # A URL's path has "/" on Windows too.
+    assert [Path(p) for p in opened] == [tmp_path / "stories" / story_id]
 
 
 def test_close_story_goes_back_to_the_start_page(app, window, tmp_path):

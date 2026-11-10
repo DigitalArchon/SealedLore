@@ -214,7 +214,7 @@ def test_the_onion_key_is_kept_in_the_keychain_and_the_rest_in_config_json(
     config.phone.devices = [PhoneDevice(id="d1", name="Pixel", token_sha256="ab" * 32)]
     save_config(config, root=tmp_path)
 
-    text = (tmp_path / "config.json").read_text()
+    text = (tmp_path / "config.json").read_text(encoding="utf-8")
     assert "secret-onion-key" not in text
     on_disk = json.loads(text)
     assert "phone" in on_disk["keychain_slots"]

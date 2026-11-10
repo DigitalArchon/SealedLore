@@ -10,11 +10,18 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import sys
 import tempfile
 import time
 from pathlib import Path
 
 import pytest
+
+# Phone access is Linux's for now (phone/torrc.py: find_tor is None on Windows,
+# and tor publishes an onion only to a Unix socket there): these drive it whole.
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32", reason="phone access is Linux only for now"
+)
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -452,7 +459,7 @@ def test_a_phone_is_paired_through_the_window(app, tmp_path, sockets, story, cas
     assert answer["state"] == "approved"
     token = answer["token"]
     assert window.config.phone.devices[0].token_sha256 == token_hash(token)
-    assert token not in (tmp_path / "config.json").read_text()
+    assert token not in (tmp_path / "config.json").read_text(encoding="utf-8")
     assert phone.ask("GET", "/api/state", token=token)[0] == 200
     window.close()
 

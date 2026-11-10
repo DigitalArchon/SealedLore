@@ -351,7 +351,9 @@ def test_prose_wrapped_in_the_file_reads_as_markdown_does():
         "and the second, kept apart.",
     ]
     parsed = parse_plot_markdown(
-        (Path(__file__).resolve().parents[1] / "SampleStories" / "The Silverwood.md").read_text()
+        (Path(__file__).resolve().parents[1] / "SampleStories" / "The Silverwood.md").read_text(
+            encoding="utf-8"
+        )
     )
     elowen = next(c for c in parsed.scenario.cast if c.name == "Elowen Thistledown")
     assert "\n" not in elowen.full_description

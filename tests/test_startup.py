@@ -59,7 +59,7 @@ def imported_at_the_top(path: Path) -> set[str]:
 
 def test_heavy_packages_are_imported_on_first_use():
     offenders = {
-        str(path.relative_to(SOURCE_ROOT)): bad
+        path.relative_to(SOURCE_ROOT).as_posix(): bad
         for path in sorted(SOURCE_ROOT.rglob("*.py"))
         if (
             bad := {
@@ -67,7 +67,7 @@ def test_heavy_packages_are_imported_on_first_use():
                 for name in imported_at_the_top(path)
                 if name.split(".")[0] in ON_FIRST_USE or name in MODULES_ON_FIRST_USE
             }
-            - FIRST_USE_HOMES.get(str(path.relative_to(SOURCE_ROOT)), set())
+            - FIRST_USE_HOMES.get(path.relative_to(SOURCE_ROOT).as_posix(), set())
         )
     }
     assert offenders == {}

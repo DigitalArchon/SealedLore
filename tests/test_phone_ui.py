@@ -7,10 +7,17 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 
 import pytest
+
+# Phone access is Linux's for now (phone/torrc.py: find_tor is None on Windows,
+# and tor publishes an onion only to a Unix socket there): these drive it whole.
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32", reason="phone access is Linux only for now"
+)
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 

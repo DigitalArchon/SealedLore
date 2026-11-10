@@ -20,7 +20,9 @@ from sealedlore.providers.model_hosts import (
     parse_model_hosts,
 )
 
-DATA = json.loads((Path(__file__).parent / "data" / "nanogpt_providers_glm53.json").read_text())
+DATA = json.loads(
+    (Path(__file__).parent / "data" / "nanogpt_providers_glm53.json").read_text(encoding="utf-8")
+)
 
 
 def test_a_listing_gives_each_hosts_figures_and_nanogpts_own():

@@ -40,7 +40,7 @@ PNG_B64 = (
 
 
 def seedance():
-    listing = json.loads((DATA / "video_models_nanogpt.json").read_text())
+    listing = json.loads((DATA / "video_models_nanogpt.json").read_text(encoding="utf-8"))
     return next(m for m in parse_nanogpt_video_models(listing) if m.id == "bytedance/seedance-2.5")
 
 

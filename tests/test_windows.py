@@ -258,3 +258,14 @@ def test_the_roots_are_in_place_before_the_sdk_attests(monkeypatch):
     with pytest.raises(Stop):
         private_mode.tinfoil_verify("https://relay.example/api", "secret")
     assert seen == [certifi.where()]
+
+
+def test_on_windows_phone_access_says_it_is_for_linux_whatever_tor_there_is(monkeypatch, tmp_path):
+    """A tor.exe on PATH changes nothing: tor publishes an onion only to a
+    Unix socket on Windows, so phone access is refused there with a reason."""
+    from sealedlore.phone.torrc import find_tor
+
+    (tmp_path / "tor").write_text("", encoding="utf-8")
+    (tmp_path / "tor").chmod(0o755)
+    monkeypatch.setattr(sys, "platform", "win32")
+    assert find_tor({"PATH": str(tmp_path), "SEALEDLORE_TOR": str(tmp_path / "tor")}) is None

@@ -331,7 +331,7 @@ def test_a_copy_as_a_plot_file_takes_the_pictures_along(app, window, monkeypatch
     target = tmp_path / "shared" / "sundering.md"
     monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *_a, **_k: (str(target), ""))
     assert editor.save_as()
-    assert "picture: images/refs/ref-1.png" in target.read_text()
+    assert "picture: images/refs/ref-1.png" in target.read_text(encoding="utf-8")
     assert (target.parent / "images" / "refs" / "ref-1.png").read_bytes() == PNG
     assert editor.story is not None and not editor.story.own, "still on the story"
 

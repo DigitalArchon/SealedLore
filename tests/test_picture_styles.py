@@ -73,7 +73,9 @@ def png() -> bytes:
 
 
 def doomsville(tmp_path: Path, replies: list[str]) -> tuple[StorySession, MockChatProvider]:
-    bundle = bundle_from_scenario(parse_plot_markdown(DOOMSVILLE.read_text()).scenario)
+    bundle = bundle_from_scenario(
+        parse_plot_markdown(DOOMSVILLE.read_text(encoding="utf-8")).scenario
+    )
     save_story_bundle(bundle, root=tmp_path)
     provider = MockChatProvider(replies)
     session = StorySession(
@@ -118,9 +120,9 @@ def test_a_plot_file_names_a_style_by_its_name_or_in_its_own_words():
     assert write_style("", "muted painterly art") == "muted painterly art"
     assert write_style("", "") == ""
     # Doomsville is gritty and realistic, the extended sample in its own words.
-    scenario = parse_plot_markdown(DOOMSVILLE.read_text()).scenario
+    scenario = parse_plot_markdown(DOOMSVILLE.read_text(encoding="utf-8")).scenario
     assert (scenario.picture_style, scenario.image_style) == ("gritty", "")
-    parsed = parse_plot_markdown(EXTENDED.read_text())
+    parsed = parse_plot_markdown(EXTENDED.read_text(encoding="utf-8"))
     assert parsed.scenario.picture_style == ""
     assert parsed.scenario.image_style == "muted painterly concept art, cold winter light"
     assert not [p for p in parsed.problems if "picture_style" in p.message]
@@ -128,7 +130,7 @@ def test_a_plot_file_names_a_style_by_its_name_or_in_its_own_words():
 
 def test_the_plot_editor_keeps_the_style_line():
     for path in (DOOMSVILLE, EXTENDED):
-        document = read_plot_document(path.read_text()).document
+        document = read_plot_document(path.read_text(encoding="utf-8")).document
         rendered = render_plot_markdown(document).text
         assert document.picture_style and f"picture style: {document.picture_style}" in rendered
         again = read_plot_document(rendered).document
@@ -136,7 +138,9 @@ def test_the_plot_editor_keeps_the_style_line():
 
 
 def test_the_style_goes_with_scenario_files_and_restart(tmp_path: Path):
-    bundle = bundle_from_scenario(parse_plot_markdown(DOOMSVILLE.read_text()).scenario)
+    bundle = bundle_from_scenario(
+        parse_plot_markdown(DOOMSVILLE.read_text(encoding="utf-8")).scenario
+    )
     assert bundle.story.picture_style == "gritty"
     bundle.story.picture_style = "anime"
     path = tmp_path / "mine.sealedlore-scenario.json"

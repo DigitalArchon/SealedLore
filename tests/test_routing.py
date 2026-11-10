@@ -190,7 +190,7 @@ def test_every_request_the_engine_builds_names_its_route():
     the subscription's routing whatever the author chose."""
     missing = []
     for path in sorted(ENGINE.glob("*.py")):
-        tree = ast.parse(path.read_text())
+        tree = ast.parse(path.read_text(encoding="utf-8"))
         for function in ast.walk(tree):
             if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue

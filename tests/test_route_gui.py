@@ -26,7 +26,9 @@ from sealedlore.providers.model_hosts import parse_model_hosts  # noqa: E402
 
 NANO = "https://nano-gpt.com/api/v1"
 GLM = "z-ai/glm-5.3"
-DATA = json.loads((Path(__file__).parent / "data" / "nanogpt_providers_glm53.json").read_text())
+DATA = json.loads(
+    (Path(__file__).parent / "data" / "nanogpt_providers_glm53.json").read_text(encoding="utf-8")
+)
 
 
 @pytest.fixture
@@ -129,6 +131,7 @@ def test_settings_keeps_each_roles_route(app, tmp_path, story, cast):
     from sealedlore.gui.settings_dialog import SettingsDialog
     from sealedlore.models.config import ProviderConfig
     from sealedlore.models.story import Story
+    from tests.test_ui_tidy import has_real_fonts
 
     window = MainWindow(root=tmp_path, use_mock=True)
     window.config.providers = [ProviderConfig(name="nano", base_url=NANO, model=GLM)]
@@ -140,8 +143,11 @@ def test_settings_keeps_each_roles_route(app, tmp_path, story, cast):
     dialog.scene_model.set_route(ModelRoute(priority="latency"))
     dialog.plot_model.set_route(None)
     # The page beside Settings' list of pages (gui/settings_pages.py).
-    assert dialog.tabs.stack.minimumSizeHint().width() <= 500, "the route labels widened Settings"
-    assert dialog.minimumSizeHint().width() <= dialog.minimumWidth()
+    if has_real_fonts():  # offscreen on Windows every glyph is a box
+        assert dialog.tabs.stack.minimumSizeHint().width() <= 500, (
+            "the route labels widened Settings"
+        )
+        assert dialog.minimumSizeHint().width() <= dialog.minimumWidth()
     # The speed test measures each role on its route: GLM twice.
     targets = {t.label: t.roles for t in dialog.speed_targets()}
     assert targets[GLM] == ("Story", "Summarisation", "Authoring", "Image prompt writer")

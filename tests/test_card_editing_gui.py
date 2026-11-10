@@ -339,7 +339,7 @@ def test_your_characters_take_another_apps_lorebook_and_say_what_it_lost(
         window_collection.QFileDialog, "getSaveFileName", lambda *a, **k: (str(out), "")
     )
     form.export_button.click()
-    world = json.loads(out.read_text())
+    world = json.loads(out.read_text(encoding="utf-8"))
     assert [e.get("content") for e in lore.entries_of(world)] == [
         "Hellsville is walled, and wary of strangers.",
         "Four winters after the end of the world.",
@@ -491,7 +491,7 @@ def test_a_lorebook_goes_out_and_comes_in_with_every_setting(
         window_collection.QFileDialog, "getSaveFileName", lambda *a, **k: (str(out), "")
     )
     page.lorebook_form.export_button.click()
-    world = json.loads(out.read_text())
+    world = json.loads(out.read_text(encoding="utf-8"))
     assert world["originalData"] == ST_CARD_BOOK
     assert world["entries"]["7"]["probability"] == 70 and world["entries"]["7"]["depth"] == 2
     # Back in, onto the card, as SillyTavern would put it there.

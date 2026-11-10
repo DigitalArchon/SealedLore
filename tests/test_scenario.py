@@ -62,7 +62,7 @@ def test_a_scenario_carries_the_base_story(bundle: StoryBundle):
 def test_a_scenario_leaves_out_the_playthrough_and_the_machine(bundle: StoryBundle, tmp_path: Path):
     path = tmp_path / "heist.sealedlore-scenario.json"
     write_scenario(path, scenario_from_bundle(bundle))
-    raw = path.read_text()
+    raw = path.read_text(encoding="utf-8")
     data = json.loads(raw)
 
     for key in ("nodes", "summaries", "asides", "embeddings", "defaults", "active_leaf_id"):
@@ -143,7 +143,7 @@ def test_an_old_story_loads_with_an_empty_setup(tmp_path: Path):
     story = Story(title="Before scenarios")
     save_story_bundle(StoryBundle(story=story), root=tmp_path)
     story_file = tmp_path / "stories" / story.id / "story.json"
-    data = json.loads(story_file.read_text())
+    data = json.loads(story_file.read_text(encoding="utf-8"))
     del data["setup"]
     story_file.write_text(json.dumps(data))
 

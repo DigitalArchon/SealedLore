@@ -445,7 +445,7 @@ def test_every_request_says_how_much_to_reason():
             "providers/base.py",
         ):
             continue
-        tree = ast.parse(path.read_text())
+        tree = ast.parse(path.read_text(encoding="utf-8"))
         for call in _calls(tree, "ChatRequest"):
             if not any(keyword.arg == "params" for keyword in call.keywords):
                 missing.append(f"{relative}:{call.lineno} ChatRequest without params")

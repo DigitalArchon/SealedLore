@@ -514,7 +514,7 @@ def test_an_archive_carries_every_picture(tmp_path: Path, saved: StoryBundle):
 def test_an_archive_cannot_write_outside_the_story(tmp_path: Path, saved: StoryBundle):
     path = tmp_path / "a.sealedlore-archive.json"
     write_archive(path, saved, [], {"images/ok.png": PNG})
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     data["files"]["../../escape.png"] = base64.b64encode(PNG).decode()
     data["files"]["story.json"] = base64.b64encode(b"{}").decode()
     path.write_text(json.dumps(data))
@@ -525,7 +525,7 @@ def test_an_archive_cannot_write_outside_the_story(tmp_path: Path, saved: StoryB
 def test_a_version_one_archive_still_imports(tmp_path: Path, saved: StoryBundle):
     path = tmp_path / "old.sealedlore-archive.json"
     write_archive(path, saved, [])
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     data["version"] = 1
     del data["files"]
     path.write_text(json.dumps(data))

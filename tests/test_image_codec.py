@@ -92,7 +92,7 @@ def test_every_decode_and_encode_in_the_gui_goes_through_the_codec_lock():
     for path in sorted(GUI.glob("*.py")):
         if path.name == "image_codec.py":
             continue
-        for number, line in enumerate(path.read_text().splitlines(), 1):
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if raw.search(line):
                 found.append(f"{path.name}:{number}: {line.strip()}")
     assert not found, "\n".join(found)

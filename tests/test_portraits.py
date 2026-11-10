@@ -58,7 +58,9 @@ PNG = _png()
 
 def session_on(tmp_path: Path, replies: list[str]) -> tuple[StorySession, MockChatProvider]:
     """Doomsville, with its pictures taken off so everyone needs a portrait."""
-    bundle = bundle_from_scenario(parse_plot_markdown(DOOMSVILLE.read_text()).scenario)
+    bundle = bundle_from_scenario(
+        parse_plot_markdown(DOOMSVILLE.read_text(encoding="utf-8")).scenario
+    )
     for character in [*bundle.cast, *bundle.supporting.characters]:
         character.reference_images.clear()
     save_story_bundle(bundle, root=tmp_path)

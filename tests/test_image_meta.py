@@ -475,7 +475,7 @@ def test_a_scenario_is_written_with_clean_pictures_or_not_at_all(
     dirty = dirty_png()
     path = tmp_path / "s.sealedlore-scenario.json"
     write_scenario(path, scenario_from_bundle(saved, {"images/refs/r.png": dirty}))
-    written = json.loads(path.read_text())["reference_files"]["images/refs/r.png"]
+    written = json.loads(path.read_text(encoding="utf-8"))["reference_files"]["images/refs/r.png"]
     assert base64.b64decode(written) == strip_metadata(dirty)
 
     refused = tmp_path / "refused.sealedlore-scenario.json"

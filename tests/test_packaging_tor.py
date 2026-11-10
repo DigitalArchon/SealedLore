@@ -16,7 +16,9 @@ APPIMAGE = ROOT / "packaging/appimage"
 
 
 def _value(name: str) -> str:
-    match = re.search(rf'^{name}="([^"]*)"', (APPIMAGE / "tools.sh").read_text(), re.M)
+    match = re.search(
+        rf'^{name}="([^"]*)"', (APPIMAGE / "tools.sh").read_text(encoding="utf-8"), re.M
+    )
     assert match, f"tools.sh sets no {name}"
     return match.group(1)
 
@@ -32,7 +34,7 @@ def test_the_bundle_is_pinned_over_https():
 
 
 def test_the_notices_name_what_is_bundled_and_where_its_source_is():
-    notices = (APPIMAGE / "THIRD-PARTY-NOTICES.md").read_text()
+    notices = (APPIMAGE / "THIRD-PARTY-NOTICES.md").read_text(encoding="utf-8")
     section = notices.split("## Tor\n", 1)[1].split("\n## ", 1)[0]
     bundle, tor = _value("TOR_BUNDLE_VERSION"), _value("TOR_VERSION")
     assert f"Tor Expert Bundle {bundle}" in section
@@ -49,10 +51,10 @@ def test_the_notices_name_what_is_bundled_and_where_its_source_is():
 
 
 def test_apprun_points_at_the_tor_build_sh_puts_in_place():
-    build = (APPIMAGE / "build.sh").read_text()
+    build = (APPIMAGE / "build.sh").read_text(encoding="utf-8")
     assert 'TORDIR="$APPDIR/usr/lib/tor"' in build
     assert 'install -m 755 "$CACHE/tor-x/tor/tor" "$TORDIR/tor"' in build
     # The libraries are the ones the app checks for beside tor, taken from it.
     assert "from sealedlore.phone.torrc import BUNDLED_LIBRARIES" in build
-    apprun = (APPIMAGE / "AppRun").read_text()
+    apprun = (APPIMAGE / "AppRun").read_text(encoding="utf-8")
     assert 'export SEALEDLORE_TOR="${SEALEDLORE_TOR:-$HERE/usr/lib/tor/tor}"' in apprun

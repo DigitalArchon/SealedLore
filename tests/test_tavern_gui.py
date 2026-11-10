@@ -241,7 +241,7 @@ def test_without_a_portrait_the_card_is_json(app, tmp_path: Path, monkeypatch, s
     target = tmp_path / "maela.json"
     save_to(monkeypatch, target)
     window.export_card(window.session.cast[1].id)
-    assert json.loads(target.read_text())["data"]["name"] == "Maela Orr"
+    assert json.loads(target.read_text(encoding="utf-8"))["data"]["name"] == "Maela Orr"
     window.close()
 
 

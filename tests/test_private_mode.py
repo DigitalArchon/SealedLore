@@ -560,9 +560,11 @@ def test_the_encryption_stack_is_pinned_exactly_and_alike_everywhere():
     from pathlib import Path
 
     root = Path(__file__).resolve().parent.parent
-    deps = tomllib.loads((root / "pyproject.toml").read_text())["project"]["dependencies"]
-    lock = (root / "packaging/appimage/requirements.lock").read_text()
-    wanted = (root / "packaging/appimage/requirements.in").read_text()
+    deps = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"][
+        "dependencies"
+    ]
+    lock = (root / "packaging/appimage/requirements.lock").read_text(encoding="utf-8")
+    wanted = (root / "packaging/appimage/requirements.in").read_text(encoding="utf-8")
     for name in ENCRYPTION_STACK:
         locked = re.search(rf"^{re.escape(name)}==(\S+)", lock, re.MULTILINE)
         assert locked, f"{name} is not in the AppImage lock"
@@ -693,7 +695,7 @@ def test_the_client_stays_within_the_reviewed_proxys_contract():
     import inspect
     import re
 
-    proxy = json.loads(PROXY_CONTRACT.read_text())
+    proxy = json.loads(PROXY_CONTRACT.read_text(encoding="utf-8"))
     assert re.fullmatch(r"\d+\.\d+\.\d+", proxy["reviewed_version"])
     fields = set(proxy["body_fields"])
     assert MODULE.ALLOWED_FIELDS <= fields, MODULE.ALLOWED_FIELDS - fields

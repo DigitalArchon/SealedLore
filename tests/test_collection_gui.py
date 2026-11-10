@@ -321,7 +321,9 @@ def test_the_window_starts_whatever_is_in_their_folder(app, tmp_path: Path, monk
     assert "couldn't be read" in window.collection_page.stats.text()
     monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("Marcus", True))
     window.collection_page.new_button.click()
-    assert warned and (folder / "cast.json").read_text() == '[{"name": '  # never written over
+    assert (
+        warned and (folder / "cast.json").read_text(encoding="utf-8") == '[{"name": '
+    )  # never written over
     window.close()
 
 
@@ -412,7 +414,7 @@ def test_an_unreadable_folder_gets_no_pictures_and_no_link(app, tmp_path: Path, 
     window._import_to_collection([str(png_card(tmp_path, {"chara": v2()}))])
     assert warned == ["Not kept", "Not kept"]
     assert not (folder / "images").exists(), "no picture written into it"
-    assert (folder / "cast.json").read_text() == '[{"name": '
+    assert (folder / "cast.json").read_text(encoding="utf-8") == '[{"name": '
     window._private_allows_close = lambda: True
     window.close()
 

@@ -25,7 +25,7 @@ def configured(**fields) -> Config:
 
 
 def on_disk(root: Path) -> dict:
-    return json.loads((root / "config.json").read_text())
+    return json.loads((root / "config.json").read_text(encoding="utf-8"))
 
 
 def test_keys_go_to_the_keychain_and_config_json_holds_none(tmp_path: Path, memory_keychain):
@@ -34,7 +34,7 @@ def test_keys_go_to_the_keychain_and_config_json_holds_none(tmp_path: Path, memo
     )
     save_config(config, root=tmp_path)
 
-    text = (tmp_path / "config.json").read_text()
+    text = (tmp_path / "config.json").read_text(encoding="utf-8")
     assert KEY not in text and "sk-video-secret" not in text
     assert on_disk(tmp_path)["keychain_slots"] == ["provider:default", "videos"]
     assert sorted(v for v in memory_keychain.store.values()) == sorted([KEY, "sk-video-secret"])
@@ -64,7 +64,7 @@ def test_an_old_plain_text_config_moves_into_the_keychain(tmp_path: Path, memory
     config = load_config(root=tmp_path)
     assert config.providers[0].api_key == KEY and config.key_storage == "keychain"
     save_config(config, root=tmp_path)
-    assert KEY not in (tmp_path / "config.json").read_text()
+    assert KEY not in (tmp_path / "config.json").read_text(encoding="utf-8")
     assert KEY in memory_keychain.store.values()
 
 
@@ -176,7 +176,7 @@ def test_settings_says_under_every_key_where_it_goes(tmp_path: Path):
     dialog = SettingsDialog(configured(), None, root=tmp_path)
     # Chat, pictures, video, embeddings and private: one note each.
     assert len(dialog._key_notes) == 5
-    assert all("Saved in the system keychain" in n.text() for n in dialog._key_notes)
+    assert all(f"Saved in {keychain.where()}" in n.text() for n in dialog._key_notes)
 
     dialog.key_storage.setCurrentIndex(dialog.key_storage.findData("file"))
     expected = f"Saved in plain text in {tmp_path / 'config.json'}."
@@ -214,9 +214,11 @@ def test_the_window_moves_old_plain_text_keys_once_it_is_up(tmp_path: Path, memo
     (tmp_path / "config.json").write_text(json.dumps(data))
 
     window = MainWindow(root=tmp_path, use_mock=True)
-    assert KEY in (tmp_path / "config.json").read_text(), "not before the window is up"
+    assert KEY in (tmp_path / "config.json").read_text(encoding="utf-8"), (
+        "not before the window is up"
+    )
     window._move_keys_to_keychain()
-    assert KEY not in (tmp_path / "config.json").read_text()
+    assert KEY not in (tmp_path / "config.json").read_text(encoding="utf-8")
     assert window.config.active_provider().api_key == KEY
     assert "moved out of config.json" in window.statusBar().currentMessage()
     window.close()

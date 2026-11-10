@@ -235,7 +235,7 @@ def test_after_a_passage_each_one_here_is_shown_as_the_pick_says(tmp_path: Path,
     sent = session.provider.requests[-1]
     assert sent.model == session.scene_model
     assert "THE LATEST PASSAGE:\n\nSerrik's jaw tightens" in sent.messages[1].parts[-1].text
-    log = (tmp_path / "stories" / story.id / "api_log.jsonl").read_text()
+    log = (tmp_path / "stories" / story.id / "api_log.jsonl").read_text(encoding="utf-8")
     assert '"look_request"' in log and '"look_response"' in log
 
 

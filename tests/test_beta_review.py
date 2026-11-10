@@ -302,7 +302,7 @@ def test_a_memory_scenes_picture_direction_is_not_written_down(tmp_path: Path):
     )
     records = run_image_request(client, request, root=tmp_path)
     assert records[0].direction == ""
-    log = (story_dir(session.story.id, tmp_path) / "api_log.jsonl").read_text()
+    log = (story_dir(session.story.id, tmp_path) / "api_log.jsonl").read_text(encoding="utf-8")
     assert MARKER not in log
 
 
@@ -351,7 +351,7 @@ def test_unreadable_settings_start_the_app_with_the_defaults(tmp_path: Path):
     config, notice = load_config_or_recover(root=tmp_path)
     assert config.active_provider() is None
     assert notice and "config.json.broken" in notice
-    assert (tmp_path / "config.json.broken").read_text() == "{not json"
+    assert (tmp_path / "config.json.broken").read_text(encoding="utf-8") == "{not json"
 
 
 def test_a_corrupt_nodes_file_falls_back_to_its_backup(tmp_path: Path):

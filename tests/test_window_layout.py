@@ -180,7 +180,9 @@ def test_dragged_widths_stay_through_opening_and_closing_a_story(
     assert (window.stories_dock.width(), window.inspector_dock.width()) == widths
     window.close()
 
-    # Next launch, the list put away with a story open: the width kept.
+    # Next launch, the list put away with a story open: the width kept. Not
+    # with box glyphs (offscreen on Windows): the Inspector's floor is wider.
+    needs_real_fonts()
     again = MainWindow(root=tmp_path, use_mock=True)
     try:
         again.config.window = WindowLayout(

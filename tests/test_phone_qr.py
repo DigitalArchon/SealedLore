@@ -24,7 +24,9 @@ def rows_of(matrix: qr.Matrix) -> list[str]:
 
 
 @pytest.mark.parametrize(
-    "case", json.loads(GOLDEN.read_text())["cases"], ids=lambda c: f"v{c['version']}"
+    "case",
+    json.loads(GOLDEN.read_text(encoding="utf-8"))["cases"],
+    ids=lambda c: f"v{c['version']}",
 )
 def test_every_version_matches_the_reference_encoder(case):
     assert rows_of(qr.encode(case["text"], mask=case["mask"])) == case["rows"]

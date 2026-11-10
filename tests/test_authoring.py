@@ -1191,7 +1191,7 @@ def test_world_activity_travels_in_a_scenario_and_old_files_still_load(
     write_scenario(path, scenario_from_bundle(bundle))
     assert bundle_from_scenario(read_scenario(path)).story.defaults.world_activity == "quiet"
 
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     del data["world_activity"]
     path.write_text(json.dumps(data))
     assert bundle_from_scenario(read_scenario(path)).story.defaults.world_activity == "normal"
@@ -1291,6 +1291,6 @@ def test_setting_facts_are_kept_out_of_sentences_about_who_lacks_them():
 
     assert "name\n  the gap without the fact" in draft_system()
     assert 'Never answer\n  this with "notes"' in review_system()
-    story = (Path(__file__).parent / "data" / "doomsville_extended.md").read_text()
+    story = (Path(__file__).parent / "data" / "doomsville_extended.md").read_text(encoding="utf-8")
     assert "Hellsville has no knowledge\nof the Northern Camp." in story
     assert "Hellsville has no knowledge that" not in story

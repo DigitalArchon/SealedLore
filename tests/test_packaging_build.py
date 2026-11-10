@@ -19,7 +19,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 APPIMAGE = ROOT / "packaging" / "appimage"
-BUILD = (APPIMAGE / "build.sh").read_text()
+BUILD = (APPIMAGE / "build.sh").read_text(encoding="utf-8")
 
 needs_bash_and_git = pytest.mark.skipif(
     not (shutil.which("bash") and shutil.which("git")), reason="needs bash and git"
@@ -102,7 +102,7 @@ def _version(text: str) -> tuple[int, ...]:
 
 
 def _locked() -> dict[str, str]:
-    lock = (APPIMAGE / "requirements.lock").read_text()
+    lock = (APPIMAGE / "requirements.lock").read_text(encoding="utf-8")
     return {
         name.lower(): version
         for name, version in re.findall(r"^([A-Za-z0-9_.-]+)==(\S+)", lock, re.MULTILINE)
@@ -114,7 +114,9 @@ def test_the_lock_meets_every_floor_the_in_file_sets():
     (certifi's root; pyasn1's and dnspython's denials of service; cryptography's
     50.0.2, the other apps' version) is only as good as the relock after it."""
     floors = re.findall(
-        r"^([A-Za-z0-9_.-]+)>=([0-9.]+)$", (APPIMAGE / "requirements.in").read_text(), re.M
+        r"^([A-Za-z0-9_.-]+)>=([0-9.]+)$",
+        (APPIMAGE / "requirements.in").read_text(encoding="utf-8"),
+        re.M,
     )
     named = dict(floors)
     assert named["pyasn1"] == "0.6.5" and named["dnspython"] == "2.9.0"
@@ -127,9 +129,13 @@ def test_the_lock_meets_every_floor_the_in_file_sets():
 
 def test_a_source_install_has_the_same_floors():
     """pip install reads pyproject.toml, never the AppImage's lock."""
-    deps = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["dependencies"]
+    deps = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"][
+        "dependencies"
+    ]
     floors = re.findall(
-        r"^([A-Za-z0-9_.-]+)>=([0-9.]+)$", (APPIMAGE / "requirements.in").read_text(), re.M
+        r"^([A-Za-z0-9_.-]+)>=([0-9.]+)$",
+        (APPIMAGE / "requirements.in").read_text(encoding="utf-8"),
+        re.M,
     )
     for name, floor in floors:
         assert f"{name}>={floor}" in deps, f"pyproject.toml lacks {name}>={floor}"
@@ -158,13 +164,15 @@ def test_a_lock_or_a_build_takes_no_uv_setting_from_this_machine():
     said = subprocess.run(
         ["bash", "-c", script], env=env, capture_output=True, text=True, check=True
     ).stdout.split()
-    version = re.search(r'^UV_VERSION="([^"]+)"', (APPIMAGE / "tools.sh").read_text(), re.M)
+    version = re.search(
+        r'^UV_VERSION="([^"]+)"', (APPIMAGE / "tools.sh").read_text(encoding="utf-8"), re.M
+    )
     assert said == ["pinned", version.group(1)], said
 
 
 @needs_bash_and_git
 def test_upgrade_re_resolves_the_lot_and_nothing_else_does():
-    lock = (APPIMAGE / "lock.sh").read_text()
+    lock = (APPIMAGE / "lock.sh").read_text(encoding="utf-8")
     chooses = block(lock, 'upgrade=""', "\nfi\n")
     for value, flag in (("", ""), ("0", ""), ("1", "--upgrade")):
         env = {"PATH": os.environ.get("PATH", ""), "UPGRADE": value}
@@ -183,7 +191,7 @@ def test_the_encryption_stack_moves_with_no_relock():
     """tinfoil, tinfoil-ehbp and pyhpke stay exactly as pinned, whatever a relock
     does (test_private_mode.py holds them to pyproject.toml)."""
     locked = _locked()
-    wanted = (APPIMAGE / "requirements.in").read_text()
+    wanted = (APPIMAGE / "requirements.in").read_text(encoding="utf-8")
     for name in ("tinfoil", "tinfoil-ehbp", "pyhpke"):
         assert f"{name}=={locked[name]}" in wanted
 
@@ -201,7 +209,7 @@ def test_the_tokenizer_is_fetched_as_every_other_download_is():
 
     url = re.search(r'^TIKTOKEN_URL="([^"]+)"', BUILD, re.M).group(1)
     pinned = re.search(r'^TIKTOKEN_SHA256="([^"]+)"', BUILD, re.M).group(1)
-    source = Path(tiktoken.__file__).read_text()
+    source = Path(tiktoken.__file__).read_text(encoding="utf-8")
     assert url.startswith("https://") and url.endswith(f"/{DEFAULT_ENCODING}.tiktoken")
     assert f'"{url}",\n        expected_hash="{pinned}"' in source, "tiktoken's own sum"
     step = block(BUILD, 'log "Tokenizer data"', 'log "Licences and third-party notices"')
@@ -254,9 +262,11 @@ def test_check_builds_twice_apart_and_compares(tmp_path: Path):
     passed = _check(tmp_path / "one", same=True)
     assert passed.returncode == 0, passed.stderr
     assert "Reproducible: both builds are" in passed.stdout
-    assert (tmp_path / "one/dist/SealedLore-1-x86_64.AppImage").read_text() == "same"
+    assert (tmp_path / "one/dist/SealedLore-1-x86_64.AppImage").read_text(
+        encoding="utf-8"
+    ) == "same"
     failed = _check(tmp_path / "two", same=False)
     assert failed.returncode == 1 and "NOT reproducible" in failed.stderr
-    a = (tmp_path / "two/dist/check-a/SealedLore-1-x86_64.AppImage").read_text()
-    b = (tmp_path / "two/dist/check-b/SealedLore-1-x86_64.AppImage").read_text()
+    a = (tmp_path / "two/dist/check-a/SealedLore-1-x86_64.AppImage").read_text(encoding="utf-8")
+    b = (tmp_path / "two/dist/check-b/SealedLore-1-x86_64.AppImage").read_text(encoding="utf-8")
     assert a.endswith("/a") and b.endswith("/b"), "each in a folder of its own"

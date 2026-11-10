@@ -144,7 +144,7 @@ def test_the_new_story_has_the_editor_s_changes_and_the_old_one_is_untouched(
 
 @pytest.mark.parametrize("path", SAMPLES, ids=lambda p: p.stem)
 def test_an_unchanged_document_leaves_the_new_story_as_the_copy_made_it(path: Path):
-    bundle = bundle_from_scenario(parse_plot_markdown(path.read_text()).scenario)
+    bundle = bundle_from_scenario(parse_plot_markdown(path.read_text(encoding="utf-8")).scenario)
     before = document_from_story(bundle, whole=True)
     copy = _copy(bundle, bundle.story.title)
     expected = copy.model_dump()

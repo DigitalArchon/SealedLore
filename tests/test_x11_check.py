@@ -157,7 +157,7 @@ def test_the_manuals_example_is_what_the_app_prints():
 
     from sealedlore.gui.x11_check import message
 
-    manual = (Path(__file__).parent.parent / "docs" / "manual.md").read_text()
+    manual = (Path(__file__).parent.parent / "docs" / "manual.md").read_text(encoding="utf-8")
     printed = message(["libxcb-cursor.so.0"], "debian", {})
     assert f"```text\n{printed}\n```" in manual
 

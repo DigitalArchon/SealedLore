@@ -185,7 +185,7 @@ def test_an_archive_round_trips_everything(session: StorySession, tmp_path: Path
     assert bundle.asides[0].question == "q?"
     assert bundle.supporting.characters[0].name == "Patel"
     assert api_log == log
-    assert "embeddings" not in json.loads(file.read_text())
+    assert "embeddings" not in json.loads(file.read_text(encoding="utf-8"))
 
 
 def test_importing_over_an_existing_story_gets_a_fresh_id(session: StorySession, tmp_path: Path):

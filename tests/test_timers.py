@@ -16,7 +16,7 @@ SRC = Path(__file__).resolve().parents[1] / "src" / "sealedlore"
 def calls(name: str) -> list[tuple[str, ast.Call]]:
     found = []
     for path in sorted(SRC.rglob("*.py")):
-        for node in ast.walk(ast.parse(path.read_text(), str(path))):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"), str(path))):
             if not isinstance(node, ast.Call):
                 continue
             func = node.func

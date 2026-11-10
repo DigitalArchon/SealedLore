@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import struct
+import sys
 import zipfile
 import zlib
 from pathlib import Path
@@ -88,7 +89,8 @@ def test_a_backup_brings_every_character_back_elsewhere_as_they_were(tmp_path: P
     path = tmp_path / f"all{BACKUP_SUFFIX}"
     written = write_backup(path, bundle.cast, store, images=store.images(), log=log)
     assert written == 4 and is_backup(path)
-    assert path.stat().st_mode & 0o077 == 0, "its log holds prompts: the author's alone"
+    if sys.platform != "win32":  # mode bits; Windows has the folder's ACL
+        assert path.stat().st_mode & 0o077 == 0, "its log holds prompts: the author's alone"
 
     there = collection.load_collection(tmp_path / "there")
     there_store = DiskPictures(COLLECTION_ID, tmp_path / "there")

@@ -384,7 +384,7 @@ def test_every_sample_character_comes_with_its_portrait():
     offered = sample_stories(SAMPLES)
     assert offered
     for _name, path in offered:
-        parsed = parse_plot_markdown(path.read_text())
+        parsed = parse_plot_markdown(path.read_text(encoding="utf-8"))
         assert load_plot_pictures(parsed, path.parent) == [], path.name
         scenario = parsed.scenario
         for character in [*scenario.cast, *scenario.supporting]:

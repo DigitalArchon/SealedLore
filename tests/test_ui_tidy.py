@@ -43,15 +43,20 @@ def window(app, tmp_path: Path, story, cast):
     window.close()
 
 
-def needs_real_fonts() -> None:
-    """Skip a test that measures text when Qt has no fonts to measure with.
-    Offscreen on Windows has no font database: every glyph is a box as wide
-    as the font is high, so "i" is as wide as "W" and a label ran to 297px
-    where Linux's was 143px (tools/smoke/qt_metrics.py, GitHub's runner)."""
+def has_real_fonts() -> bool:
+    """Whether Qt has fonts to measure text with. Offscreen on Windows has
+    no font database: every glyph is a box as wide as the font is high, so
+    "i" is as wide as "W" and a label ran to 297px where Linux's was 143px
+    (tools/smoke/qt_metrics.py, GitHub's runner)."""
     from PySide6.QtGui import QFont, QFontMetrics
 
     metrics = QFontMetrics(QFont())
-    if metrics.horizontalAdvance("i") == metrics.horizontalAdvance("W"):
+    return metrics.horizontalAdvance("i") != metrics.horizontalAdvance("W")
+
+
+def needs_real_fonts() -> None:
+    """Skip a test that measures text when Qt has no fonts to measure with."""
+    if not has_real_fonts():
         pytest.skip("no real fonts on this Qt platform: every glyph is a box")
 
 

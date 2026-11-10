@@ -30,6 +30,12 @@ from sealedlore.phone.torrc import (
     tor_environment,
 )
 
+# Phone access is Linux's for now (phone/torrc.py: find_tor is None on Windows,
+# and tor publishes an onion only to a Unix socket there): these drive it whole.
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32", reason="phone access is Linux only for now"
+)
+
 FAKE_TOR = Path(__file__).parent / "data" / "fake_tor.py"
 
 
@@ -211,7 +217,7 @@ def run(app, place, mode="ok", key=None):
 
 
 def commands(log: Path) -> list[str]:
-    return [line.split()[0] for line in log.read_text().splitlines()]
+    return [line.split()[0] for line in log.read_text(encoding="utf-8").splitlines()]
 
 
 def test_tor_is_started_logged_into_and_publishes_the_onion(app, place):
@@ -231,7 +237,7 @@ def test_tor_is_started_logged_into_and_publishes_the_onion(app, place):
         "GETINFO",
         "ADD_ONION",
     ]
-    add_onion = log.read_text().splitlines()[-1]
+    add_onion = log.read_text(encoding="utf-8").splitlines()[-1]
     assert f"Port=80,unix:{service.paths.http}" in add_onion
     assert (service.paths.data.stat().st_mode & 0o777) == 0o700
     assert (service.paths.torrc.stat().st_mode & 0o777) == 0o600
@@ -326,7 +332,7 @@ def test_a_kept_key_keeps_the_address(app, place):
     service, seen, log = run(app, place, key="ED25519-V3:kept-key")
     wait_for(app, lambda: service.step == "ready")
     assert seen["keys"] == []
-    assert "ADD_ONION ED25519-V3:kept-key " in log.read_text()
+    assert "ADD_ONION ED25519-V3:kept-key " in log.read_text(encoding="utf-8")
     first = seen["address"]
     service.stop()
     again, seen_again, _ = run(app, place, key="ED25519-V3:kept-key")
@@ -399,7 +405,7 @@ def test_the_window_turns_phone_access_on_and_off(app, place, monkeypatch, memor
     assert window.phone_on and window._phone.onion.endswith(".onion")
     key = window.config.phone.onion.api_key
     assert key.startswith("ED25519-V3:")
-    assert key not in (root / "config.json").read_text()  # in the keychain
+    assert key not in (root / "config.json").read_text(encoding="utf-8")  # in the keychain
     assert window._phone.onion == window.config.phone.service_id + ".onion"
     assert "ready" in changes
 
@@ -439,4 +445,6 @@ def test_closing_the_window_ends_tor(app, place, monkeypatch, memory_keychain):
     window.close()
     assert window._tor is None and not service.running()
     save_config(window.config, root=place / "data")
-    assert json.loads((place / "data" / "config.json").read_text())["phone"]["service_id"]
+    assert json.loads((place / "data" / "config.json").read_text(encoding="utf-8"))["phone"][
+        "service_id"
+    ]

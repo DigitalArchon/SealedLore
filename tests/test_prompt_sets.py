@@ -52,7 +52,7 @@ def test_a_set_round_trips_with_its_fingerprints(tmp_path: Path):
     path = tmp_path / f"mine{PROMPT_SET_SUFFIX}"
 
     write_prompt_set(path, edits)
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     loaded = read_prompt_set(path)
 
     assert data["format"] == "sealedlore-prompts" and data["version"] == 1

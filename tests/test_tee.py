@@ -301,7 +301,7 @@ def fixture_server(fixture: dict, *, intel_status: int = 200, jwks: dict | None 
 
 @pytest.fixture
 def real():
-    fixture = json.loads(FIXTURE.read_text())
+    fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
     dcap._cache.clear()
     nras._keys.update(at=0.0, keys={})
     yield fixture

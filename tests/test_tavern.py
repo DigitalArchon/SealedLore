@@ -624,7 +624,7 @@ def test_a_json_card_is_v3_with_v1_on_top_and_only_its_links(tmp_path: Path):
     first, third = card_data(gus)
     path = tmp_path / "gus.json"
     write_card(path, first, third, None)
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     assert (data["spec"], data["spec_version"]) == ("chara_card_v3", "3.0")
     # V1's fields on top too, for readers that know no other.
     assert data["name"] == "Gus" and data["description"] == "Runs the bar."
