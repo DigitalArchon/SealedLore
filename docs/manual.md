@@ -2461,15 +2461,21 @@ recorded in the story's log, and if it doesn't match its record the status
 bar says so. A reply that fails its check, of any kind, has the model
 attested again before anything more is sent to it.
 
-**Through NanoGPT, the receipt keys aren't in the quote** (November 2026),
-and the model button says so ("receipt keys not in the quote"). The quote
-binds the key that signs each reply's record, so the record's tie to the
-attested enclave holds. The receipt's own key is only published beside that
-key, so the receipt's word that the model was verified rests on NanoGPT's
-relay, not on the hardware. Some `TEE/` models are refused outright for now:
-those NanoGPT can't attest for a fresh nonce of ours (the Tinfoil-hosted ones,
-and those relayed from Chutes). Several have an end-to-end encrypted
-`private/` version, which is attested its own way (below).
+**The receipt keys are in the quote** for every model RedPill's gateway
+serves (since November 10 2026). The app also asks NanoGPT for the gateway's
+own report, whose quote binds the gateway's whole keyset, receipt key
+included, to a fresh nonce of ours. Where NanoGPT has no such report for a
+model, the model button says "receipt keys not in the quote": the receipt's
+word that the model was verified then rests on NanoGPT's relay. A model whose
+own attestation can't be had for our nonce, but which the gateway answers, is
+attested through the gateway: its replies are checked as any other's, and the
+model button says "no GPU evidence", since its own enclave is then the
+gateway's word in each receipt. Models Chutes answers (several Kimi, GLM and
+Gemma ones) attest every instance for our nonce; Chutes signs no replies, so
+theirs show as not verified, unless RedPill's gateway answered instead. The
+Tinfoil-hosted `TEE/` models are refused: NanoGPT can't attest them for a
+fresh nonce of ours. Several have an end-to-end encrypted `private/` version,
+which is attested its own way (below).
 
 **Check TEE models** (Settings → Private, on by default) is that whole check
 for `TEE/` models. Switched off, a `TEE/` model is used like any other: no

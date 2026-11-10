@@ -37,15 +37,20 @@ UNCHECKED_TEE = "⚠ not checked (Check TEE models is off)"
 # model button's tooltip: the button names them, this says what they cost.
 SHORTFALL_TIPS = {
     RECEIPT_KEYS_LOOSE: (
-        "Receipt keys not in the quote: the hardware's quote binds the key that signs "
-        "each reply's record, not the key of the gateway's receipts, so a receipt's "
-        "word that the model was verified rests on NanoGPT's relay."
+        "Receipt keys not in the quote: NanoGPT had no gateway report for this model, so "
+        "the hardware's quote binds the key that signs each reply's record, not the key "
+        "of the gateway's receipts, and a receipt's word that the model was verified "
+        "rests on NanoGPT's relay."
     ),
     "receipt keys expired": (
         "Receipt keys expired: the gateway's keyset names no time its keys hold until, so "
         "its receipts aren't read. (Keys past their time are refused.)"
     ),
-    "no GPU evidence": "No GPU evidence: none was offered, so no GPU was checked.",
+    "no GPU evidence": (
+        "No GPU evidence: none was offered, so no GPU was checked. For a model attested "
+        "through RedPill's gateway, each reply's receipt carries the gateway's word that "
+        "the model was verified."
+    ),
     "GPUs unverified": "GPUs unverified: NVIDIA's attestation service couldn't be reached.",
     "NVIDIA signature unchecked": (
         "NVIDIA signature unchecked: NVIDIA's keys couldn't be fetched to check its verdict."
