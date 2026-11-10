@@ -269,3 +269,92 @@ def test_on_windows_phone_access_says_it_is_for_linux_whatever_tor_there_is(monk
     (tmp_path / "tor").chmod(0o755)
     monkeypatch.setattr(sys, "platform", "win32")
     assert find_tor({"PATH": str(tmp_path), "SEALEDLORE_TOR": str(tmp_path / "tor")}) is None
+
+
+STORE_FOLDER = "PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0"
+STORE_FAMILY = "PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0"
+
+
+def test_the_microsoft_stores_python_is_known_by_its_package(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+    # Read with Windows' separators wherever the test runs.
+    store = STORE_FOLDER
+    assert paths.store_python_family(f"/Program Files/WindowsApps/{store}") == STORE_FAMILY
+    assert paths.store_python_family("/Users/ann/AppData/Local/Programs/Python/Python312") is None
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert paths.store_python_family(f"/Program Files/WindowsApps/{store}") is None
+
+
+def test_the_stores_python_keeps_appdata_in_its_package(monkeypatch, tmp_path):
+    """A folder it creates under AppData lands in the package's LocalCache,
+    gone with the package (Windows 11, Nov 10 2026)."""
+    monkeypatch.setattr(sys, "platform", "win32")
+    prefix = f"/Program Files/WindowsApps/{STORE_FOLDER}"
+    local, roaming = tmp_path / "AppData" / "Local", tmp_path / "AppData" / "Roaming"
+    env = {"LOCALAPPDATA": str(local), "APPDATA": str(roaming)}
+    cache = local / "Packages" / STORE_FAMILY / "LocalCache"
+    home = local / "SealedLore"
+    # A folder that was there before (python.org's Python made it) is written
+    # in place: its copy in the package never exists, and nothing is said.
+    assert paths.hidden_by_store_python(home, env, prefix) is None
+    (cache / "Local" / "SealedLore").mkdir(parents=True)
+    assert paths.hidden_by_store_python(home, env, prefix) == cache / "Local" / "SealedLore"
+    (cache / "Roaming" / "x").mkdir(parents=True)
+    assert paths.hidden_by_store_python(roaming / "x", env, prefix) == cache / "Roaming" / "x"
+    # A --data-dir outside AppData is the folder it says.
+    assert paths.hidden_by_store_python(tmp_path / "Documents" / "sl", env, prefix) is None
+    # python.org's Python: nothing hidden.
+    python_org = str(local / "Programs" / "Python" / "Python312")
+    assert paths.hidden_by_store_python(home, env, python_org) is None
+
+
+def test_the_window_warns_at_every_start_on_the_stores_python(monkeypatch, tmp_path):
+    from PySide6.QtWidgets import QApplication
+
+    import sealedlore.gui.main_window as main_window
+
+    QApplication.instance() or QApplication([])
+    window = main_window.MainWindow(root=tmp_path, use_mock=True)
+    shown: list[object] = []
+
+    class Box:
+        def exec(self):
+            shown.append(self)
+
+        def clickedButton(self):  # noqa: N802 - Qt's name
+            return None
+
+        def property(self, _name):
+            return object()
+
+    monkeypatch.setattr(window, "_store_python_box", lambda home, hidden: Box())
+    window._warn_store_python()
+    assert shown == [], "python.org's Python, or not Windows: nothing said"
+    hidden = Path("/hidden/SealedLore")
+    monkeypatch.setattr(main_window, "hidden_by_store_python", lambda home: hidden)
+    window._warn_store_python()
+    assert len(shown) == 1
+
+    box = main_window.MainWindow._store_python_box(window, tmp_path, hidden)
+    assert box.windowTitle() == "Python from the Microsoft Store"
+    assert str(tmp_path) in box.text() and str(hidden) in box.text()
+    assert "Uninstalling or resetting that Python deletes them" in box.text()
+    assert box.property("open_button").text() == "Open that folder"
+    window.close()
+
+
+def test_a_long_windows_path_can_wrap_in_the_warning():
+    from pathlib import PureWindowsPath
+
+    from sealedlore.gui.main_window import store_python_warning
+
+    text = store_python_warning(PureWindowsPath(r"C:\Users\ann"), PureWindowsPath(r"C:\A\B"))
+    assert "C:\\\u200bA\\\u200bB" in text
+
+
+def test_the_cli_says_it_too(monkeypatch, tmp_path, capsys):
+    import sealedlore.cli as cli
+
+    monkeypatch.setattr(cli, "hidden_by_store_python", lambda home: Path("/hidden/SealedLore"))
+    assert cli.main(["--data-dir", str(tmp_path), "list"]) == 0
+    assert "Microsoft Store's Python" in capsys.readouterr().err

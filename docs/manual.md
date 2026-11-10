@@ -298,6 +298,12 @@ rights.
 5. Close PowerShell and open it again (see above). Then go to Step 2,
    "Without Git".
 
+**Not the Microsoft Store's Python.** Both ways above install Python from
+python.org. The Python in the Microsoft Store keeps a folder it makes in
+AppData inside its own package, so your stories would not be where this
+manual says, and uninstalling that Python would delete them. SealedLore
+warns at every start when that has happened, and says where they are.
+
 #### Step 2: Install SealedLore
 
 **With Git** (the quick way above). Paste these two lines:

@@ -171,7 +171,7 @@ from sealedlore.storage.archive import (
 )
 from sealedlore.storage.collection_backup import BACKUP_SUFFIX, is_backup
 from sealedlore.storage.images import is_video_file, reference_files, without_videos
-from sealedlore.storage.paths import data_home, samples_dir, story_dir
+from sealedlore.storage.paths import data_home, hidden_by_store_python, samples_dir, story_dir
 from sealedlore.storage.prompt_sets import PROMPT_SET_SUFFIX
 from sealedlore.storage.repository import (
     StoryBundle,
@@ -220,6 +220,27 @@ PAGE_ABOUT = {
 # How long after the window shows the tokenizer's warm-up starts: past the
 # first paint, well before anyone has chosen a story.
 WARM_UP_DELAY_MS = 300
+
+
+def _breakable(path: Path) -> str:
+    """A long Windows path that a label can wrap: a zero-width space after
+    each separator (a label wraps only where it may break a line)."""
+    return str(path).replace("\\", "\\\u200b")
+
+
+def store_python_warning(home: Path, hidden: Path) -> str:
+    return (
+        "SealedLore is running on the Microsoft Store's Python. Windows keeps what that "
+        "Python saves under AppData inside its own package, so your stories and settings "
+        f"are not in\n\n"
+        f"{_breakable(home)}\n\nbut in\n\n{_breakable(hidden)}\n\n"
+        "Uninstalling or resetting that Python deletes them.\n\n"
+        "To keep them safe: install Python from python.org (the README's winget line "
+        "installs that one), copy the second folder (Open that folder shows it) into "
+        f"{home.parent}, then in the SealedLore folder delete .venv and make it again with "
+        "py -3.12 -m venv .venv and .venv\\Scripts\\python -m pip install -e . "
+        "(the manual's Windows section, Step 2)."
+    )
 
 
 def _how_it_starts(story: Story) -> dict:
@@ -5477,6 +5498,7 @@ class MainWindow(
             QTimer.singleShot(WARM_UP_DELAY_MS, self, self._warm_tokenizer)
             QTimer.singleShot(WARM_UP_DELAY_MS, self, self._move_keys_to_keychain)
             QTimer.singleShot(WARM_UP_DELAY_MS, self, self._maybe_start_phone)
+            QTimer.singleShot(WARM_UP_DELAY_MS, self, self._warn_store_python)
 
     def _warm_tokenizer(self) -> None:
         """tiktoken reads its vocabulary on first use (~0.25s, holding the
@@ -5485,6 +5507,34 @@ class MainWindow(
         window's first paint. A story opened meanwhile waits for the rest of
         the load (tiktoken loads an encoding once)."""
         BackgroundThread(target=lambda: self.estimator.raw_count("warm up"), daemon=True).start()
+
+    def _warn_store_python(self) -> None:
+        """On the Microsoft Store's Python the data folder is kept inside
+        Python's package and goes when it is uninstalled
+        (`paths.hidden_by_store_python`). Said at every start, as long as it
+        is so: the author's call (Nov 10 2026)."""
+        home = self.root or data_home()
+        hidden = hidden_by_store_python(home)
+        if hidden is None:
+            return
+        box = self._store_python_box(home, hidden)
+        box.exec()
+        if box.clickedButton() is box.property("open_button"):
+            # File Explorer runs outside Python's package: it sees the real files.
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(hidden)))
+
+    def _store_python_box(self, home: Path, hidden: Path) -> QMessageBox:
+        box = QMessageBox(
+            QMessageBox.Warning,
+            "Python from the Microsoft Store",
+            store_python_warning(home, hidden),
+            QMessageBox.Ok,
+            self._dialog_parent(),
+        )
+        box.setTextFormat(Qt.PlainText)
+        box.setProperty("open_button", box.addButton("Open that folder", QMessageBox.ActionRole))
+        box.setDefaultButton(QMessageBox.Ok)
+        return box
 
     def _move_keys_to_keychain(self) -> None:
         """Keys an older config.json holds in plain text go into the keychain

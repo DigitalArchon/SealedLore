@@ -36,6 +36,55 @@ def data_home() -> Path:
     return base / APP_DIR_NAME
 
 
+# The Microsoft Store's Python is installed as a package whose folder is named
+# PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0.
+STORE_PYTHON = "PythonSoftwareFoundation.Python."
+
+
+def store_python_family(base_prefix: str | None = None) -> str | None:
+    """The package family name ("PythonSoftwareFoundation.Python.3.12_
+    qbz5n2kfra8p0") when this runs on the Microsoft Store's Python, else None."""
+    if sys.platform != "win32":
+        return None
+    folder = Path(base_prefix if base_prefix is not None else sys.base_prefix).name
+    if not folder.startswith(STORE_PYTHON) or "__" not in folder:
+        return None
+    return f"{folder.split('_', 1)[0]}_{folder.rsplit('__', 1)[1]}"
+
+
+def hidden_by_store_python(
+    folder: Path, environ: dict[str, str] | None = None, base_prefix: str | None = None
+) -> Path | None:
+    """Where the Microsoft Store's Python really keeps `folder`, when this
+    runs on that Python and Windows has put it there; else None.
+
+    Windows gives a Store package a private copy of AppData: a folder it
+    creates there lands in the package's own LocalCache, seen at the usual
+    path only from inside, and deleted with the package. So a SealedLore run
+    on it keeps the stories where the manual doesn't say, File Explorer
+    doesn't look, and uninstalling Python removes them. A folder that was
+    already there (made by python.org's Python) is written in place, and its
+    copy in LocalCache never exists: nothing to say then (both seen on
+    Windows 11, Nov 10 2026). The package can see its own LocalCache. The
+    README's steps use python.org's Python, which doesn't do this."""
+    family = store_python_family(base_prefix)
+    if family is None:
+        return None
+    env = os.environ if environ is None else environ
+    for variable, kind in (("LOCALAPPDATA", "Local"), ("APPDATA", "Roaming")):
+        base = env.get(variable)
+        if not base:
+            continue
+        try:
+            inside = Path(folder).relative_to(Path(base))
+        except ValueError:
+            continue
+        local = env.get("LOCALAPPDATA") or str(Path(base).parent / "Local")
+        hidden = Path(local) / "Packages" / family / "LocalCache" / kind / inside
+        return hidden if hidden.is_dir() else None
+    return None
+
+
 def samples_dir() -> Path | None:
     """The sample plot files and their format guide: `$SEALEDLORE_SAMPLES`
     (the AppImage sets it), else the checkout's `SampleStories/`, else None."""
