@@ -270,8 +270,8 @@ that installs programs for you, and most up-to-date Windows 10 computers
 have it too. Paste these two lines into PowerShell, one at a time:
 
 ```powershell
-winget install -e --id Python.Python.3.12 --accept-source-agreements --accept-package-agreements
-winget install -e --id Git.Git --accept-source-agreements --accept-package-agreements
+winget install -e --id Python.Python.3.12 --source winget --accept-source-agreements --accept-package-agreements
+winget install -e --id Git.Git --source winget --accept-source-agreements --accept-package-agreements
 ```
 
 If Windows asks whether to allow the app to make changes, click **Yes**.
@@ -331,7 +331,10 @@ Paste this to start SealedLore:
 .venv\Scripts\pythonw -m sealedlore.gui.app
 ```
 
-The SealedLore window opens. To connect it to a model, see step 1 of
+The SealedLore window opens. **The first time can take a minute or two**
+with nothing on screen, while Windows' virus scanner checks the files just
+installed; leave it, and it comes. After that it opens in a few seconds.
+To connect it to a model, see step 1 of
 [First five minutes](../README.md#first-five-minutes).
 
 To put a **SealedLore** shortcut on your desktop, paste this line (it is

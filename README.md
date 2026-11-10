@@ -465,8 +465,8 @@ the Start menu and paste these lines one at a time. Close and reopen
 PowerShell after the first two, so it finds what they installed.
 
 ```powershell
-winget install -e --id Python.Python.3.12 --accept-source-agreements --accept-package-agreements
-winget install -e --id Git.Git --accept-source-agreements --accept-package-agreements
+winget install -e --id Python.Python.3.12 --source winget --accept-source-agreements --accept-package-agreements
+winget install -e --id Git.Git --source winget --accept-source-agreements --accept-package-agreements
 ```
 
 ```powershell
