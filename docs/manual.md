@@ -2467,10 +2467,13 @@ own report, whose quote binds the gateway's whole keyset, receipt key
 included, to a fresh nonce of ours. Where NanoGPT has no such report for a
 model, the model button says "receipt keys not in the quote": the receipt's
 word that the model was verified then rests on NanoGPT's relay. A model whose
-own attestation can't be had for our nonce, but which the gateway answers, is
-attested through the gateway: its replies are checked as any other's, and the
-model button says "no GPU evidence", since its own enclave is then the
-gateway's word in each receipt. Models Chutes answers (several Kimi, GLM and
+own attestation is relayed for a nonce that isn't ours, or times out twice,
+but which the gateway answers, is attested through the gateway: its replies
+are checked as any other's, and the model button says "no GPU evidence",
+since its own enclave is then the gateway's word in each receipt. Any other
+failure (a rate limit, an outage) refuses the model as before, so that a
+model Chutes answers first is never sent to instances that weren't attested
+this time. Models Chutes answers (several Kimi, GLM and
 Gemma ones) attest every instance for our nonce; Chutes signs no replies, so
 theirs show as not verified, unless RedPill's gateway answered instead. The
 Tinfoil-hosted `TEE/` models are refused: NanoGPT can't attest them for a
