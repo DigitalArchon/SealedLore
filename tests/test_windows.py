@@ -206,3 +206,55 @@ def test_capture_exclusion_is_windows_only_and_never_raises(monkeypatch):
         assert exclude_from_capture(widget, True) is False
         monkeypatch.setattr(sys, "platform", "win32")  # and no windll here
         assert exclude_from_capture(widget, True) is False
+
+
+def test_on_windows_attestation_trusts_certifi_beside_the_windows_store(monkeypatch):
+    """Sigstore's TUF client trusts OpenSSL's defaults, on Windows only the
+    roots already in the Windows store: a fresh Windows 11 lacked the one its
+    CDN chains to, and every private/ model was refused (Nov 10 2026)."""
+    import certifi
+
+    from sealedlore.providers.private_mode import windows_roots
+
+    monkeypatch.delenv("SSL_CERT_FILE", raising=False)
+    monkeypatch.setattr(sys, "platform", "win32")
+    windows_roots()
+    assert os.environ["SSL_CERT_FILE"] == certifi.where()
+
+    monkeypatch.setenv("SSL_CERT_FILE", "C:\\corp\\roots.pem")
+    windows_roots()
+    assert os.environ["SSL_CERT_FILE"] == "C:\\corp\\roots.pem"
+
+
+def test_elsewhere_the_certificate_settings_are_left_alone(monkeypatch):
+    from sealedlore.providers.private_mode import windows_roots
+
+    monkeypatch.delenv("SSL_CERT_FILE", raising=False)
+    monkeypatch.setattr(sys, "platform", "linux")
+    windows_roots()
+    assert "SSL_CERT_FILE" not in os.environ
+
+
+def test_the_roots_are_in_place_before_the_sdk_attests(monkeypatch):
+    import certifi
+    import tinfoil
+
+    from sealedlore.providers import private_mode, sdk_guard
+
+    seen: list[str | None] = []
+
+    class Stop(Exception):
+        pass
+
+    class FakeClient:
+        def __init__(self, **_kwargs):
+            seen.append(os.environ.get("SSL_CERT_FILE"))
+            raise Stop
+
+    monkeypatch.setattr(tinfoil, "SecureClient", FakeClient)
+    monkeypatch.setattr(sdk_guard, "guard", lambda *_a, **_k: [])
+    monkeypatch.delenv("SSL_CERT_FILE", raising=False)
+    monkeypatch.setattr(sys, "platform", "win32")
+    with pytest.raises(Stop):
+        private_mode.tinfoil_verify("https://relay.example/api", "secret")
+    assert seen == [certifi.where()]

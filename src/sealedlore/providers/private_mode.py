@@ -47,7 +47,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import secrets
+import sys
 import threading
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
@@ -149,6 +151,28 @@ def _hardware(document: dict[str, Any]) -> str:
 REQUIRED_STEPS = ("verifyCode", "verifyEnclave", "compareMeasurements")
 
 
+def windows_roots() -> None:
+    """On Windows, let OpenSSL's default contexts trust certifi's roots too.
+
+    Inside `SecureClient.verify`, Sigstore's TUF client opens its own urllib3
+    pool, which trusts OpenSSL's defaults: on Windows, the certificates already
+    in the Windows store. Windows fetches most roots only when something asks
+    for them through its own TLS, so a fresh install had 16, without GTS Root
+    R1, the root Sigstore's CDN chains to: every `private/` model was refused
+    ("Failed to refresh TUF metadata"; Windows 11 26H2, Nov 10 2026). Chrome
+    and Firefox keep their own roots and never fetch it for Windows, and a
+    company may turn the fetching off. SSL_CERT_FILE adds certifi's bundle,
+    the one httpx and the SDK's own requests already trust, to the Windows
+    store's (the store still counts, a company's root included). The
+    AppImage's AppRun does the same on Linux. Left alone when set, so the
+    user's own bundle stands, and never on another system."""
+    if sys.platform != "win32" or os.environ.get("SSL_CERT_FILE"):
+        return
+    import certifi  # noqa: PLC0415 - only where it is needed
+
+    os.environ["SSL_CERT_FILE"] = certifi.where()
+
+
 def tinfoil_verify(relay: str, cache_secret: str) -> Verified:
     """Attest Tinfoil's router through nano-gpt's relay (network; worker thread)."""
     # Imported here: the SDK pulls in sigstore and the OpenAI client, which
@@ -161,6 +185,7 @@ def tinfoil_verify(relay: str, cache_secret: str) -> Verified:
     # Before it fetches anything: its requests follow a redirect anywhere,
     # https to plain http included (providers/sdk_guard.py).
     sdk_guard.guard(is_local_host)
+    windows_roots()
 
     # The secret is passed explicitly, or the SDK would create one in
     # ~/.tinfoil; this client only verifies, it never sends a request.
