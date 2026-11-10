@@ -466,8 +466,12 @@ class TeeClient:
         try:
             body, nonce = self._fetch_attestation()
         except ProviderError as exc:
-            if gateway is not None:
-                return self._attest_gateway_alone(gateway, "its own attestation couldn't be had")
+            if gateway is not None and exc.status_code == 504:
+                # nano-gpt's `tee_attestation_upstream_timeout`, asked twice (live, Nov 10
+                # 2026: TEE/qwen3.6-27b). Only that: on a rate limit (429, seen live in the
+                # author's other apps) or an outage, the gateway standing in would send a
+                # model Chutes answers first (TEE/glm-5.1) to instances not attested this time.
+                return self._attest_gateway_alone(gateway, "its own attestation timed out")
             raise self._refused(exc) from exc
         if isinstance(body.get("evidence"), list):
             return self._attest_instances(body, nonce, gateway)
@@ -494,8 +498,8 @@ class TeeClient:
             )
         if body.get("signing_address") or body.get("intel_quote"):
             return self._attest_signing_key(body, nonce, gateway)
-        if gateway is not None:
-            return self._attest_gateway_alone(gateway, "its own attestation held nothing to check")
+        # An answer holding nothing to check is refused, the gateway's report or none: the
+        # gateway stands in only for a report relayed for a nonce not ours, or a timeout.
         if body.get("error"):
             said = relay_said(str(body["error"]))
             raise TeeRefused(f"nano-gpt couldn't attest {self.model}: {said}")

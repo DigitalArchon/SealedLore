@@ -1162,6 +1162,24 @@ def test_a_slow_attestation_is_asked_again_with_a_new_nonce_then_the_gateway_sta
         receipt_client(aci="400", plain=lambda nonce: (504, timeout))
 
 
+@pytest.mark.parametrize(
+    ("status", "body", "refusal"),
+    [
+        (429, {"error": "Rate limit exceeded"}, "couldn't be fetched"),
+        (502, {"error": "Bad gateway"}, "provider's side"),
+        (503, {"error": "Unable to reach Chutes TEE evidence service"}, "provider's side"),
+        (200, {}, "shape this app doesn't recognise"),
+    ],
+)
+def test_the_gateway_stands_in_for_nothing_else(status, body, refusal):
+    """Only a report relayed for another nonce, or a timeout: live (Nov 10 2026,
+    in the author's other apps), a rate limit on a Chutes-first model's own report
+    had it attested through the gateway alone, the Chutes instances nano-gpt
+    routes it to first unattested."""
+    with pytest.raises(TeeRefused, match=refusal):
+        receipt_client(model="TEE/glm-5.1", aci="bound", plain=lambda nonce: (status, body))
+
+
 def test_a_chutes_model_with_the_gateway_checks_the_replies_redpill_answers(instances):
     """Chutes answers first and signs nothing; a reply RedPill answers instead
     names its receipt, checked against the gateway's bound keys."""
