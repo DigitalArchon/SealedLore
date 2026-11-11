@@ -34,7 +34,7 @@ from sealedlore.engine.plot_draft import DEPTHS, NO_NEWCOMERS, PlotWishes
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.gui.model_picker import Browse, ModelField
 from sealedlore.gui.plot_wishes import PlotWishesForm
-from sealedlore.gui.sizing import may_discard, size_to_screen
+from sealedlore.gui.sizing import enter_only_on_buttons, may_discard, size_to_screen
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.character import Character
 from sealedlore.models.generation import ReasoningConfig
@@ -440,6 +440,13 @@ class GenerateDialog(QDialog):
         ):
             wishes = replace(wishes, depth=depth)
         return wishes
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        """Enter in a field never drafts (a paid call): it presses only a
+        push button that has the focus (gui/sizing.py
+        `enter_only_on_buttons`). Enter in Model drafted the story."""
+        if not enter_only_on_buttons(self, event):
+            super().keyPressEvent(event)
 
     def reject(self) -> None:
         """Cancel or Esc: a premise typed here is asked about before it is

@@ -31,7 +31,7 @@ from PySide6.QtWidgets import (
 from sealedlore.engine.plot_file import render_plot_markdown
 from sealedlore.gui.markdown_text import markdown_html
 from sealedlore.gui.plot_wishes import ABOUT, PlotWishesForm
-from sealedlore.gui.sizing import may_discard, size_to_screen
+from sealedlore.gui.sizing import enter_only_on_buttons, may_discard, size_to_screen
 from sealedlore.models.config import model_label
 from sealedlore.models.plot_file import OpeningDoc, PlotDocument
 
@@ -80,7 +80,6 @@ class PlotDialog(QDialog):
         layout.addStretch(1)
         self.buttons = QDialogButtonBox(QDialogButtonBox.Cancel)
         self.write_button = self.buttons.addButton("Write the plot", QDialogButtonBox.AcceptRole)
-        self.write_button.setDefault(True)
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
         layout.addWidget(self.buttons)
@@ -89,6 +88,13 @@ class PlotDialog(QDialog):
 
     def wishes(self):
         return self.form.wishes()
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        """Enter on a field never writes the plot (a paid call): it presses
+        only a push button that has the focus (gui/sizing.py
+        `enter_only_on_buttons`). Enter on a list or a box wrote it."""
+        if not enter_only_on_buttons(self, event):
+            super().keyPressEvent(event)
 
     def reject(self) -> None:
         if may_discard(self, self._typed, [self.form.typed()]):

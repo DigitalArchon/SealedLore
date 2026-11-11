@@ -74,7 +74,7 @@ from sealedlore.gui.ref_images import (
     store_reference,
     thumbnail_of,
 )
-from sealedlore.gui.sizing import GrowingText, size_to_screen
+from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, size_to_screen
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage, ImageRef, RefUse
@@ -402,7 +402,8 @@ class ImageDialog(QDialog):
         self.buttons = QDialogButtonBox(QDialogButtonBox.Cancel)
         self.generate_button = QPushButton("Generate")
         self.generate_button.setObjectName("sendButton")
-        self.generate_button.setDefault(False)
+        # Enter in a field never draws (`keyPressEvent`): turning the default
+        # off here wasn't enough, the button box makes it default on show.
         self.generate_button.setAutoDefault(False)
         self.buttons.addButton(self.generate_button, QDialogButtonBox.AcceptRole)
         self.generate_button.clicked.connect(self._approve)
@@ -964,6 +965,13 @@ class ImageDialog(QDialog):
             background=self.background,
         )
         self.accept()
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        """Enter in a field never sends the picture: it presses only a push
+        button that has the focus (gui/sizing.py `enter_only_on_buttons`).
+        Enter in Model, Size, Pictures or Prompt written by drew and paid."""
+        if not enter_only_on_buttons(self, event):
+            super().keyPressEvent(event)
 
     def reject(self) -> None:
         if self._worker is not None:

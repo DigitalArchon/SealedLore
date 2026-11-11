@@ -49,7 +49,7 @@ from sealedlore.engine.picture_use import (
 from sealedlore.engine.places import PLACE_CAPTION, place_for, place_title
 from sealedlore.gui.crop_dialog import MIN_SIDE, CropView, shapes
 from sealedlore.gui.ref_images import _encoded, image_of, picture_bytes_of
-from sealedlore.gui.sizing import size_to_screen
+from sealedlore.gui.sizing import enter_only_on_buttons, size_to_screen
 from sealedlore.models.character import Character
 from sealedlore.storage.image_meta import picture_kind
 
@@ -145,7 +145,6 @@ class UsePictureDialog(QDialog):
         # Made before anything that syncs to them (a radio ticked, the frame set).
         self.buttons = QDialogButtonBox(QDialogButtonBox.Cancel)
         self.keep_button = self.buttons.addButton("Keep", QDialogButtonBox.AcceptRole)
-        self.keep_button.setDefault(True)
         self.buttons.accepted.connect(self._approve)
         self.buttons.rejected.connect(self.reject)
 
@@ -289,6 +288,14 @@ class UsePictureDialog(QDialog):
         least = min(MIN_SIDE, self._image.width(), self._image.height())
         self.keep_button.setEnabled(min(crop.width(), crop.height()) >= least)
         self.keep_button.setText("Keep and draw…" if self.keep_draw.isChecked() else "Keep")
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        """Enter in a field presses nothing; on a push button, that button
+        (gui/sizing.py `enter_only_on_buttons`). Keep was made the default
+        before the button box was in the dialog, so Use the whole picture
+        took Enter: Enter in Caption threw the frame away and kept nothing."""
+        if not enter_only_on_buttons(self, event):
+            super().keyPressEvent(event)
 
     # --- the result ------------------------------------------------------------------
 

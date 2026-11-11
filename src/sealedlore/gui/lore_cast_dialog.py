@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.gui.fields import set_field_text
-from sealedlore.gui.sizing import GrowingText, size_to_screen
+from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, size_to_screen
 from sealedlore.models.config import model_label
 
 FILL_LABEL = "Fill with lore characters…"
@@ -77,13 +77,19 @@ class LoreCastDialog(QDialog):
         layout.addStretch(1)
         self.buttons = QDialogButtonBox(QDialogButtonBox.Cancel)
         self.ok = self.buttons.addButton("Write the cards", QDialogButtonBox.AcceptRole)
-        self.ok.setDefault(True)
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
         layout.addWidget(self.buttons)
         self.lore.textChanged.connect(self._sync)
         self._sync()
         size_to_screen(self, 0.32, 0.36)
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        """Enter in a field never writes the cards (a paid call): it presses
+        only a push button that has the focus (gui/sizing.py
+        `enter_only_on_buttons`)."""
+        if not enter_only_on_buttons(self, event):
+            super().keyPressEvent(event)
 
     def _sync(self) -> None:
         self.ok.setEnabled(bool(self.lore.text().strip()))

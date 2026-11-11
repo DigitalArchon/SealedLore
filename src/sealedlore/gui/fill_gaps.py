@@ -40,7 +40,7 @@ from sealedlore.gui.cast_board import ASPECT, cover
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.model_picker import ModelField
 from sealedlore.gui.ref_images import pixmap_of
-from sealedlore.gui.sizing import GrowingText, size_to_screen
+from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, size_to_screen
 from sealedlore.models.character import Character
 from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS
 from sealedlore.providers.images import ImageModelInfo
@@ -170,7 +170,6 @@ class FillGapsDialog(QDialog):
 
         self.buttons = QDialogButtonBox(QDialogButtonBox.Cancel)
         self.draw_button = self.buttons.addButton("Draw", QDialogButtonBox.AcceptRole)
-        self.draw_button.setDefault(True)
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
         layout = QVBoxLayout(self)
@@ -258,6 +257,13 @@ class FillGapsDialog(QDialog):
         ready = bool(count) and filled and not cannot and bool(self.sent_model())
         self.draw_button.setEnabled(ready)
         self.draw_button.setText(f"Draw {count}" if count else "Draw")
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        """Enter in a field never draws: it presses only a push button that
+        has the focus (gui/sizing.py `enter_only_on_buttons`). Enter in
+        Drawn by drew every gap ticked."""
+        if not enter_only_on_buttons(self, event):
+            super().keyPressEvent(event)
 
     # --- the result -------------------------------------------------------------------
 

@@ -59,7 +59,7 @@ from sealedlore.gui.picture_style import (
     PictureStyleField,
 )
 from sealedlore.gui.ref_images import PICTURE_FILTER, store_reference, thumbnail_of
-from sealedlore.gui.sizing import GrowingText, may_discard, size_to_screen
+from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, may_discard, size_to_screen
 from sealedlore.gui.video_jobs import VideoCatalog
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.image import RefUse
@@ -253,6 +253,8 @@ class VideoDialog(QDialog):
         self.buttons = QDialogButtonBox(QDialogButtonBox.Cancel)
         self.generate_button = QPushButton("Generate video")
         self.generate_button.setObjectName("sendButton")
+        # Enter in a field never sends (`keyPressEvent`): the button box makes
+        # its accept button the default when the dialog shows.
         self.generate_button.setAutoDefault(False)
         self.buttons.addButton(self.generate_button, QDialogButtonBox.AcceptRole)
         self.generate_button.clicked.connect(self._approve)
@@ -738,6 +740,13 @@ class VideoDialog(QDialog):
 
     def _words(self) -> list[str]:
         return [self.direction.toPlainText(), self.prompt.toPlainText()]
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        """Enter in a field never sends the video: it presses only a push
+        button that has the focus (gui/sizing.py `enter_only_on_buttons`).
+        With the price ticked, Enter in Model or the writer's field sent it."""
+        if not enter_only_on_buttons(self, event):
+            super().keyPressEvent(event)
 
     def reject(self) -> None:
         """Cancel or Esc: a direction typed, or the prompt changed by hand,

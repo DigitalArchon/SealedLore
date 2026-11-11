@@ -40,7 +40,13 @@ from sealedlore.engine.authoring import (
 )
 from sealedlore.engine.session import ReviewSizes
 from sealedlore.gui.model_picker import Browse, ModelField
-from sealedlore.gui.sizing import GrowingText, may_discard, size_to_screen, typed_texts
+from sealedlore.gui.sizing import (
+    GrowingText,
+    enter_only_on_buttons,
+    may_discard,
+    size_to_screen,
+    typed_texts,
+)
 from sealedlore.gui.winprivacy import copy_text
 from sealedlore.models.authoring import SettingsChange, SettingsReview
 from sealedlore.models.config import ModelPrice
@@ -197,6 +203,13 @@ class ReviewRequestDialog(QDialog):
         # The complaint as it opened (the last one, or none): one written
         # here is asked about before Cancel or Esc loses it.
         self._typed = typed_texts(self)
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        """Enter in a field never starts the review (a paid call over the
+        story): it presses only a push button that has the focus
+        (gui/sizing.py `enter_only_on_buttons`)."""
+        if not enter_only_on_buttons(self, event):
+            super().keyPressEvent(event)
 
     def reject(self) -> None:
         if not may_discard(self, self._typed):

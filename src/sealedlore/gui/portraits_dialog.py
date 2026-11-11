@@ -50,7 +50,7 @@ from sealedlore.gui.model_picker import ModelField
 from sealedlore.gui.picture_style import PictureStyleField
 from sealedlore.gui.picture_words import WORDS_ONLY
 from sealedlore.gui.ref_images import thumbnail_of
-from sealedlore.gui.sizing import GrowingText, size_to_screen
+from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, size_to_screen
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.character import Character
 from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS, recommended_model
@@ -281,7 +281,6 @@ class PortraitsDialog(QDialog):
 
         self.buttons = QDialogButtonBox(QDialogButtonBox.Cancel)
         self.draw_button = self.buttons.addButton("Draw", QDialogButtonBox.AcceptRole)
-        self.draw_button.setDefault(True)
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
 
@@ -492,6 +491,13 @@ class PortraitsDialog(QDialog):
             for row in self.rows
             if row.wanted()
         ]
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        """Enter in a field never draws: it presses only a push button that
+        has the focus (gui/sizing.py `enter_only_on_buttons`). Enter in
+        Drawn by drew every ticked card."""
+        if not enter_only_on_buttons(self, event):
+            super().keyPressEvent(event)
 
     def reject(self) -> None:
         if self._worker is not None:
