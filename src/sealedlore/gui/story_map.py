@@ -6,8 +6,9 @@ metro map, running top to bottom with the message numbers down the left (the
 author's call: a complex tree is easier to follow scrolling down than
 across). A branch leaves the lane it split from at the message it follows;
 its lane then runs down to its end. Beside its first message a lane carries
-its name and how it begins: the message that was rewritten is what tells one
-branch from another. Chapters are shaded along each lane, and a dot marks
+its name and how it begins (lower down where a line to another lane crosses
+there): the message that was rewritten is what tells one branch from
+another. Chapters are shaded along each lane, and a dot marks
 where you are. Takes are not drawn: they swap in place and are not lines of
 the story. A 500-message story with five branches is five lanes, not 500
 nodes, so it stays readable (the author asked for it, Sept 2026, to explore
@@ -55,6 +56,8 @@ ZOOM_MIN, ZOOM_MAX = 0.05, 8.0
 ZOOM_STEP = 1.25
 # How long the hover card stays once the pointer has left what it describes.
 CARD_LINGER_MS = 1500
+# Pixels kept between a lane's name and a branch's line crossing its gap.
+LABEL_CLEAR = 3.0
 
 
 # A label block's lane, as item data (its index in the view's lanes).
@@ -165,6 +168,8 @@ class _MapView(QGraphicsView):
         self.setMouseTracking(True)
         self.setObjectName("storyMapView")
         self.lanes: list[MapLane] = []
+        # Each lane's name and opening, by its index in `lanes`.
+        self.labels: dict[int, QGraphicsRectItem] = {}
         self.text_of: Callable[[str], str] = lambda _node_id: ""
         self.openings: Mapping[str | None, str] = {}
         self.card = _HoverCard(self)
@@ -207,8 +212,12 @@ class _MapView(QGraphicsView):
         return self.mapFromScene(QPointF(x_of(lane.column), y_of(message)))
 
     def label_point(self, lane: MapLane) -> QPoint:
-        """A point on a lane's name, in the view's own coordinates."""
-        return self.point_for(lane, lane.first) + QPoint(40, 0)
+        """A point on a lane's name, in the view's own coordinates (it may
+        stand below its first message: `StoryMap._place_labels`)."""
+        block = self.labels.get(self.lanes.index(lane))
+        if block is None:
+            return self.point_for(lane, lane.first) + QPoint(40, 0)
+        return self.mapFromScene(block.pos()) + QPoint(28, 0)
 
     # --- zoom ------------------------------------------------------------------
 
@@ -380,6 +389,9 @@ class StoryMap(QWidget):
         self.fit_button.clicked.connect(self.fit)
         self._longest = 0
         self._right = 0.0
+        # Each lane's name, its first message's height, and the heights of
+        # the branches' lines that cross the gap it sits in (`_place_labels`).
+        self._labels: list[tuple[QGraphicsRectItem, float, list[tuple[float, float]]]] = []
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
@@ -407,9 +419,31 @@ class StoryMap(QWidget):
 
     def _fit_scene_rect(self) -> None:
         if self._longest:
+            zoom = max(self.view.zoom(), ZOOM_MIN)
+            self._place_labels()
             # Room below the last lane for its labels, in pixels at any zoom.
-            bottom = y_of(self._longest) + 90 / max(self.view.zoom(), ZOOM_MIN)
+            bottom = y_of(self._longest) + 90 / zoom
+            for block, _base, _crossing in self._labels:
+                bottom = max(bottom, block.pos().y() + (block.rect().bottom() + 20) / zoom)
             self.scene.setSceneRect(QRectF(0, 0, self._right, bottom))
+
+    def _place_labels(self) -> None:
+        """Each lane's name beside its first message, moved down past any
+        branch's line crossing the gap it sits in. With short branches the
+        line leaving a lane ran through its name and where it comes from: a
+        name is drawn in pixels, and stood over the next few messages. Where
+        it fits changes with the zoom, so it is placed again on every zoom."""
+        zoom = max(self.view.zoom(), ZOOM_MIN)
+        clear = LABEL_CLEAR / zoom
+        for block, base, crossing in self._labels:
+            top, bottom = block.rect().top() / zoom, block.rect().bottom() / zoom
+            y = base
+            for start, end in crossing:  # by where they start, down the page
+                if start - clear >= y + bottom:
+                    break  # this line and every later one pass below it
+                if end + clear > y + top:
+                    y = end + clear - top
+            block.setPos(block.pos().x(), y)
 
     def set_lanes(
         self,
@@ -436,6 +470,8 @@ class StoryMap(QWidget):
             view.verticalScrollBar().value(),
         )
         scene = self.scene
+        view.labels = {}
+        self._labels = []
         scene.clear()
         if not lanes:
             self._longest = 0
@@ -459,6 +495,18 @@ class StoryMap(QWidget):
             )
 
         columns = {lane.column for lane in lanes}
+        # The lines from one lane to another, by the columns whose gaps they
+        # cross (a gap is right of its column) and from where to where down.
+        joins = [
+            (
+                min(lane.parent_column, lane.column),
+                max(lane.parent_column, lane.column),
+                y_of(lane.first - 1),
+                y_of(lane.first),
+            )
+            for lane in lanes
+            if lane.parent_column is not None and lane.parent_column in columns
+        ]
         for index, lane in enumerate(lanes):
             current = lane.branch.is_current
             colour = theme.colour("map_current" if current else "map_lane")
@@ -502,7 +550,13 @@ class StoryMap(QWidget):
                     (text, small, theme.colour("map_dim"))
                     for text in _wrap(f"“{opening}”", small, 2)
                 ]
-            _text_block(scene, lines, x + 12, y_of(first), top=-8).setData(_LANE_KEY, index)
+            block = _text_block(scene, lines, x + 12, y_of(first), top=-8)
+            block.setData(_LANE_KEY, index)
+            view.labels[index] = block
+            crossing = sorted(
+                (start, end) for low, high, start, end in joins if low <= lane.column < high
+            )
+            self._labels.append((block, y_of(first), crossing))
 
             if current and here is not None:
                 _dot(scene, x, y_of(here), 7, theme.colour("map_here"))

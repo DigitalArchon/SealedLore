@@ -460,3 +460,85 @@ def test_deleting_a_branch_of_one_message_says_one_message(app, tmp_path, story,
     window._delete_branch(branch.start_id)
     assert asked and "“Alt”: its one message?" in asked[0]
     window.close()
+
+
+# --- 10. the Branches diagram: no line runs through a lane's name ---------------------
+
+
+@pytest.fixture
+def styled(app):
+    """The app's stylesheet, as the window has it."""
+    from sealedlore.gui.app import load_stylesheet
+
+    before = app.styleSheet()
+    app.setStyleSheet(load_stylesheet())
+    yield app
+    app.setStyleSheet(before)
+
+
+def _names_crossed(window: MainWindow) -> list[str]:
+    """The lanes whose name a line between lanes runs through, as drawn."""
+    from PySide6.QtCore import QPointF
+    from PySide6.QtWidgets import QGraphicsPathItem, QGraphicsRectItem
+
+    from sealedlore.gui.story_map import _LANE_KEY
+
+    view = window.story_map.view
+    items = view.scene().items()
+    names = [i for i in items if isinstance(i, QGraphicsRectItem) and i.data(_LANE_KEY) is not None]
+    crossed = set()
+    for line in (i for i in items if isinstance(i, QGraphicsPathItem)):
+        for step in range(101):
+            point = QPointF(
+                view.mapFromScene(line.mapToScene(line.path().pointAtPercent(step / 100)))
+            )
+            for name in names:
+                anchor = view.mapFromScene(name.pos())
+                if name.rect().translated(anchor.x(), anchor.y()).contains(point):
+                    crossed.add(view.lanes[name.data(_LANE_KEY)].branch.name)
+    return sorted(crossed)
+
+
+def test_no_line_on_the_branches_diagram_runs_through_a_lanes_name(styled, tmp_path, story, cast):
+    """Short branches: the line leaving a lane was drawn through its name
+    and where it comes from, struck through (the review after 3.1.0b8)."""
+    app = styled
+    window = _window(tmp_path, story, cast, exchanges=1)
+    window._rewrite_from("a0", "Another ending.", "Alt")
+    window._rewrite_from(window.session.full_path()[-1].id, "A third ending.", "Third")
+    window.show_map(True)
+    app.processEvents()
+    view = window.story_map.view
+    assert [lane.branch.length for lane in view.lanes] == [2, 2, 2]
+    assert _names_crossed(window) == []
+    for factor in (4.0, 0.2, 10.0):
+        view.zoom_by(factor)
+        app.processEvents()
+        assert _names_crossed(window) == [], view.zoom()
+    # A lane's name is still where a click on it picks the lane.
+    alt = next(lane for lane in view.lanes if lane.branch.name == "Alt")
+    assert view.hit_at(view.label_point(alt)) == (alt, None)
+    window.close()
+
+
+def test_a_long_branchs_name_stays_beside_its_first_message(styled, tmp_path, story, cast):
+    from sealedlore.gui.story_map import y_of
+
+    app = styled
+    window = _window(tmp_path, story, cast, exchanges=30)
+    window._rewrite_from("a10", "A turn at message twenty-two.", "Long A")
+    window._switch_branch(None)
+    window._rewrite_from("a20", "A turn at message forty-two.", "Long B")
+    window.show_map(True)
+    app.processEvents()
+    view = window.story_map.view
+    assert _names_crossed(window) == []
+    from PySide6.QtWidgets import QGraphicsRectItem
+
+    from sealedlore.gui.story_map import _LANE_KEY
+
+    for name in view.scene().items():
+        if isinstance(name, QGraphicsRectItem) and name.data(_LANE_KEY) is not None:
+            lane = view.lanes[name.data(_LANE_KEY)]
+            assert name.pos().y() == y_of(lane.first), lane.branch.name
+    window.close()
