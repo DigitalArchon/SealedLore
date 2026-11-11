@@ -17,7 +17,6 @@ from dataclasses import dataclass, field
 
 from sealedlore.engine.plot_md import (
     _CHARACTER_FIELDS,
-    _COMMENT,
     _EVENT_FIELDS,
     _FACT_NAME,
     _FIELD,
@@ -29,6 +28,7 @@ from sealedlore.engine.plot_md import (
     PICTURE_LABELS,
     PlotProblem,
     _Block,
+    _comments,
     _Fields,
     _key,
     _norm,
@@ -366,7 +366,7 @@ class _Reader:
     def __init__(self, text: str) -> None:
         self.parser = _Parser(text, fallback_title="")
         self.notes = "\n\n".join(
-            match.group(0)[4:-3].strip() for match in _COMMENT.finditer(text.replace("\r\n", "\n"))
+            comment.strip() for comment in _comments(text.replace("\r\n", "\n"))
         )
         self.document = PlotDocument(notes=self.notes)
         self.lines = self.parser.text.split("\n")

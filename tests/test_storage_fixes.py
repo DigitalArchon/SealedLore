@@ -8,16 +8,19 @@ import io
 import json
 import shutil
 import struct
+import time
 import tracemalloc
 import zipfile
 from pathlib import Path
 
 import pytest
 
+from sealedlore.engine.plot_md import _comments, _strip_comments, parse_plot_markdown
 from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage, ImageRef
 from sealedlore.models.scenario import Scenario
 from sealedlore.models.story import Story
+from sealedlore.models.tavern import CardAsset
 from sealedlore.models.video import GeneratedVideo
 from sealedlore.storage import collection, collection_backup, tavern_cards
 from sealedlore.storage.archive import (
@@ -27,6 +30,7 @@ from sealedlore.storage.archive import (
     restore_archive,
     write_archive,
 )
+from sealedlore.storage.card_files import greeting_pictures
 from sealedlore.storage.collection_backup import (
     BACKUP_FORMAT,
     CHARACTERS,
@@ -394,3 +398,41 @@ def test_importing_a_photo_says_why_nothing_happened(tmp_path, monkeypatch):
         assert warned and "photo.jpg" in warned[0]
     finally:
         window.close()
+
+
+# --- text built to be slow -------------------------------------------------------------------
+
+
+def seconds(work) -> float:
+    start = time.perf_counter()
+    work()
+    return time.perf_counter() - start
+
+
+def test_a_greeting_of_one_unclosed_tag_is_read_in_one_pass():
+    """64 KB of ` src="x"` after one `<img` took 20 seconds: every way of
+    splitting its attributes was tried before it was found unclosed."""
+    text = "<img" + ' src="x"' * 8000
+    assert seconds(lambda: greeting_pictures(text, [])) < 2
+    assert greeting_pictures(text, []).text == text, "no tag, so nothing taken out"
+
+
+def test_a_tag_shows_its_first_quoted_src_as_it_did():
+    snow = CardAsset(type="other", name="snow", ext="png", path="assets/snow.png", file="f")
+    tag = """<img alt="{{raw::x}}" src="it's" SRC = 'embeded://assets/snow.png' src="b">"""
+    found = greeting_pictures(f"Before {tag} after", [snow])
+    assert found.pictures == [snow] and found.text == "Before  after"
+    # No src it can read, and no tag: a macro in it still shows its picture.
+    found = greeting_pictures('<img alt="{{raw::snow}}">', [snow])
+    assert found.pictures == [snow] and found.text == '<img alt="">'
+
+
+def test_a_plot_file_of_unclosed_comments_is_read_in_one_pass():
+    """270 KB of unclosed `<!--` took 31 seconds: each looked for its end
+    to the end of the file."""
+    text = "# World\n" + "<!-- a\n" * 40_000
+    assert seconds(lambda: parse_plot_markdown(text)) < 2
+    long_paragraph = "# World\n" + "a farm\n" * 40_000
+    assert seconds(lambda: parse_plot_markdown(long_paragraph)) < 2
+    assert _strip_comments("a<!-- x\n-->b<!--->c<!-- d") == "a\nb<!--->c<!-- d"
+    assert _comments("<!-- one --><!----><!-- two -->") == [" one ", "", " two "]

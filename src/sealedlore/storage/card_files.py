@@ -42,9 +42,17 @@ _GAP = r"(?:[ \t\f\r]|\n(?![ \t\f\r]*\n))"
 # (its ">" written "&gt;") is no tag: it stays in the text, and only a macro
 # in it shows its picture.
 _ATTRIBUTE = rf"""{_GAP}+[a-z_:][\w:.-]*(?:{_GAP}*={_GAP}*(?:"[^"<>]*"|'[^'<>]*'|[^\s"'<>=`]+))?"""
+# The picture's own attribute: `src`, its address quoted, holding neither
+# quote nor bracket. The first such one in the tag is the tag's picture.
+_SRC = rf"""{_GAP}+src{_GAP}*={_GAP}*(?:"[^"'<>]*"|'[^"'<>]*')"""
+# Each attribute is read once and never again (`*+`): the attributes before
+# the first `src`, the `src`, the rest. A tag's attributes read only one way,
+# so this is the tag a lazy run of attributes before `src` found, but that
+# tried every way of splitting them when the tag never closed, and a
+# greeting of 64 KB of ` src="x"` after one `<img` took 20 seconds.
 _HTML_IMG = re.compile(
-    rf"""<img(?:{_ATTRIBUTE})*?{_GAP}+src{_GAP}*={_GAP}*(?P<quote>["'])(?P<src>[^"'<>]*)(?P=quote)"""
-    rf"""(?:{_ATTRIBUTE})*{_GAP}*/?>""",
+    rf"""<img(?:(?!{_SRC}){_ATTRIBUTE})*+{_GAP}+src{_GAP}*={_GAP}*(?P<quote>["'])"""
+    rf"""(?P<src>[^"'<>]*)(?P=quote)(?:{_ATTRIBUTE})*+{_GAP}*/?>""",
     re.IGNORECASE,
 )
 # Its words never hold a bracket, nor its address a parenthesis or a space.
