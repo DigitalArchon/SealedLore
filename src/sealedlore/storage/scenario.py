@@ -223,12 +223,23 @@ def write_scenario(path: Path, scenario: Scenario) -> None:
 
 
 def read_scenario(path: Path) -> Scenario:
+    # File → Import… sends here whatever else it is given (a photo, a
+    # document), so every way a file fails to be read is said in words.
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
     except OSError as exc:
         raise ScenarioError(f"Couldn't read {path}: {exc.strerror or exc}") from exc
     except json.JSONDecodeError as exc:
         raise ScenarioError(f"{Path(path).name} isn't valid JSON (line {exc.lineno}).") from exc
+    except UnicodeDecodeError as exc:
+        raise ScenarioError(
+            f"{Path(path).name} isn't a file SealedLore can import: it isn't text in UTF-8, as "
+            "a scenario, a story backup or a plot file is."
+        ) from exc
+    except RecursionError as exc:
+        raise ScenarioError(
+            f"{Path(path).name} is nested far deeper than any scenario, so it can't be read."
+        ) from exc
 
     if not isinstance(data, dict) or data.get("format") != SCENARIO_FORMAT:
         raise ScenarioError(f"{Path(path).name} isn't a SealedLore scenario file.")

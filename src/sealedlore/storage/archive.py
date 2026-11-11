@@ -124,6 +124,12 @@ def read_archive(path: Path) -> tuple[StoryBundle, list[dict[str, Any]]]:
         raise ArchiveError(f"Couldn't read {path}: {exc.strerror or exc}") from exc
     except json.JSONDecodeError as exc:
         raise ArchiveError(f"{name} isn't valid JSON (line {exc.lineno}).") from exc
+    except UnicodeDecodeError as exc:
+        raise ArchiveError(f"{name} isn't a SealedLore story archive (it isn't text).") from exc
+    except RecursionError as exc:
+        raise ArchiveError(
+            f"{name} is nested far deeper than any story backup, so it can't be read."
+        ) from exc
 
     if not isinstance(data, dict) or data.get("format") != ARCHIVE_FORMAT:
         raise ArchiveError(f"{name} isn't a SealedLore story archive.")

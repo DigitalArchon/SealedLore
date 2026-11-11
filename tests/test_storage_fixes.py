@@ -358,3 +358,39 @@ def test_a_card_as_deep_as_a_card_may_be_still_travels(tmp_path):
     archive = tmp_path / "story.sealedlore-archive.json"
     write_archive(archive, StoryBundle(story=Story(title="Doomsville"), cast=[character]), [])
     assert read_archive(archive)[0].cast[0].name == "Mallory"
+
+
+# --- a file that isn't text -----------------------------------------------------------------
+
+NOT_TEXT = {
+    "photo.jpg": b"\xff\xd8\xff\xe0" + bytes(50),
+    "notes.docx": b"PK\x03\x04" + b"\xff" * 50,
+    "latin1.json": '{"title": "caf\xe9"}'.encode("latin-1"),
+    "deep.json": b"[" * 100_000 + b"]" * 100_000,
+}
+
+
+@pytest.mark.parametrize("name", sorted(NOT_TEXT))
+def test_a_file_that_isnt_a_scenario_is_said_in_words(tmp_path, name):
+    path = tmp_path / name
+    path.write_bytes(NOT_TEXT[name])
+    with pytest.raises(ScenarioError, match=name):
+        read_scenario(path)
+    with pytest.raises(ArchiveError, match=name):
+        read_archive(path)
+
+
+def test_importing_a_photo_says_why_nothing_happened(tmp_path, monkeypatch):
+    pytest.importorskip("PySide6")
+    from sealedlore.gui.main_window import MainWindow
+
+    path = tmp_path / "photo.jpg"
+    path.write_bytes(NOT_TEXT["photo.jpg"])
+    window = MainWindow(root=tmp_path / "data", use_mock=True)
+    try:
+        warned: list[str] = []
+        monkeypatch.setattr(window, "_warn_plain", lambda title, text: warned.append(text))
+        window._import_scenario(path)
+        assert warned and "photo.jpg" in warned[0]
+    finally:
+        window.close()
