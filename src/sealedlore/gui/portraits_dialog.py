@@ -188,7 +188,7 @@ class PortraitsDialog(QDialog):
             f"{what}, drawn from the cards. {writer} writes a prompt for each: read them, "
             "change any you like and untick anything you'd rather not draw. Nothing is "
             "drawn until you press Draw. Each picture goes first among its card's pictures, "
-            "shown large on the Cast or Lore page, and "
+            "shown large on its card (the Cast board or the Lore page), and "
             "is kept in Media with its prompt and cost."
         )
         intro.setWordWrap(True)

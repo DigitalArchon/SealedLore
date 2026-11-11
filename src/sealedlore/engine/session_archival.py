@@ -556,7 +556,7 @@ class ArchivalRuntime:
         self.save()
         if found:
             names = ", ".join(suggestion.name for suggestion in found)
-            yield SessionNotice(f"New characters to consider, in the Cast tab: {names}.")
+            yield SessionNotice(f"New characters to consider, on the Cast board: {names}.")
 
 
 def _call(client, call: _Call) -> None:  # noqa: ANN001

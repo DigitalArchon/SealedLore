@@ -506,3 +506,50 @@ def test_generate_is_off_with_no_model_and_says_why(app, window):
     dialog.model.setText("hidream")
     assert dialog.generate_button.isEnabled() and "No model" not in dialog.warning.text()
     dialog.done(0)
+
+
+# --- no word of a Cast page or tab -------------------------------------------------
+
+
+def _shown_strings(path: Path) -> list[str]:
+    """Every string literal in a module but its docstrings (an f-string's
+    words included; words split over lines are one literal)."""
+    import ast
+
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    docstrings = set()
+    for node in ast.walk(tree):
+        body = getattr(node, "body", None)
+        if isinstance(body, list) and body and isinstance(body[0], ast.Expr):
+            if isinstance(body[0].value, ast.Constant):
+                docstrings.add(id(body[0].value))
+    return [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and id(node) not in docstrings
+    ]
+
+
+def test_nothing_shown_names_a_cast_page_or_tab():
+    """The Cast page went into the Cast board (Nov 2026), but the picture
+    dialog still said "(Cast and Lore tabs)", Portraits "the Cast or Lore
+    page", the new characters' notice "in the Cast tab" and Settings "the
+    Cast page says which"."""
+    import re
+
+    stale = re.compile(r"\bCast (page|tab)s?\b|\bCast and Lore (tabs|pages)\b|\bCast or Lore\b")
+    root = Path(__file__).resolve().parents[1]
+    found = [
+        f"{path.relative_to(root)}: {text!r}"
+        for path in sorted((root / "src" / "sealedlore").rglob("*.py"))
+        for text in _shown_strings(path)
+        if stale.search(text)
+    ]
+    assert found == []
+    for doc in ("README.md", "docs/manual.md", "SampleStories/PLOT_FORMAT.md"):
+        lines = (root / doc).read_text(encoding="utf-8").splitlines()
+        assert not [
+            line for line in lines if stale.search(line) and "has gone into it" not in line
+        ], doc

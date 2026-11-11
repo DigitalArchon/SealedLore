@@ -567,7 +567,7 @@ class SetupDialog(QDialog):
                 "A fact written into a sentence about someone reads as something they "
                 "know, and their characters will quote it; a note elsewhere won't undo "
                 "that. Leave out who plays whom, how passages should read and what "
-                "should happen next: those belong in Cast, Style and Opening."
+                "should happen next: those belong in Characters, Style and Opening."
             )
         )
         return widget

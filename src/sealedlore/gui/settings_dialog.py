@@ -1387,7 +1387,7 @@ class SettingsDialog(QDialog):
             control.setToolTip(
                 "Every main cast card is sent on every turn. While their cards fit this "
                 "room they go whole; past it, the largest are sent condensed, and the Cast "
-                "page says which. A share grows and shrinks with each story's budget."
+                "board says which. A share grows and shrinks with each story's budget."
             )
         cast_room = QWidget()
         cast_row = QHBoxLayout(cast_room)

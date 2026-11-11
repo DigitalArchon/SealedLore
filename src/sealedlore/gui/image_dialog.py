@@ -889,7 +889,8 @@ class ImageDialog(QDialog):
         if not self._choices:
             self.ref_note.setText(
                 f"{WORDS_ONLY} There are no reference pictures in this story yet: add them "
-                "to characters and lore entries (Cast and Lore tabs) to keep their look."
+                "to characters and lore entries (the Cast board and the Lore page) to keep "
+                "their look."
             )
         elif not accepts:
             self.ref_note.setText(f"{WORDS_ONLY} This model takes no reference pictures.")

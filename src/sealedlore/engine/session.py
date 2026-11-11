@@ -3401,7 +3401,7 @@ class StorySession(
             return
         if found:
             names = ", ".join(suggestion.name for suggestion in found)
-            yield SessionNotice(f"New characters to consider, in the Cast tab: {names}.")
+            yield SessionNotice(f"New characters to consider, on the Cast board: {names}.")
 
     def scan_recent(self, nodes: int = 20) -> Iterator[SessionNotice]:
         """The on-demand scan: the most recent verbatim prose."""

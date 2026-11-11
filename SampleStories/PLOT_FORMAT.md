@@ -109,7 +109,7 @@ The description.
   continuity and shown to the storyteller only when the character comes up.
 
 **Hidden characters** (`hidden: yes`) are kept from every model, and from your
-Cast page, until an event brings them in (`brings:`, below). Until then the
+Cast board, until an event brings them in (`brings:`, below). Until then the
 storyteller doesn't know they exist, so it can't reach for them early. Once
 the event happens they join the cast for the rest of that branch. Keep a
 character's description to who they are; when and how they turn up belongs to
