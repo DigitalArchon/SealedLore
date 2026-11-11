@@ -226,6 +226,19 @@ def test_a_videos_hidden_data_is_blanked_in_place():
     assert stripped_or_same(MP4) == stripped, "coming in from a backup, it is stripped too"
 
 
+def test_ffmpegs_aac_encoder_name_in_the_first_frame_of_sound_is_blanked():
+    """tiny.mp4's sound is ffmpeg's own AAC encoder's, which writes its name
+    into the first frame, inside `mdat`: it survived when the compressor's
+    name (the same "Lavc60.31.102") in the video's sample entry no longer
+    did. Spaces where it stood; checked with ffmpeg that the sound and the
+    pictures decode to the same bytes after."""
+    at = MP4.index(b"Lavc60.31.102", MP4.index(b"mdat"))
+    stripped = strip_video_metadata(MP4)
+    assert b"Lavc" not in stripped and len(stripped) == len(MP4)
+    assert stripped[at : at + 13] == b" " * 13
+    assert stripped[at - 3 : at] == MP4[at - 3 : at] and stripped[at + 13] == MP4[at + 13]
+
+
 def test_a_file_that_isnt_a_video_is_refused():
     from sealedlore.storage.image_meta import MetadataError
 

@@ -7,8 +7,10 @@ media headers, and the encoder's settings as text inside the video stream
 (x264 writes them into an SEI message of the first frame). Seedance's
 videos from NanoGPT carried the first and the last (Sept 2026). And
 whatever a writer leaves in padding (`free`, `skip`), a handler's name, a
-video track's compressor name (ffmpeg's "Lavc60.31.102 libx264") and any
-top-level box a player has no use for.
+video track's compressor name (ffmpeg's "Lavc60.31.102 libx264"), the name
+ffmpeg's own AAC encoder writes into the first frame of sound (the same
+"Lavc60.31.102", as fill data a decoder skips) and any top-level box a
+player has no use for.
 
 Nothing is removed from the file, only blanked where it stands: a metadata
 box, padding, or a top-level box that isn't one a player needs becomes a
@@ -22,6 +24,7 @@ A file that isn't an MP4 this can walk is `MetadataError`.
 
 from __future__ import annotations
 
+import re
 import struct
 
 from sealedlore.storage.image_meta import PICTURE_BRANDS, MetadataError, bmff_brands
@@ -68,6 +71,12 @@ _VIDEO_ENTRIES = {
 # Encoder settings written as text into the video stream. Long markers only:
 # a short one could turn up by chance in compressed data.
 _ENCODER_TEXT = (b"x264 - core ", b"x265 (build ")
+# The name libavcodec writes into a stream it encodes: "Lavc" and the whole
+# dotted version, all of it text and with no end mark (ffmpeg's AAC encoder
+# puts it, byte-aligned, in a fill element of the first frame of sound).
+# Four letters, then numbers with two dots between them: compressed data
+# doesn't spell that by chance.
+_LIBAVCODEC = re.compile(rb"Lavc\d+\.\d+\.\d+")
 
 
 def is_mp4(data: bytes) -> bool:
@@ -166,7 +175,9 @@ def _blank_encoder_text(out: bytearray, payload: int, stop: int) -> None:
     """The encoder's settings, where it wrote them into the stream as text:
     each run from a known marker to its terminating NUL becomes spaces
     (never zeros, which could read as a start code). A run that isn't all
-    printable text is left alone: it isn't the encoder's."""
+    printable text is left alone: it isn't the encoder's. And libavcodec's
+    name with its version, wherever it stands whole (a decoder skips the
+    fill it is written in), as spaces too; the bytes around it untouched."""
     for marker in _ENCODER_TEXT:
         at = out.find(marker, payload, stop)
         while at != -1:
@@ -176,6 +187,13 @@ def _blank_encoder_text(out: bytearray, payload: int, stop: int) -> None:
             if all(32 <= byte < 127 for byte in out[at:nul]):
                 out[at:nul] = b" " * (nul - at)
             at = out.find(marker, nul, stop)
+    at = out.find(b"Lavc", payload, stop)
+    while at != -1:
+        name = _LIBAVCODEC.match(out, at, stop)
+        end = name.end() if name else at + 4
+        if name:
+            out[at:end] = b" " * (end - at)
+        at = out.find(b"Lavc", end, stop)
 
 
 def strip_video_metadata(data: bytes) -> bytes:

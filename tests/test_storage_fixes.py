@@ -538,6 +538,22 @@ def test_a_videos_padding_names_and_unknown_boxes_are_blanked_in_place():
     assert strip_video_metadata(stripped) == stripped
 
 
+def test_ffmpegs_name_in_the_sound_is_blanked_and_nothing_round_it():
+    """ffmpeg's own AAC encoder writes its name, "Lavc60.31.102", byte-aligned
+    into a fill element of the first frame of sound, inside `mdat`, with no
+    end mark (tests/data/tiny.mp4 has it there); it survived the stripper.
+    Only the name with its whole version goes, as spaces: the frame's bytes
+    round it, and anything that only begins like it, stay."""
+    frame = b"\xde\x02\x00" + b"Lavc60.31.102" + b"\x00\x02\x34"
+    near = b"Lavc\x9a" + b"Lavc60\x01" + b"Lavc60.31\x05" + b"Lavc.31.102\x00"
+    moov = mp4_box(b"moov", track(b"soun", mp4_box(b"mp4a", bytes(28))))
+    video = mp4_box(b"ftyp", b"isom\x00\x00\x02\x00isom") + moov + mp4_box(b"mdat", frame + near)
+    stripped = strip_video_metadata(video)
+    assert len(stripped) == len(video) and b"Lavc60.31.102" not in stripped
+    assert stripped.endswith(b"\xde\x02\x00" + b" " * 13 + b"\x00\x02\x34" + near)
+    assert strip_video_metadata(stripped) == stripped
+
+
 def test_a_video_of_boxes_nested_thousands_deep_is_stripped_without_recursing():
     inner = mp4_box(b"udta", b"made by someone")
     for _ in range(3000):
