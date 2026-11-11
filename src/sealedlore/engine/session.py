@@ -1686,6 +1686,11 @@ class StorySession(
         if self.story.active_leaf_id == old.id:
             self.story.active_leaf_id = new.id
         move_continuation(self.nodes, old, new)
+        for span in self.story.private_spans:
+            # A scene that followed the old take follows the new one: it
+            # begins there now (`bundle_to_save`, Discard).
+            if span.start_parent_id == old.id:
+                span.start_parent_id = new.id
         stale = swap_covered(self.bundle.summaries, old.id, new.id)
         dropped = {summary.id for summary in self.drop_stale_parts()}
         self._sync_scene()
@@ -2851,7 +2856,10 @@ class StorySession(
         ]
 
         if self.story.active_leaf_id in doomed:
-            self.story.active_leaf_id = node.parent_id
+            # Not into an ended scene's messages (a private scene's summary
+            # deleted): the next scene would begin among them, and a memory
+            # scene's are never saved.
+            self.story.active_leaf_id = self.out_of_ended_scenes(node.parent_id)
         self.story.updated_at = utc_now_iso()
         self.last_result = None
         if node.parent_id is None and node.meta.scene is not None and not self.path():

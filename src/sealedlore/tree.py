@@ -47,7 +47,14 @@ def path_to(nodes: Sequence[Node], leaf_id: str) -> list[Node]:
 def active_path(nodes: Sequence[Node], active_leaf_id: str | None) -> list[Node]:
     if active_leaf_id is None:
         return []
-    return path_to(nodes, active_leaf_id)
+    try:
+        return path_to(nodes, active_leaf_id)
+    except KeyError as exc:
+        # A story whose file names a current message it doesn't hold: said
+        # as a damaged story is (ValueError), never a lookup that failed.
+        raise ValueError(
+            f"the story's current message {active_leaf_id!r} is not among its messages"
+        ) from exc
 
 
 def roots(nodes: Sequence[Node]) -> list[Node]:

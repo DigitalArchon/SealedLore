@@ -303,6 +303,132 @@ def test_an_unfinished_memory_scene_is_gone_after_a_restart(tmp_path: Path):
     assert again.private_notice
 
 
+def reopened(session: StorySession, tmp_path: Path) -> StorySession:
+    """The story as the next launch opens it."""
+    return StorySession(
+        load_story_bundle(session.story.id, root=tmp_path),
+        make_config(),
+        MockChatProvider(["Reopened."]),
+        root=tmp_path,
+        estimator=TokenEstimator(counter=fallback_counter),
+        learn_corrections=False,
+    )
+
+
+def ids_and_text(nodes) -> list[tuple[str, str]]:
+    return [(node.id, node.content) for node in nodes]
+
+
+def closed_memory_scene(tmp_path: Path):
+    """A story, a scene kept in memory and closed with its summary."""
+    session, main, held = build(tmp_path)
+    play(session, turn(held, "Before."))
+    private = enter(session)
+    play(session, turn(held, f"{MARKER} a"))
+    private.responses = ["They agreed to meet at dawn."]
+    for _event in session.close_private(session.summarise_private()):
+        pass
+    return session, main, held
+
+
+def test_a_branch_from_a_memory_scenes_summary_is_saved_whole(tmp_path: Path):
+    """New branch from here… on the summary puts its rewrite beside it, under
+    the scene's last message, which is never saved: the story couldn't be
+    opened again ("a missing parent reference")."""
+    session, _main, _held = closed_memory_scene(tmp_path)
+    summary = session.full_path()[-1]
+    for _event in session.rewrite_from(summary.id, "They agreed to meet at dusk.", name="Dusk"):
+        pass
+    again = reopened(session, tmp_path)
+    assert ids_and_text(again.path()) == ids_and_text(session.path())
+    assert again.path()[-1].content == "They agreed to meet at dusk."
+    assert not any(node.meta.private_span for node in again.nodes)
+
+
+@pytest.mark.parametrize("second", ["memory", "disk"])
+def test_a_memory_scenes_summary_deleted_steps_the_story_out_of_the_scene(
+    tmp_path: Path, second: str
+):
+    """Deleting the summary left the story standing on the scene's last
+    message, and the next scene began there: neither is ever saved, and the
+    story couldn't be opened again (an unknown message, a missing parent)."""
+    session, _main, held = closed_memory_scene(tmp_path)
+    before = session.path()[-2].id
+    session.delete_from(session.full_path()[-1].id)
+    assert session.story.active_leaf_id == before
+
+    private = enter(session, keep=second)
+    assert session.open_span.start_parent_id == before
+    play(session, turn(held, f"{MARKER} again"))
+    again = reopened(session, tmp_path)
+    assert ids_and_text(again.path()) == ids_and_text(session.path())
+    private.responses = ["They met again."]
+    for _event in session.close_private(session.summarise_private()):
+        pass
+    play(session, turn(held, "Morning."))
+    assert ids_and_text(reopened(session, tmp_path).path()) == ids_and_text(session.path())
+
+
+@pytest.mark.parametrize("second", ["memory", "disk"])
+def test_a_scene_after_one_ended_with_no_summary_is_saved_whole(tmp_path: Path, second: str):
+    """A scene ended without a summary leaves the story at its last message;
+    the next began under it, a message never saved."""
+    session, _main, held = build(tmp_path)
+    play(session, turn(held, "Before."))
+    before = session.story.active_leaf_id
+    enter(session)
+    play(session, turn(held, f"{MARKER} a"))
+    for _event in session.close_private(""):
+        pass
+    private = enter(session, keep=second)
+    assert session.open_span.start_parent_id == before
+    play(session, turn(held, f"{MARKER} b"))
+    assert ids_and_text(reopened(session, tmp_path).path()) == ids_and_text(session.path())
+    private.responses = ["They spoke."]
+    for _event in session.close_private(session.summarise_private()):
+        pass
+    assert ids_and_text(reopened(session, tmp_path).path()) == ids_and_text(session.path())
+
+
+@pytest.mark.parametrize("how", ["regenerate", "switch"])
+def test_a_take_swapped_in_before_a_memory_scene_is_the_one_saved(tmp_path: Path, how: str):
+    """The scene's messages move onto the new take, but the summary was
+    saved under the take the scene began from: on the next launch the old
+    take was back, without a word."""
+    session, main, held = build(tmp_path)
+    play(session, turn(held, "Before."))
+    first = session.path()[-1]
+    private = enter(session)
+    play(session, turn(held, f"{MARKER} a"))
+    private.responses = ["They agreed to meet at dawn."]
+    for _event in session.close_private(session.summarise_private()):
+        pass
+    play(session, turn(held, "Next morning."))
+    main.responses = ["A different take of the first passage."]
+    for _event in session.regenerate(first.id):
+        pass
+    if how == "switch":
+        main.responses = ["A third take."]
+        for _event in session.regenerate(session.path()[1].id):
+            pass
+        session.switch_take(session.path()[1].id, -1)
+    shown = session.path()[1]
+    assert shown.id != first.id
+
+    again = reopened(session, tmp_path)
+    assert ids_and_text(again.path()) == ids_and_text(session.path())
+    assert again.path()[1].id == shown.id
+
+
+def test_a_story_whose_current_message_is_missing_says_so(tmp_path: Path):
+    session, _main, held = build(tmp_path)
+    play(session, turn(held, "Before."))
+    bundle = load_story_bundle(session.story.id, root=tmp_path)
+    bundle.story.active_leaf_id = "not-a-message"
+    with pytest.raises(ValueError, match="not among its messages"):
+        StorySession(bundle, make_config(), MockChatProvider(["x"]), root=tmp_path)
+
+
 def test_a_disk_scene_survives_a_restart_and_stays_out_of_model_paths(tmp_path: Path):
     session, _main, held = build(tmp_path)
     play(session, turn(held, "Before."))

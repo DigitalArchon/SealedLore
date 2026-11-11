@@ -306,6 +306,23 @@ class PrivateRuntime:
         """The scene's messages on the active path, in order."""
         return [node for node in self.full_path() if node.meta.private_span == span.id]
 
+    def out_of_ended_scenes(self, node_id: str | None) -> str | None:
+        """`node_id`, or the nearest message above it that isn't one of an
+        ended private scene's: the story goes on only from a scene's summary,
+        and a memory scene's own messages are never saved."""
+        ended = {span.id for span in self.story.private_spans if span.status != "open"}
+        if not ended:
+            return node_id
+        index = {node.id: node for node in self.nodes}
+        seen: set[str] = set()
+        while node_id is not None and node_id not in seen:
+            node = index.get(node_id)
+            if node is None or node.meta.private_span not in ended:
+                return node_id
+            seen.add(node_id)
+            node_id = node.parent_id
+        return node_id
+
     def enter_private(
         self, *, keep: PrivateKeep, provider: ChatProvider, model: str, base_url: str = ""
     ) -> PrivateSpan:
@@ -317,8 +334,14 @@ class PrivateRuntime:
                 "no other model to keep a part of it from"
             )
         full = self.full_path()
+        start = self.out_of_ended_scenes(full[-1].id if full else None)
+        if full and start != full[-1].id:
+            # The story stood at the end of a scene closed with no summary:
+            # this one begins where the story goes on from, as a turn would,
+            # never among that scene's messages (a memory one's aren't saved).
+            self.story.active_leaf_id = start
         span = PrivateSpan(
-            start_parent_id=full[-1].id if full else None,
+            start_parent_id=start,
             model=model,
             host=urlparse(base_url).hostname or "",
             keep=keep,
@@ -953,8 +976,11 @@ class PrivateRuntime:
 
     def bundle_to_save(self):
         """The bundle as it may be written: a memory-only scene's messages,
-        and anything anchored to them, left out; the summary re-attached to
-        where the scene began."""
+        and anything anchored to them, left out. Whatever hung from them (the
+        summary; a branch rewritten from it; a scene begun after one ended
+        with no summary) hangs from the nearest message above them that is
+        written, as do the leaf and a scene's start: the path as it stands,
+        so a take swapped in under the scene's start since is the one saved."""
         memory = {span.id: span for span in self.story.private_spans if span.keep == "memory"}
         doomed = (
             {node.id for node in self.nodes if node.meta.private_span in memory}
@@ -966,10 +992,20 @@ class PrivateRuntime:
         if not doomed and not private_asides and not condensed:
             return self.bundle
         bundle = self.bundle
-        summary_parent = {
-            span.summary_node_id: span.start_parent_id
-            for span in memory.values()
-            if span.summary_node_id
+        index = {node.id: node for node in bundle.nodes}
+
+        def kept_above(node_id: str | None) -> str | None:
+            """`node_id`, or its nearest ancestor that is written."""
+            seen: set[str] = set()
+            while node_id is not None and node_id in doomed and node_id not in seen:
+                seen.add(node_id)
+                node_id = index[node_id].parent_id
+            return None if node_id in doomed else node_id
+
+        moved = {
+            node.id: kept_above(node.parent_id)
+            for node in bundle.nodes
+            if node.id not in doomed and node.parent_id in doomed
         }
         nodes: list[Node] = []
         for node in bundle.nodes:
@@ -977,35 +1013,31 @@ class PrivateRuntime:
                 continue
             changed: dict[str, Any] = {}
             children = [child for child in node.children if child not in doomed]
-            children += [summary for summary, parent in summary_parent.items() if parent == node.id]
+            children += [
+                child
+                for child, parent in moved.items()
+                if parent == node.id and child not in children
+            ]
             if children != node.children:
                 changed["children"] = children
-            if node.id in summary_parent:
-                changed["parent_id"] = summary_parent[node.id]
+            if node.id in moved:
+                changed["parent_id"] = moved[node.id]
             nodes.append(node.model_copy(update=changed) if changed else node)
         story = bundle.story
         story_update: dict[str, Any] = {}
         if story.active_leaf_id in doomed:
-            # Back to where that node's scene began, whether it is still open
-            # or was closed with the messages left in memory: a branch onto
-            # one of them must never save a leaf that isn't in the file.
-            leaf_span = next(
-                (n.meta.private_span for n in bundle.nodes if n.id == story.active_leaf_id),
-                None,
-            )
-            span = memory.get(leaf_span) if leaf_span else None
-            story_update["active_leaf_id"] = span.start_parent_id if span else None
+            # Whether its scene is still open or was closed with the messages
+            # left in memory: a leaf that isn't in the file can't be opened.
+            story_update["active_leaf_id"] = kept_above(story.active_leaf_id)
         kept_log = [entry for entry in story.scene_log if entry.closed_at_node_id not in doomed]
         if len(kept_log) != len(story.scene_log):
             story_update["scene_log"] = kept_log
-        if any(span.scene_summary for span in memory.values()):
-            # The rolling summary is scene text: never written for a memory span.
-            story_update["private_spans"] = [
-                span.model_copy(update={"scene_summary": None, "scene_summary_through": None})
-                if span.id in memory
-                else span
-                for span in story.private_spans
-            ]
+        spans: list[PrivateSpan] = []
+        for span in story.private_spans:
+            update = self._span_as_saved(span, memory, doomed, kept_above)
+            spans.append(span.model_copy(update=update) if update else span)
+        if any(saved is not span for saved, span in zip(spans, story.private_spans, strict=True)):
+            story_update["private_spans"] = spans
         if story_update:
             story = story.model_copy(update=story_update)
         return bundle.model_copy(
@@ -1019,6 +1051,20 @@ class PrivateRuntime:
                 ],
             }
         )
+
+    @staticmethod
+    def _span_as_saved(
+        span: PrivateSpan, memory: dict[str, PrivateSpan], doomed: set[str], kept_above
+    ) -> dict[str, Any]:
+        """What changes in a span as it is written: a memory span's rolling
+        summary goes (it is scene text), and a start among messages that
+        aren't written moves to the nearest one above them that is."""
+        update: dict[str, Any] = {}
+        if span.id in memory and (span.scene_summary or span.scene_summary_through):
+            update.update(scene_summary=None, scene_summary_through=None)
+        if span.start_parent_id in doomed:
+            update["start_parent_id"] = kept_above(span.start_parent_id)
+        return update
 
 
 def _reply_record(completed: Any) -> dict[str, Any]:
