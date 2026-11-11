@@ -307,7 +307,10 @@ def settle_files(characters: Sequence[Character], store: PictureStore) -> list[s
             new = file_path(character, asset, taken)
             try:
                 store.write(new, data)
-            except OSError:
+            except (OSError, ValueError):
+                # ValueError: no place the store takes (a character whose id
+                # isn't a plain name has no folder), raised the first time
+                # Your characters opened, each run.
                 continue
             moved.append(asset.file)
             asset.file = new

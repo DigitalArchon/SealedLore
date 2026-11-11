@@ -21,7 +21,7 @@ from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage, ImageRef
 from sealedlore.models.scenario import Scenario
 from sealedlore.models.story import Story
-from sealedlore.models.tavern import CardAsset
+from sealedlore.models.tavern import CardAsset, TavernFields
 from sealedlore.models.video import GeneratedVideo
 from sealedlore.storage import collection, collection_backup, tavern_cards, tavern_lore
 from sealedlore.storage.archive import (
@@ -532,3 +532,33 @@ def test_a_cards_numbers_past_any_whole_number_are_read_as_none(tmp_path):
     # A book keyed by a number of thousands of digits: Python reads none.
     world = {"entries": {"9" * 5000: {"key": ["a"], "content": "c", "comment": "t"}}}
     assert tavern_lore.book_from_world(world)["entries"]
+
+
+def flat_file(character_id: str) -> Character:
+    """Someone whose card file is kept as 3.0.0b1 kept them, in one folder."""
+    asset = CardAsset(type="other", name="a", ext="bin", file="images/assets/flat.bin")
+    return Character(id=character_id, name="Mallory", tavern=TavernFields(assets=[asset]))
+
+
+def test_a_backup_cant_bring_a_character_whose_id_isnt_a_plain_name(tmp_path):
+    path = backup_zip(
+        tmp_path / "evil.zip",
+        [flat_file("../../x").model_dump(mode="json")],
+        {"images/assets/flat.bin": b"hello"},
+    )
+    with pytest.raises(BackupError, match="damaged"):
+        with open_backup(path):
+            pass
+
+
+def test_settling_card_files_passes_over_one_with_no_place_to_go(tmp_path):
+    """Kept before this was refused, such a character made settle_files
+    raise ValueError the first time Your characters opened, every run."""
+    store = DiskPictures(COLLECTION_ID, tmp_path)
+    store.write("images/assets/flat.bin", b"hello")
+    mallory, jane = flat_file("../../x"), flat_file("jane")
+    jane.tavern.assets[0].file = "images/assets/jane.bin"
+    store.write("images/assets/jane.bin", b"hers")
+    assert collection.settle_files([mallory, jane], store) == ["images/assets/jane.bin"]
+    assert mallory.tavern.assets[0].file == "images/assets/flat.bin", "left where it is"
+    assert store.read(jane.tavern.assets[0].file) == b"hers"

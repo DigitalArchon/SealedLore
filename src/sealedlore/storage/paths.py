@@ -179,11 +179,17 @@ def collection_dir(root: Path | None = None) -> Path:
     return (root or data_home()) / "characters"
 
 
+def is_plain_id(value: str) -> bool:
+    """An id that is one plain path component, as every id SealedLore makes
+    is: one of Your characters' names their folder of card files."""
+    return bool(_SAFE_STORY_ID.fullmatch(value))
+
+
 def is_safe_story_id(story_id: str) -> bool:
     """One plain path component: nothing that could leave the stories folder,
     and never the author's own characters' id (an archive naming it is given
     a fresh one, as one whose id is taken)."""
-    return story_id != COLLECTION_ID and bool(_SAFE_STORY_ID.fullmatch(story_id))
+    return story_id != COLLECTION_ID and is_plain_id(story_id)
 
 
 def story_dir(story_id: str, root: Path | None = None) -> Path:

@@ -43,6 +43,7 @@ from sealedlore.storage.image_meta import (
     stripped_or_same,
 )
 from sealedlore.storage.images import is_safe_relative
+from sealedlore.storage.paths import is_plain_id
 from sealedlore.storage.picture_store import PictureStore
 from sealedlore.storage.repository import StoryBundle
 from sealedlore.storage.zip_members import member_lines, read_member
@@ -205,6 +206,10 @@ def open_backup(path: Path) -> Iterator[Backup]:
             images = [GeneratedImage.model_validate(i) for i in _json(archive, IMAGES, [])]
         except (ValidationError, TypeError) as exc:
             raise BackupError(f"{name} is damaged: its characters can't be read.") from exc
+        if not all(is_plain_id(character.id) for character in characters):
+            # A character's id names their folder of card files: one that
+            # isn't a plain name ("../../x") is no id SealedLore made.
+            raise BackupError(f"{name} is damaged: one of its characters has no id of its own.")
         yield Backup(characters, images, archive)
 
 
