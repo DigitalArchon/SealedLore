@@ -821,9 +821,9 @@ class ImageDialog(QDialog):
     def _set_running(self, running: bool) -> None:
         self.busy.setVisible(running)
         self.write_button.setEnabled(not running)
-        self.generate_button.setEnabled(not running and bool(self.prompt.toPlainText().strip()))
         self.direction.setReadOnly(running)
         self.prompt.setReadOnly(running)
+        self._sync()  # Generate by the same rules as always (a model, a size)
 
     def _show_status(self, text: str) -> None:
         self.status.setText(text)
@@ -835,6 +835,8 @@ class ImageDialog(QDialog):
         problems: list[str] = []
         info = self._info()
         text = self.prompt.toPlainText()
+        if not self.model.text().strip():
+            problems.append("No model: choose the one that draws the picture (Model, below).")
         if info is not None and self._refs and info.max_inputs == 0:
             problems.append(
                 f"{info.name} takes no reference pictures: they won't be sent. Remove them, "
@@ -903,9 +905,12 @@ class ImageDialog(QDialog):
         self.warning.setText("\n".join(problems))
         self.warning.setVisible(bool(problems))
         running = self._worker is not None
+        # Off with no model, and the warning says so: on, it did nothing.
+        model = bool(self.model.text().strip())
         self.generate_button.setEnabled(
-            not running and bool(self.prompt.toPlainText().strip()) and bool(size)
+            not running and bool(self.prompt.toPlainText().strip()) and bool(size) and model
         )
+        self.generate_button.setToolTip("" if model else "Choose the model that draws it first.")
         self._sync_ref_buttons()
 
     def _generate_word(self) -> str:

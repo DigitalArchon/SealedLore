@@ -489,3 +489,20 @@ def test_esc_asks_before_what_was_typed_is_lost(app, window, which, monkeypatch)
     settle(app)
     assert not dialog.isVisible(), "Discard closes it"
     dialog.deleteLater()
+
+
+# --- the picture dialog with no model ----------------------------------------------
+
+
+def test_generate_is_off_with_no_model_and_says_why(app, window):
+    """With the Model field blank, Generate was on and did nothing."""
+    dialog = ImageDialog(window.session, parent=window)
+    dialog.prompt.setPlainText("A man at a farmhouse door.")
+    assert dialog.generate_button.isEnabled()
+    dialog.model.setText("")
+    assert not dialog.generate_button.isEnabled(), "nothing to send it to"
+    assert dialog.generate_button.toolTip()
+    assert "No model" in dialog.warning.text() and not dialog.warning.isHidden()
+    dialog.model.setText("hidream")
+    assert dialog.generate_button.isEnabled() and "No model" not in dialog.warning.text()
+    dialog.done(0)
