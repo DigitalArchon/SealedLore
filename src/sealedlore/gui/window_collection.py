@@ -280,6 +280,21 @@ class CollectionWindow:
         except OSError as exc:
             self._warn_plain("Couldn't keep your characters", str(exc))
             return False
+        except (ValueError, RecursionError) as exc:
+            # Not the disk's doing: something one of them holds can't be
+            # written (data nested past what can be). Said, rather than every
+            # edit after it going unkept without a word.
+            reason = (
+                "one of them holds data nested too deep to be written"
+                if isinstance(exc, RecursionError)
+                else str(exc).splitlines()[0][:200]
+            )
+            self._warn_plain(
+                "Couldn't keep your characters",
+                f"Your characters couldn't be saved ({reason}), so the changes since the last "
+                "save aren't kept.",
+            )
+            return False
         self._forget_unused_pictures()
         return True
 

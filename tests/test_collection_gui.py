@@ -156,6 +156,23 @@ def test_edits_on_the_page_are_kept(app, window, tmp_path: Path, monkeypatch):
     assert page.tag.isVisibleTo(page) and page.tag.count() == 3
 
 
+def test_a_save_that_fails_for_what_a_character_holds_says_so(app, window, monkeypatch):
+    """A character holding data nested past what can be written made every
+    save raise RecursionError, which only OSError was caught for: edits
+    stopped being kept without a word."""
+    warned: list[str] = []
+    monkeypatch.setattr(window, "_warn_plain", lambda title, text: warned.append(text))
+    session = window._collection_session()
+    mallory = collection.kept("Mallory")
+    deep: list = []
+    for _ in range(3000):
+        deep = [deep]
+    mallory.tavern.extensions["x"] = deep  # as a backup read before it was refused
+    session.bundle.cast.append(mallory)
+    assert window._save_collection() is False
+    assert warned and "couldn't be saved" in warned[0]
+
+
 def test_a_new_character_and_a_search_for_one(app, window, monkeypatch):
     monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("Marcus", True))
     window.show_collection(True)

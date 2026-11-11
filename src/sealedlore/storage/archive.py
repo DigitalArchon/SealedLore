@@ -31,7 +31,7 @@ from sealedlore.models.node import Node
 from sealedlore.models.story import Story
 from sealedlore.models.summary import Summary
 from sealedlore.models.supporting import SupportingCast
-from sealedlore.storage.atomic import atomic_write_json
+from sealedlore.storage.atomic import atomic_write_json, nests_deeper
 from sealedlore.storage.image_meta import stripped_or_same
 from sealedlore.storage.images import RECORD_FILES, is_story_file
 from sealedlore.storage.paths import is_safe_story_id, story_dir
@@ -127,6 +127,11 @@ def read_archive(path: Path) -> tuple[StoryBundle, list[dict[str, Any]]]:
 
     if not isinstance(data, dict) or data.get("format") != ARCHIVE_FORMAT:
         raise ArchiveError(f"{name} isn't a SealedLore story archive.")
+    if nests_deeper(data):
+        # Read, it couldn't be written back: refused before anything is.
+        raise ArchiveError(
+            f"{name} is nested far deeper than any story backup, so it can't be read."
+        )
     version = data.get("version")
     if not isinstance(version, int) or version > ARCHIVE_VERSION:
         raise ArchiveError(

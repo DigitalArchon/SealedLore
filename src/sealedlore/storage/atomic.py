@@ -26,6 +26,32 @@ from typing import Any
 
 _LOCK = threading.Lock()
 
+# Deeper than anything SealedLore keeps nests: a card's own JSON is taken to
+# 100 levels (tavern_cards.MAX_NESTING), and sits a few levels down in a
+# character, a backup or a scenario. Past this, what was read couldn't be
+# saved or copied (json.dumps recursed too far from about 990 levels, a deep
+# copy from about 490), so a file someone else made that deep is refused as
+# it is read (`nests_deeper`), not after half of it is written.
+MAX_NESTING = 200
+
+
+def nests_deeper(data: Any, limit: int = MAX_NESTING) -> bool:
+    """Whether `data` (as json.loads made it) nests past `limit` levels.
+    Walked, never recursed into."""
+    stack: list[tuple[Any, int]] = [(data, 1)]
+    while stack:
+        item, depth = stack.pop()
+        if depth > limit:
+            return True
+        if isinstance(item, dict):
+            children: Any = item.values()
+        elif isinstance(item, list):
+            children = item
+        else:
+            continue
+        stack.extend((child, depth + 1) for child in children if isinstance(child, dict | list))
+    return False
+
 
 def read_json(path: Path, default: Any = None) -> Any:
     if not path.exists():

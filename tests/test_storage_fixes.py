@@ -16,10 +16,17 @@ import pytest
 
 from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage, ImageRef
+from sealedlore.models.scenario import Scenario
 from sealedlore.models.story import Story
 from sealedlore.models.video import GeneratedVideo
 from sealedlore.storage import collection, collection_backup, tavern_cards
-from sealedlore.storage.archive import read_archive, restore_archive, write_archive
+from sealedlore.storage.archive import (
+    ArchiveError,
+    archive_data,
+    read_archive,
+    restore_archive,
+    write_archive,
+)
 from sealedlore.storage.collection_backup import (
     BACKUP_FORMAT,
     CHARACTERS,
@@ -39,6 +46,7 @@ from sealedlore.storage.repository import (
     read_api_log,
     save_story_bundle,
 )
+from sealedlore.storage.scenario import ScenarioError, read_scenario
 from tests.test_collection_backup import png
 
 
@@ -295,3 +303,58 @@ def test_a_story_folder_copied_by_hand_is_a_story_of_its_own(tmp_path):
     assert [e["id"] for e in read_api_log("mycopy", root=tmp_path)] == ["a1", "a2"]
     listed = {listing.id: listing.title for listing in story_listings(tmp_path)}
     assert listed == {original.story.id: "Doomsville", "mycopy": "Doomsville, played again"}
+
+
+# --- nested deeper than anything can be saved -----------------------------------------------
+
+
+def nested(levels: int) -> str:
+    return "[" * levels + "]" * levels
+
+
+def deep_character(levels: int) -> str:
+    return '{"name": "Mallory", "tavern": {"extensions": {"x": ' + nested(levels) + "}}}"
+
+
+def test_a_backup_of_characters_nested_too_deep_is_refused_before_anything_is_put_back(tmp_path):
+    path = tmp_path / "deep.zip"
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("manifest.json", json.dumps({"format": BACKUP_FORMAT, "version": 1}))
+        archive.writestr("characters.json", "[" + deep_character(1000) + "]")
+    with pytest.raises(BackupError, match="nested far deeper"):
+        with open_backup(path):
+            pass
+
+
+def test_a_story_backup_nested_too_deep_is_refused_and_writes_nothing(tmp_path):
+    data = archive_data(StoryBundle(story=Story(title="Doomsville")), [], {})
+    text = json.dumps(data).replace('"cast": []', '"cast": [' + deep_character(1000) + "]")
+    path = tmp_path / "deep.sealedlore-archive.json"
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(ArchiveError, match="nested far deeper"):
+        read_archive(path)
+    assert not stories_dir(tmp_path).exists()
+
+
+def test_a_scenario_nested_too_deep_is_refused(tmp_path):
+    scenario = Scenario(title="Doomsville").model_dump()
+    text = json.dumps(scenario).replace('"cast": []', '"cast": [' + deep_character(1000) + "]")
+    path = tmp_path / "deep.sealedlore-scenario.json"
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(ScenarioError, match="nested far deeper"):
+        read_scenario(path)
+
+
+def test_a_card_as_deep_as_a_card_may_be_still_travels(tmp_path):
+    """A card's own JSON is read to 100 levels: in a backup of characters,
+    a story backup or a scenario it sits a few levels down, and still reads."""
+    card = json.loads(deep_character(tavern_cards.MAX_NESTING - 3))
+    character = Character.model_validate(card)
+    store = DiskPictures(COLLECTION_ID, tmp_path)
+    path = tmp_path / "all.zip"
+    collection_backup.write_backup(path, [character], store)
+    with open_backup(path) as backup:
+        assert [c.name for c in backup.characters] == ["Mallory"]
+    archive = tmp_path / "story.sealedlore-archive.json"
+    write_archive(archive, StoryBundle(story=Story(title="Doomsville"), cast=[character]), [])
+    assert read_archive(archive)[0].cast[0].name == "Mallory"

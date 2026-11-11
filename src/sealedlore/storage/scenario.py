@@ -17,7 +17,7 @@ from sealedlore.models.scenario import SCENARIO_FORMAT, SCENARIO_VERSION, Scenar
 from sealedlore.models.scene import SceneState
 from sealedlore.models.story import Story, StorySetup
 from sealedlore.models.supporting import SupportingCast
-from sealedlore.storage.atomic import atomic_write_json
+from sealedlore.storage.atomic import atomic_write_json, nests_deeper
 from sealedlore.storage.image_meta import MetadataError, strip_metadata, stripped_or_same
 from sealedlore.storage.images import is_safe_relative
 from sealedlore.storage.repository import StoryBundle
@@ -232,6 +232,11 @@ def read_scenario(path: Path) -> Scenario:
 
     if not isinstance(data, dict) or data.get("format") != SCENARIO_FORMAT:
         raise ScenarioError(f"{Path(path).name} isn't a SealedLore scenario file.")
+    if nests_deeper(data):
+        # Read, it couldn't be saved or copied: refused as it is read.
+        raise ScenarioError(
+            f"{Path(path).name} is nested far deeper than any scenario, so it can't be read."
+        )
     version = data.get("version")
     if not isinstance(version, int) or version > SCENARIO_VERSION:
         raise ScenarioError(

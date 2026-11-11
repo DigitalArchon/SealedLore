@@ -34,6 +34,7 @@ from pydantic import ValidationError
 from sealedlore.ids import utc_now_iso
 from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage
+from sealedlore.storage.atomic import nests_deeper
 from sealedlore.storage.collection import files_of
 from sealedlore.storage.image_meta import (
     MetadataError,
@@ -308,9 +309,14 @@ def _json(archive: zipfile.ZipFile, member: str, default: Any) -> Any:
     if info.file_size > MAX_MEMBER_BYTES:
         raise BackupError(f"its {member} is far larger than any backup's.")
     try:
-        return json.loads(read_member(archive, info, MAX_MEMBER_BYTES).decode("utf-8"))
+        data = json.loads(read_member(archive, info, MAX_MEMBER_BYTES).decode("utf-8"))
     except (*_DAMAGED, json.JSONDecodeError, RecursionError) as exc:
         raise BackupError(f"its {member} is damaged.") from exc
+    if nests_deeper(data):
+        # Put back, it could never be saved again, and every edit after it
+        # went unkept: refused before anything is put back.
+        raise BackupError(f"its {member} is nested far deeper than any backup's.")
+    return data
 
 
 def _log(archive: zipfile.ZipFile) -> Iterator[dict[str, Any]]:
