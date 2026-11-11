@@ -4055,11 +4055,14 @@ class StorySession(
         history: Sequence[Node] | None = None,
         options: AssemblyOptions | None = None,
         recall: Sequence[RecallItem] = (),
+        span: PrivateSpan | None = None,
     ) -> AssembledPrompt:
         """The prompt for an aside at the current leaf. Like `assemble`, never embeds.
 
         `history` and `options` are a private scene's (its messages, its budget
-        and rules) when the aside is asked in one."""
+        and rules) when the aside is asked in one, and `span` that scene: its
+        window then stands for the rest, as for its turns (the handoff, the
+        condensed part)."""
         history = self.path() if history is None else list(history)
         # Earlier asides from a private scene go only to that scene's model.
         span_id = self.open_span.id if self.open_span is not None else None
@@ -4068,12 +4071,16 @@ class StorySession(
             lore = self.retrieve(
                 self._question_as_turn(question), history, allow_network=False
             ).entries
-        split = self.split(history)
+        if span is not None:
+            verbatim, summaries = self._private_window(history, span)
+        else:
+            split = self.split(history)
+            verbatim, summaries = list(split.verbatim), list(split.summaries)
         plot = self.story.plot
         prompt = assemble_question(
             story=self.story,
             cast=self.visible_cast(),
-            history_nodes=split.verbatim,
+            history_nodes=verbatim,
             question=question,
             # The events the author's character knows of, as a turn is told
             # them, and nothing the character doesn't know (the author, Oct 29
@@ -4088,7 +4095,7 @@ class StorySession(
                 for a in self.asides_at(anchor)
                 if a.answer and a.private_span in (None, span_id)
             ],
-            summaries=split.summaries,
+            summaries=summaries,
             lore=lore,
             recall=recall,
             standing_lore=self.lore_layout().standing,
@@ -4129,6 +4136,7 @@ class StorySession(
             history=history,
             options=self.private_options() if span is not None else None,
             recall=recall,
+            span=span,
         )
         request = ChatRequest(
             model=model,

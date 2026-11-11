@@ -975,7 +975,7 @@ class PrivateRuntime:
     def _release_private(self) -> None:
         """Close the scene's clients, and forget what was worked out from
         the scene: the lore selection made from its keywords would otherwise
-        serve the next image prompt."""
+        serve the next image prompt, and its last prompt be shown or sent."""
         for client in (self.private_provider, self.private_tee):
             close = getattr(client, "close", None)
             if callable(close):
@@ -987,6 +987,9 @@ class PrivateRuntime:
         self.private_tee = None
         self.tee_block = None
         self.last_retrieval = None
+        # The scene's last prompt is scene text: nothing after the scene may
+        # read it (the inspector, Help → Model trouble's "the story's prompt").
+        self.last_prompt = None
 
     # --- what reaches the disk ----------------------------------------------------------
 

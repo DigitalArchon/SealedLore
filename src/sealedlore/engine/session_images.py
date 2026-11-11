@@ -278,15 +278,21 @@ class ImageRuntime:
         span = self.open_span
         path = self.image_path(anchor_id)
         chat = self.story.chat
-        split = self.split(path)
+        if span is not None:
+            # The private model reads what it reads for the scene's turns:
+            # the handoff in place of the chapters, the condensed part.
+            verbatim, summaries = self._private_window(path, span)
+        else:
+            split = self.split(path)
+            verbatim, summaries = list(split.verbatim), list(split.summaries)
         if chat:
             # The chat as its model reads it, the request last. A TEE chat's
             # prompt is written by its own model: the chat never leaves it.
             prompt = assemble_chat(
                 story=self.story,
-                history_nodes=split.verbatim,
+                history_nodes=verbatim,
                 tail=question,
-                summaries=split.summaries,
+                summaries=summaries,
                 nodes_by_id=index_nodes(self.nodes),
                 estimator=self.estimator,
                 # In a private part, the private model's budget, as a story's
@@ -310,9 +316,9 @@ class ImageRuntime:
             prompt = assemble_question(
                 story=self.story,
                 cast=self.visible_cast(path),
-                history_nodes=split.verbatim,
+                history_nodes=verbatim,
                 question="",
-                summaries=split.summaries,
+                summaries=summaries,
                 lore=lore,
                 standing_lore=self.lore_layout().standing,
                 supporting=self.supporting_for(path[-1].content if path else "", path),

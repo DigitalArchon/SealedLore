@@ -514,6 +514,54 @@ def test_the_handoff_reads_only_what_came_before(tmp_path: Path):
     assert MARKER not in json.dumps(main.payloads)
 
 
+@pytest.mark.parametrize("call", ["question", "picture prompt"])
+def test_a_question_or_picture_prompt_in_a_scene_reads_the_scene_s_window(
+    tmp_path: Path, call: str
+):
+    """A story that needed the handoff to fit the private model: a turn sent
+    the handoff in place of the chapters, but a Question or a picture's
+    prompt sent the whole chapter block to the private model instead."""
+    session, main, held = build(tmp_path)
+    for i in range(8):
+        play(session, turn(held, f"Long ago, step {i}."))
+    chapters = session.split().summaries
+    assert chapters, "nothing was archived"
+    private = enter(session)
+    main.responses = ["The story so far, condensed."]
+    session.write_handoff()
+    play(session, turn(held, f"{MARKER} now"))
+
+    if call == "question":
+        private.responses = ["Because she asked."]
+        list(session.ask("Why did she come?"))
+    else:
+        private.responses = ['{"references": [], "prompt": "A lamp by the window."}']
+        session.write_image_prompt("")
+    sent = json.dumps([m.text for m in private.requests[-1].messages])
+    assert "The story so far, condensed." in sent
+    assert not any(chapter.content in sent for chapter in chapters)
+
+
+@pytest.mark.parametrize("end", ["close", "discard"])
+def test_the_scene_s_last_prompt_goes_with_the_scene(tmp_path: Path, end: str):
+    """Help → Model trouble offers "the story's prompt" (the last one sent) to
+    other hosts, and the inspector shows it: after the scene it was the
+    scene's."""
+    session, _main, held = build(tmp_path)
+    play(session, turn(held, "Before."))
+    private = enter(session)
+    play(session, turn(held, f"{MARKER} now"))
+    assert MARKER in json.dumps([m.text for m in session.last_prompt.messages])
+    if end == "close":
+        private.responses = ["They spoke."]
+        for _event in session.close_private(session.summarise_private()):
+            pass
+    else:
+        session.discard_private()
+    prompt = session.last_prompt
+    assert prompt is None or MARKER not in json.dumps([m.text for m in prompt.messages])
+
+
 def test_a_private_passage_can_only_be_retaken_inside_its_scene(tmp_path: Path):
     session, _main, held = build(tmp_path)
     play(session, turn(held, "Before."))
