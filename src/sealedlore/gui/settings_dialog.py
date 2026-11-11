@@ -80,6 +80,7 @@ from sealedlore.models.config import (
     ProviderConfig,
     _same_host,
     chat_api,
+    credentials,
     is_local_host,
     is_loopback_host,
     key_problem,
@@ -152,12 +153,26 @@ class SentPlain(NamedTuple):
     key: str
 
     def already_among(self, others: list[SentPlain]) -> bool:
-        """The same key goes to the same host in `others` (scheme, name and
-        port, as a key is shared out, `_same_host`): a new path on the same
-        machine sends it nowhere new."""
+        """The same key, and the same password written into the address,
+        go to the same host in `others` (scheme, name and port, as a key is
+        shared out, `_same_host`): a new path on the same machine sends them
+        nowhere new."""
         return any(
-            other.key == self.key and _same_host(other.address, self.address) for other in others
+            other.key == self.key
+            and credentials(other.address) == credentials(self.address)
+            and _same_host(other.address, self.address)
+            for other in others
         )
+
+    @property
+    def line(self) -> str:
+        """Its line in the question: whose, where, and a password written
+        into the address said, since the address is shown without it."""
+        what = ""
+        if credentials(self.address):
+            also = "and " if self.key.strip() else ""
+            what = f" ({also}the password in its address)"
+        return f"•  {self.whose}: {shown(self.address)}{what}"
 
 
 def _in_the_clear(url: str) -> bool:
@@ -214,7 +229,13 @@ def typed_keys(config: Config) -> list[tuple[str, str, str]]:
 
 
 def _plain(sent: list[SentPlain]) -> list[SentPlain]:
-    return [entry for entry in sent if entry.key.strip() and _in_the_clear(entry.address)]
+    # A password written into the address goes with every request as Basic
+    # credentials, in the clear over http, key or no key: it counts as one.
+    return [
+        entry
+        for entry in sent
+        if (entry.key.strip() or credentials(entry.address)) and _in_the_clear(entry.address)
+    ]
 
 
 # Said by a question asked before Browse…, Test speed…, Test attestation or
@@ -2166,7 +2187,7 @@ class SettingsDialog(QDialog):
         """The question, every key in `new` at once; True on Yes, which is
         kept (`_plain_allowed`). `after_no`: what No does."""
         one = len(new) == 1
-        listed = "\n".join(f"•  {sent.whose}: {shown(sent.address)}" for sent in new)
+        listed = "\n".join(sent.line for sent in new)
         answer = QMessageBox.question(
             self,
             "Send the key unencrypted?" if one else "Send the keys unencrypted?",
@@ -2206,6 +2227,13 @@ class SettingsDialog(QDialog):
             )
             if row is not None:
                 self.endpoint_list.setCurrentRow(row)
+        if not first.key.strip():
+            raise SettingsProblem(
+                first.page,
+                f"the password in the address {shown(first.address)} would go unencrypted. Use "
+                "the server's https:// address, take the password out if it needs none, or Save "
+                "again and choose Yes.",
+            )
         raise SettingsProblem(
             first.page,
             f"the key for {shown(first.address)} would go unencrypted. Use the server's https:// "

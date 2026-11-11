@@ -2868,7 +2868,8 @@ as `192.168.1.10`, or a `.local` name; a proxy is never used for these). The
 one exception the other way is phone access, which answers
 phones over plain `http://` on its onion address, where tor encrypts the
 whole way (see [Playing from your phone](#playing-from-your-phone)). An API
-key sent over plain `http://` to another machine, even one on your own
+key (or a password written into the address, `http://user:password@…`, which
+goes with every request) sent over plain `http://` to another machine, even one on your own
 network, can be read by anyone on that network, a café's or a hotel's Wi-Fi
 included, so Settings asks before it saves one there, or sends one there
 before Save (Choose, Test speed…, Test attestation and Detect use the keys

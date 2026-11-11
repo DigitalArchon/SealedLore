@@ -391,6 +391,21 @@ def without_password(url: str) -> str:
     return parsed._replace(netloc=parsed.netloc.rsplit("@", 1)[1]).geturl()
 
 
+def credentials(url: str) -> str:
+    """The user name and password written into `url`, as written ("" for
+    none): sent with every request to it, as Basic credentials, as secret as
+    a key. A text that can't be read as an address comes back whole, to be
+    compared as it is."""
+    text = str(url or "").strip()
+    if "@" not in text:
+        return ""
+    try:
+        netloc = urlparse(text).netloc
+    except ValueError:
+        return text
+    return netloc.rpartition("@")[0]
+
+
 # What no API key has in it, and no HTTP header can carry: whitespace (a line
 # break, a space), control characters, a backslash.
 _NOT_IN_A_KEY = re.compile(r"[\\\s\x00-\x1f\x7f]")

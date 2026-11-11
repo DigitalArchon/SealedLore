@@ -61,6 +61,21 @@ def test_configure_warns_when_a_key_would_go_unencrypted(tmp_path: Path, capsys)
     assert capsys.readouterr().err == ""
 
 
+def test_configure_warns_of_a_password_in_the_address_with_no_key(tmp_path: Path, capsys):
+    """It goes with every request as Basic credentials, in the clear over http:
+    as much a key as the key is."""
+    data = ["--data-dir", str(tmp_path)]
+    address = "http://user:pw-lan@192.168.1.5:11434/v1"
+    cli_main([*data, "configure", "--base-url", address, "--api-key", ""])
+    err = capsys.readouterr().err
+    assert "the password written into the address goes unencrypted" in err
+    assert "pw-lan" not in err and "…@192.168.1.5:11434" in err
+    cli_main([*data, "configure", "--base-url", address, "--model", "llama3"])
+    assert capsys.readouterr().err == "", "once"
+    cli_main([*data, "configure", "--base-url", "http://user:other@192.168.1.5:11434/v1"])
+    assert "goes unencrypted" in capsys.readouterr().err, "another password is asked about anew"
+
+
 def test_configure_says_so_when_it_keeps_a_key_for_another_machine(tmp_path: Path, capsys):
     """Changing only the address keeps the key saved for the old one: a
     NanoGPT key would go, unencrypted, to a server on the network."""
@@ -173,6 +188,41 @@ def test_a_blank_key_or_this_computer_is_nothing_to_ask_about(app, monkeypatch):
     assert [p.name for p in cfg.providers] == ["NanoGPT", "Studio", "Here"]
     assert cfg.private().api_key == "private-key"
     dialog.deleteLater()
+
+
+def test_a_password_in_the_address_is_asked_about_with_no_key(app, monkeypatch):
+    """http://user:pw@192.168.1.5/v1 sends Basic credentials in the clear with
+    every request, a key or none."""
+    cfg = nano()
+    dialog = SettingsDialog(cfg, None)
+    dialog._add_endpoint()
+    dialog.provider_name.setText("Studio")
+    dialog.base_url.setText("http://user:pw-lan@192.168.1.5:11434/v1")
+    questions = asked(monkeypatch, QMessageBox.No)
+    dialog._save()
+    assert len(questions) == 1
+    title, text, default = questions[0]
+    assert title == "Send the key unencrypted?" and default == QMessageBox.No
+    assert "Studio (Endpoints): http://…@192.168.1.5:11434/v1 (the password in its address)" in text
+    assert "pw-lan" not in text
+    assert dialog.error.text().startswith("Endpoints: the password in the address")
+    assert "pw-lan" not in dialog.error.text()
+    assert [p.name for p in cfg.providers] == ["NanoGPT"], "No: nothing saved"
+
+    questions = asked(monkeypatch, QMessageBox.Yes)
+    dialog._save()
+    assert len(questions) == 1 and dialog.result() == QDialog.Accepted
+    # Opened again: going there already. Another password is new.
+    again = SettingsDialog(cfg, None)
+    questions = asked(monkeypatch, QMessageBox.No)
+    again._save()
+    assert questions == []
+    again.endpoint_list.setCurrentRow(1)
+    again.base_url.setText("http://user:another@192.168.1.5:11434/v1")
+    again._save()
+    assert len(questions) == 1
+    dialog.deleteLater()
+    again.deleteLater()
 
 
 def test_a_key_taken_from_the_chat_endpoint_is_counted_where_it_goes(app, monkeypatch):

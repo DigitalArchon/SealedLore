@@ -35,6 +35,7 @@ from sealedlore.models.config import (
     Config,
     ProviderConfig,
     _same_host,
+    credentials,
     is_local_host,
     is_loopback_host,
     key_problem,
@@ -216,10 +217,27 @@ def warn_if_plain(provider: ProviderConfig, before: list[tuple[str, str]], *, ke
     parsed = urlparse(provider.base_url)
     host = parsed.hostname or ""
     plain = parsed.scheme == "http" and is_local_host(host) and not is_loopback_host(host)
-    if not plain or not provider.api_key.strip():
+    # A password written into the address goes with every request (Basic
+    # credentials, in the clear over http): it counts as a key here.
+    password = credentials(provider.base_url)
+    if not plain or not (provider.api_key.strip() or password):
         return
-    if any(key == provider.api_key and _same_host(url, provider.base_url) for url, key in before):
+    if any(
+        key == provider.api_key
+        and credentials(url) == password
+        and _same_host(url, provider.base_url)
+        for url, key in before
+    ):
         return  # going there already
+    if not provider.api_key.strip():
+        print(
+            f"Warning: {shown(provider.base_url)} is plain http to another machine on your "
+            "network: the password written into the address goes unencrypted, and anyone on "
+            "that network can read it (a café's or a hotel's Wi-Fi too). Use the server's "
+            "https:// address if it has one.",
+            file=sys.stderr,
+        )
+        return
     if kept:
         print(
             f"Warning: the API key already saved for {provider.name!r} is kept, and now goes "
