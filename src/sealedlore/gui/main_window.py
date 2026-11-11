@@ -3115,8 +3115,10 @@ class MainWindow(
             return
         if self.session is None or (self._busy and not self._can_queue()):
             return
-        if self._page_covers():
+        if self._page_covers() or self.map_shown():
             # Ctrl+Enter typed in a card's field: the story's box isn't there.
+            # Nor under the Branches diagram, which put the composer away: its
+            # draft went out unseen, and the passage streamed under the map.
             return
         text = self.composer.text()
         if not text or not self._tee_allows_send():

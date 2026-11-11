@@ -295,3 +295,24 @@ def test_leaving_the_story_with_a_chapters_edit_asks_first(app, tmp_path, story,
     window.close_story()
     assert window.session is None and not panel.unsaved_edit()
     window.close()
+
+
+# --- 4. Ctrl+Enter under the Branches diagram sends nothing -------------------------
+
+
+def test_send_under_the_branches_diagram_does_nothing(app, tmp_path, story, cast):
+    """The diagram puts the composer away; Ctrl+Enter sent its hidden draft
+    and the passage streamed under the map (the review after 3.1.0b8)."""
+    window = _window(tmp_path, story, cast)
+    window._rewrite_from("a1", "Another ending.", "Alt")
+    before = len(window.session.nodes)
+    window.composer.input.setPlainText("A draft I can't see.")
+    window.show_map(True)
+    assert window.map_shown() and not window.composer.isVisible()
+    window.send_turn()  # what Ctrl+Enter runs
+    app.processEvents()
+    sent = window._busy
+    _idle(app, window)
+    assert not sent and len(window.session.nodes) == before
+    assert window.map_shown() and window.composer.text() == "A draft I can't see."
+    window.close()
