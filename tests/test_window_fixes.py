@@ -15,7 +15,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.providers.mock import MockChatProvider  # noqa: E402
@@ -134,4 +134,59 @@ def test_the_passage_landing_leaves_a_full_window_page_its_keyboard(app, tmp_pat
     _idle(app, window)
     assert focus is search
     window.show_collection(False)
+    window.close()
+
+
+# --- 2. a story that can't be read leaves the window as it was ----------------------
+
+
+def _broken(tmp_path: Path) -> str:
+    folder = tmp_path / "stories" / "broken-one"
+    folder.mkdir(parents=True)
+    (folder / "story.json").write_text("{not json", encoding="utf-8")
+    return "broken-one"
+
+
+def test_a_story_that_cant_be_read_leaves_the_start_page_as_it_was(app, tmp_path, monkeypatch):
+    """Opened from the start page, an unreadable story left an empty
+    transcript and a greyed composer where the start page had been, until
+    another story was opened and closed (the review after 3.1.0b8)."""
+    story_id = _broken(tmp_path)
+    window = MainWindow(root=tmp_path, use_mock=True)
+    window.resize(1600, 900)
+    window.show()
+    app.processEvents()
+    warned: list[str] = []
+    monkeypatch.setattr(window, "_warn_plain", lambda title, _text: warned.append(title))
+    assert window.centre_stack.currentWidget() is window.start_page
+    window.open_story(story_id)
+    app.processEvents()
+    assert warned == ["Could not open story"] and window.session is None
+    assert window.centre_stack.currentWidget() is window.start_page
+    assert window.composer.isHidden()
+    window.close()
+
+
+def test_a_story_that_cant_be_read_lets_nothing_go_in_the_story_open(
+    app, tmp_path, story, cast, monkeypatch
+):
+    """The edit the author agreed to lose for the story to open stays when
+    that story couldn't be read, as does the view of the story open."""
+    window = _window(tmp_path, story, cast)
+    story_id = _broken(tmp_path)
+    warned: list[str] = []
+    monkeypatch.setattr(window, "_warn_plain", lambda title, _text: warned.append(title))
+    monkeypatch.setattr(QMessageBox, "question", lambda *_a, **_k: QMessageBox.Discard)
+    widget = window.transcript.message_widget("u1")
+    widget.begin_edit()
+    widget._editor.setPlainText("Typed and not saved.")
+    window.show_cast_board(True)
+    window.open_story(story_id)
+    app.processEvents()
+    assert warned == ["Could not open story"] and window.session.story.id == story.id
+    assert window.board_shown(), "the page the author was on stays"
+    window.show_cast_board(False)
+    editor = window.transcript.open_editor()
+    assert editor is not None and editor._editor.toPlainText() == "Typed and not saved."
+    editor.cancel_edit()
     window.close()

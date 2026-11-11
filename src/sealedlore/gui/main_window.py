@@ -2056,12 +2056,10 @@ class MainWindow(
         if self._busy:
             return
         # Leaving a memory-only chat or scene loses it, whichever story opens
-        # next (the same one again comes back from disk, without it): asked.
-        if self.session is not None and not self._private_allows_close():
+        # next (the same one again comes back from disk, without it): asked,
+        # and let go only once the story to open has been read.
+        if self.session is not None and not self._private_may_close():
             return
-        self.show_collection(False)
-        self.show_cast_board(False)
-        self.show_map(False)
         try:
             session = StorySession.load(
                 story_id,
@@ -2073,8 +2071,18 @@ class MainWindow(
                 embeddings=self._current_embeddings(),
             )
         except (FileNotFoundError, ValueError) as exc:
+            # Nothing has changed yet: the window is as it was. The view used
+            # to be switched first, and a story that couldn't be read left an
+            # empty transcript under a greyed composer where the start page
+            # had been, with no way back but opening and closing another.
             self._warn_plain("Could not open story", str(exc))
             return
+        if self.session is not None:
+            self._discard_edits()
+            self._discard_memory_scene()
+        self.show_collection(False)
+        self.show_cast_board(False)
+        self.show_map(False)
         if self.session is not None:
             # Background chapters of the story being left are logged, not
             # lost, and its map stops drawing. The same story opened again
