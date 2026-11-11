@@ -39,7 +39,7 @@ from sealedlore.gui.model_picker import ModelField
 from sealedlore.gui.picture_style import PictureStyleField
 from sealedlore.gui.portraits_dialog import card_name
 from sealedlore.gui.ref_images import pixmap_of
-from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, size_to_screen
+from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, may_discard, size_to_screen
 from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS
 from sealedlore.models.image import ImageRef
 from sealedlore.providers.images import ImageModelInfo
@@ -253,6 +253,13 @@ class RestyleDialog(QDialog):
         Drawn by redrew every ticked picture."""
         if not enter_only_on_buttons(self, event):
             super().keyPressEvent(event)
+
+    def reject(self) -> None:
+        """Cancel or Esc: prompts changed by hand are asked about before
+        they are lost, as the picture dialog's is."""
+        edited = [row.prompt.toPlainText() for row in self.rows if row.edited]
+        if may_discard(self, [], edited):
+            super().reject()
 
     # --- the result -------------------------------------------------------------------
 

@@ -50,7 +50,7 @@ from sealedlore.gui.model_picker import ModelField
 from sealedlore.gui.picture_style import PictureStyleField
 from sealedlore.gui.picture_words import WORDS_ONLY
 from sealedlore.gui.ref_images import thumbnail_of
-from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, size_to_screen
+from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, may_discard, size_to_screen
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.character import Character
 from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS, recommended_model
@@ -500,6 +500,11 @@ class PortraitsDialog(QDialog):
             super().keyPressEvent(event)
 
     def reject(self) -> None:
+        """Cancel or Esc: prompts changed by hand are asked about before
+        they are lost, as the picture dialog's is. The writer's own aren't."""
+        edited = [row.prompt.toPlainText() for row in self.rows if row.edited]
+        if not may_discard(self, [], edited):
+            return
         if self._worker is not None:
             # The writer's call is stopped; close once its thread is done
             # rather than block here or destroy a running thread.

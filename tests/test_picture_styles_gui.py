@@ -145,7 +145,7 @@ def test_the_dialog_draws_in_the_style_and_framing_chosen_and_rewrites_what_was_
     assert {r.size for r in requests} == {"1536x1536"}
     assert {r.card_framing for r in requests} == {"full"}
     assert dialog.chosen_style() == ("anime", "")
-    dialog.reject()
+    dialog.done(0)  # past Cancel's question about the prompt changed by hand
 
 
 def test_a_style_chosen_in_the_dialog_becomes_the_story_s_when_drawn(
@@ -345,7 +345,7 @@ def test_restyle_pictures_ticks_those_not_in_the_style_and_each_takes_its_place(
     comic = DEFAULT_TEXTS["pictures.styles.comic"]
     assert dialog.rows[0].prompt.toPlainText() == "My own words."
     assert comic in dialog.rows[2].prompt.toPlainText()
-    dialog.reject()
+    dialog.done(0)  # past Cancel's question about the prompt changed by hand
     # With no listing yet it opens all the same, with no price.
     unlisted = RestyleDialog(session, [card], catalog=None, browse=None)
     assert "price isn't listed" in unlisted.note.text()

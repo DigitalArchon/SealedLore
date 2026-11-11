@@ -32,7 +32,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.followup import PLOT, STORY, FollowUpTurn
 from sealedlore.gui.plot_dialog import preview_html
-from sealedlore.gui.sizing import GrowingText, size_to_screen
+from sealedlore.gui.sizing import GrowingText, may_discard, size_to_screen
 
 STORY_EXAMPLE = (
     "e.g. I like the world, but I'd prefer the characters were more badass. Or: the "
@@ -233,10 +233,12 @@ class FollowUpDialog(QDialog):
 
     def reject(self) -> None:
         """Esc or the window's close: the same as going on, since every
-        change is made already, and can be undone from here later."""
+        change is made already, and can be undone from here later. A request
+        typed and not sent is asked about first: Esc went on and dropped it."""
         if not self.go_on_button.isEnabled():
             return  # a request is under way: Stop is in its progress dialog
-        self.accept()
+        if may_discard(self, [""], [self.request.toPlainText().strip()]):
+            self.accept()
 
 
 __all__ = ["PLOT", "STORY", "FollowUpDialog"]

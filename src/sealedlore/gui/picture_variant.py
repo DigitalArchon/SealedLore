@@ -69,7 +69,7 @@ from sealedlore.gui.picture_style import KEEP, PictureStyleField
 from sealedlore.gui.picture_words import WORDS_ONLY
 from sealedlore.gui.portraits_dialog import card_name
 from sealedlore.gui.ref_images import image_of, thumbnail_of
-from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, size_to_screen
+from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, may_discard, size_to_screen
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.character import Character
 from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS, recommended_model
@@ -350,6 +350,8 @@ class PictureVariantDialog(QDialog):
             catalog.changed.connect(self._sync)
             catalog.ensure()
         self._sync()
+        # As it opened: Cancel asks only about what was typed since.
+        self._opened = self._typed()
 
     @staticmethod
     def _hint(text: str) -> QLabel:
@@ -681,7 +683,18 @@ class PictureVariantDialog(QDialog):
         if not enter_only_on_buttons(self, event):
             super().keyPressEvent(event)
 
+    def _typed(self) -> list[str]:
+        """What the author has written or chosen here: the change, the
+        labels, and the prompt once changed by hand (the dialog's own
+        composing of it, or the writer's, isn't theirs)."""
+        prompt = self.prompt.toPlainText() if self._hand_edited else ""
+        return [self.change.text(), prompt, *self.labels()]
+
     def reject(self) -> None:
+        """Cancel or Esc: what was typed is asked about before it is lost,
+        as the picture dialog asks about its prompt."""
+        if not may_discard(self, self._opened, self._typed()):
+            return
         if self._worker is not None:
             self._closing = True
             self._worker.stop()

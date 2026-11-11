@@ -36,7 +36,7 @@ from sealedlore.engine.portraits import card_size
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.model_picker import ModelField
 from sealedlore.gui.ref_images import thumbnail_of
-from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, size_to_screen
+from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, may_discard, size_to_screen
 from sealedlore.models.character import Character
 from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS
 from sealedlore.providers.images import ImageModelInfo
@@ -269,6 +269,22 @@ class ExpressionSetDialog(QDialog):
         Others drew the set, with the expression just typed among it."""
         if not enter_only_on_buttons(self, event):
             super().keyPressEvent(event)
+
+    def _typed(self) -> list[str]:
+        """What the author has written here: the other expressions, and each
+        prompt changed from the one the dialog wrote for it."""
+        changed = [
+            box.toPlainText()
+            for expression, box in self._boxes.items()
+            if box.toPlainText() != self._prompt_for(expression)
+        ]
+        return [self.others.text().strip(), *changed]
+
+    def reject(self) -> None:
+        """Cancel or Esc: what was typed is asked about before it is lost,
+        as the picture dialog asks about its prompt."""
+        if may_discard(self, [""], self._typed()):
+            super().reject()
 
     # --- the result -------------------------------------------------------------------
 

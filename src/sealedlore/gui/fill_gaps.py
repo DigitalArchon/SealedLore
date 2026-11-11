@@ -40,7 +40,7 @@ from sealedlore.gui.cast_board import ASPECT, cover
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.model_picker import ModelField
 from sealedlore.gui.ref_images import pixmap_of
-from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, size_to_screen
+from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, may_discard, size_to_screen
 from sealedlore.models.character import Character
 from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS
 from sealedlore.providers.images import ImageModelInfo
@@ -182,6 +182,8 @@ class FillGapsDialog(QDialog):
             catalog.changed.connect(self._sync)
             catalog.ensure()
         self._sync()
+        # The prompts as the dialog wrote them: Cancel asks about changes.
+        self._opened = [prompt.toPlainText() for prompt in self.prompts]
 
     # --- the model and the price, as A set of expressions… has them ---------------------------
 
@@ -264,6 +266,12 @@ class FillGapsDialog(QDialog):
         Drawn by drew every gap ticked."""
         if not enter_only_on_buttons(self, event):
             super().keyPressEvent(event)
+
+    def reject(self) -> None:
+        """Cancel or Esc: prompts changed by hand are asked about before
+        they are lost, as the picture dialog's is."""
+        if may_discard(self, self._opened, [prompt.toPlainText() for prompt in self.prompts]):
+            super().reject()
 
     # --- the result -------------------------------------------------------------------
 

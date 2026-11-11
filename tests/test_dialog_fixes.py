@@ -392,3 +392,100 @@ def test_a_number_setting_can_be_set_to_its_lowest_and_it_is_sent(app, window):
     guidance.setValue(-0.4)  # under the lowest, above "—": the lowest
     assert guidance.value() == 0.0 and dialog.sent_settings()["guidance"] == 0.0
     dialog.done(0)
+
+
+# --- Esc asks before what was typed is lost ----------------------------------------
+
+TYPED = "A prompt written by hand, line by line."
+
+
+def _esc_portraits(window):
+    dialog, _button = _portraits(window)
+    return dialog, lambda: dialog.rows[0].prompt.setPlainText(TYPED)
+
+
+def _esc_variant(window):
+    dialog, _button = _variant(window)
+    dialog.change.clear()
+    return dialog, lambda: dialog.change.setText("a fresh scar")
+
+
+def _esc_variant_prompt(window):
+    dialog, _type = _esc_variant(window)
+    return dialog, lambda: dialog.prompt.setPlainText(TYPED)
+
+
+def _esc_restyle(window):
+    dialog, _button = _restyle(window)
+    return dialog, lambda: dialog.rows[0].prompt.setPlainText(TYPED)
+
+
+def _esc_expressions(window):
+    dialog, _button = _expressions(window)
+    dialog.others.clear()
+    return dialog, lambda: next(iter(dialog._boxes.values())).setPlainText(TYPED)
+
+
+def _esc_expressions_others(window):
+    dialog, _type = _esc_expressions(window)
+    return dialog, lambda: dialog.others.setText("laughing")
+
+
+def _esc_gaps(window):
+    dialog, _button = _gaps(window)
+    return dialog, lambda: dialog.prompts[0].setPlainText(TYPED)
+
+
+def _esc_follow_up(window):
+    from sealedlore.engine.followup import STORY
+    from sealedlore.gui.followup_dialog import FollowUpDialog
+
+    dialog = FollowUpDialog(window, target=STORY, title="The Sundering", go_on="Go on")
+    return dialog, lambda: dialog.request.setPlainText("More wolves, please.")
+
+
+TYPING = {
+    "portraits": _esc_portraits,
+    "change a picture": _esc_variant,
+    "change a picture, the prompt": _esc_variant_prompt,
+    "restyle": _esc_restyle,
+    "expression set": _esc_expressions,
+    "expression set, others": _esc_expressions_others,
+    "fill gaps": _esc_gaps,
+    "follow-up": _esc_follow_up,
+}
+
+
+@pytest.mark.parametrize("which", list(TYPING))
+def test_esc_asks_before_what_was_typed_is_lost(app, window, which, monkeypatch):
+    """Portraits, Change this picture, Restyle, A set of expressions and Fill
+    the gaps closed on Esc with prompts changed by hand (the picture dialog
+    asks), and the follow-up dialog took Esc as going on, dropping a request
+    typed and not sent. Untouched, Esc closes them as before."""
+    titles: list[str] = []
+    answers = [QMessageBox.Cancel]
+
+    def ask(_parent, title, *_args, **_kwargs):
+        titles.append(title)
+        return answers[-1]
+
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(ask))
+    dialog, _type = TYPING[which](window)
+    dialog.show()
+    settle(app)
+    QTest.keyClick(dialog, Qt.Key_Escape)
+    settle(app)
+    assert not dialog.isVisible() and titles == [], "nothing typed: closed, nothing asked"
+    dialog.deleteLater()
+    dialog, type_it = TYPING[which](window)
+    dialog.show()
+    settle(app)
+    type_it()
+    QTest.keyClick(dialog, Qt.Key_Escape)
+    settle(app)
+    assert titles == ["Discard what you wrote?"] and dialog.isVisible(), "Cancel keeps it"
+    answers.append(QMessageBox.Discard)
+    QTest.keyClick(dialog, Qt.Key_Escape)
+    settle(app)
+    assert not dialog.isVisible(), "Discard closes it"
+    dialog.deleteLater()

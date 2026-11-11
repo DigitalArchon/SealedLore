@@ -105,7 +105,7 @@ def test_the_dialog_shows_every_prompt_and_draws_them_as_they_stand(
     assert [r.prompt for r in requests][0] == "  My own words.\n"
     assert all(r.card_id and r.card_first for r in requests) and len(requests) == len(cast) - 1
     assert dialog.draw_button.text() == f"Draw {len(cast) - 1}"
-    dialog.reject()
+    dialog.done(0)  # past Cancel's question about the prompt changed by hand
 
 
 def test_the_cast_page_shows_the_portrait_large_and_the_others_small(app):
@@ -275,7 +275,7 @@ def test_an_edit_says_what_changes_and_needs_a_model_that_takes_a_picture(
     assert not request.card_first
     dialog.model.setText("words-only")
     assert not dialog.draw_button.isEnabled() and "can't be given a picture" in dialog.note.text()
-    dialog.reject()
+    dialog.done(0)  # past Cancel's question about the change typed
     # Drawing again: the picture's own prompt and model, nothing sent with it.
     again = PictureVariantDialog(session, hero, portrait, edit=False, catalog=catalog, browse=None)
     assert again.prompt.toPlainText() == "A man." and again.model.text() == "words-only"
@@ -444,7 +444,7 @@ def test_an_edit_of_a_story_picture_keeps_the_scene_and_goes_after_its_passage(
     ]
     assert request.size == "1280*720"  # nearest the picture's own 16:9
     assert request.card_id is None
-    dialog.reject()
+    dialog.done(0)  # past Cancel's question about the change typed
 
 
 def test_remove_takes_off_the_portrait_shown_when_asked(app, monkeypatch):
