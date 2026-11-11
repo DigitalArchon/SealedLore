@@ -237,3 +237,60 @@ def test_an_old_story_with_unmarked_asides_still_loads(tmp_path):
 
     aside = Aside.model_validate(json.loads('{"question": "q", "answer": "a"}'))
     assert aside.tee is None
+
+
+class NamingTee(RecordingTee):
+    """As RecordingTee, and names who ran the model when asked to
+    (providers/tee.py `check` with `name_upstream`)."""
+
+    def check(self, response_id, *, name_upstream=False, **record):
+        from sealedlore.models.private import TeeUpstream
+        from sealedlore.providers.tee import ReplyCheck
+
+        self.checked.append({**record, "named": name_upstream})
+        found = TeeUpstream(name="phala-244", scope="model_instance", gpus="asserted")
+        return ReplyCheck(self.marks[0], found if name_upstream else None)
+
+
+def test_a_questions_answer_names_its_provider_as_a_passage_does(tmp_path):
+    session, _main, private, held = _long_scene(tmp_path, keep="disk")
+    session.config.tee_name_upstreams = True
+    tee = NamingTee("local/model", ["verified"])
+    session.private_tee = tee
+    play(session, turn(held, "A private turn."))
+    passages = [n for n in session.span_nodes(session.open_span) if n.kind == "assistant"]
+    assert passages[-1].meta.tee == "verified"
+    assert passages[-1].meta.tee_upstream.name == "phala-244"
+    private.responses = ["A quiet answer."]
+    for _event in session.ask("Who is listening?"):
+        pass
+    aside = session.bundle.asides[-1]
+    assert aside.tee == "verified" and aside.tee_upstream.name == "phala-244"
+    # Where a mark shows, the name was asked for; the replies with no mark of
+    # their own (`_watch_tee`) are checked with `check_reply`, never named.
+    assert tee.checked and all(c["named"] for c in tee.checked)
+
+
+def test_a_question_shows_who_ran_its_model_beside_its_mark():
+    import os
+
+    import pytest
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    pytest.importorskip("PySide6")
+    from PySide6.QtWidgets import QApplication
+
+    from sealedlore.gui.transcript import AsideWidget
+    from sealedlore.models.private import TeeUpstream
+
+    QApplication.instance() or QApplication([])
+    upstream = TeeUpstream(name="phala-244", scope="model_instance", gpus="asserted")
+    widget = AsideWidget("q", "a", aside_id="a1", tee="verified", tee_upstream=upstream)
+    assert widget.header.text().endswith("TEE verified  ·  run by Phala")
+    assert "the machine that ran the model" in widget.toolTip()
+    assert "RedPill's word" in widget.toolTip()
+    # Beside a failed check the name would rest on nothing: not shown.
+    failed = AsideWidget("q", "a", aside_id="a2", tee="failed", tee_upstream=upstream)
+    assert "run by" not in failed.header.text()
+    widget.deleteLater()
+    failed.deleteLater()

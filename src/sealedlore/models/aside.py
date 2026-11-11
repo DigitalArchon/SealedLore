@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from sealedlore.ids import new_id, utc_now_iso
 from sealedlore.models.node import Usage
+from sealedlore.models.private import TeeUpstream
 
 
 class Aside(BaseModel):
@@ -32,5 +33,7 @@ class Aside(BaseModel):
     # turns that follow it (`RecallRuntime._carried`).
     recalled: list[str] = Field(default_factory=list)
     # Answered by an attested TEE/ model: how its check went, as a passage's
-    # (`NodeMeta.tee`: "verified", "signed", "failed", "unchecked").
+    # (`NodeMeta.tee`: "verified", "signed", "failed", "unchecked"), and who
+    # ran the model, when that was looked up (`NodeMeta.tee_upstream`).
     tee: str | None = None
+    tee_upstream: TeeUpstream | None = None

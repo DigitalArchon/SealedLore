@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from sealedlore.ids import new_id, utc_now_iso
 from sealedlore.models.plot import Chronicle, Direction
+from sealedlore.models.private import TeeUpstream
 from sealedlore.models.scene import SceneShortcut, SceneState
 
 NodeKind = Literal["user", "assistant"]
@@ -131,6 +132,10 @@ class NodeMeta(BaseModel):
         ]
         | None
     ) = None
+    # A TEE/ reply's provider, by RedPill's record of its gateway's session
+    # (Settings → Private, "Name the provider behind each TEE reply"): None
+    # when not looked up.
+    tee_upstream: TeeUpstream | None = None
     # The first message of a branch carries its name (engine/branches.py).
     # A branch is made only by rewriting an earlier message; takes are not.
     branch_name: str | None = None

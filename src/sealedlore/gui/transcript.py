@@ -48,6 +48,8 @@ from sealedlore.models.node import (
     Node,
     Usage,
 )
+from sealedlore.models.private import TeeUpstream
+from sealedlore.providers.tee import upstream_label, upstream_words
 
 # How far from the bottom still counts as "reading the newest text".
 FOLLOW_TOLERANCE_PX = 48
@@ -901,7 +903,13 @@ class AsideWidget(QFrame):
     delete_requested = Signal(str)
 
     def __init__(
-        self, question: str, answer: str = "", *, aside_id: str = "", tee: str | None = None
+        self,
+        question: str,
+        answer: str = "",
+        *,
+        aside_id: str = "",
+        tee: str | None = None,
+        tee_upstream: TeeUpstream | None = None,
     ) -> None:
         super().__init__()
         self.setObjectName("message")
@@ -914,11 +922,13 @@ class AsideWidget(QFrame):
 
         # An attested TEE/ model's answer says how its check went, as a passage does.
         self.header = QLabel(
-            "Question  ·  out of character, not part of the story" + TEE_MARKS.get(tee or "", "")
+            "Question  ·  out of character, not part of the story"
+            + TEE_MARKS.get(tee or "", "")
+            + run_by(tee, tee_upstream)
         )
         self.header.setObjectName("messageHeader")
         if tee in TEE_MARK_TIPS:
-            self.setToolTip(TEE_MARK_TIPS[tee])
+            self.setToolTip(tee_tip(tee, tee_upstream))
         delete = QToolButton()
         delete.setObjectName("messageAction")
         delete.setText("Delete")
@@ -1457,6 +1467,23 @@ TEE_MARK_TIPS = {
 }
 
 
+def run_by(tee: str | None, upstream: TeeUpstream | None) -> str:
+    """Beside a reply's TEE mark: who ran its model, by RedPill's record
+    (Settings → Private, "Name the provider behind each TEE reply"), only
+    beside a mark whose receipt the provider's name rests on."""
+    if tee not in ("verified", "signed") or upstream is None or not upstream.name:
+        return ""
+    return f"  ·  run by {upstream_label(upstream)}"
+
+
+def tee_tip(tee: str, upstream: TeeUpstream | None) -> str:
+    """A TEE mark's tooltip, with who ran the model where that was looked up."""
+    tip = TEE_MARK_TIPS[tee]
+    if tee in ("verified", "signed") and upstream is not None:
+        tip += "\n\n" + upstream_words(upstream)
+    return tip
+
+
 def sent_mark(message: Node, reply: Node | None) -> str | None:
     """The author's message's TEE mark as shown. Before Nov 11 2026 it was
     "attested" whatever the reply showed: read now by the reply shown with it."""
@@ -1804,9 +1831,17 @@ class TranscriptView(QScrollArea):
         return widget
 
     def add_aside(
-        self, question: str, answer: str = "", *, aside_id: str = "", tee: str | None = None
+        self,
+        question: str,
+        answer: str = "",
+        *,
+        aside_id: str = "",
+        tee: str | None = None,
+        tee_upstream: TeeUpstream | None = None,
     ) -> AsideWidget:
-        widget = AsideWidget(question, answer, aside_id=aside_id, tee=tee)
+        widget = AsideWidget(
+            question, answer, aside_id=aside_id, tee=tee, tee_upstream=tee_upstream
+        )
         widget.delete_requested.connect(self.delete_aside_requested)
         self._place(widget)
         return widget
@@ -1838,7 +1873,13 @@ class TranscriptView(QScrollArea):
 
         def add_asides(anchor: str | None) -> None:
             for aside in asides_for(anchor) if asides_for else ():
-                self.add_aside(aside.question, aside.answer, aside_id=aside.id, tee=aside.tee)
+                self.add_aside(
+                    aside.question,
+                    aside.answer,
+                    aside_id=aside.id,
+                    tee=aside.tee,
+                    tee_upstream=aside.tee_upstream,
+                )
             for item in pictures_for(anchor) if pictures_for else ():
                 if isinstance(item, tuple):
                     self.add_picture(*item)
@@ -1989,8 +2030,9 @@ class TranscriptView(QScrollArea):
         elif node.meta.private_span or self._tee_look:
             if node.meta.private_span:
                 label += "  ·  private"
-            # How the reply's check went (TEE_MARKS), or how the message went.
-            label += TEE_MARKS.get(tee or "", "")
+            # How the reply's check went (TEE_MARKS), or how the message went,
+            # and who ran the model, where that was looked up.
+            label += TEE_MARKS.get(tee or "", "") + run_by(tee, node.meta.tee_upstream)
         widget = self.add_message(
             label,
             node.content,
@@ -2019,7 +2061,7 @@ class TranscriptView(QScrollArea):
             widget.setProperty("private", "true")
             widget.setToolTip(f"Written in a private {part}: only the private model ever saw it.")
         if tee in TEE_MARK_TIPS:
-            widget.setToolTip(TEE_MARK_TIPS[tee])
+            widget.setToolTip(tee_tip(tee, node.meta.tee_upstream))
         if node.meta.private_summary_of:
             widget.setProperty("privatesummary", "true")
             widget.setToolTip(

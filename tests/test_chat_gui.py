@@ -767,6 +767,30 @@ def test_the_authors_messages_say_how_they_were_sent(app, window, monkeypatch):
     assert "signed" not in window.transcript.message_widget(mine.id).header.text()
 
 
+def test_a_reply_says_who_ran_its_model_when_settings_ask(app, window, monkeypatch):
+    from sealedlore.models.private import TeeUpstream
+    from sealedlore.providers.tee import ReplyCheck
+
+    class Naming(_FakeTee):
+        def check(self, _response_id, *, name_upstream=False, **_record):
+            found = TeeUpstream(name="tinfoil", scope="router", gpus="unknown")
+            return ReplyCheck("signed", found if name_upstream else None)
+
+    monkeypatch.setattr(window, "_attest_chat", lambda: None)
+    make_chat(window, monkeypatch, model="TEE/gemma-4-31b-it")
+    session = window.session
+    session.private_tee = Naming()
+    session.config.tee_name_upstreams = True
+    session.provider.responses = ["Hi."]
+    list(session.send(window._chat_turn("Hello")))
+    window.reload_transcript()
+    reply = session.path()[-1]
+    widget = window.transcript.message_widget(reply.id)
+    assert widget.header.text().endswith("TEE signed, text not compared  ·  run by Tinfoil")
+    assert "its router, which passes requests on to the model" in widget.toolTip()
+    assert "fetched from api.redpill.ai" in widget.toolTip()
+
+
 def test_an_older_sent_mark_is_read_by_the_reply_shown_with_it(app, window, monkeypatch):
     """Before Nov 11 2026 the author's message read "sent to the attested TEE"
     whatever its reply showed: a saved story's is read by its reply now."""

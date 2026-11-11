@@ -2351,6 +2351,8 @@ class StorySession(
         # until the continuation's own reply is checked, and then keeps the
         # less proven of the two marks (`_check_tee`).
         self._carried_mark = (node.id, node.meta.tee)
+        self._carried_upstream = (node.id, node.meta.tee_upstream)
+        node.meta.tee_upstream = None
         if node.meta.tee is not None:
             node.meta.tee = "unchecked"
         node.content = node.content.rstrip() + text
@@ -2830,8 +2832,9 @@ class StorySession(
 
         if content != node.content:
             # A TEE mark is for the text as it came, or as it was sent: edited,
-            # the text is no longer that.
+            # the text is no longer that, nor whoever ran it.
             node.meta.tee = None
+            node.meta.tee_upstream = None
         node.content = content
         if ooc is not None:
             node.ooc = ooc.strip() or None
@@ -4225,6 +4228,8 @@ class StorySession(
             answer = "".join(text).strip()
             usage = self.priced(completed.usage if completed else Usage(), model)
             if answer:
+                # A TEE/ model's answer, checked as a passage is.
+                tee, tee_upstream = self._tee_check(completed, model, name=True)
                 self.bundle.asides.append(
                     Aside(
                         anchor_node_id=anchor,
@@ -4235,8 +4240,8 @@ class StorySession(
                         request_log_ref=log_ref,
                         private_span=span.id if span is not None else None,
                         recalled=[item.id for item in recall],
-                        # A TEE/ model's answer, checked as a passage is.
-                        tee=self._tee_mark(completed, model),
+                        tee=tee,
+                        tee_upstream=tee_upstream,
                     )
                 )
             self._log_turn(

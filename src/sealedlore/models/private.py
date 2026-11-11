@@ -20,6 +20,27 @@ PrivateStatus = Literal["open", "closed", "discarded"]
 PrivateRulesMode = Literal["compact", "full", "custom"]
 
 
+class TeeUpstream(BaseModel):
+    """Who ran a TEE/ reply's model, by RedPill's record of its gateway's
+    session with that machine (providers/tee.py `served_by`; Settings →
+    Private, "Name the provider behind each TEE reply", off by default). The
+    record is RedPill's word, pinned by the receipt the attested gateway
+    signed; nothing in it is checked by this app."""
+
+    # RedPill's name for the provider ("tinfoil", "phala-244"); "" when the
+    # lookup was made and named none, `note` saying why.
+    name: str = ""
+    # The verifier RedPill's gateway checked that machine with, what it
+    # vouched for ("model_instance", "router", "near-ai-gateway"), and what
+    # RedPill says of its GPUs ("asserted", "unknown").
+    verifier: str = ""
+    scope: str = ""
+    gpus: str = ""
+    # The model id the receipt names upstream ("gemma4-31b").
+    model: str = ""
+    note: str = ""
+
+
 class Attestation(BaseModel):
     """What a TEE check found when the scene began (providers/tee.py), or,
     for an end-to-end encrypted model, what the enclave proved before anything

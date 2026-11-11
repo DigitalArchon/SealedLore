@@ -1067,6 +1067,12 @@ class Config(BaseModel):
     # Check a TEE model's attestation when a scene begins, and each reply's
     # signature against it.
     private_verify_tee: bool = True
+    # After a TEE/ reply whose receipt holds, name the provider that ran the
+    # model, from RedPill's public record of its gateway's session
+    # (providers/tee.py `served_by`). Off by default: it connects to
+    # api.redpill.ai directly, not through nano-gpt, so RedPill sees this
+    # computer's address (the author, Nov 11 2026: a clear choice in Settings).
+    tee_name_upstreams: bool = False
     # "Don't show this again" on the note of what a private scene pauses.
     private_intro_seen: bool = False
     # The author's edits to the program's prompt texts for every story, by

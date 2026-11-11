@@ -57,7 +57,7 @@ from sealedlore.engine.scene_state import log_on_path
 from sealedlore.ids import utc_now_iso
 from sealedlore.models.config import split_model
 from sealedlore.models.node import NARRATOR_SPEAKER_ID, Node, NodeMeta, Usage
-from sealedlore.models.private import PrivateKeep, PrivateSpan
+from sealedlore.models.private import PrivateKeep, PrivateSpan, TeeUpstream
 from sealedlore.models.summary import Summary
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError
 
@@ -237,22 +237,40 @@ class PrivateRuntime:
         or a private/ model's, sealed and so proved by its seal. A failed one
         makes the model attested again before its next request (`_tee_guard`:
         TeeClient.doubt)."""
+        return self._tee_check(completed, model)[0]
+
+    def _tee_check(
+        self, completed: Any, model: str | None = None, *, name: bool = False
+    ) -> tuple[str | None, TeeUpstream | None]:
+        """`_tee_mark`, and with `name` (where the reply shows its mark, and
+        Settings → Private asks for it: `Config.tee_name_upstreams`) who ran
+        its model, by RedPill's record (providers/tee.py `served_by`)."""
         tee = self.private_tee
         if tee is None or completed is None or getattr(completed, "sealed", False):
-            return None
+            return None, None
         if model is not None and split_model(model)[1] != getattr(tee, "model", None):
-            return None
+            return None, None
+        named = name and self.config.tee_name_upstreams and callable(getattr(tee, "check", None))
+        upstream = None
         try:
-            mark = tee.check_reply(
-                getattr(completed, "response_id", None), **_reply_record(completed)
-            )
+            if named:
+                found = tee.check(
+                    getattr(completed, "response_id", None),
+                    **_reply_record(completed),
+                    name_upstream=True,
+                )
+                mark, upstream = found.mark, found.upstream
+            else:
+                mark = tee.check_reply(
+                    getattr(completed, "response_id", None), **_reply_record(completed)
+                )
         except Exception:  # noqa: BLE001 - an unreachable check is not a failed one
             mark = "unchecked"
         if mark == "failed":
             doubt = getattr(tee, "doubt", None)
             if callable(doubt):
                 doubt()
-        return mark
+        return mark, upstream
 
     def _watch_tee(self, request: ChatRequest, completed: Any) -> None:
         """Every reply comes here, on the thread it came back on and before
@@ -770,8 +788,10 @@ class PrivateRuntime:
             return
         if node is None or self.private_tee is None:
             return
-        mark = self._tee_mark(getattr(self, "_last_completed", None)) or "unchecked"
+        mark, upstream = self._tee_check(getattr(self, "_last_completed", None), name=True)
+        mark = mark or "unchecked"
         node.meta.tee = self._with_carried(node, mark)
+        node.meta.tee_upstream = self._upstream_carried(node, upstream)
         # The author's message is marked too, or it looked less protected than
         # the reply (the author, Sept 2026), and only as far as the reply shows
         # (the author, Nov 11 2026: "always make clear to the user what is
@@ -783,6 +803,20 @@ class PrivateRuntime:
         # that shows nothing doesn't take it back: the same text was received.
         received = mark in ("verified", "signed")
         self._mark_sent(node, "received" if received else "unproven", keep_received=True)
+
+    def _upstream_carried(self, node: Node, upstream: TeeUpstream | None) -> TeeUpstream | None:
+        """Who ran a passage just carried on: named only when both parts
+        name the same provider, or the first named none."""
+        carried = getattr(self, "_carried_upstream", None)
+        self._carried_upstream = None
+        if carried is None or carried[0] != node.id or carried[1] is None:
+            return upstream
+        before = carried[1]
+        if upstream is None or not before.name:
+            return upstream
+        if before.name != upstream.name:
+            return TeeUpstream(note="its parts were run by different providers")
+        return upstream
 
     def _with_carried(self, node: Node, mark: str) -> str | None:
         """A passage just carried on (Continue) is only as proven as its less

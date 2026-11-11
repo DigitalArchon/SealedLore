@@ -290,6 +290,43 @@ def test_a_tee_chats_replies_are_marked_by_their_signature(tmp_path):
     assert session.path()[-2].meta.tee == "unproven"
 
 
+class NamingTee(FakeTee):
+    """A TEE client that can name who ran a reply's model (providers/tee.py
+    `check`), saying whether it was asked to."""
+
+    def __init__(self) -> None:
+        super().__init__(signed=True)
+        self.named: list[bool] = []
+
+    def check(self, response_id, *, name_upstream=False, **_record):
+        from sealedlore.models.private import TeeUpstream
+        from sealedlore.providers.tee import ReplyCheck
+
+        self.asked.append(response_id)
+        self.named.append(name_upstream)
+        found = TeeUpstream(name="tinfoil", scope="router", model="gemma4-31b")
+        return ReplyCheck("verified", found if name_upstream else None)
+
+
+def test_a_replys_provider_is_named_only_when_settings_ask(tmp_path):
+    """Off by default (Settings → Private): asking RedPill goes to
+    api.redpill.ai directly, so nothing asks it unless the author chose to."""
+    session, _provider = chat_session(tmp_path, ["One.", "Two.", "Three."])
+    session.story.defaults.main_model = "TEE/gemma-4-31b-it"
+    session.private_tee = tee = NamingTee()
+    assert session.config.tee_name_upstreams is False
+    say(session, "Hello")
+    assert session.path()[-1].meta.tee == "verified"
+    assert session.path()[-1].meta.tee_upstream is None and tee.named == []
+    session.config.tee_name_upstreams = True
+    say(session, "Again")
+    reply = session.path()[-1]
+    assert tee.named == [True] and reply.meta.tee_upstream.name == "tinfoil"
+    # An edit makes the text no longer what was checked, nor whoever ran it.
+    session.edit_node(reply.id, "My own words.")
+    assert reply.meta.tee is None and reply.meta.tee_upstream is None
+
+
 def test_a_tee_chats_message_is_received_only_as_far_as_a_reply_shows(tmp_path):
     """The author, Nov 11 2026: "always make clear to the user what is actually
     happening". A reply with no signed record (Chutes signs none; a model may be

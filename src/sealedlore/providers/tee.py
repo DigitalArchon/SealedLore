@@ -45,11 +45,14 @@ report's quote is the gateway's image, its signing key the gateway's), which
 passes requests on to the machine running the model; that machine is the
 gateway's word in the receipt (`upstream.verified`). Its session record
 (api.redpill.ai/v1/aci/sessions/{id}, named by its sha256 in the receipt)
-says which provider that is, but isn't fetched: a Chutes instance has a
-session of its own (3.4 MB for TEE/deepseek-v3.2) and replies are spread
-over the instances, so it would be one nearly every message (the author:
-not every message). The GPU evidence nano-gpt's report carries is for our
-nonce but not in the quote (`GPUS_LOOSE`).
+says which provider that is. It is fetched only when Settings asks (`check`
+with `name_upstream`, `served_by`: off by default, since it goes to
+api.redpill.ai directly), once a session, and never for a model Chutes
+serves: a Chutes instance has a session of its own (3.4 MB for
+TEE/deepseek-v3.2) and replies are spread over the instances, so it would be
+megabytes nearly every message (the author: not every message). The GPU
+evidence nano-gpt's report carries is for our nonce but not in the quote
+(`GPUS_LOOSE`).
 """
 
 from __future__ import annotations
@@ -58,7 +61,9 @@ import base64
 import binascii
 import hashlib
 import json
+import re
 import secrets
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -68,7 +73,7 @@ from urllib.parse import quote, urlparse
 import httpx
 
 from sealedlore.models.config import split_model
-from sealedlore.models.private import Attestation
+from sealedlore.models.private import Attestation, TeeUpstream
 from sealedlore.providers import dcap, nras
 from sealedlore.providers.base import ProviderError, checked_key, relay_said
 from sealedlore.providers.ethsig import keccak256, recover_personal
@@ -96,6 +101,34 @@ RECEIPT_KEYS_LOOSE = "receipt keys not in the quote"
 # machine's, the model's upstream say, relayed. A Chutes instance's quote binds
 # its GPU evidence's nonce, so its GPUs are its own.
 GPUS_LOOSE = "GPUs not tied to the quote"
+# RedPill's public records of its gateway's sessions with the machines that
+# run the models (Settings → Private, "Name the provider behind each TEE
+# reply"; `served_by`). Each receipt's `upstream.verified` names its session
+# by the sha256 of the record's RFC 8785 JSON, so the attested gateway's
+# signature pins it whoever serves it. No key goes with it.
+SESSION_RECORDS = "https://api.redpill.ai/v1/aci/sessions/"
+# A record past this is never read: a Chutes instance's is megabytes (3.4 MB
+# for TEE/deepseek-v3.2, Nov 11 2026), and its replies spread over instances
+# with a session each, so it would be megabytes nearly every message (the
+# author: not that). Live, the others were 3 KB-0.3 MB, one an hour a model.
+SESSION_RECORD_MAX_BYTES = 1_000_000
+# Records already read, by session id (content-addressed, so the same for
+# every client): a session serves every reply to its provider for an hour.
+SESSION_RECORDS_KEPT = 64
+_records: dict[str, _Record] = {}
+_records_lock = threading.Lock()
+# RedPill's names for its upstreams as the app shows them (`upstream_label`);
+# any other is shown as RedPill writes it.
+_UPSTREAM_LABELS = {
+    "tinfoil": "Tinfoil",
+    "phala": "Phala",
+    "fortanix": "Fortanix",
+    "armet": "Armet",
+    "near-ai": "NEAR AI",
+    "0g-private-computer": "0G",
+    "chutes": "Chutes",
+    "privatemode": "Privatemode",
+}
 # An attestation this old is made again before the next request to the model
 # (engine/session_private.py `_tee_guard`), on dcap.since_boot, a clock that
 # runs on while the machine sleeps. It matters most for a per-instance
@@ -251,6 +284,116 @@ def what_was_attested(attestation: Attestation) -> str:
             "machine runs the model itself or passes requests on isn't shown." + clear
         )
     return ""
+
+
+@dataclass(frozen=True)
+class ReplyCheck:
+    """What `TeeClient.check` found of a reply: its mark ("verified",
+    "signed", "failed"), and who ran its model, when asked to look."""
+
+    mark: str
+    upstream: TeeUpstream | None = None
+
+
+@dataclass(frozen=True)
+class _Record:
+    """What a session record says, read once (`_session_record`)."""
+
+    name: str
+    verifier: str
+    scope: str
+    gpus: str
+    established: int
+    expires: int
+
+
+def upstream_label(upstream: TeeUpstream) -> str:
+    """The provider as the transcript names it: "Tinfoil" for "tinfoil",
+    "Phala" for "phala-244", else as RedPill writes it."""
+    name = upstream.name
+    return _UPSTREAM_LABELS.get(re.sub(r"-\d+$", "", name), name)
+
+
+def upstream_words(upstream: TeeUpstream) -> str:
+    """A reply's provider, said plainly, for its tooltip: whose word it is,
+    and what it doesn't prove."""
+    if not upstream.name:
+        return f"The provider that ran it wasn't named: {upstream.note}."
+    scope = upstream.scope
+    what = (
+        "the machine that ran the model"
+        if scope == "model_instance"
+        else "its router, which passes requests on to the model"
+        if scope == "router"
+        else "its gateway, which passes requests on to the model"
+        if "gateway" in scope
+        else "it"
+    )
+    gpus = {
+        "asserted": "RedPill's verifier checked its GPUs",
+        "unknown": "RedPill's record has no GPU attestation",
+    }.get(upstream.gpus, "")
+    model = f" (as {upstream.model})" if upstream.model else ""
+    return (
+        f"Run by {upstream_label(upstream)}{model}: RedPill's record of its gateway's "
+        f"session says its verifier ({upstream.verifier or 'unnamed'}) checked {what}"
+        + (f"; {gpus}" if gpus else "")
+        + ". That is RedPill's word, fetched from api.redpill.ai and matched to the receipt "
+        "the attested gateway signed; this app doesn't check that machine."
+    )
+
+
+def _session_record(client: httpx.Client, session_id: str) -> _Record:
+    """RedPill's record of one session, read once a process: from
+    api.redpill.ai, no key, at most SESSION_RECORD_MAX_BYTES, and only if its
+    sha256 is the id the receipt named. Raises ProviderError, in words a
+    tooltip can carry, for what kept it from being read."""
+    with _records_lock:
+        if session_id in _records:
+            return _records[session_id]
+    body = bytearray()
+    try:
+        with client.stream(
+            "GET", SESSION_RECORDS + session_id, timeout=TIMEOUT_SECONDS
+        ) as response:
+            if response.status_code != 200:
+                raise ProviderError(f"api.redpill.ai answered HTTP {response.status_code}")
+            length = response.headers.get("content-length", "")
+            if length.isdigit() and int(length) > SESSION_RECORD_MAX_BYTES:
+                raise ProviderError(
+                    f"its record is {int(length) // 1000:,} KB, more than is read for one reply"
+                )
+            for chunk in response.iter_bytes():
+                body += chunk
+                if len(body) > SESSION_RECORD_MAX_BYTES:
+                    raise ProviderError("its record is more than is read for one reply")
+    except httpx.HTTPError as exc:
+        raise ProviderError(f"api.redpill.ai couldn't be reached ({type(exc).__name__})") from exc
+    try:
+        record = json.loads(bytes(body))
+    except ValueError as exc:
+        raise ProviderError("RedPill's record couldn't be read") from exc
+    if not isinstance(record, dict) or hashlib.sha256(_canonical(record)).hexdigest() != (
+        session_id
+    ):
+        raise ProviderError("the record api.redpill.ai sent isn't the one the receipt names")
+    claims = record.get("claims") if isinstance(record.get("claims"), dict) else {}
+    extra = claims.get("extra") if isinstance(claims.get("extra"), dict) else {}
+    gpus = claims.get("gpu_attested") if isinstance(claims.get("gpu_attested"), dict) else {}
+    established, expires = record.get("established_at"), record.get("expires_at")
+    found = _Record(
+        name=relay_said(str(record.get("upstream_name") or ""), 60),
+        verifier=relay_said(str(record.get("verifier_id") or ""), 80),
+        scope=relay_said(str(extra.get("evidence_scope") or extra.get("trust_boundary") or ""), 40),
+        gpus=relay_said(str(gpus.get("status") or ""), 20),
+        established=established if isinstance(established, int) else 0,
+        expires=expires if isinstance(expires, int) else 0,
+    )
+    with _records_lock:
+        while len(_records) >= SESSION_RECORDS_KEPT:
+            _records.pop(next(iter(_records)))
+        _records[session_id] = found
+    return found
 
 
 def _bases(base_url: str) -> list[str]:
@@ -976,6 +1119,18 @@ class TeeClient:
         body_hash: str | None = None,
         route: str | None = None,
     ) -> str:
+        """`check`'s mark alone, nothing more looked up."""
+        return self.check(response_id, receipt_id=receipt_id, body_hash=body_hash, route=route).mark
+
+    def check(
+        self,
+        response_id: str | None,
+        *,
+        receipt_id: str | None = None,
+        body_hash: str | None = None,
+        route: str | None = None,
+        name_upstream: bool = False,
+    ) -> ReplyCheck:
         """Was this reply the attested enclave's, as received? "verified":
         signed by the attested key, for these exact bytes, its receipt (where
         read) holding; "signed": signed by it, the bytes not comparable (a
@@ -995,7 +1150,11 @@ class TeeClient:
           was verified, as nano-gpt now requires.
 
         A stream's receipt is complete just after it ends: a lookup that
-        finds none yet is tried again for a while."""
+        finds none yet is tried again for a while.
+
+        `name_upstream`: for a reply that checks out with its receipt read,
+        who ran its model too (`served_by`: a lookup on api.redpill.ai). It
+        never changes the mark."""
         lookup = receipt_id or response_id
         if not lookup:
             raise ProviderError("the reply carried no id to check")
@@ -1012,17 +1171,17 @@ class TeeClient:
         try:
             signer = recover_personal(text, signature)
         except ValueError:
-            return "failed"
+            return ReplyCheck("failed")
         if signer.lower() not in self.signers:
-            return "failed"
+            return ReplyCheck("failed")
         request_hash, _colon, response_hash = text.partition(":")
         compared = bool(body_hash) and self.model not in REBUILT_STREAMS
         if compared and f"sha256:{response_hash.lower()}" != body_hash:
-            return "failed"
+            return ReplyCheck("failed")
         receipt = body.get("receipt")
         checked = isinstance(receipt, dict) and self.keyset is not None
         if checked and not self._receipt_holds(receipt, request_hash, response_hash):
-            return "failed"
+            return ReplyCheck("failed")
         if self.receipt_required and not checked:
             # Attested through the gateway alone, the gateway's signature says
             # only that the reply passed through it: the receipt is its word
@@ -1031,7 +1190,60 @@ class TeeClient:
             raise ProviderError(
                 "the reply came with no receipt to say the model's enclave answered"
             )
-        return "verified" if compared else "signed"
+        mark = "verified" if compared else "signed"
+        if not name_upstream:
+            return ReplyCheck(mark)
+        if not checked:
+            # A session named by a receipt that wasn't read under the
+            # attested keys is anyone's word.
+            return ReplyCheck(
+                mark, TeeUpstream(note="its receipt wasn't read under the attested keys")
+            )
+        return ReplyCheck(mark, self.served_by(receipt))
+
+    def served_by(self, receipt: dict[str, Any]) -> TeeUpstream:
+        """Who ran the model of a reply whose receipt held (`check`), by
+        RedPill's public record of its gateway's session with that machine:
+        named by the receipt, fetched once a session (`_session_record`).
+        Not for a model Chutes serves: each of its instances has a session
+        of its own, megabytes each. What the record says is RedPill's word;
+        anything that kept it from being read is a note, never a failure."""
+        event = next(
+            (
+                e
+                for e in receipt.get("event_log") or []
+                if isinstance(e, dict) and e.get("type") == "upstream.verified"
+            ),
+            {},
+        )
+        model = relay_said(str(event.get("model_id") or ""), 80)
+        if self.instances:
+            return TeeUpstream(
+                model=model,
+                note=(
+                    "not looked up for a model Chutes serves: each of its instances has a "
+                    "record of its own, megabytes each"
+                ),
+            )
+        session = event.get("session_id")
+        if not (isinstance(session, str) and re.fullmatch(r"[0-9a-f]{64}", session)):
+            return TeeUpstream(model=model, note="its receipt names no session")
+        try:
+            record = _session_record(self._client, session)
+        except ProviderError as exc:
+            return TeeUpstream(model=model, note=str(exc))
+        served = receipt.get("served_at")
+        if not (isinstance(served, int) and record.established <= served <= record.expires):
+            return TeeUpstream(
+                model=model, note="it was served outside the session its receipt names"
+            )
+        return TeeUpstream(
+            name=record.name or "an unnamed provider",
+            verifier=record.verifier,
+            scope=record.scope,
+            gpus=record.gpus,
+            model=model,
+        )
 
     def _signature(self, lookup: str, route: str | None, *, wait: bool) -> dict[str, Any]:
         """The reply's record; for a reply that named its receipt, tried again

@@ -130,6 +130,20 @@ def _shown_value(field: QWidget) -> object:
     return field.text() if isinstance(field, QLineEdit) else field.value()
 
 
+# Settings → Private, under "Name the provider behind each TEE reply"
+# (providers/tee.py `served_by`): what it does, and whom it tells.
+TEE_UPSTREAMS_NOTE = (
+    "Most TEE models are attested as RedPill's gateway, which passes each request on to "
+    "the provider that runs the model. With this on, after a TEE reply checks out the "
+    "app asks RedPill which provider that was (Phala, Fortanix, NEAR AI, 0G, Tinfoil…) "
+    "and shows it beside the reply. This connects to api.redpill.ai directly, not "
+    "through NanoGPT, so RedPill sees this computer's internet address and that one of "
+    "its models was used around then. Only the session's id is sent, never your messages "
+    "or your key. It is one small download a model an hour, and never for models Chutes "
+    "serves, whose records are megabytes each. What it names is RedPill's word, matched "
+    "to the receipt the attested gateway signed."
+)
+
 # Settings → Lore: how a lorebook too big to send whole is chosen from.
 LORE_SELECTORS = (
     ("Model picks after each passage", "picker"),
@@ -1800,12 +1814,23 @@ class SettingsDialog(QDialog):
             "NVIDIA's signed verdict on the GPUs is for our nonce and passes; each reply's "
             "signature record recovers the attested key. Anything forged, revoked or for "
             "another nonce is refused and nothing is sent; what couldn't be checked is "
-            "shown as partial. Not checked: which software the enclave runs, and the "
-            "reply's content against its record. The text still passes NanoGPT's gateway. "
-            "A private/ model is always attested, whatever this says: it is end-to-end "
-            "encrypted to the attested enclave's key."
+            "shown as partial. Not checked: which software the enclave runs, and, for a "
+            "model RedPill serves, the machine that runs the model: what is attested is "
+            "RedPill's gateway, which passes requests on, and that machine is the gateway's "
+            "word. The text still passes NanoGPT's gateway. A private/ model is always "
+            "attested, whatever this says: it is end-to-end encrypted to the attested "
+            "enclave's key."
         )
         self.private_tee.setChecked(self.config.private_verify_tee)
+        # Off by default, and said plainly (the author, Nov 11 2026): it is the
+        # one call that goes to RedPill directly, not through NanoGPT.
+        self.tee_upstreams = QCheckBox("Name the provider behind each TEE reply")
+        self.tee_upstreams.setChecked(self.config.tee_name_upstreams)
+        self.tee_upstreams_note = QLabel(TEE_UPSTREAMS_NOTE)
+        self.tee_upstreams_note.setObjectName("hintLabel")
+        self.tee_upstreams_note.setWordWrap(True)
+        self.private_tee.toggled.connect(self.tee_upstreams.setEnabled)
+        self.tee_upstreams.setEnabled(self.private_tee.isChecked())
         form.addRow("Base URL", self.private_url)
         form.addRow("API key", self.private_key)
         form.addRow(self._key_note())
@@ -1828,6 +1853,8 @@ class SettingsDialog(QDialog):
         form.addRow("Context budget", budget_row)
         form.addRow("", self.detect_note)
         form.addRow(self.private_tee)
+        form.addRow(self.tee_upstreams)
+        form.addRow(self.tee_upstreams_note)
         # Its own line: as the checkbox's text it ran off the dialog.
         tee_note = QLabel(
             "For a NanoGPT TEE/ model: the enclave's attestation (Intel's and NVIDIA's "
@@ -2459,6 +2486,7 @@ class SettingsDialog(QDialog):
             self.private_budget, self.private_budget.value(), self.config.private_budget
         )
         self.config.private_verify_tee = self.private_tee.isChecked()
+        self.config.tee_name_upstreams = self.tee_upstreams.isChecked()
         self.config.phone.start_on_launch = self.phone_on_launch.isChecked()
         self.config.phone.notify_connect = self.phone_notify.isChecked()
         self.config.scene_reads = "every_turn" if self.keep_scene.isChecked() else "manual"

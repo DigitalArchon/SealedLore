@@ -2456,12 +2456,24 @@ with what it leaves to someone's word:
   answered: NanoGPT routes each request, and a model may be served elsewhere
   when its provider is busy.
 
-Each receipt names the gateway's session with the machine that answered,
-and RedPill publishes that session's record, saying which provider it is.
-The app doesn't fetch it: a model Chutes serves through RedPill has a
-session for each instance, about 3.4 MB each for `TEE/deepseek-v3.2`, and
-replies are spread across them, so it would be a download of megabytes
-nearly every message.
+**Name the provider behind each TEE reply** (Settings → Private, off by
+default) says who ran the model, beside the reply's mark: "TEE verified ·
+run by Phala", say. Each receipt names the gateway's session with the
+machine that answered, and RedPill publishes that session's record, saying
+which provider it is (Phala, Fortanix, NEAR AI, 0G, Tinfoil's router and
+others; the same model can be run by different ones from one reply to the
+next). With the option on, the app fetches that record after each reply
+whose receipt holds, and believes it only if it is exactly the record the
+receipt names. This connects to `api.redpill.ai` directly, not through
+NanoGPT, so RedPill sees your computer's internet address and that one of
+its models was used around then; only the session's id is sent, never your
+messages or your key. A session's record is read once (a session serves a
+provider for about an hour) and is a few kilobytes to a few hundred. It is
+never fetched for a model Chutes serves: each Chutes instance has a session
+of its own, about 3.4 MB for `TEE/deepseek-v3.2`, and replies are spread
+across them, so it would be megabytes nearly every message. What the record
+says is RedPill's word: the app doesn't check the machine it names. A
+Question's answer is named as a passage is.
 
 After each reply the app fetches the record NanoGPT keeps for it, signed by
 the attested key. The record holds a hash of the reply as the enclave's
@@ -2950,7 +2962,11 @@ crash reporting.
   a TEE model sends the enclave's GPU evidence, and nothing else, to NVIDIA's
   attestation service, and fetches Intel's public certificates, revocation
   lists and platform ratings (`api.trustedservices.intel.com`,
-  `certificates.trustedservices.intel.com`) to check the enclave's quote. A `private/` model's attestation is fetched through
+  `certificates.trustedservices.intel.com`) to check the enclave's quote.
+  With **Name the provider behind each TEE reply** on (Settings → Private,
+  off by default), RedPill's public record of the session that ran a reply
+  is fetched from `api.redpill.ai`, directly, with the session's id alone.
+  A `private/` model's attestation is fetched through
   NanoGPT and checked against Sigstore's public records and Tinfoil's latest
   release on GitHub; what the app sends it is sealed first (see "Private
   scenes"). Everything else the app does with the story is paused until the

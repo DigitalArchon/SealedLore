@@ -214,3 +214,30 @@ def test_new_chat_and_the_picker_test_the_model_being_chosen(app):
     picker.search.setText("anthropic")
     assert picker.attest.isHidden()
     picker.deleteLater()
+
+
+def test_naming_a_tee_replys_provider_is_a_choice_that_says_where_it_goes(app):
+    """The author, Nov 11 2026: "a clear option in settings to enable or
+    disable it, explaining to the user that it will connect to api.redpill.ai
+    directly". Off by default; no use without Check TEE models."""
+    from sealedlore.gui.settings_dialog import SettingsDialog
+
+    config = Config(
+        providers=[ProviderConfig(name="n", base_url=NANO, api_key="chat-key")],
+        active_provider_name="n",
+    )
+    dialog = SettingsDialog(config, None)
+    box, note = dialog.tee_upstreams, dialog.tee_upstreams_note.text()
+    assert box.text() == "Name the provider behind each TEE reply"
+    assert not box.isChecked() and box.isEnabled()
+    assert "connects to api.redpill.ai directly, not through NanoGPT" in note
+    assert "RedPill sees this computer's internet address" in note
+    assert "never your messages or your key" in note
+    assert "never for models Chutes serves" in note
+    dialog.private_tee.setChecked(False)
+    assert not box.isEnabled(), "nothing to name without the TEE check"
+    dialog.private_tee.setChecked(True)
+    box.setChecked(True)
+    dialog._save()
+    assert config.tee_name_upstreams is True
+    dialog.deleteLater()
