@@ -202,6 +202,57 @@ def test_an_address_without_a_password_never_reaches_the_keychain(tmp_path, memo
     assert not any(name.startswith("address:") for _, name in memory_keychain.store)
 
 
+def test_a_listings_source_keeps_no_password(tmp_path, memory_keychain):
+    """Which endpoint the picture and video listings came from is kept in
+    config.json: by the address without its password, the chat's own too
+    when the picture address is blank and inherits it, and the listing is
+    still taken for that endpoint's."""
+    pytest.importorskip("PySide6")
+    from sealedlore.gui.image_jobs import ImageCatalog
+    from sealedlore.gui.video_jobs import VideoCatalog
+    from sealedlore.providers.images import parse_image_models
+    from tests.test_images import LISTING
+    from tests.test_videos import nanogpt_models
+
+    config = configured(
+        image_endpoint=MediaEndpoint(base_url=PICTURES),
+        video_endpoint=MediaEndpoint(base_url=VIDEO, api_key="sk-video"),
+    )
+    pictures = ImageCatalog(config, tmp_path)
+    pictures._on_finished(parse_image_models(LISTING))
+    videos = VideoCatalog(config, tmp_path)
+    videos._on_finished(list(nanogpt_models().values()), config.videos().base_url)
+    text = on_disk(tmp_path)
+    assert not any(secret in text for secret in PASSWORDS + ("dave", "erin")), text
+    assert config.image_models_source == "https://pictures.example/v1"
+    assert pictures.models and videos.models, "the listings are still this endpoint's"
+
+    # A blank picture address takes the chat's, password and all: not into the file.
+    inherited = configured()
+    ImageCatalog(inherited, tmp_path)._on_finished(parse_image_models(LISTING))
+    assert "hunter2" not in on_disk(tmp_path)
+    again = as_new_process(tmp_path)
+    assert ImageCatalog(again, tmp_path).models, "after a restart too"
+
+
+def test_an_older_files_listing_source_loses_its_password(tmp_path, memory_keychain):
+    pytest.importorskip("PySide6")
+    from sealedlore.gui.image_jobs import ImageCatalog
+    from tests.test_images import LISTING
+
+    data = configured(image_endpoint=MediaEndpoint(base_url=PICTURES)).model_dump()
+    data["image_models"] = LISTING["data"]
+    data["image_models_source"] = PICTURES
+    data["video_models_source"] = VIDEO
+    (tmp_path / "config.json").write_text(json.dumps(data))
+    config = load_config(root=tmp_path)
+    assert config.image_models_source == "https://pictures.example/v1"
+    assert config.video_models_source == "https://video.example/v1"
+    assert ImageCatalog(config, tmp_path).models, "the listing kept stands"
+    save_config(config, root=tmp_path)
+    assert not any(secret in on_disk(tmp_path) for secret in PASSWORDS)
+
+
 # --- where the keychain can't take it, or isn't wanted ------------------------------------
 
 

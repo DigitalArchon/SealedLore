@@ -740,6 +740,14 @@ class Config(BaseModel):
         # config aside.
         return max(0.9, min(2.0, value))
 
+    @field_validator("image_models_source", "video_models_source")
+    @classmethod
+    def _source_without_password(cls, value: str | None) -> str | None:
+        # Which endpoint a listing came from is kept in config.json, and a
+        # password written into that address belongs in the keychain alone
+        # (storage/repository.py): one an older file kept goes here, on load.
+        return without_password(value) if value else value
+
     providers: list[ProviderConfig] = Field(default_factory=list)
     active_provider_name: str | None = None
     # Where API keys are kept (storage/keychain.py): "keychain" is the system
@@ -998,6 +1006,8 @@ class Config(BaseModel):
     image_models: list[dict] = Field(default_factory=list)
     image_models_fetched_at: str | None = None
     # Which endpoint that listing came from: another endpoint's is stale.
+    # Always without a password written into the address (`without_password`):
+    # the listing is compared by the address without it.
     image_models_source: str | None = None
     # Where pictures are made. Blank address and key are the chat
     # endpoint's (the key only on the chat's own host), as before this

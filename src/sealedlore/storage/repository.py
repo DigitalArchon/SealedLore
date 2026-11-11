@@ -132,6 +132,11 @@ def _as_written(config: Config, root: Path | None) -> dict[str, Any]:
     for slot, holder in keychain.address_slots(written):
         if slot in kept:
             holder.base_url = without_password(holder.base_url)
+    # Where a listing came from is only ever compared, never used to send:
+    # it needs no password in any case (gui/image_jobs.py, video_jobs.py).
+    for source in ("image_models_source", "video_models_source"):
+        if getattr(written, source):
+            setattr(written, source, without_password(getattr(written, source)))
     return written.model_dump()
 
 

@@ -28,7 +28,7 @@ from sealedlore.engine.videos import VideoRequest, follow_video, submit_video
 from sealedlore.gui.image_jobs import listing_is_stale
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.ids import new_id, utc_now_iso
-from sealedlore.models.config import Config
+from sealedlore.models.config import Config, without_password
 from sealedlore.models.video import GeneratedVideo
 from sealedlore.providers import wavespeed
 from sealedlore.providers.base import StreamCancelled
@@ -93,7 +93,8 @@ class VideoCatalog(QObject):
             return self._held
         media = self.config.videos()
         source = self.config.video_models_source
-        if media is not None and source is not None and source != media.base_url:
+        # By the address without a password: all the config keeps of it.
+        if media is not None and source is not None and source != without_password(media.base_url):
             return [], None
         return self.config.video_models, self.config.video_models_fetched_at
 
@@ -145,7 +146,8 @@ class VideoCatalog(QObject):
             return
         self.config.video_models = entries
         self.config.video_models_fetched_at = utc_now_iso()
-        self.config.video_models_source = source
+        # Never a password written into the address: config.json keeps none.
+        self.config.video_models_source = without_password(source)
         try:
             save_config(self.config, root=self.root)
         except OSError:

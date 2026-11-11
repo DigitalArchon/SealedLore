@@ -20,7 +20,7 @@ from PySide6.QtCore import QObject, QThread, Signal
 from sealedlore.engine.images import ImageRequest, run_image_request
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.ids import new_id, utc_now_iso
-from sealedlore.models.config import Config
+from sealedlore.models.config import Config, without_password
 from sealedlore.models.image import GeneratedImage
 from sealedlore.providers.base import StreamCancelled
 from sealedlore.providers.images import (
@@ -80,7 +80,9 @@ class ImageCatalog(QObject):
             return self._held
         media = self.config.images()
         source = self.config.image_models_source
-        if media is not None and source is not None and source != media.base_url:
+        # By the address without a password written into it: that is all the
+        # config keeps of where the listing came from.
+        if media is not None and source is not None and source != without_password(media.base_url):
             # Another endpoint's listing: its models may not be this one's.
             return [], None
         return self.config.image_models, self.config.image_models_fetched_at
@@ -135,7 +137,11 @@ class ImageCatalog(QObject):
         self.config.image_models = entries
         self.config.image_models_fetched_at = utc_now_iso()
         media = self.config.images()
-        self.config.image_models_source = media.base_url if media is not None else None
+        # Never the password an address may carry (the chat's too, when the
+        # picture address is blank and inherits it): config.json keeps none.
+        self.config.image_models_source = (
+            without_password(media.base_url) if media is not None else None
+        )
         try:
             save_config(self.config, root=self.root)
         except OSError:
