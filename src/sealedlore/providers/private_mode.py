@@ -19,8 +19,10 @@ runs no code from nano-gpt (Sept 2026):
    binds the enclave's HPKE key. Through a relay the SDK accepts any genuine
    release, so the latest one is looked up from Tinfoil directly and an older
    one is reported (`latest_release`), not refused: rollouts lag. The SDK's
-   fetches follow no redirect off https, nor one from the internet into this
-   computer or its network (providers/sdk_guard.py).
+   fetches, and those of the Sigstore library it verifies with (its TUF
+   trust root included), follow no redirect off https, nor one from the
+   internet into this computer or its network; where they can't be held to
+   that, nothing is attested (providers/sdk_guard.py).
 2. **Preflight**: nano-gpt checks balance and reserves a charge, and says the
    upstream model's name. It issues a cache scope; we send its sha256 as the
    header nano-gpt wants, but the body carries **our own** random secret, so
@@ -182,8 +184,10 @@ def tinfoil_verify(relay: str, cache_secret: str) -> Verified:
 
     from sealedlore.providers import sdk_guard
 
-    # Before it fetches anything: its requests follow a redirect anywhere,
-    # https to plain http included (providers/sdk_guard.py).
+    # Before it fetches anything: its requests, and Sigstore's TUF client,
+    # follow a redirect anywhere, https to plain http included. guard raises
+    # Unguarded where Sigstore's or TUF's internals aren't as it expects:
+    # the attestation is refused, saying why (providers/sdk_guard.py).
     sdk_guard.guard(is_local_host)
     windows_roots()
 
