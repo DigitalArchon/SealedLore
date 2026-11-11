@@ -554,6 +554,22 @@ def test_ffmpegs_name_in_the_sound_is_blanked_and_nothing_round_it():
     assert strip_video_metadata(stripped) == stripped
 
 
+def test_ffmpegs_name_in_an_mpeg4_videos_setup_is_blanked_too():
+    """ffmpeg's MPEG-4 Part 2 video encoder writes its name again as user data
+    in the stream's setup, the `esds` inside the `mp4v` sample entry in
+    `moov`; only the entry's compressor name was blanked. Spaces, as in the
+    stream (a decoder skips user data; zeros could read as a start code)."""
+    setup = b"\x00\x00\x01\xb0\x01\x00\x00\x01\xb2" + b"Lavc60.31.102" + b"\x00\x00\x01\xb5"
+    esds = mp4_box(b"esds", bytes(4) + b"\x05" + bytes([len(setup)]) + setup)
+    mp4v = mp4_box(b"mp4v", bytes(78) + esds)
+    moov = mp4_box(b"moov", track(b"vide", mp4v))
+    video = mp4_box(b"ftyp", b"isom\x00\x00\x02\x00isom") + moov + mp4_box(b"mdat", b"\x00")
+    stripped = strip_video_metadata(video)
+    assert len(stripped) == len(video) and b"Lavc" not in stripped
+    assert setup.replace(b"Lavc60.31.102", b" " * 13) in stripped
+    assert strip_video_metadata(stripped) == stripped
+
+
 def test_a_video_of_boxes_nested_thousands_deep_is_stripped_without_recursing():
     inner = mp4_box(b"udta", b"made by someone")
     for _ in range(3000):

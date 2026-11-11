@@ -140,6 +140,10 @@ def _blank_names(out: bytearray, payload: int, stop: int, handler: bytes) -> Non
         if video and entry_stop - entry >= _COMPRESSOR[1]:
             for first, last in (_VENDOR, _COMPRESSOR):
                 out[entry + first : entry + last] = bytes(last - first)
+        if video:
+            # ffmpeg's MPEG-4 Part 2 encoder writes its name again into the
+            # stream's setup (user data in the `esds` inside an `mp4v` entry).
+            _blank_libavcodec(out, entry, entry_stop)
 
 
 def _walk(out: bytearray, start: int, end: int, parent: bytes = b"") -> None:
@@ -187,6 +191,13 @@ def _blank_encoder_text(out: bytearray, payload: int, stop: int) -> None:
             if all(32 <= byte < 127 for byte in out[at:nul]):
                 out[at:nul] = b" " * (nul - at)
             at = out.find(marker, nul, stop)
+    _blank_libavcodec(out, payload, stop)
+
+
+def _blank_libavcodec(out: bytearray, payload: int, stop: int) -> None:
+    """libavcodec's name with its version, wherever it stands whole in
+    [payload, stop), as spaces (never zeros: they could read as a start
+    code); the bytes around it untouched."""
     at = out.find(b"Lavc", payload, stop)
     while at != -1:
         name = _LIBAVCODEC.match(out, at, stop)
