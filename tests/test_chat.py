@@ -6,6 +6,7 @@ after the summary of their part."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -20,7 +21,7 @@ from sealedlore.engine.session import StorySession
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
 from sealedlore.models.character import Character
 from sealedlore.models.config import Config, ProviderConfig
-from sealedlore.models.image import ImageRef
+from sealedlore.models.image import GeneratedImage, ImageRef
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.node import CHAT_USER_ID
 from sealedlore.models.story import Story
@@ -527,3 +528,42 @@ def test_a_private_part_s_picture_prompt_is_written_at_the_private_budget(tmp_pa
     session.write_image_prompt("a cat")
     turn, picture = private.requests[0], private.requests[-1]
     assert len(picture.messages) <= len(turn.messages) + 2
+
+
+def test_a_picture_from_a_private_part_offers_its_prompt_to_that_part_alone(tmp_path: Path):
+    """A picture made in a chat's private part is offered to the picture
+    writer afterwards, but the start of its prompt (written from the part)
+    went with it as its caption: the chat's own model read the part's words.
+    It goes now only to the part's own model, while the part is open; the
+    picture itself is still offered."""
+    session, main = chat_session(tmp_path, ["Public reply."])
+    say(session, "Hello")
+    private = enter(session, keep="disk")
+    say(session, f"I tell you {MARKER}")
+    span = session.open_span
+    session.pictures.write("images/x.png", b"\x89PNG\r\n\x1a\n")
+    session.pictures.add_images(
+        [
+            GeneratedImage(
+                anchor_node_id=session.full_path()[-1].id,
+                file="images/x.png",
+                prompt=f"A note that reads {MARKER}",
+                model="hidream",
+                size="1024x1024",
+                private_span=span.id,
+            )
+        ]
+    )
+    private.responses = ['{"prompt": "the note", "references": []}']
+    session.write_image_prompt("")
+    assert MARKER in private.requests[-1].messages[-1].text  # the part's own model may
+    private.responses = ["They talked."]
+    for _event in session.close_private(session.summarise_private()):
+        pass
+
+    main.responses = ['{"prompt": "a cat", "references": []}']
+    sent = len(main.payloads)
+    session.write_image_prompt("a cat")
+    assert MARKER not in json.dumps(main.payloads[sent:])
+    picture = next(c for c in session.image_ref_choices() if c.use.owner_kind == "picture")
+    assert MARKER not in picture.use.caption

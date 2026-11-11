@@ -24,6 +24,7 @@ from sealedlore.engine.session import StorySession, TurnRequest
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
 from sealedlore.engine.usage import usage_report
 from sealedlore.models.config import Config, ProviderConfig
+from sealedlore.models.image import GeneratedImage
 from sealedlore.models.lore import LoreEntry
 from sealedlore.providers.base import ProviderError
 from sealedlore.providers.mock import MockChatProvider, MockEmbeddings
@@ -374,6 +375,42 @@ def test_a_picture_in_a_private_scene_is_prompted_by_the_private_model(tmp_path:
     # Memory only: the writer's call is logged without what it said.
     log = read_api_log(session.story.id, root=tmp_path)
     assert MARKER not in json.dumps(log)
+
+
+def test_a_scene_s_picture_offers_no_words_of_its_prompt_once_the_scene_ends(tmp_path: Path):
+    """A video's frames are the story's pictures, each told to the prompt
+    writer by the start of its prompt: one made in the scene took the scene's
+    words to the story model's writer afterwards."""
+    session, main, held = build(tmp_path)
+    play(session, turn(held, "Before."))
+    private = enter(session, keep="disk")
+    play(session, turn(held, f"{MARKER} by the window"))
+    span = session.open_span
+    session.pictures.write("images/x.png", b"\x89PNG\r\n\x1a\n")
+    session.pictures.add_images(
+        [
+            GeneratedImage(
+                anchor_node_id=session.full_path()[-1].id,
+                file="images/x.png",
+                prompt=f"Two figures by a window, {MARKER}",
+                model="hidream",
+                size="1024x1024",
+                private_span=span.id,
+            )
+        ]
+    )
+    frame = next(use for use in session.video_frame_choices() if use.owner_kind == "picture")
+    assert MARKER in frame.caption  # to the scene's own writer, while it is open
+    private.responses = ["They spoke by the window."]
+    for _event in session.close_private(session.summarise_private()):
+        pass
+
+    frame = next(use for use in session.video_frame_choices() if use.owner_kind == "picture")
+    assert frame.file == "images/x.png" and MARKER not in frame.caption
+    main.responses = ['{"prompt": "A slow pan."}']
+    sent = len(main.payloads)
+    session.write_video_prompt("", start=frame)
+    assert MARKER not in json.dumps(main.payloads[sent:])
 
 
 @pytest.mark.parametrize("keep", ["memory", "disk"])

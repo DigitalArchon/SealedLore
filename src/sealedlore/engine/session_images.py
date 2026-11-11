@@ -161,7 +161,7 @@ class ImageRuntime:
             uses.sort(key=lambda item: not item[1])
             uses += added
             for image in self.generated_images():
-                shown = ImageRef(id=image.id, file=image.file, caption=image.prompt[:80])
+                shown = ImageRef(id=image.id, file=image.file, caption=self._made_caption(image))
                 uses.append((_use("picture", image.id, "A picture from this chat", shown), False))
             return ref_choices(uses)
         path = self.image_path(anchor_id)
@@ -184,6 +184,16 @@ class ImageRuntime:
         # Those in the scene first: they are the likeliest to be in the picture.
         uses.sort(key=lambda item: not item[1])
         return ref_choices(uses + added)
+
+    def _made_caption(self, image: GeneratedImage) -> str:
+        """A picture made earlier, as a prompt writer is told of it: the start
+        of its prompt. One made in a private scene or part tells nothing of
+        its prompt (written from the scene) but to that scene's own model,
+        while it is open; the picture itself is still offered."""
+        span = self.open_span
+        if image.private_span is not None and (span is None or span.id != image.private_span):
+            return ""
+        return image.prompt[:80]
 
     def write_image_prompt(
         self,
@@ -393,7 +403,7 @@ class ImageRuntime:
         uses = [choice.use for choice in self.image_ref_choices(anchor_id)]
         if not self.story.chat:
             for image in self.generated_images():
-                shown = ImageRef(id=image.id, file=image.file, caption=image.prompt[:80])
+                shown = ImageRef(id=image.id, file=image.file, caption=self._made_caption(image))
                 uses.append(_use("picture", image.id, "A picture from this story", shown))
         for video in self.generated_videos():
             if video.status == "done" and video.last_frame:
