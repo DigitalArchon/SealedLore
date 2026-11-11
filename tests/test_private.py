@@ -345,6 +345,43 @@ def test_a_branch_from_a_memory_scenes_summary_is_saved_whole(tmp_path: Path):
     assert not any(node.meta.private_span for node in again.nodes)
 
 
+@pytest.mark.parametrize("keep", ["memory", "disk"])
+def test_a_summary_rewritten_after_a_scene_s_unanswered_turn_never_sends_that_turn(
+    tmp_path: Path, keep: str
+):
+    """A scene that ended on a turn with no reply has its summary under that
+    turn, and so has a branch rewritten from the summary: read as a passage
+    answering the turn, Continue sent the scene's turn to the story's model."""
+    session, main, held = build(tmp_path)
+    play(session, turn(held, "Before."))
+    private = enter(session, keep=keep)
+    play(session, turn(held, "A first secret."))
+    private.error = ProviderError("the private model is down")
+    with pytest.raises(ProviderError):
+        play(session, turn(held, f"{MARKER} unanswered"))
+    private.error = None
+    private.responses = ["They spoke."]
+    for _event in session.close_private(session.summarise_private()):
+        pass
+    summary = session.full_path()[-1]
+    for _event in session.rewrite_from(summary.id, "They spoke of other things.", name="Other"):
+        pass
+    rewritten = session.full_path()[-1]
+    assert rewritten.meta.private_summary_of == summary.meta.private_summary_of
+    assert not session.can_continue()
+
+    # As 3.1.0b8 saved it: the rewrite marked as nothing.
+    rewritten.meta.private_summary_of = None
+    assert not session.can_continue()
+    sent = len(main.payloads)
+    with pytest.raises(ValueError, match="ended"):
+        list(session.continue_passage())
+    with pytest.raises(ValueError, match="ended"):
+        list(session.regenerate())
+    assert len(main.payloads) == sent
+    assert MARKER not in json.dumps(main.payloads)
+
+
 @pytest.mark.parametrize("second", ["memory", "disk"])
 def test_a_memory_scenes_summary_deleted_steps_the_story_out_of_the_scene(
     tmp_path: Path, second: str

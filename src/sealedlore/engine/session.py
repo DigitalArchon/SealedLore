@@ -1866,6 +1866,10 @@ class StorySession(
             meta=NodeMeta(
                 controlled_character_id=original.meta.controlled_character_id,
                 branch_name=name,
+                # A private scene's summary rewritten is still its summary:
+                # under the scene's last turn, but never a passage answering
+                # it, to be carried on or retaken with that turn sent along.
+                private_summary_of=original.meta.private_summary_of,
             ),
         )
         node.edited_at = utc_now_iso()
@@ -2024,7 +2028,7 @@ class StorySession(
             # it on: nothing may carry it on (`continue_passage` refuses).
             return False
         open_id = self.open_span.id if self.open_span is not None else None
-        return path[-1].meta.private_span == open_id
+        return path[-1].meta.private_span == open_id and path[-2].meta.private_span == open_id
 
     def continue_passage(
         self, shape: TurnShape | None = None
@@ -2048,7 +2052,11 @@ class StorySession(
             raise ValueError(NOT_CONTINUABLE)
         passage, user_node = path[-1], path[-2]
         span_id = passage.meta.private_span
-        if span_id is not None and (self.open_span is None or self.open_span.id != span_id):
+        if user_node.meta.private_span != span_id or (
+            span_id is not None and (self.open_span is None or self.open_span.id != span_id)
+        ):
+            # The turn is sent again with the passage: a scene's turn never
+            # goes to any model but that scene's, while it is open.
             raise ValueError("that private scene has ended; its messages can't be continued")
         if span_id is None and self.in_private:
             raise ValueError("leave the private scene before continuing a passage from outside it")
