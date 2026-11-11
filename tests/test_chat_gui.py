@@ -679,6 +679,32 @@ def test_a_refused_tee_chat_sends_nothing_until_attested_again(app, window, monk
     assert session.provider.requests
 
 
+def test_a_refused_tee_chat_is_not_archived_or_rebuilt_by_hand(app, window, monkeypatch):
+    """Send waited for the attestation or offered to try again; Archive now
+    (the Story so far page's and the banner's) and Rebuild sent the oldest
+    messages to the refused model all the same."""
+    monkeypatch.setattr(window, "_attest_chat", lambda: None)
+    make_chat(window, monkeypatch, model="TEE/gemma-3-27b")
+    session = window.session
+    session.private_tee = _FakeTee()
+    session.provider.responses = [f"Reply {i}." for i in range(6)] + ["They talked."]
+    for i in range(4):
+        list(session.send(window._chat_turn(f"Question {i}")))
+    summary = session.archive(session.next_chunk(allow_partial=True))
+    sent = len(session.provider.requests)
+    offered: list[str] = []
+    monkeypatch.setattr(window, "_offer_reattest", lambda reason, for_chat: offered.append(reason))
+    started: list[object] = []
+    monkeypatch.setattr(window, "_start", lambda *args, **kwargs: started.append(args))
+
+    session.tee_block = "The attestation was refused: TEE/gemma-3-27b offers no attestation"
+    window.archive_now()
+    window.archive_to_target()
+    window._rebuild_summary(summary.id)
+    assert len(offered) == 3 and started == []
+    assert len(session.provider.requests) == sent
+
+
 def test_a_tee_chat_attested_again_before_a_message_says_what_it_found(app, window, monkeypatch):
     """Once a TEE chat's attestation is fifteen minutes old, the message that
     finds it so attests the model again first, on the job's thread (engine

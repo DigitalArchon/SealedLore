@@ -74,6 +74,12 @@ class RebuildRuntime:
     _rebuild_job: _RebuildJob | None = None
 
     def can_rebuild_in_background(self) -> bool:
+        """With a client of its own, and not for a TEE chat whose model is
+        attested: its rebuild waits for the guard on the worker
+        (`rebuild_summary`), which may attest the model again first, and
+        that must never be on the window's thread, where this starts."""
+        if self.tee_chat and self.private_tee is not None:
+            return False
         return callable(getattr(self.provider, "detached", None))
 
     def rebuilding_ids(self) -> set[str]:
@@ -93,6 +99,12 @@ class RebuildRuntime:
         another model) or while a rebuild is still out.
         """
         self._refuse_in_private("Rebuilding a summary")
+        if self.tee_block:
+            # A TEE chat's model refused or being attested (`_tee_guard`'s
+            # refusal, without the attestation it may do: this is the GUI's).
+            from sealedlore.providers.tee import TeeRefused
+
+            raise TeeRefused(f"{self.tee_block}; nothing was sent")
         if self._rebuild_job is not None:
             raise ValueError("chapters are already being rebuilt; try again once they are in")
         by_id = {summary.id: summary for summary in self.bundle.summaries}

@@ -153,7 +153,7 @@ from sealedlore.models.scene import SceneState
 from sealedlore.models.story import Story
 from sealedlore.models.summary import Summary
 from sealedlore.providers import make_session_provider
-from sealedlore.providers.base import ChatProvider, UnconfiguredProvider
+from sealedlore.providers.base import ChatProvider, ProviderError, UnconfiguredProvider
 from sealedlore.providers.embeddings import EmbeddingBackend, OpenAICompatibleEmbeddings
 from sealedlore.providers.endpoints import listing_key
 from sealedlore.providers.mock import MockChatProvider
@@ -2239,7 +2239,9 @@ class MainWindow(
 
     def archive_to_target(self) -> None:
         """The banner's Archive now: whole chunks down to the target, with a progress dialog."""
-        if self.session is None or self._busy:
+        # A TEE chat's messages go to its model: not while it is refused or
+        # being attested, said as Send says it.
+        if self.session is None or self._busy or not self._tee_allows_send():
             return
         self.session.provider = self._current_provider()
         self.over_budget.hide()
@@ -3452,7 +3454,7 @@ class MainWindow(
 
     def archive_now(self) -> None:
         """Archive the next chunk on demand, rather than waiting for the budget."""
-        if self.session is None or self._busy:
+        if self.session is None or self._busy or not self._tee_allows_send():
             return
         if not self.session.next_chunk(allow_partial=True):
             self.statusBar().showMessage(
@@ -3531,6 +3533,8 @@ class MainWindow(
 
     def _rebuild(self, summary_ids: list[str]) -> None:
         assert self.session is not None
+        if not self._tee_allows_send():  # as `archive_now`
+            return
         self.session.provider = self._current_provider()
         self._staleness_dismissed = False
         if self.session.can_rebuild_in_background():
@@ -3538,7 +3542,7 @@ class MainWindow(
             # chapters are sent until the new ones are in (_poll_rebuild).
             try:
                 started = self.session.start_rebuild(summary_ids)
-            except ValueError as exc:
+            except (ValueError, ProviderError) as exc:  # a private scene, a refused TEE model
                 self.statusBar().showMessage(str(exc), 8000)
                 return
             if started:

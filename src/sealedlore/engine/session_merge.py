@@ -71,7 +71,8 @@ class MergeRuntime:
         Needs a provider that can make a call alongside the worker's
         (`detached()`); a scripted one can't, and merges only when asked.
         """
-        if not self.config.auto_archive or self._merge_job is not None:
+        if not self.config.auto_archive or self._merge_job is not None or self.tee_block:
+            # A TEE chat's model refused or being attested: nothing goes to it.
             return False
         make_client = getattr(self.provider, "detached", None)
         if not callable(make_client):
@@ -99,6 +100,7 @@ class MergeRuntime:
     def merge_now(self) -> Summary | None:
         """Merge on this thread, and adopt it: for the author asking, and tests."""
         self._refuse_in_private("Merging chapters")
+        self._tee_guard()  # a TEE chat's chapters go to its own model
         run = self.merge_run()
         if not run:
             return None

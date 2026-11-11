@@ -569,3 +569,65 @@ def test_a_picture_from_a_private_part_offers_its_prompt_to_that_part_alone(tmp_
     assert MARKER not in json.dumps(main.payloads[sent:])
     picture = next(c for c in session.image_ref_choices() if c.use.owner_kind == "picture")
     assert MARKER not in picture.use.caption
+
+
+class Detachable(MockChatProvider):
+    """A provider that can make calls beside the worker's, as the real one."""
+
+    def detached(self):
+        return self
+
+
+def test_a_refused_tee_chat_sends_nothing_by_archive_rebuild_or_merge(tmp_path):
+    """Send refused a TEE chat whose enclave was refused, or was being
+    attested; Archive now, Rebuild, merges and the card prompt writer sent
+    its messages to the model all the same."""
+    from sealedlore.providers.tee import TeeRefused
+
+    session, provider = chat_session(tmp_path, [f"Reply {i}." for i in range(8)] * 2)
+    session.story.defaults.main_model = "TEE/gemma-3-27b"
+    session.private_tee = FakeTee(signed=True)
+    session.cast.append(Character(id="c2", name="Ada Lark", description="A tutor in grey."))
+    for i in range(6):
+        say(session, f"SECRET-{i} question")
+    provider.responses = ["They talked about sums."]
+    summary = session.archive(session.next_chunk(allow_partial=True))
+    session.provider = Detachable(["unused"])
+    assert not session.can_rebuild_in_background(), "rebuilt on the worker, behind the guard"
+    sent = len(session.provider.requests)
+
+    session.tee_block = "The attestation was refused: TEE/gemma-3-27b's quote failed verification"
+    for call in (
+        lambda: session.archive(session.next_chunk(allow_partial=True)),
+        lambda: session.rebuild_summary(summary.id, force=True),
+        lambda: session.start_rebuild([summary.id]),
+        session.merge_now,
+        lambda: session.write_card_prompts([session.cast[-1]]),
+    ):
+        with pytest.raises(TeeRefused, match="nothing was sent"):
+            call()
+    assert not session.prepare_archival(force=True)
+    session.config.auto_archive = True
+    assert not session.start_background_merge()
+    assert len(session.provider.requests) == sent
+
+
+def test_archiving_a_tee_chat_attests_its_model_again_once_due(tmp_path):
+    """As every other call to the model: an attestation fifteen minutes old is
+    renewed before the chapter's request goes."""
+    from sealedlore.providers.tee import REATTEST_SECONDS
+    from tests.test_private import AttestedTee, _attestation
+
+    session, provider = chat_session(tmp_path, [f"Reply {i}." for i in range(8)])
+    session.story.defaults.main_model = "TEE/x"
+    clock = [1000.0]
+    again = _attestation()
+    tee = AttestedTee(session, clock, [_attestation(), again])
+    for i in range(4):
+        say(session, f"Question {i}")
+    clock[0] += REATTEST_SECONDS
+    sent = len(provider.requests)
+    provider.responses = ["They talked."]
+    session.archive(session.next_chunk(allow_partial=True))
+    assert len(tee.attested) == 2 and session.story.chat_attestation is again
+    assert len(provider.requests) == sent + 1

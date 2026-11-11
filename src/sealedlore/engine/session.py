@@ -2552,6 +2552,9 @@ class StorySession(
         writing, and would be paid for here to no purpose.
         """
         self._refuse_in_private("Archiving")
+        # A TEE chat's messages go to its own model: not to one refused or
+        # still being attested, and attested again once its attestation is old.
+        self._tee_guard()
         if not chunk:
             raise ValueError("nothing to archive")
 
@@ -2686,6 +2689,7 @@ class StorySession(
         the confirmation §5.2 asks for.
         """
         self._refuse_in_private("Rebuilding a summary")
+        self._tee_guard()  # as `archive`
         summary = self.summary_by_id(summary_id)
         if summary.hand_edited and not force:
             raise ValueError("this summary was edited by hand; rebuilding would overwrite it")

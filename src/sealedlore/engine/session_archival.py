@@ -153,7 +153,8 @@ class ArchivalRuntime:
         `force` starts it whatever the prompt's size (a turn found it over).
         Never blocks, and does nothing while a job is out.
         """
-        if not self.can_archive_in_background():
+        if not self.can_archive_in_background() or self.tee_block:
+            # A TEE chat's model refused or being attested: nothing goes to it.
             return False
         history = self.path()
         job = self._archive_job

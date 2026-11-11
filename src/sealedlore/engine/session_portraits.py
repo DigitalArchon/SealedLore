@@ -131,6 +131,8 @@ class PortraitRuntime:
         prompts: dict[str, str] = {}
         problems: list[str] = []
         if characters or lore:
+            # A TEE chat's prompt writer is its own model (`_role_in_use`).
+            self._tee_guard()
             model = model or self.image_prompt_model
             params = self.side_params(model, max_tokens=PORTRAIT_MAX_TOKENS, temperature=0.7)
             batches = [
