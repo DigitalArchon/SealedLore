@@ -156,8 +156,50 @@ def test_high_contrast_reads_at_seven_to_one_and_marks_show_at_three():
         assert _contrast(HC[text], HC[ground]) >= 7, (text, ground)
     for name in MARKS_ON_BLACK:
         assert _contrast(HC[name], black) >= 3, name
-    # Disabled text is exempt from WCAG, but must still be read.
+    # Disabled text is exempt from WCAG, but must still be read: a box's
+    # own and its placeholder (text_disabled_faint) alike.
     assert _contrast(HC["text_disabled"], black) >= 4.5
+    assert _contrast(HC["text_disabled_faint"], black) >= 4.5
+
+
+def test_placeholders_are_drawn_in_the_themes_colours_on_or_off(app):
+    """Qt draws a placeholder in the field's colour at half strength once
+    a rule sets that colour, whatever the theme names: in High contrast an
+    empty prompt box's hint was 5:1 on black, and in one that is off (the
+    Portraits dialog's prompts waiting to be written) #464646, 2.2:1."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QLineEdit
+
+    from sealedlore.gui import text_size
+    from sealedlore.gui.sizing import GrowingText
+
+    def drawn(field) -> str:
+        """The placeholder's colour: the pixel furthest from the ground."""
+        field.setPlaceholderText("WWWWWWWWWW the placeholder")
+        field.setFocusPolicy(Qt.NoFocus)
+        field.resize(420, 90)
+        field.show()
+        app.processEvents()
+        image = field.grab().toImage()
+        ground = image.pixelColor(image.width() - 6, image.height() // 2)
+        colours = (
+            image.pixelColor(x, y) for y in range(8, image.height() - 8) for x in range(8, 320)
+        )
+        return max(colours, key=lambda c: abs(c.lightness() - ground.lightness())).name()
+
+    theme.set_theme("high_contrast")
+    try:
+        text_size.apply(app, 1.0)
+        for kind in (QLineEdit, GrowingText):
+            on, off = kind(), kind()
+            off.setEnabled(False)
+            assert _contrast(drawn(on), HC["field"]) >= 7, kind.__name__
+            assert _contrast(drawn(off), HC["field_disabled"]) >= 4.5, kind.__name__
+            on.deleteLater()
+            off.deleteLater()
+    finally:
+        theme.set_theme(theme.DEFAULT_THEME)
+        text_size.apply(app, 1.0)
 
 
 def test_what_is_drawn_in_code_follows_the_theme():

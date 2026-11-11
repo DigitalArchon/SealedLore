@@ -1088,6 +1088,18 @@ QPlainTextEdit:focus, QTextEdit:focus {
   border-color: @accent;
 }
 
+/* Placeholders in the theme's own colours. Once a rule sets a field's
+   colour, Qt draws its placeholder in that colour at half strength: in High
+   contrast 5:1 on black, and 2.2:1 in a box that is off (the Portraits
+   dialog's prompts waiting to be written). */
+QLineEdit, QPlainTextEdit, QTextEdit {
+  placeholder-text-color: @text_placeholder;
+}
+
+QLineEdit:disabled, QPlainTextEdit:disabled, QTextEdit:disabled {
+  placeholder-text-color: @text_disabled_faint;
+}
+
 /* Drop-downs and spin boxes draw their own arrows: chevrons in the text's
    colour. Qt's were black on these grounds, spin boxes' all but invisible. */
 QComboBox::drop-down {
