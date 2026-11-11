@@ -7,7 +7,8 @@ phones use.
 
 - **Nothing a phone asks opens a dialog.** Every action checks first what
   would need the desktop's answer (a dialog open, a memory-only scene to
-  leave, an attestation) and refuses with a reason the phone shows.
+  leave, a message's edit left open, an attestation) and refuses with a
+  reason the phone shows; and "started" is said only of a job that did.
 - **The story is read only when nothing runs.** While a passage is written
   the worker is its only writer, so what a phone reads is built when the
   window rebuilds its transcript (`_phone_settled`) and served from there.
@@ -21,6 +22,7 @@ from __future__ import annotations
 import dataclasses
 import sys
 import uuid
+from collections.abc import Collection
 from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -46,6 +48,7 @@ from sealedlore.storage import keychain
 from sealedlore.storage.library import story_listings
 from sealedlore.storage.paths import data_home, story_dir
 from sealedlore.storage.repository import save_config
+from sealedlore.tree import path_to
 
 if TYPE_CHECKING:
     from sealedlore.gui.worker import GenerationWorker
@@ -66,6 +69,8 @@ ALREADY_QUEUED = "A turn is already waiting to go."
 NO_ENDPOINT = "Set up an endpoint on the desktop first."
 LEAVING_ASKS = "Leaving this story needs an answer on the desktop."
 NOT_IN_PRIVATE = "That waits until the private scene ends."
+EDIT_OPEN = "An edit is open on the desktop. Save or cancel it there first."
+NOT_STARTED = "The desktop couldn't start that now."
 NO_TOR = (
     "Phone access needs tor, and none was found. The AppImage brings its own; running "
     "from source, install tor (for example: sudo apt install tor). Only the program is "
@@ -459,6 +464,14 @@ class PhoneWindow:
         if block:
             raise Refused(409, f"The private model can't be used now: {block}")
 
+    def _phone_edit_refusal(self, keeping: Collection[str] = ()) -> None:
+        """Raises Refused when doing it would ask about a message's edit left
+        open and changed on the desktop (`_edit_allows_leave`, `keeping` as
+        it has it): a phone's request must not open a dialog there, and every
+        phone after it was refused as "waiting" until someone answered."""
+        if self._edits_lost(keeping):
+            raise Refused(409, EDIT_OPEN)
+
     def _phone_private_tag(self) -> str | None:
         session = self.session
         if session is None:
@@ -791,6 +804,8 @@ class _Backend:
         session = window.session
         if session is not None and (session.memory_only or window._phone_private_tag() == "memory"):
             raise Refused(409, LEAVING_ASKS)
+        # Opening another asks about an edit left open (`_edit_allows_leave`).
+        window._phone_edit_refusal()
         # Opened once this answer is on its way: the phone hears of it by
         # its events, as it would of the desktop opening one.
         QTimer.singleShot(0, window, lambda: window.open_story(story_id))
@@ -840,17 +855,44 @@ class _Backend:
             raise Refused(409, "That passage isn't in the story as it stands.")
         return node_id or ids[-1]
 
+    def _retake_refused(self, path) -> None:
+        """Why the window would decline to retake the last of `path`, said to
+        the phone (the window says it only in its status bar)."""
+        refusal = self.window._retake_refusal(path)
+        if refusal is not None:
+            raise Refused(409, refusal)
+
+    def _started(self) -> None:
+        """After asking the window for a job: the phone is told it started
+        only when it did. The window declines some with no more than a word
+        in its status bar, and "started" sent the phone waiting on nothing."""
+        if not self.window._busy:
+            raise Refused(409, NOT_STARTED)
+
     def regenerate(self, retake: Retake) -> None:
-        self.window._phone_refusal()
+        window = self.window
+        window._phone_refusal()
         node_id = self._assistant_on_path(retake.node_id)
-        self.window._regenerate_node(node_id, self._shape(retake))
+        session = window.session
+        path = session.full_path()
+        latest = bool(path) and path[-1].id == node_id
+        target = path if latest else path_to(session.nodes, node_id)
+        self._retake_refused(target)
+        if not latest:
+            # An older passage's take shows the story as it stood before it
+            # while it is written: an edit open after it would be asked about.
+            window._phone_edit_refusal({node.id for node in target[:-1]})
+        window._regenerate_node(node_id, self._shape(retake))
+        self._started()
 
     def reroll(self, node_id: str) -> None:
         self.window._phone_refusal()
         entry = next((e for e in self.service.entries if e["id"] == node_id), None)
         if entry is None or not entry["can_reroll"]:
             raise Refused(409, "Only the latest roll can be rolled again.")
+        self._retake_refused(self.window.session.full_path())
         self.window.reroll(node_id, self._shape(Retake(node_id)))
+        self._started()
 
     def continue_passage(self, retake: Retake) -> None:
         self.window._phone_refusal()
@@ -858,10 +900,12 @@ class _Backend:
         if entry is None or not entry["can_continue"]:
             raise Refused(409, "Only the latest passage can be continued.")
         self.window.continue_passage(self._shape(retake))
+        self._started()
 
     def switch_take(self, node_id: str, step: int) -> None:
-        self.window._phone_refusal()
-        if self.window.session.in_private:
+        window = self.window
+        window._phone_refusal()
+        if window.session.in_private:
             raise Refused(409, NOT_IN_PRIVATE)
         entry = next((e for e in self.service.entries if e["id"] == node_id), None)
         if entry is None or entry["take"] is None:
@@ -869,13 +913,17 @@ class _Backend:
         position, count = entry["take"]
         if not 1 <= position + step <= count:
             raise Refused(409, "There is no take that way.")
-        self.window._switch_variant(node_id, step)
+        # The take showing goes from the story: an edit open on it is asked about.
+        window._phone_edit_refusal(window._path_ids_without([node_id]))
+        window._switch_variant(node_id, step)
 
     def switch_branch(self, start_id: str) -> None:
-        self.window._phone_refusal()
-        if self.window.session.in_private:
+        window = self.window
+        window._phone_refusal()
+        if window.session.in_private:
             raise Refused(409, NOT_IN_PRIVATE)
-        self.window._switch_branch(start_id or None)
+        window._phone_edit_refusal()
+        window._switch_branch(start_id or None)
 
     # --- the phones themselves -------------------------------------------------------
 

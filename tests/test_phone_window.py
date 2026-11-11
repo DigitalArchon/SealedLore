@@ -357,6 +357,65 @@ def test_a_dialog_on_the_desktop_holds_the_phone_back(app, tmp_path, sockets, st
     window.close()
 
 
+def test_an_edit_open_on_the_desktop_refuses_the_phone_rather_than_asking(
+    app, tmp_path, sockets, story, cast, monkeypatch
+):
+    """Nothing a phone asks opens a dialog: with a changed edit left open on the
+    desktop, opening a story, retaking an older passage, switching takes or
+    branches each asked "Discard your edit?" there, and every phone after was
+    refused as waiting on the desktop until someone answered."""
+    from PySide6.QtWidgets import QMessageBox
+
+    window, phone = open_window(tmp_path, sockets, story, cast, ["One.", "Two.", "Three."])
+    for text in ("I push.", "I pull."):
+        phone.ask("POST", "/api/turn", {"text": text, "speaker": NARRATOR_SPEAKER_ID})
+        wait_for(app, lambda: not window._busy and window._phone.entries)
+    phone.ask("POST", "/api/regenerate", {})
+    wait_for(app, lambda: not window._busy and window._phone.entries[-1]["take"] == [2, 2])
+    path = window.session.path()
+    first, latest = path[1], path[-1]
+    widget = window.transcript.message_widget(latest.id)
+    widget.begin_edit()
+    app.processEvents()
+    widget._editor.setPlainText("An edit the author left open on the desktop.")
+    asked: list[str] = []
+    monkeypatch.setattr(
+        QMessageBox, "question", lambda _p, title, *_a, **_k: asked.append(title) or 0
+    )
+    refused = (409, {"error": "An edit is open on the desktop. Save or cancel it there first."})
+    assert phone.ask("POST", f"/api/stories/{story.id}/open") == refused
+    assert phone.ask("POST", "/api/regenerate", {"node_id": first.id}) == refused
+    assert phone.ask("POST", "/api/take", {"node_id": latest.id, "step": -1}) == refused
+    assert phone.ask("POST", "/api/branch", {"start_id": ""}) == refused
+    for _ in range(20):
+        app.processEvents()
+    assert asked == [] and not window._busy
+    assert widget._editor is not None, "the edit is still there, as typed"
+    assert phone.ask("GET", "/api/state")[1]["desktop_waiting"] is False
+    widget.cancel_edit()
+    window.close()
+
+
+def test_the_phone_is_told_started_only_when_it_did(
+    app, tmp_path, sockets, story, cast, monkeypatch
+):
+    """The window declines a retake with no more than a word in its status bar:
+    the phone was answered 202 "started" all the same, and waited on nothing."""
+    window, phone = open_window(tmp_path, sockets, story, cast, ["The door gives."])
+    phone.ask("POST", "/api/turn", {"text": "I push.", "speaker": NARRATOR_SPEAKER_ID})
+    wait_for(app, lambda: not window._busy and window._phone.entries)
+    passage = window.session.path()[-1]
+    monkeypatch.setattr(window, "_retake_refusal", lambda _path: "Not a take of anything.")
+    assert phone.ask("POST", "/api/regenerate", {}) == (409, {"error": "Not a take of anything."})
+    monkeypatch.setattr(window, "continue_passage", lambda _shape=None: None)
+    assert phone.ask("POST", "/api/continue", {"node_id": passage.id}) == (
+        409,
+        {"error": window_phone.NOT_STARTED},
+    )
+    assert not window._busy
+    window.close()
+
+
 def test_a_retake_and_a_take_switch_from_the_phone(app, tmp_path, sockets, story, cast):
     window, phone = open_window(
         tmp_path, sockets, story, cast, ["The door gives.", "The door holds."]
