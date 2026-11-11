@@ -2949,6 +2949,11 @@ address without it, the keychain the address as typed, and the two come
 together again only while `config.json` still has that address. Taking the
 password out of the address takes it out of the keychain. An address is
 never shown with its password, in a message or by the command line. A key
+the keychain can't give back is never deleted: when it is locked, the key
+is looked for again at the next start. When the keychain answers that it has
+no such key (deleted outside SealedLore), the app says so at every start
+until you enter it again in Settings; for an endpoint that needs no key any
+more, save Settings with the field left blank and it stops asking. A key
 with a space, a line break or another character no API key has in it (picked
 up where it was copied from, perhaps) is refused when you save it, and before
 anything would be sent with it, saying so without showing the key. The

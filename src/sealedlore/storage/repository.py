@@ -84,10 +84,16 @@ def _as_written(config: Config, root: Path | None) -> dict[str, Any]:
     present: set[str] = set()
     kept: list[str] = []
     keychain.last_problem = None if use or config.key_storage == "file" else keychain.problem()
+    # Keys kept in the file by choice: one the keychain has said it hasn't got
+    # has nothing to bring there, and is no longer looked for. One it couldn't
+    # be asked about stays listed, to move to the file once it can be read.
+    by_choice = config.key_storage == "file"
     for slot, holder in keychain.slots(config):
         present.add(slot)
         value = holder.api_key
         if slot in listed and not value and not keychain.known(slot, root):
+            if by_choice and keychain.gone(config, root, slot):
+                continue
             kept.append(slot)  # still there, out of reach: never lost
         elif not use:
             if slot in listed and reachable:
@@ -108,7 +114,8 @@ def _as_written(config: Config, root: Path | None) -> dict[str, Any]:
         typed = holder.base_url
         if without_password(typed) == typed:
             if slot in listed and not keychain.known(slot, root):
-                kept.append(slot)  # still there, out of reach: never lost
+                if not (by_choice and keychain.gone(config, root, slot)):
+                    kept.append(slot)  # still there, out of reach: never lost
             elif slot in listed and reachable:
                 keychain.remove(slot, root)  # the password taken out, or another address
         elif not use:
@@ -169,14 +176,15 @@ def _fill_api_keys(config: Config, root: Path | None) -> str | None:
     keys = [slot for slot in missing if slot != "phone"]
     if keys:
         notes.append(
-            f"{keychain.where().capitalize()} has no key for {', '.join(keys)}: "
-            "enter it again in Settings."
+            f"{keychain.where(opening=True)} has no key for {', '.join(keys)}: "
+            "enter it again in Settings (one that needs no key any more: save Settings with "
+            "it left blank)."
         )
     if "phone" in missing:
         # Not a key the author typed: tor made it, and it is the phones'
         # address. A new one is made only when the author asks.
         notes.append(
-            f"{keychain.where().capitalize()} has lost phone access's address key: phones "
+            f"{keychain.where(opening=True)} has lost phone access's address key: phones "
             "can't reach this computer until it has a new address (File → Phone devices… → "
             "New address…), and then they pair again."
         )
@@ -202,8 +210,9 @@ def _fill_addresses(config: Config, root: Path | None) -> str | None:
             holder.base_url = stored
     if lost:
         return (
-            f"{keychain.where().capitalize()} has lost the password written into the address "
-            f"for {', '.join(lost)}: type it in again in Settings."
+            f"{keychain.where(opening=True)} has lost the password written into the address "
+            f"for {', '.join(lost)}: type it in again in Settings (one that needs none any "
+            "more: save Settings with the address as it is)."
         )
     return None
 

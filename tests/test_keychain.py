@@ -134,6 +134,129 @@ def test_a_key_missing_from_the_keychain_is_said(tmp_path: Path, memory_keychain
     assert "no key for provider:default" in notice
 
 
+def test_the_keychain_is_named_with_its_own_capitals(tmp_path: Path, memory_keychain, monkeypatch):
+    monkeypatch.setattr(keychain.sys, "platform", "linux")
+    save_config(configured(), root=tmp_path)
+    keychain.forget()
+    memory_keychain.store.clear()
+    _config, notice = load_config_or_recover(root=tmp_path)
+    assert notice.startswith("The system keychain (GNOME Keyring or KWallet) has no key"), notice
+    assert keychain.where() == "the system keychain (GNOME Keyring or KWallet)"
+
+
+def missing_at_the_start(tmp_path: Path, memory_keychain, **fields) -> Config:
+    """A key the keychain is asked for at the start and hasn't got: its entry
+    deleted outside the app, or the endpoint never needing one again."""
+    save_config(configured(**fields), root=tmp_path)
+    keychain.forget()  # as a new process would
+    memory_keychain.store.clear()
+    config, notice = load_config_or_recover(root=tmp_path)
+    assert "no key for provider:default" in notice
+    return config
+
+
+def notice_at_the_next_start(tmp_path: Path) -> str | None:
+    keychain.forget()
+    return load_config_or_recover(root=tmp_path)[1]
+
+
+def test_a_missing_key_stays_looked_for_until_the_author_says(tmp_path: Path, memory_keychain):
+    """The window saves the config after nearly everything: none of that is
+    the author's word that the key is gone for good, so it is still said."""
+    config = missing_at_the_start(tmp_path, memory_keychain)
+    save_config(config, root=tmp_path)
+    assert on_disk(tmp_path)["keychain_slots"] == ["provider:default"]
+    assert "no key for provider:default" in notice_at_the_next_start(tmp_path)
+
+
+def test_settings_saved_with_a_missing_key_left_blank_stops_asking_for_it(
+    tmp_path: Path, memory_keychain
+):
+    """The way out of "enter it again in Settings" for an endpoint that needs no
+    key any more: Settings saved with it blank. Not said again at every start."""
+    import os
+
+    import pytest
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    pytest.importorskip("PySide6")
+    from PySide6.QtWidgets import QApplication
+
+    from sealedlore.gui.settings_dialog import SettingsDialog
+
+    QApplication.instance() or QApplication([])
+    config = missing_at_the_start(tmp_path, memory_keychain)
+    dialog = SettingsDialog(config, None, root=tmp_path)
+    dialog._save()
+    dialog.close()
+    save_config(config, root=tmp_path)
+    assert on_disk(tmp_path)["keychain_slots"] == []
+    assert notice_at_the_next_start(tmp_path) is None
+
+
+def test_one_the_keychain_couldnt_be_asked_about_is_never_let_go_of(
+    tmp_path: Path, memory_keychain
+):
+    """Locked, not gone: Settings saved, or the keys moved to the file, it is
+    still looked for, and comes back once the keychain opens."""
+    save_config(configured(), root=tmp_path)
+    keychain.forget()
+    reads = memory_keychain.get_password
+
+    def locked(*args):
+        raise RuntimeError("Collection is locked")
+
+    memory_keychain.get_password = locked
+    config = load_config(root=tmp_path)
+    assert keychain.let_go_of_gone(config, tmp_path) == []
+    config.key_storage = "file"
+    save_config(config, root=tmp_path)
+    assert on_disk(tmp_path)["keychain_slots"] == ["provider:default"]
+    memory_keychain.get_password = reads
+    keychain.forget()
+    assert load_config(root=tmp_path).providers[0].api_key == KEY
+
+
+def test_keys_kept_in_the_file_by_choice_stop_asking_for_one_the_keychain_hasnt_got(
+    tmp_path: Path, memory_keychain
+):
+    config = missing_at_the_start(tmp_path, memory_keychain)
+    config.key_storage = "file"
+    save_config(config, root=tmp_path)
+    assert on_disk(tmp_path)["keychain_slots"] == []
+    assert notice_at_the_next_start(tmp_path) is None
+
+
+def test_an_addresses_lost_password_can_be_let_go_of_too(tmp_path: Path, memory_keychain):
+    config = configured()
+    config.providers[0].base_url = "https://bob:pw@nano-gpt.com/api/v1"
+    save_config(config, root=tmp_path)
+    keychain.forget()
+    for entry in [e for e in memory_keychain.store if e[1].startswith("address:")]:
+        del memory_keychain.store[entry]
+    config, notice = load_config_or_recover(root=tmp_path)
+    assert "lost the password written into the address for provider:default" in notice
+    save_config(config, root=tmp_path)
+    assert "address:provider:default" in on_disk(tmp_path)["keychain_slots"], "still looked for"
+    assert keychain.let_go_of_gone(config, tmp_path) == ["address:provider:default"]
+    save_config(config, root=tmp_path)
+    assert notice_at_the_next_start(tmp_path) is None
+    assert load_config(root=tmp_path).providers[0].api_key == KEY, "the key itself stays"
+
+
+def test_the_phones_key_is_never_let_go_of_by_settings(tmp_path: Path, memory_keychain):
+    """Not a key the author types: only Phone devices… → New address… replaces it."""
+    config = configured()
+    config.phone.onion.api_key = "ED25519-V3:secret"
+    save_config(config, root=tmp_path)
+    keychain.forget()
+    for entry in [e for e in memory_keychain.store if e[1].startswith("phone")]:
+        del memory_keychain.store[entry]
+    config = load_config(root=tmp_path)
+    assert keychain.let_go_of_gone(config, tmp_path) == []
+    assert "phone" in config.keychain_slots
+
+
 def test_emptying_a_key_removes_it_and_a_renamed_provider_leaves_nothing_behind(
     tmp_path: Path, memory_keychain
 ):

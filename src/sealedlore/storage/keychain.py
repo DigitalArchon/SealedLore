@@ -118,6 +118,8 @@ last_problem: str | None = None
 # when it is known (the author emptied the field), never when it couldn't
 # be read.
 _known: dict[str, str] = {}
+# What this process asked the keychain for and was told it hasn't got.
+_absent: set[str] = set()
 _lock = threading.Lock()
 
 
@@ -168,18 +170,30 @@ def problem() -> str | None:
     return _problem[0]
 
 
-def where() -> str:
-    """Where a key goes on this machine, in the author's words."""
+def where(*, opening: bool = False) -> str:
+    """Where a key goes on this machine, in the author's words; `opening`, to
+    begin a sentence with (only its first letter made a capital: GNOME and
+    KWallet keep theirs)."""
     if sys.platform == "win32":
-        return "Windows Credential Manager"
-    if sys.platform == "darwin":
-        return "the macOS Keychain"
-    return "the system keychain (GNOME Keyring or KWallet)"
+        said = "Windows Credential Manager"
+    elif sys.platform == "darwin":
+        said = "the macOS Keychain"
+    else:
+        said = "the system keychain (GNOME Keyring or KWallet)"
+    return said[:1].upper() + said[1:] if opening else said
 
 
 def known(slot: str, root: Path | None) -> bool:
     with _lock:
         return account(slot, root) in _known
+
+
+def absent(slot: str, root: Path | None) -> bool:
+    """This process asked the keychain for the slot and it answered that it
+    has no such entry: gone from it, not merely out of reach (locked, or no
+    keychain to ask), which raises instead."""
+    with _lock:
+        return account(slot, root) in _absent
 
 
 def read(slot: str, root: Path | None) -> str | None:
@@ -189,9 +203,12 @@ def read(slot: str, root: Path | None) -> str | None:
         value = _keyring().get_password(SERVICE, name)
     except Exception as exc:  # noqa: BLE001 - keyring raises many kinds
         raise KeychainError(str(exc) or type(exc).__name__) from exc
-    if value is not None:
-        with _lock:
+    with _lock:
+        if value is None:
+            _absent.add(name)
+        else:
             _known[name] = value
+            _absent.discard(name)
     return value
 
 
@@ -207,6 +224,7 @@ def write(slot: str, root: Path | None, value: str) -> None:
         raise KeychainError(str(exc) or type(exc).__name__) from exc
     with _lock:
         _known[name] = value
+        _absent.discard(name)
 
 
 def remove(slot: str, root: Path | None) -> None:
@@ -224,3 +242,35 @@ def forget() -> None:
     """Forget what this process knows (tests)."""
     with _lock:
         _known.clear()
+        _absent.clear()
+
+
+# Not a key the author types: tor made it, and only Phone devices… → New
+# address… replaces it (gui/window_phone.py, KEY_MISSING).
+PHONE = "phone"
+
+
+def gone(config: Config, root: Path | None, slot: str) -> bool:
+    """A listed slot that is no use listing any more: the keychain answered
+    that it has nothing under it, and nothing is there to keep (its key field
+    blank, or its address without a password). Never the phone's."""
+    if slot == PHONE or slot not in config.keychain_slots or not absent(slot, root):
+        return False
+    for name, holder in slots(config):
+        if name == slot:
+            return not holder.api_key
+    for name, address in address_slots(config):
+        if name == slot:
+            return without_password(address.base_url) == address.base_url
+    return False
+
+
+def let_go_of_gone(config: Config, root: Path | None) -> list[str]:
+    """The author has saved Settings with each such key left blank: the
+    answer to "enter it again in Settings" for one that needs no key any
+    more. They are no longer looked for, nor said to be missing at every
+    start. One the keychain couldn't be asked about (locked) stays listed:
+    it may come back. The slots let go of."""
+    let_go = [slot for slot in config.keychain_slots if gone(config, root, slot)]
+    config.keychain_slots = [slot for slot in config.keychain_slots if slot not in let_go]
+    return let_go

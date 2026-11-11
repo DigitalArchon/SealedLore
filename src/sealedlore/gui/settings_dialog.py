@@ -845,7 +845,9 @@ class SettingsDialog(QDialog):
             return f"Saved in plain text in {path}."
         problem = keychain.problem()
         if problem is not None:
-            return f"{problem.capitalize()}, so it is saved in plain text in {path}."
+            # Only its first letter: capitalize() lowercased the rest, the
+            # keychain's own words in it included.
+            return f"{problem[:1].upper()}{problem[1:]}, so it is saved in plain text in {path}."
         if keychain.last_problem:
             return (
                 f"Kept in {keychain.where()}, but {keychain.last_problem}, so for now it is in "
@@ -2356,5 +2358,10 @@ class SettingsDialog(QDialog):
         self.config.summary_target_words = self.summary_words.value()
         self.config.recall, self.config.recall_in = self.recall.currentData().split("|")
         self.config.recall_carry_turns = self.recall_carry.value()
+        # A key (or an address's password) the keychain said at the start it
+        # hasn't got, saved here blank: the answer to "enter it again in
+        # Settings" for one that needs none any more, so it is no longer said
+        # at every start. One it couldn't be asked about stays looked for.
+        keychain.let_go_of_gone(self.config, self._root)
 
         self.accept()
