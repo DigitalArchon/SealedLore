@@ -41,7 +41,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.looks import look_words
 from sealedlore.engine.plot_md import ParsedPlotFile, PlotProblem
-from sealedlore.gui.image_codec import encoded, read_image
+from sealedlore.gui.image_codec import HEAD_BYTES, encoded, raster_format, read_image
 from sealedlore.gui.picture_words import AGAIN_LABEL, EDIT_LABEL
 from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.ids import new_id
@@ -68,8 +68,15 @@ def _encoded(image: QImage, fmt: str, quality: int = -1) -> bytes:
 def load_image(path: Path) -> QImage:
     """A picture file as it should be seen: its EXIF orientation applied, and
     one pixel a pixel (Qt reads "face@2x.png" as twice as dense, and the crop
-    dialog drew it at half size under a full-size frame)."""
-    image = read_image(lambda: QImageReader(str(path)))
+    dialog drew it at half size under a full-size frame). Read as the kind
+    of picture its first bytes say it is, never by its name
+    (gui/image_codec.py): a null image for anything else."""
+    try:
+        with open(path, "rb") as file:
+            head = file.read(HEAD_BYTES)
+    except OSError:
+        return QImage()
+    image = read_image(lambda: QImageReader(str(path)), raster_format(head))
     image.setDevicePixelRatio(1.0)
     return image
 
@@ -81,12 +88,13 @@ def load_pixmap(path: Path) -> QPixmap:
 
 def image_of(data: bytes | None) -> QImage:
     """A picture's bytes as they should be seen, as `load_image` reads a file."""
-    if not data:
+    fmt = raster_format(data)
+    if not data or fmt is None:
         return QImage()
     array = QByteArray(data)
     buffer = QBuffer(array)
     buffer.open(QIODevice.ReadOnly)
-    image = read_image(lambda: QImageReader(buffer))
+    image = read_image(lambda: QImageReader(buffer), fmt)
     buffer.close()
     return image
 

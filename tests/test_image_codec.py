@@ -96,3 +96,112 @@ def test_every_decode_and_encode_in_the_gui_goes_through_the_codec_lock():
             if raw.search(line):
                 found.append(f"{path.name}:{number}: {line.strip()}")
     assert not found, "\n".join(found)
+
+
+# --- only the pictures the app takes are decoded ---------------------------------------
+
+
+def _svg_naming(local: Path) -> bytes:
+    """A drawing that pulls in a picture file on this computer by its path."""
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
+        'width="64" height="64"><rect width="64" height="64" fill="#ff0000"/>'
+        f'<image x="0" y="0" width="64" height="64" xlink:href="{local}"/></svg>'
+    ).encode()
+
+
+def _local_picture(tmp_path: Path) -> Path:
+    from PySide6.QtGui import QColor, QImage
+
+    from sealedlore.gui.image_codec import encoded
+
+    image = QImage(64, 64, QImage.Format_RGB32)
+    image.fill(QColor(0, 255, 0))
+    local = tmp_path / "private" / "local.png"
+    local.parent.mkdir()
+    local.write_bytes(encoded(image, "PNG"))
+    return local
+
+
+def test_a_drawing_named_as_a_picture_is_never_drawn(tmp_path):
+    """An SVG saved as "jane.png" (beside a plot file, a card's icon, a
+    scenario's picture) was drawn by Qt's SVG reader, pulling in a picture
+    file on this computer it named by path: the story kept its pixels."""
+    pytest.importorskip("PySide6")
+    from sealedlore.gui.image_codec import image_from_data
+    from sealedlore.gui.ref_images import clean_incoming, image_of, load_image, picture_bytes
+
+    svg = _svg_naming(_local_picture(tmp_path))
+    beside = tmp_path / "pictures" / "jane.png"
+    beside.parent.mkdir()
+    beside.write_bytes(svg)
+    assert image_of(svg).isNull() and image_from_data(svg).isNull()
+    assert load_image(beside).isNull()
+    with pytest.raises(ValueError):
+        picture_bytes(beside)  # a plot file's picture line: left out, with a note
+    assert clean_incoming({"images/refs/a.png": svg})["images/refs/a.png"] == svg, "not redrawn"
+    pdf = b"%PDF-1.4\n1 0 obj << >> endobj\ntrailer << >>\n%%EOF\n"
+    assert image_of(pdf).isNull()
+
+
+def test_a_cards_drawing_of_an_icon_isnt_kept_as_its_portrait(tmp_path):
+    pytest.importorskip("PySide6")
+    import io
+    import json
+    import zipfile
+
+    from sealedlore.gui.ref_images import clean_incoming
+    from sealedlore.storage import collection, tavern_cards
+    from sealedlore.storage.picture_store import MemoryPictures
+
+    card = {
+        "spec": "chara_card_v3",
+        "data": {
+            "name": "Jane",
+            "description": "A farmer.",
+            "assets": [
+                {"type": "icon", "name": "main", "uri": "embeded://icon/main.png", "ext": "png"}
+            ],
+        },
+    }
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("card.json", json.dumps(card))
+        archive.writestr("icon/main.png", _svg_naming(_local_picture(tmp_path)))
+    path = tmp_path / "jane.charx"
+    path.write_bytes(buffer.getvalue())
+    store = MemoryPictures(lambda kind, body: "")
+    character, notes = collection.kept_from_card(
+        tavern_cards.read_card(path),
+        store,
+        clean=lambda data: clean_incoming({"picture": data}).get("picture", data),
+    )
+    assert character.reference_images == []
+    assert any("format SealedLore doesn't keep" in note for note in notes)
+
+
+def test_every_picture_the_app_takes_still_reads(tmp_path):
+    pytest.importorskip("PySide6")
+    from PySide6.QtGui import QColor, QImage
+
+    from sealedlore.gui.image_codec import encoded
+    from sealedlore.gui.ref_images import image_of, load_image
+
+    image = QImage(8, 6, QImage.Format_RGB32)
+    image.fill(QColor(10, 20, 30))
+    pictures = {fmt: encoded(image, fmt) for fmt in ("PNG", "JPEG", "WEBP", "BMP", "TIFF")}
+    # Qt reads GIF, and writes none: one pixel, by hand.
+    pictures["GIF"] = (
+        b"GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00"
+        b",\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;"
+    )
+    for fmt, data in pictures.items():
+        shown = image_of(data)
+        assert not shown.isNull(), fmt
+        path = tmp_path / f"picture.{fmt.lower()}"
+        path.write_bytes(data)
+        assert load_image(path).size() == shown.size(), fmt
+    # By its bytes, never its name: a JPEG named .png still reads.
+    misnamed = tmp_path / "photo.png"
+    misnamed.write_bytes(encoded(image, "JPEG"))
+    assert not load_image(misnamed).isNull()
