@@ -141,8 +141,16 @@ def read_link(text: str) -> Link:
     """A pasted link, read as a site's or as a file's; LinkError when it is
     neither a link SealedLore may fetch nor one it can do anything with."""
     url = text.strip()
-    parsed = urlparse(url)
-    host = (parsed.hostname or "").lower()
+    try:
+        parsed = urlparse(url)
+        host = (parsed.hostname or "").lower()
+        _ = parsed.port  # a port that isn't a number, or past 65535
+    except ValueError:
+        # Half typed or mangled ("https://[", a port of letters): said as
+        # the rest are, never raised out of the dialog reading it as typed.
+        raise LinkError(
+            "That address can't be read: check it was pasted whole, starting with https://."
+        ) from None
     if parsed.scheme not in ("http", "https") or not host:
         raise LinkError(
             "That isn't a web link: paste the address of the card's page or file, "

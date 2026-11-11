@@ -455,6 +455,13 @@ def test_the_link_dialog_says_what_can_t_be_fetched_before_sending(app):
     assert not dialog.import_button.isEnabled() and "JanitorAI" in dialog.problem.text()
     dialog.field.setText("https://chub.ai/characters/someone/elena-1234")
     assert dialog.import_button.isEnabled() and dialog.problem.isHidden()
+    # A bracket deleted from a good address: the state follows the text, and
+    # nothing is raised in the slot (Import stayed on, no problem shown).
+    dialog.field.setText("https://[::1]/x.png")
+    assert dialog.import_button.isEnabled()
+    dialog.field.setText("https://[::1/x.png")
+    assert not dialog.import_button.isEnabled() and "can't be read" in dialog.problem.text()
+    assert not dialog.problem.isHidden()
     dialog.deleteLater()
 
 

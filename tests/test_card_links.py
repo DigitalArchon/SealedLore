@@ -132,6 +132,12 @@ def test_a_link_is_read_as_its_site_s(link: str, expected: tuple[str, str, str])
         ("https://chub.ai/characters/someone", "doesn't name a character or a lorebook"),
         ("https://janitorai.com/characters/1234abcd_character-elena", "JanitorAI"),
         ("https://jannyai.com/characters/1234abcd_character-elena", "JanitorAI"),
+        # Half typed or mangled: urlparse raised ValueError out of the dialog's slot.
+        ("https://[", "can't be read"),
+        ("https://[::1", "can't be read"),
+        ("https://[zz]/card.png", "can't be read"),
+        ("https://example.com:abc/card.png", "can't be read"),
+        ("https://example.com:99999/card.png", "can't be read"),
     ],
 )
 def test_a_link_that_can_t_be_fetched_says_why_before_anything_is_sent(link: str, said: str):
