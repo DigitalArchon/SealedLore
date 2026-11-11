@@ -112,6 +112,7 @@ from sealedlore.gui.summaries_panel import SummariesPanel
 from sealedlore.gui.tab_rows import TabRows
 from sealedlore.gui.tavern_dialog import LINK_IMPORT_LABEL
 from sealedlore.gui.transcript import (
+    EMPTY_EDIT,
     ChapterCard,
     MessageWidget,
     TranscriptView,
@@ -2769,7 +2770,12 @@ class MainWindow(
         if self.session is None or self._busy:
             return
         node = next((n for n in self.session.nodes if n.id == node_id), None)
-        if node is None or not text.strip():
+        if node is None:
+            return
+        if not text.strip():
+            # It closed and did nothing, without a word (the editor's Save is
+            # off while it is blank; Enter in the name field came here).
+            self._edit_again(node_id, text, name, ooc, EMPTY_EDIT)
             return
         if not may_branch(node.meta.private_span, self._open_scene()):
             self._edit_again(
@@ -3659,6 +3665,13 @@ class MainWindow(
         try:
             went_stale = self.session.edit_node(node_id, content, ooc=ooc)
         except KeyError:
+            return
+        except ValueError as exc:
+            # Refused (a blank message): the editor open again with what was typed.
+            widget = self.transcript.message_widget(node_id)
+            if widget is not None:
+                widget.edit_again(content, ooc)
+            self.statusBar().showMessage(str(exc), 10000)
             return
         if went_stale:
             self._staleness_dismissed = False

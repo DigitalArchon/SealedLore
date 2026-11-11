@@ -316,3 +316,49 @@ def test_send_under_the_branches_diagram_does_nothing(app, tmp_path, story, cast
     assert not sent and len(window.session.nodes) == before
     assert window.map_shown() and window.composer.text() == "A draft I can't see."
     window.close()
+
+
+# --- 5. a message can't be saved empty --------------------------------------------
+
+
+def test_a_message_cleared_in_its_editor_cant_be_saved(app, tmp_path, story, cast):
+    """Edit, clear the text, Save: the message was stored empty, and a chat
+    sent ('user', '') on every later request (the review after 3.1.0b8)."""
+    window = _window(tmp_path, story, cast)
+    widget = window.transcript.message_widget("u1")
+    widget.begin_edit()
+    widget._editor.setPlainText("   \n ")
+    app.processEvents()
+    assert not widget._save_button.isEnabled()
+    assert not widget._empty_note.isHidden() and "can't be empty" in widget._empty_note.text()
+    widget.commit_edit()  # Save, as Ctrl+Enter in the editor does
+    assert widget.editing(), "the editor stays open, with what was typed"
+    assert window.session.nodes[2].content == "Author turn 1."
+    widget._editor.setPlainText("Author turn 1, changed.")
+    assert widget._save_button.isEnabled() and widget._empty_note.isHidden()
+    widget._save_button.click()
+    assert next(n for n in window.session.nodes if n.id == "u1").content == (
+        "Author turn 1, changed."
+    )
+    window.close()
+
+
+def test_a_blank_new_branch_says_why_and_keeps_its_editor(app, tmp_path, story, cast):
+    """A whitespace-only New branch from here… closed and did nothing."""
+    window = _window(tmp_path, story, cast)
+    widget = window.transcript.message_widget("u1")
+    widget.begin_edit(rewrite=True)
+    widget._editor.setPlainText("  ")
+    widget._branch_name.setText("Elsewhere")
+    widget._branch_name.returnPressed.emit()  # Enter in the name field
+    assert widget.editing() and not widget._save_button.isEnabled()
+    # The window refuses it too, the editor back with what was typed.
+    widget.cancel_edit()
+    before = len(window.session.nodes)
+    window._rewrite_from("u1", " ", "Elsewhere")
+    reopened = window.transcript.message_widget("u1")
+    assert reopened.editing() and reopened._branch_name.text() == "Elsewhere"
+    assert "can't be empty" in window.statusBar().currentMessage()
+    assert len(window.session.nodes) == before and not window._busy
+    reopened.cancel_edit()
+    window.close()

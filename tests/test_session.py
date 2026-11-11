@@ -412,6 +412,19 @@ def test_editing_a_verbatim_node_stales_nothing(session: StorySession):
     assert session.edit_node(history[-1].id, "Rewritten.") == []
 
 
+def test_a_message_is_never_edited_or_branched_to_nothing(session: StorySession):
+    """Saved blank, a chat's message went out as an empty one on every later
+    request and a turn as its bare label; deleting takes a message out."""
+    history = grow(session, 2)
+    for blank in ("", "  \n\t "):
+        with pytest.raises(ValueError, match="can't be empty"):
+            session.edit_node(history[0].id, blank)
+        with pytest.raises(ValueError, match="can't be empty"):
+            list(session.rewrite_from(history[1].id, blank))
+    assert history[0].content and history[0].edited_at is None
+    assert len(session.nodes) == len(history)
+
+
 def test_a_hand_edited_summary_is_the_authors_words(session: StorySession, tmp_path: Path):
     grow(session, 14)
     session.story.defaults.context_token_budget = 4_000

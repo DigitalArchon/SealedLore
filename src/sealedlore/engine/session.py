@@ -268,6 +268,8 @@ MAX_NOTES = 6
 PRIVATE_NO_MODEL = (
     "the private scene has no model to send to (Settings → Private); end the scene to go on"
 )
+# An edit or a new branch refused for having no text (`edit_node`).
+EMPTY_MESSAGE = "A message can't be empty: delete it instead."
 
 
 @dataclass(frozen=True)
@@ -1826,6 +1828,8 @@ class StorySession(
         answered, as if sent; a passage is the author's prose, and waits.
         """
         self._refuse_in_private("Rewriting from an earlier message")
+        if not text.strip():
+            raise ValueError(EMPTY_MESSAGE)
         index = index_nodes(self.nodes)
         original = index[node_id]
         if original.meta.private_span:
@@ -2813,6 +2817,11 @@ class StorySession(
         node = next((candidate for candidate in self.nodes if candidate.id == node_id), None)
         if node is None:
             raise KeyError(f"unknown node id: {node_id!r}")
+        if not content.strip():
+            # Stored blank, a chat's message went out as an empty one on every
+            # later request (Anthropic's API refuses those) and a turn as its
+            # bare label. Deleting is the way to take a message out.
+            raise ValueError(EMPTY_MESSAGE)
 
         if content != node.content:
             # A TEE mark is for the text as it came, or as it was sent: edited,

@@ -71,6 +71,9 @@ COLUMN_MARGIN = 18
 # keeps the text readable, and the message frames go translucent.
 WASH_ALPHA = 150
 
+# Under a message's editor while its text is blank, Save off.
+EMPTY_EDIT = "A message can't be empty. To remove it, use Delete from here… in its ⋯ menu."
+
 
 def background_qss() -> str:
     """The messages made see-through over a background picture, in the
@@ -323,6 +326,8 @@ class MessageWidget(QFrame):
         self._busy = False
         self._edit_row: QWidget | None = None
         self._branch_name: QLineEdit | None = None
+        # Under the editor while its text is blank: why Save is off.
+        self._empty_note: QLabel | None = None
         # The name a new branch gets when its field is left blank ("Branch 3").
         self.default_branch_name: Callable[[], str] = lambda: ""
 
@@ -699,11 +704,21 @@ class MessageWidget(QFrame):
             if self.ooc is not None:
                 self.ooc.hide()
         self.layout_.insertWidget(index + (3 if ooc_editor is not None else 2), row)
+        # Saved blank, a chat's message went out as nothing on every later
+        # request (an API may refuse that outright) and a turn as its bare
+        # label; a blank new branch closed and did nothing, without a word.
+        empty_note = QLabel(EMPTY_EDIT)
+        empty_note.setObjectName("hintLabel")
+        empty_note.setWordWrap(True)
+        empty_note.hide()
+        self.layout_.insertWidget(self.layout_.indexOf(row) + 1, empty_note)
+        editor.textChanged.connect(self._sync_save)
         self.body.hide()
         self.edit_button.setEnabled(False)
         self._editor = editor
         self._ooc_editor = ooc_editor
         self._edit_row = row
+        self._empty_note = empty_note
         self._save_button = save
         # What the editors held as they opened. Compared with the message
         # itself, an editor left alone already differed: a plain text box
@@ -813,6 +828,9 @@ class MessageWidget(QFrame):
         if self._edit_row is not None:
             self._edit_row.deleteLater()
             self._edit_row = None
+        if self._empty_note is not None:
+            self._empty_note.deleteLater()
+            self._empty_note = None
         self.body.show()
         if self.ooc is not None:
             self.ooc.show()
@@ -834,8 +852,16 @@ class MessageWidget(QFrame):
     def _sync_save(self) -> None:
         if self._save_button is None:
             return
-        self._save_button.setEnabled(not self._busy)
-        self._save_button.setToolTip("Saved once the current job is done" if self._busy else "")
+        blank = self._edit_blank()
+        self._save_button.setEnabled(not self._busy and not blank)
+        self._save_button.setToolTip(
+            "Saved once the current job is done" if self._busy else EMPTY_EDIT if blank else ""
+        )
+        if self._empty_note is not None:
+            self._empty_note.setVisible(blank)
+
+    def _edit_blank(self) -> bool:
+        return self._editor is not None and not self._editor.toPlainText().strip()
 
     def editing(self) -> bool:
         return self._editor is not None
@@ -843,6 +869,8 @@ class MessageWidget(QFrame):
     def _commit_edit(self) -> None:
         if self._editor is None or self._busy:
             return  # the editor stays, and Save with it, until the job is done
+        if self._edit_blank():
+            return  # the note under it says why; Delete from here… removes a message
         if not self._rewriting and self._edit_now() == self._edit_opened:
             # Saved as it opened: nothing to save. Saved anyway, the message
             # was written again (a no-break space a space), and the chapter
