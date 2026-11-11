@@ -1436,7 +1436,10 @@ class CollectionWindow:
         if skipped:
             notes.append(f"{skipped} were in a format SealedLore doesn't keep.")
         self._collection_pictures_changed(card.id)
-        lead = f"Added {len(refs)} expression pictures to {card.name}, labelled by their names."
+        lead = (
+            f"Added {len(refs)} expression picture{'s' if len(refs) != 1 else ''} to "
+            f"{card.name}, labelled by their names."
+        )
         if notes:
             self._say_left_out("Expression pictures", lead, notes)
         else:

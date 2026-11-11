@@ -58,6 +58,11 @@ def _first_words(text: str, count: int = 9) -> str:
     return " ".join(words[:count]) + ("…" if len(words) > count else "")
 
 
+def _counted(count: int, one: str, many: str) -> str:
+    """ "1 lore entry", "3 greetings"; "" for none."""
+    return f"{count} {one if count == 1 else many}" if count else ""
+
+
 class CardImportDialog(QDialog):
     def __init__(self, card: TavernCard, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -75,18 +80,23 @@ class CardImportDialog(QDialog):
         title = QLabel(card.name)
         title.setObjectName("dialogTitle")
         title.setStyleSheet("font-weight: bold;")
-        about = QLabel(first_sentence(card.text("description") or card.text("personality"), 300))
-        about.setWordWrap(True)
+        # The card's own words, with the names where its macros for them
+        # stand (`_sync`, as the name you play is typed).
+        self.about = QLabel()
+        self.about.setWordWrap(True)
+        self.about.setTextFormat(Qt.PlainText)
         creator = card.text("creator").strip()
         book = len(card.book["entries"]) if card.book else 0
-        facts = [f"by {creator}" if creator else "", f"{len(card.greetings)} greetings"]
-        if book:
-            facts.append(f"{book} lore entries")
+        facts = [
+            f"by {creator}" if creator else "",
+            _counted(len(card.greetings), "greeting", "greetings"),
+            _counted(book, "lore entry", "lore entries"),
+        ]
         details = QLabel(" · ".join(fact for fact in facts if fact))
         details.setObjectName("hintLabel")
         heading = QVBoxLayout()
         heading.addWidget(title)
-        heading.addWidget(about)
+        heading.addWidget(self.about)
         heading.addWidget(details)
         heading.addStretch(1)
         top = QHBoxLayout()
@@ -119,8 +129,8 @@ class CardImportDialog(QDialog):
         )
 
         self.opening = QComboBox()
-        for number, greeting in enumerate(card.greetings, start=1):
-            self.opening.addItem(f"Greeting {number}: {_first_words(greeting)}", number - 1)
+        for number, _greeting in enumerate(card.greetings, start=1):
+            self.opening.addItem(f"Greeting {number}", number - 1)
         self.opening.addItem(NO_OPENING, None)
         self.preview = GrowingText(lines=4, most=10)
         self.preview.setReadOnly(True)
@@ -180,7 +190,15 @@ class CardImportDialog(QDialog):
         self.buttons.button(QDialogButtonBox.Ok).setEnabled(bool(name))
         index = self.opening.currentData()
         fill = macro_filler(self.card.name, name or None)
-        self.preview.setPlainText("" if index is None else fill(self.card.greetings[index]))
+        card = self.card
+        self.about.setText(
+            first_sentence(fill(card.text("description") or card.text("personality")), 300)
+        )
+        for number, greeting in enumerate(card.greetings):
+            self.opening.setItemText(
+                number, f"Greeting {number + 1}: {_first_words(fill(greeting))}"
+            )
+        self.preview.setPlainText("" if index is None else fill(card.greetings[index]))
         self.preview.setVisible(index is not None)
 
     def options(self) -> dict[str, Any]:

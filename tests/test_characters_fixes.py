@@ -677,3 +677,44 @@ def test_enter_in_the_guides_card_doesnt_move_to_the_next_step(app, guide, story
     settle(app)
     assert guide.stack.currentIndex() == 1
     assert [c.name for c in story_window.session.cast] == ["John"]
+
+
+# --- wording -------------------------------------------------------------------------------
+
+
+def test_a_story_from_a_cards_scenario_shows_names_and_counts_in_words(app, tmp_path: Path):
+    """The card's details said "1 lore entries" and "1 greetings", and its
+    words showed {{char}} as written, above the choices and in the
+    greetings offered."""
+    from sealedlore.gui.tavern_dialog import CardImportDialog
+    from sealedlore.storage.tavern_cards import read_card
+    from tests.test_tavern import ELENA, png_card, v2
+
+    fields = dict(ELENA, alternate_greetings=[], first_mes="{{char}} looks {{user}} over.")
+    dialog = CardImportDialog(read_card(png_card(tmp_path, {"chara": v2(fields)})))
+    assert dialog.about.text() == "Elena keeps the farmhouse north of Hellsville."
+    details = [label.text() for label in dialog.findChildren(type(dialog.about))]
+    assert "by someone · 1 greeting · 1 lore entry" in details
+    assert dialog.opening.itemText(0).startswith("Greeting 1: Elena looks")
+    dialog.player.setText("John")
+    assert dialog.opening.itemText(0) == "Greeting 1: Elena looks John over."
+    dialog.deleteLater()
+
+
+def test_one_expression_picture_added_is_said_as_one(app, kept_window, tmp_path, monkeypatch):
+    import zipfile
+
+    from tests.test_tavern import tiny_png
+
+    window = kept_window
+    pack = tmp_path / "ben.zip"
+    with zipfile.ZipFile(pack, "w") as archive:
+        archive.writestr("joy.png", tiny_png())
+    monkeypatch.setattr(
+        "sealedlore.gui.window_collection.QFileDialog.getOpenFileName",
+        lambda *args, **kwargs: (str(pack), ""),
+    )
+    said: list[str] = []
+    monkeypatch.setattr(window.statusBar(), "showMessage", lambda text, *_args: said.append(text))
+    window._collection_expressions(kept_id(window, "Ben"))
+    assert said[-1] == "Added 1 expression picture to Ben, labelled by their names."
