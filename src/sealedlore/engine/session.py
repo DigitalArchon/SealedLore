@@ -1307,8 +1307,9 @@ class StorySession(
         pending: list[LoreEntry] = []
         hashes: dict[str, str] = {}
         # A held-back entry reaches no model, the embeddings endpoint's
-        # included; it is embedded on the first turn after it is named.
-        held = self.held_back_ids()
+        # included; it is embedded on the first turn after it is named. Nor
+        # does lore the plot hasn't revealed yet (`visible_lore`).
+        held = self.held_back_ids() | self.hidden_ids()
         for entry in self.bundle.lore:
             if not entry.enabled or entry.id in held:
                 continue

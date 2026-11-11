@@ -28,10 +28,10 @@ from sealedlore.engine.scene_update import SceneDelta
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
 from sealedlore.models.character import Character
-from sealedlore.models.config import Config
+from sealedlore.models.config import Config, EmbeddingProviderConfig
 from sealedlore.models.plot import Condition, Plot
 from sealedlore.models.scene import SceneShortcut, SceneState
-from sealedlore.providers.mock import MockChatProvider
+from sealedlore.providers.mock import MockChatProvider, MockEmbeddings
 from sealedlore.storage.repository import read_api_log, save_story_bundle
 from sealedlore.storage.scenario import bundle_from_scenario
 
@@ -851,6 +851,24 @@ def test_the_extended_story_parses_and_keeps_its_hidden_cast_out_of_the_prompt(t
     for hidden in ("Voss", "Vance", "Brennan", "Okafor", "Stevens", "Relay Tower", "Fort Garrow"):
         assert hidden not in prompt, hidden
     assert "Jane Moss" in prompt
+
+
+def test_lore_the_plot_has_not_revealed_is_never_embedded(tmp_path: Path):
+    """Hidden lore reached no prompt, but every entry's text went to the
+    embeddings endpoint, the plot's secrets with it."""
+    session = make_session(tmp_path, [], text=EXTENDED.read_text(encoding="utf-8"))
+    session.config.embedding_provider = EmbeddingProviderConfig(model="mock-embed")
+    backend = MockEmbeddings()
+    session.embeddings = backend
+    hidden = [entry for entry in session.bundle.lore if entry.id in session.hidden_ids()]
+    assert hidden
+
+    vectors = session.ensure_lore_vectors()
+    embedded = "\n".join(text for batch, _as_query in backend.calls for text in batch)
+    assert embedded, "nothing was embedded at all"
+    for entry in hidden:
+        assert entry.id not in vectors
+        assert entry.content[:40] not in embedded, entry.title
 
 
 def test_each_character_keeps_their_own_place_across_a_switch():
