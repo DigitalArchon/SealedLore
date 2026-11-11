@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import io
 import json
+import shutil
 import struct
 import tracemalloc
 import zipfile
@@ -28,9 +29,16 @@ from sealedlore.storage.collection_backup import (
     restore,
 )
 from sealedlore.storage.images import is_safe_relative, is_story_file
-from sealedlore.storage.paths import COLLECTION_ID, collection_dir, story_dir
+from sealedlore.storage.library import story_listings
+from sealedlore.storage.paths import COLLECTION_ID, collection_dir, stories_dir, story_dir
 from sealedlore.storage.picture_store import DiskPictures, MemoryPictures
-from sealedlore.storage.repository import StoryBundle, save_story_bundle
+from sealedlore.storage.repository import (
+    StoryBundle,
+    append_api_log,
+    load_story_bundle,
+    read_api_log,
+    save_story_bundle,
+)
 from tests.test_collection_backup import png
 
 
@@ -257,3 +265,33 @@ def test_a_backups_log_is_read_a_line_at_a_time_and_only_when_put_back(tmp_path,
     assert opened < MIB, "opening it reads no log"
     assert [entry["id"] for entry in entries] == ["e1", "e3"], "the long line passed over"
     assert peak < 2 * MIB, "four million newlines cost nothing"
+
+
+# --- a story folder copied by hand ----------------------------------------------------------
+
+
+def test_a_story_folder_copied_by_hand_is_a_story_of_its_own(tmp_path):
+    original = StoryBundle(story=Story(title="Doomsville"))
+    save_story_bundle(original, root=tmp_path)
+    store = DiskPictures(original.story.id, tmp_path)
+    store.write("images/refs/john.png", png(7))
+    append_api_log(original.story.id, {"id": "a1", "kind": "turn_response"}, root=tmp_path)
+    shutil.copytree(story_dir(original.story.id, tmp_path), stories_dir(tmp_path) / "mycopy")
+
+    copy = load_story_bundle("mycopy", root=tmp_path)
+    assert copy.story.id == "mycopy"
+    assert any("copied or renamed" in notice for notice in copy.notices)
+    copy.story.title = "Doomsville, played again"
+    save_story_bundle(copy, root=tmp_path)
+    append_api_log(copy.story.id, {"id": "a2", "kind": "turn_response"}, root=tmp_path)
+    DiskPictures(copy.story.id, tmp_path).write("images/refs/jane.png", png(8))
+
+    again = load_story_bundle(original.story.id, root=tmp_path)
+    assert again.story.title == "Doomsville" and not again.notices
+    assert [e["id"] for e in read_api_log(original.story.id, root=tmp_path)] == ["a1"]
+    assert store.read("images/refs/jane.png") is None
+    reopened = load_story_bundle("mycopy", root=tmp_path)
+    assert reopened.story.title == "Doomsville, played again" and not reopened.notices
+    assert [e["id"] for e in read_api_log("mycopy", root=tmp_path)] == ["a1", "a2"]
+    listed = {listing.id: listing.title for listing in story_listings(tmp_path)}
+    assert listed == {original.story.id: "Doomsville", "mycopy": "Doomsville, played again"}

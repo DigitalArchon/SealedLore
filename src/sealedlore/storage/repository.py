@@ -312,8 +312,21 @@ def load_story_bundle(story_id: str, root: Path | None = None) -> StoryBundle:
             "which may be a save behind."
         )
 
+    story = Story.model_validate(story_data)
+    if story.id != story_id:
+        # The folder is the story: one copied or renamed by hand keeps the
+        # id of the story it was copied from in its story.json, and saved by
+        # that id every change went on to the original's folder.
+        if is_safe_story_id(story_id):
+            notices.append(
+                f"This story's folder ({story_id}) was copied or renamed outside SealedLore: "
+                "it is now a story of its own, saved in its own folder, and the story it "
+                "came from is left as it was."
+            )
+        story.id = story_id
+
     return StoryBundle(
-        story=Story.model_validate(story_data),
+        story=story,
         cast=[Character.model_validate(c) for c in read_json(directory / "cast.json", [])],
         lore=[LoreEntry.model_validate(e) for e in read_json(directory / "lore.json", [])],
         nodes=nodes,
