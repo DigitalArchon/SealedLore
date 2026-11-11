@@ -195,3 +195,142 @@ def test_a_tag_taken_off_several_doesnt_come_back_on_the_card_shown(app, kept_wi
     window._flush_collection()
     saved = {c.name: c for c in collection.load_collection(window.root).cast}
     assert saved["Elena"].tavern.tags == ["road"] and saved["Elena"].tavern.creator == "me"
+
+
+# --- the plot editor: a name typed a key at a time renames only its own item --------------
+
+
+SAMPLE = Path(__file__).resolve().parents[1] / "SampleStories" / "Doomsville.md"
+
+
+@pytest.fixture
+def plot_editor(app):
+    from sealedlore.gui.plot_editor import PlotEditorWindow
+
+    window = PlotEditorWindow()
+    assert window.open_path(SAMPLE)
+    window.show()
+    yield window
+    window.modified = False
+    window.close()
+
+
+def type_name(app, field, text: str) -> None:
+    """What a person does: the field chosen whole, then the keys."""
+    field.setFocus()
+    field.selectAll()
+    QTest.keyClicks(field, text)
+    settle(app)
+
+
+def brought(document) -> list[list[str]]:
+    return [list(way.brings) for event in document.events for way in (event, *event.variants)]
+
+
+def test_a_new_characters_name_typed_through_anothers_leaves_them_be(app, plot_editor):
+    """Typing "Elena Ruiz Junior" for a new character renamed Elena Ruiz, and
+    every event that brings her, on the way (at "Elena Ruiz", then " ")."""
+    from sealedlore.gui.plot_editor import CHARACTER, HEADER
+
+    editor = plot_editor
+    names = [c.name for c in editor.document.characters]
+    brings = brought(editor.document)
+    editor._select((HEADER, CHARACTER, -1))
+    editor._add()
+    type_name(app, editor.pages.currentWidget().name, "Elena Ruiz Junior")
+    assert [c.name for c in editor.document.characters] == [*names, "Elena Ruiz Junior"]
+    assert brought(editor.document) == brings
+    elena = names.index("Elena Ruiz")
+    assert editor._find((CHARACTER, elena, -1)).text(0) == "Elena Ruiz"
+    assert editor._find((CHARACTER, len(names), -1)).text(0).startswith("Elena Ruiz Junior")
+    editor.check_now()
+    assert not [p for p in editor.problems if p.error]
+
+
+def test_a_new_facts_name_typed_through_anothers_leaves_its_conditions_be(app, plot_editor):
+    from sealedlore.gui.plot_editor import FACT, HEADER
+
+    editor = plot_editor
+    facts = [f.name for f in editor.document.facts]
+    editor._select((HEADER, FACT, -1))
+    editor._add()
+    type_name(app, editor.pages.currentWidget().name, "hellsville_two")
+    assert [f.name for f in editor.document.facts] == [*facts, "hellsville_two"]
+    fall = editor.document.events[0]
+    assert fall.requires[0].fact == "hellsville"
+    assert fall.variants[0].sets[0].fact == "hellsville"
+
+
+def test_two_new_events_one_retitled_leaves_the_other(app, plot_editor):
+    from sealedlore.gui.plot_editor import HEADER, OPTIONAL
+
+    editor = plot_editor
+    editor._select((HEADER, OPTIONAL, -1))
+    editor._add()
+    editor._add()
+    type_name(app, editor.pages.currentWidget().title, "The second one")
+    titles = [e.title for e in editor.document.events]
+    assert titles[-2:] == ["New event", "The second one"]
+
+
+def test_a_name_emptied_and_typed_anew_keeps_what_named_it(app, plot_editor):
+    """Marcus Webb backspaced to nothing, then "Helena Ruiz": the events that
+    brought him brought "" (saved as nobody)."""
+    from sealedlore.gui.plot_editor import CHARACTER
+
+    editor = plot_editor
+    marcus = [c.name for c in editor.document.characters].index("Marcus Webb")
+    editor._select((CHARACTER, marcus, -1))
+    field = editor.pages.currentWidget().name
+    field.setFocus()
+    field.end(False)
+    for _ in "Marcus Webb":
+        QTest.keyClick(field, Qt.Key_Backspace)
+    assert "Marcus Webb" in [n for names in brought(editor.document) for n in names], (
+        "while blank, what named him keeps his name"
+    )
+    QTest.keyClicks(field, "Helena Ruiz")
+    settle(app)
+    named = [n for names in brought(editor.document) for n in names]
+    assert "Helena Ruiz" in named and "Marcus Webb" not in named and "" not in named
+    editor.check_now()
+    assert "- brings: Helena Ruiz, Elena Ruiz" in editor.rendered.text
+    assert not [p for p in editor.problems if p.error]
+
+
+def test_a_name_typed_onto_anothers_and_on_keeps_both_apart(app, plot_editor):
+    """Ben renamed by typing "Marcus Webb, the elder": while his name is
+    Marcus Webb's, nothing of Marcus's follows him, and his own references
+    end on his new name."""
+    from sealedlore.gui.plot_editor import CHARACTER
+
+    editor = plot_editor
+    names = [c.name for c in editor.document.characters]
+    editor._select((CHARACTER, names.index("Ben"), -1))
+    field = editor.pages.currentWidget().name
+    type_name(app, field, "Marcus Webb")
+    assert [c.name for c in editor.document.characters].count("Marcus Webb") == 2
+    caves = next(e for e in editor.document.events if e.title == "Ben in the caves")
+    assert caves.brings == ["Ben"], "on another's name, what named him keeps his own"
+    editor.check_now()
+    shown = [p.message for p in editor.problems]
+    assert "Two characters are called “Marcus Webb”: what names them can't tell them apart." in (
+        shown
+    )
+    QTest.keyClicks(field, " the elder")
+    settle(app)
+    assert caves.brings == ["Marcus Webb the elder"]
+    assert ["Marcus Webb", "Elena Ruiz"] in brought(editor.document)
+
+
+def test_an_ordinary_rename_still_follows_as_it_is_typed(app, plot_editor):
+    from sealedlore.gui.plot_editor import CHARACTER
+
+    editor = plot_editor
+    names = [c.name for c in editor.document.characters]
+    editor._select((CHARACTER, names.index("Elena Ruiz"), -1))
+    type_name(app, editor.pages.currentWidget().name, "Elena Cruz")
+    named = [n for names in brought(editor.document) for n in names]
+    assert "Elena Cruz" in named and "Elena Ruiz" not in named
+    editor.check_now()
+    assert not [p for p in editor.problems if p.error]

@@ -19,6 +19,7 @@ never written to the file.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -33,6 +34,9 @@ PacingChoice = Literal["quiet", "any"]
 ConditionKind = Literal["fact", "at", "visited", "happened", "text"]
 # The length choices the file accepts: `custom` is set in the app.
 FileLength = Literal["adaptive", "brief", "standard", "descriptive", "literary"]
+# What a name in a list or a condition can stand for (`references`); a lore
+# entry is named as a place is.
+ReferenceKind = Literal["fact", "place", "event", "character"]
 
 
 class OpeningDoc(BaseModel):
@@ -183,45 +187,59 @@ class PlotDocument(BaseModel):
             holders.extend(event.variants)
         return holders
 
-    def rename_fact(self, old: str, new: str) -> None:
-        for fact in self.facts:
-            if fact.name == old:
-                fact.name = new
+    def references(self, kind: ReferenceKind, name: str) -> list[Callable[[str], None]]:
+        """Every place in the document that names `name` as a fact, place
+        (or lore entry), event or character, each as a way to write another
+        name there. Taken once as an item's rename begins, they follow that
+        item alone, whatever names it passes through on the way (the plot
+        editor renames a key at a time)."""
+        found: list[Callable[[str], None]] = []
+
+        def field(holder: BaseModel, attribute: str) -> None:
+            found.append(lambda new: setattr(holder, attribute, new))
+
+        def entry(names: list[str], index: int) -> None:
+            found.append(lambda new: names.__setitem__(index, new))
+
         for holder in self._holders():
+            if kind == "place" and holder.at == name:
+                field(holder, "at")
+            listed = {"place": holder.reveals, "character": holder.brings}.get(kind, [])
+            for index, other in enumerate(listed):
+                if other == name:
+                    entry(listed, index)
             for condition in holder.requires:
-                if condition.kind == "fact" and condition.fact == old:
-                    condition.fact = new
-            for assignment in holder.sets:
-                if assignment.fact == old:
-                    assignment.fact = new
+                if kind == "fact" and condition.kind == "fact" and condition.fact == name:
+                    field(condition, "fact")
+                elif kind == "event" and condition.kind == "happened" and condition.event == name:
+                    field(condition, "event")
+                elif condition.kind in ("at", "visited"):
+                    if kind == "place" and condition.place == name:
+                        field(condition, "place")
+                    elif kind == "character" and condition.who == name:
+                        field(condition, "who")
+            if kind == "fact":
+                for assignment in holder.sets:
+                    if assignment.fact == name:
+                        field(assignment, "fact")
+        return found
+
+    def _rename(self, kind: ReferenceKind, items, attribute: str, old: str, new: str) -> None:
+        follow = self.references(kind, old)
+        for item in items:
+            if getattr(item, attribute) == old:
+                setattr(item, attribute, new)
+        for write in follow:
+            write(new)
+
+    def rename_fact(self, old: str, new: str) -> None:
+        self._rename("fact", self.facts, "name", old, new)
 
     def rename_place(self, old: str, new: str) -> None:
-        for entry in (*self.places, *self.lore):
-            if entry.name == old:
-                entry.name = new
-        for holder in self._holders():
-            if holder.at == old:
-                holder.at = new
-            holder.reveals = [new if name == old else name for name in holder.reveals]
-            for condition in holder.requires:
-                if condition.kind in ("at", "visited") and condition.place == old:
-                    condition.place = new
+        self._rename("place", (*self.places, *self.lore), "name", old, new)
 
     def rename_event(self, old: str, new: str) -> None:
-        for event in self.events:
-            if event.title == old:
-                event.title = new
-        for holder in self._holders():
-            for condition in holder.requires:
-                if condition.kind == "happened" and condition.event == old:
-                    condition.event = new
+        self._rename("event", self.events, "title", old, new)
 
     def rename_character(self, old: str, new: str) -> None:
-        for character in self.characters:
-            if character.name == old:
-                character.name = new
-        for holder in self._holders():
-            holder.brings = [new if name == old else name for name in holder.brings]
-            for condition in holder.requires:
-                if condition.kind in ("at", "visited") and condition.who == old:
-                    condition.who = new
+        self._rename("character", self.characters, "name", old, new)

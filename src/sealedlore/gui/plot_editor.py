@@ -34,6 +34,7 @@ its one writer. The story's pictures are shown from a copy of them
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -112,6 +113,7 @@ from sealedlore.models.plot_file import (
     FactDoc,
     PictureDoc,
     PlotDocument,
+    ReferenceKind,
     VariantDoc,
 )
 from sealedlore.storage.repository import StoryBundle
@@ -181,6 +183,14 @@ _SECTION_ABOUT = {
 }
 _PLOT_SECTIONS = {PLOT, FACT, TIMELINE, OPTIONAL, EVENT}
 _LISTS = (CHARACTER, PLACE, LORE, FACT, TIMELINE, OPTIONAL)
+# What other items name each kind of item by, and the field of its name.
+_NAMED: dict[str, tuple[ReferenceKind, str]] = {
+    CHARACTER: ("character", "name"),
+    PLACE: ("place", "name"),
+    LORE: ("place", "name"),
+    FACT: ("fact", "name"),
+    EVENT: ("event", "title"),
+}
 CHECK_DELAY_MS = 250
 
 
@@ -257,6 +267,9 @@ class PlotEditorWindow(QMainWindow):
         self.modified = False
         self.rendered: RenderedPlot | None = None
         self.problems: list[DocProblem] = []
+        # The item being renamed, the name it had when its rename began, and
+        # what named it then (`_on_renamed`); forgotten when another is shown.
+        self._renaming: tuple[object, str, list[Callable[[str], None]]] | None = None
         self._check_timer = QTimer(self)
         self._check_timer.setSingleShot(True)
         self._check_timer.setInterval(CHECK_DELAY_MS)
@@ -586,6 +599,7 @@ class PlotEditorWindow(QMainWindow):
         self._sync_buttons(ref)
 
     def _show(self, ref: tuple | None) -> None:
+        self._renaming = None
         if ref is None:
             self.pages.setCurrentWidget(self.empty_page)
             return
@@ -678,18 +692,30 @@ class PlotEditorWindow(QMainWindow):
         self._touch()
 
     def _on_renamed(self, old: str, new: str) -> None:
+        """The item shown has another name (a key at a time): what named it
+        follows. What named it is found once, from the name it had as its
+        rename began, and only if that name was its alone; while its name is
+        blank or another item's, they keep the name it had (the check says
+        what is wrong). Each key used to rename every item and reference with
+        the name of the key before: typing "John Junior" for a new character
+        renamed John, and everything that named him, on the way."""
         ref = self.current_ref()
-        if ref is None or ref[0] == HEADER:
+        if ref is None or ref[0] not in _NAMED or (ref[0] == EVENT and ref[2] >= 0):
             return
-        kind = ref[0]
-        if kind == FACT:
-            self.document.rename_fact(old, new)
-        elif kind in (PLACE, LORE):
-            self.document.rename_place(old, new)
-        elif kind == EVENT:
-            self.document.rename_event(old, new)
-        elif kind == CHARACTER:
-            self.document.rename_character(old, new)
+        kind, attribute = _NAMED[ref[0]]
+        items = self._items(ref[0])
+        if not 0 <= ref[1] < len(items):
+            return
+        item = items[ref[1]]
+        namesakes = (*self.document.places, *self.document.lore) if kind == "place" else items
+        others = {getattr(other, attribute) for other in namesakes if other is not item}
+        if self._renaming is None or self._renaming[0] is not item:
+            alone = bool(old.strip()) and old not in others
+            self._renaming = (item, old, self.document.references(kind, old) if alone else [])
+        _item, start, follow = self._renaming
+        name = new if new.strip() and new not in others else start
+        for write in follow:
+            write(name)
 
     def _on_place_toggled(self, place: bool) -> None:
         """An entry moved between Places and Lore: a story's lore entry

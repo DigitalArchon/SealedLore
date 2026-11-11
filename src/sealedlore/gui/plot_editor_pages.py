@@ -228,7 +228,9 @@ class Page(QWidget):
                 widget.changed.connect(self._on_change)
 
     def _name_changed(self, old: str, new: str) -> None:
-        if old != new and old.strip() and not self._loading:
+        # Every change, from a blank name too: the window keeps what named the
+        # item following it (plot_editor._on_renamed).
+        if old != new and not self._loading:
             self.renamed.emit(old, new)
 
 

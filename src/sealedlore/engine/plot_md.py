@@ -874,6 +874,7 @@ class _Parser:
         choose: list[str] = []
         if block is None:
             return cast, supporting, choose
+        named: set[str] = set()
         for child in block.children:
             found = self.body(child, _CHARACTER_FIELDS)
             values = found.values
@@ -919,6 +920,15 @@ class _Parser:
                         "in the opening scene or chosen at the start.",
                     )
             self.keep_pictures(found, "character", character.id, character.name)
+            if _norm(character.name) in named:
+                # Said as events are: everything that names them takes the
+                # later one (the plot editor shows it against the card).
+                self.note(
+                    child.line,
+                    f"Two characters are called “{child.title}”: what names them "
+                    "can't tell them apart.",
+                )
+            named.add(_norm(character.name))
             self.people[_norm(character.name)] = character.id
             for alias in character.aliases:
                 self.people.setdefault(_norm(alias), character.id)
