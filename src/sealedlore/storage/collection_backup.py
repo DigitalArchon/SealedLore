@@ -315,7 +315,12 @@ def _json(archive: zipfile.ZipFile, member: str, default: Any) -> Any:
         raise BackupError(f"its {member} is far larger than any backup's.")
     try:
         data = json.loads(read_member(archive, info, MAX_MEMBER_BYTES).decode("utf-8"))
-    except (*_DAMAGED, json.JSONDecodeError, RecursionError) as exc:
+    except RecursionError as exc:
+        # Python 3.11's json gives up at about 1,000 levels, where 3.12 reads
+        # them: either way it is the nesting, and says so. First: it is a
+        # RuntimeError, which _DAMAGED holds.
+        raise BackupError(f"its {member} is nested far deeper than any backup's.") from exc
+    except (*_DAMAGED, json.JSONDecodeError) as exc:
         raise BackupError(f"its {member} is damaged.") from exc
     if nests_deeper(data):
         # Put back, it could never be saved again, and every edit after it

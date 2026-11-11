@@ -323,19 +323,28 @@ def deep_character(levels: int) -> str:
     return '{"name": "Mallory", "tavern": {"extensions": {"x": ' + nested(levels) + "}}}"
 
 
-def test_a_backup_of_characters_nested_too_deep_is_refused_before_anything_is_put_back(tmp_path):
+# Past MAX_NESTING (200), refused by our own check on every Python; and
+# 1,000, where Python 3.11's json gives up first (3.12 reads it).
+DEPTHS = pytest.mark.parametrize("levels", [300, 1000])
+
+
+@DEPTHS
+def test_a_backup_of_characters_nested_too_deep_is_refused_before_anything_is_put_back(
+    tmp_path, levels
+):
     path = tmp_path / "deep.zip"
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("manifest.json", json.dumps({"format": BACKUP_FORMAT, "version": 1}))
-        archive.writestr("characters.json", "[" + deep_character(1000) + "]")
+        archive.writestr("characters.json", "[" + deep_character(levels) + "]")
     with pytest.raises(BackupError, match="nested far deeper"):
         with open_backup(path):
             pass
 
 
-def test_a_story_backup_nested_too_deep_is_refused_and_writes_nothing(tmp_path):
+@DEPTHS
+def test_a_story_backup_nested_too_deep_is_refused_and_writes_nothing(tmp_path, levels):
     data = archive_data(StoryBundle(story=Story(title="Doomsville")), [], {})
-    text = json.dumps(data).replace('"cast": []', '"cast": [' + deep_character(1000) + "]")
+    text = json.dumps(data).replace('"cast": []', '"cast": [' + deep_character(levels) + "]")
     path = tmp_path / "deep.sealedlore-archive.json"
     path.write_text(text, encoding="utf-8")
     with pytest.raises(ArchiveError, match="nested far deeper"):
@@ -343,9 +352,10 @@ def test_a_story_backup_nested_too_deep_is_refused_and_writes_nothing(tmp_path):
     assert not stories_dir(tmp_path).exists()
 
 
-def test_a_scenario_nested_too_deep_is_refused(tmp_path):
+@DEPTHS
+def test_a_scenario_nested_too_deep_is_refused(tmp_path, levels):
     scenario = Scenario(title="Doomsville").model_dump()
-    text = json.dumps(scenario).replace('"cast": []', '"cast": [' + deep_character(1000) + "]")
+    text = json.dumps(scenario).replace('"cast": []', '"cast": [' + deep_character(levels) + "]")
     path = tmp_path / "deep.sealedlore-scenario.json"
     path.write_text(text, encoding="utf-8")
     with pytest.raises(ScenarioError, match="nested far deeper"):
