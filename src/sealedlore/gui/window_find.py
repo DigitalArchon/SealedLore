@@ -58,6 +58,14 @@ class FindWindow:
         self._matches, self._match_index = [], None
         self.composer.input.setFocus()
 
+    def _forget_find(self) -> None:
+        """Find put away with its words, as another story or chat opens or
+        the story closes: they were the one being left's. Kept, a memory-only
+        chat's search stood over the next story and ran again in it."""
+        self.find_bar.reset()
+        self.transcript.clear_match()
+        self._matches, self._match_index = [], None
+
     def find_open(self) -> bool:
         return self.find_bar.isVisible()
 
@@ -92,4 +100,8 @@ class FindWindow:
             self._match_index = None
         elif self._match_index is None or self._match_index >= len(self._matches):
             self._match_index = len(self._matches) - 1
+        if self._match_index is not None:
+            # The rebuilt messages are new labels: the match the count names
+            # is selected again where it is, the reader left where they are.
+            self.transcript.select_match(*self._matches[self._match_index])
         self.find_bar.set_count(self._match_index, len(self._matches))

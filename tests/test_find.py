@@ -188,3 +188,46 @@ def test_editing_an_old_message_keeps_the_window_there(app, long_window: MainWin
     assert edited.body.text() == "Author turn 2, put right."
     assert view.unbuilt_later > PAGE, "the edit rebuilt the whole story after the message"
     assert visible(window, edited.body)
+
+
+def test_a_rebuild_selects_the_match_it_counts_again(app, window: MainWindow):
+    """After a rebuild (a turn, a theme or text size) the count still said
+    "2 of 2" and nothing was selected (the review after 3.1.0b8)."""
+    search(window, "kestrel")
+    settle(app)
+    window.reload_transcript()
+    settle(app)
+    assert window.find_bar.count.text() == "2 of 2"
+    latest = window.transcript.message_widget(f"a{EXCHANGES - 1}").body
+    assert latest.selectedText() == "kestrel"
+    window.set_theme("high_contrast")
+    settle(app)
+    latest = window.transcript.message_widget(f"a{EXCHANGES - 1}").body
+    assert window.find_bar.count.text() == "2 of 2" and latest.selectedText() == "kestrel"
+    window.set_theme("dark")
+
+
+def test_find_and_its_words_stay_with_the_story_they_were_typed_in(
+    app, window: MainWindow, tmp_path: Path, story, cast
+):
+    """A search from one story or chat stood over the next one opened, and
+    Ctrl+F there ran it again (the review after 3.1.0b8)."""
+    other = story.model_copy(
+        update={"id": "story-2", "title": "Another story", "active_leaf_id": "a1"}
+    )
+    save_story_bundle(StoryBundle(story=other, cast=cast, nodes=make_exchange(2)), root=tmp_path)
+    search(window, "kestrel")
+    settle(app)
+    window.open_story("story-2")
+    settle(app)
+    assert not window.find_open() and window.find_bar.field.text() == ""
+    assert window.find_bar.count.text() == ""
+    window.find_action.trigger()
+    assert window.find_bar.field.text() == "" and window._matches == []
+    window.find_bar.field.setText("turn")
+    window.find_bar._timer.stop()
+    window._on_find_changed("turn")
+    window.close_story()
+    window.open_story(story.id)
+    window.find_action.trigger()
+    assert window.find_bar.field.text() == "" and window._matches == []

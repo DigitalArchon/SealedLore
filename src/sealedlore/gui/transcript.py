@@ -2512,6 +2512,18 @@ class TranscriptView(QScrollArea):
         QTimer.singleShot(0, self, self._reveal_match)
         return True
 
+    def select_match(self, node_id: str, start: int, length: int) -> bool:
+        """Select a match again in its message, where it is built, without
+        moving the reader: a rebuild (a turn, a theme or text size) made new
+        labels, and the count still said "6 of 6" with nothing selected."""
+        self.clear_match()
+        widget = self._built_widget(node_id)
+        if widget is None or widget._editor is not None:
+            return False
+        widget.body.setSelection(start, length)
+        self._found = widget.body
+        return True
+
     def _reveal_match(self) -> None:
         if self._anchor_match is None:
             return

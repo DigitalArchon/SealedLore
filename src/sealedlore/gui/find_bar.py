@@ -123,6 +123,15 @@ class FindBar(QFrame):
         self.field.setFocus()
         self.field.selectAll()
 
+    def reset(self) -> None:
+        """Closed and empty, nothing waiting to be searched."""
+        self._timer.stop()
+        self.field.blockSignals(True)
+        self.field.clear()
+        self.field.blockSignals(False)
+        self.set_count(None, 0)
+        self.hide()
+
     def set_count(self, index: int | None, total: int) -> None:
         """Show "3 of 12", counted in story order, or "No matches"."""
         text = self.field.text().strip()

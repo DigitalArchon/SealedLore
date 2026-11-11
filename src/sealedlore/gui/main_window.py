@@ -1799,7 +1799,7 @@ class MainWindow(
         self.show_collection(False)
         self.show_cast_board(False)
         self.show_map(False)
-        self.close_find()
+        self._forget_find()
         if self.session is not None:
             if self.session.memory_only:
                 bad_hosts().forget_session()
@@ -2099,6 +2099,7 @@ class MainWindow(
         # A route to one host is checked against that host's price.
         self.session.host_price = self._host_price
         self._fetch_host_prices()
+        self._forget_find()
         self.setWindowTitle(f"SealedLore — {self.session.story.title}")
         # A notice still showing is about the story left ("Scene: …" over a
         # chat just opened, a playtest of Oct 29 2026).
