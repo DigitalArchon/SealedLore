@@ -691,3 +691,72 @@ def test_settings_cancelled_leaves_no_dialog_holding_the_key_typed(app, window, 
     assert window.findChildren(VideoDialog) == []
     held = [field for field in window.findChildren(QLineEdit) if field.text() == typed]
     assert held == [], "no field anywhere still holds the key"
+
+
+# --- Settings saves back what it can't show --------------------------------------
+
+
+def _odd_config():
+    from sealedlore.models.config import Config, ProviderConfig
+
+    config = Config(
+        providers=[
+            ProviderConfig(
+                name="NanoGPT",
+                base_url="https://nano-gpt.com/api/v1",
+                api_key="k1",
+                model="z-ai/glm-5.3",
+            )
+        ],
+        active_provider_name="NanoGPT",
+    )
+    config.generation.temperature = 0.835
+    config.generation.stop = ["a,b", " c "]
+    config.summary_target_words = 37
+    config.cast_share = 0.155
+    config.archive_target_ratio = 0.555
+    config.lore_similarity_threshold = 0.455
+    return config
+
+
+def test_settings_saves_back_what_its_fields_cant_show_unless_changed(app):
+    """A summary length of 37 showed as the box's lowest, 50, and a Save that
+    touched nothing saved 50; the stop sequence "a,b" came back as two, and
+    0.155, 0.555, 0.455 and 0.835 rounded to what the boxes show."""
+    from sealedlore.gui.settings_dialog import SettingsDialog
+
+    config = _odd_config()
+    before = config.model_dump()
+    dialog = SettingsDialog(config, None)
+    dialog._save()
+    assert dialog.result() == 1
+    assert config.model_dump() == before, "nothing changed, nothing rewritten"
+    # A field changed is saved as it shows.
+    dialog = SettingsDialog(config, None)
+    dialog.summary_words.setValue(200)
+    dialog.stop.setText("THE END")
+    dialog.similarity.setValue(0.5)
+    dialog._save()
+    assert config.summary_target_words == 200 and config.generation.stop == ["THE END"]
+    assert config.lore_similarity_threshold == 0.5
+    assert config.cast_share == 0.155 and config.generation.temperature == 0.835
+
+
+def test_a_settings_problem_is_said_until_it_is_put_right(app):
+    """The error line stayed after the address was put right, until the next
+    Save; now it follows the fields, and says the next problem if there is
+    one."""
+    from sealedlore.gui.settings_dialog import SettingsDialog
+
+    dialog = SettingsDialog(_odd_config(), None)
+    dialog.show()
+    dialog.image_url.setText("http://pictures.example.com/v1")
+    dialog._save()
+    assert dialog.isVisible() and not dialog.error.isHidden()
+    assert dialog.error.text().startswith("Images:")
+    dialog.video_url.setText("http://video.example.com/v1")
+    dialog.image_url.setText("")
+    wait_for(app, lambda: dialog.error.text().startswith("Video:"))
+    dialog.video_url.setText("https://video.example.com/v1")
+    wait_for(app, lambda: dialog.error.isHidden())
+    dialog.done(0)

@@ -113,6 +113,8 @@ from sealedlore.storage.paths import config_file
 
 UNSET = -1.0
 UNSET_INT = -1
+# A Save's problem is looked at again this long after the last change.
+RECHECK_MS = 150
 
 
 def _optional_double(value: float) -> float | None:
@@ -121,6 +123,11 @@ def _optional_double(value: float) -> float | None:
 
 def _optional_int(value: int) -> int | None:
     return None if value < 0 else value
+
+
+def _shown_value(field: QWidget) -> object:
+    """What a number or text field shows, to tell whether it was changed."""
+    return field.text() if isinstance(field, QLineEdit) else field.value()
 
 
 # Settings → Lore: how a lorebook too big to send whole is chosen from.
@@ -359,6 +366,50 @@ class SettingsDialog(QDialog):
         # Everything as it stood once filled in (`_state`), to tell on Cancel
         # whether anything would be lost.
         self._opened: tuple | None = None
+        # What each number and the stop sequences showed as the dialog was
+        # filled in: one left as it was saves back what was there (`_kept`).
+        self._shown = {
+            field: _shown_value(field)
+            for kind in (QSpinBox, QDoubleSpinBox)
+            for field in self.findChildren(kind)
+        }
+        self._shown[self.stop] = _shown_value(self.stop)
+        # A Save's problem is said until it is put right, then goes.
+        self._recheck = QTimer(self)
+        self._recheck.setSingleShot(True)
+        self._recheck.setInterval(RECHECK_MS)
+        self._recheck.timeout.connect(self._recheck_problem)
+        for kind, signal in (
+            (QLineEdit, "textChanged"),
+            (QComboBox, "currentIndexChanged"),
+            (QCheckBox, "toggled"),
+        ):
+            for field in self.findChildren(kind):
+                getattr(field, signal).connect(self._problem_may_have_gone)
+
+    def _kept(self, field: QWidget, value, saved):
+        """`value`, read from `field`, or `saved` while the field shows what
+        it showed when the dialog opened. A field can't show every value:
+        a summary length of 37 words showed as the box's lowest, 50, and was
+        saved as 50; a stop sequence "a,b" became two; 0.155 became 0.16. A
+        Save that touched nothing rewrote them."""
+        return (
+            saved if field in self._shown and _shown_value(field) == self._shown[field] else value
+        )
+
+    def _problem_may_have_gone(self, *_args) -> None:
+        if not self.error.isHidden():
+            self._recheck.start()
+
+    def _recheck_problem(self) -> None:
+        """A Save's problem said once more, or put away once it is put right:
+        it stayed after the field was fixed, until the next Save."""
+        problem = self._problem(self._endpoints_as_typed(), self.embed_base_url.text().strip())
+        if problem is None:
+            self.error.hide()
+            return
+        page = getattr(problem, "page", "")
+        self.error.setText(f"{page}: {problem}" if page else str(problem))
 
     def showEvent(self, event) -> None:  # noqa: N802 - Qt naming
         super().showEvent(event)
@@ -2302,34 +2353,51 @@ class SettingsDialog(QDialog):
             "address, leave its key blank if it needs none, or Save again and choose Yes.",
         )
 
+    def _check_addresses(self, endpoints: list[ProviderConfig], embed_url: str) -> None:
+        """Raises ValueError naming a bad endpoint or address, and its page."""
+        self._check_endpoints(endpoints)
+        checks = [
+            (
+                "Lore",
+                "The embeddings address",
+                embed_url if self.embeddings_enabled.isChecked() else "",
+            ),
+            ("Images", "The picture endpoint's address", self.image_url.text().strip()),
+            ("Video", "The video endpoint's address", self.video_url.text().strip()),
+            ("Private", "The private model's address", self.private_url.text().strip()),
+        ]
+        for page, field, url in checks:
+            if url:
+                try:
+                    require_https(url)
+                except ValueError as exc:
+                    raise SettingsProblem(page, f"{field} {exc}") from exc
+
+    @staticmethod
+    def _check_keys(typed: Config) -> None:
+        """A key no header can carry (a line break, a zero-width space from
+        a web page) is said here, where it is, and never shown."""
+        for page, whose, key in typed_keys(typed):
+            if problem := key_problem(key, whose):
+                raise SettingsProblem(page, problem)
+
+    def _problem(self, endpoints: list[ProviderConfig], embed_url: str) -> ValueError | None:
+        """What Save would refuse now, asking nothing (`_recheck_problem`)."""
+        try:
+            self._check_addresses(endpoints, embed_url)
+            self._check_keys(self._as_typed(endpoints, embed_url))
+        except ValueError as exc:
+            return exc
+        return None
+
     def _save(self) -> None:
         endpoints = self._endpoints_as_typed()
         embed_url = self.embed_base_url.text().strip()
         try:
-            self._check_endpoints(endpoints)
-            checks = [
-                (
-                    "Lore",
-                    "The embeddings address",
-                    embed_url if self.embeddings_enabled.isChecked() else "",
-                ),
-                ("Images", "The picture endpoint's address", self.image_url.text().strip()),
-                ("Video", "The video endpoint's address", self.video_url.text().strip()),
-                ("Private", "The private model's address", self.private_url.text().strip()),
-            ]
-            for page, field, url in checks:
-                if url:
-                    try:
-                        require_https(url)
-                    except ValueError as exc:
-                        raise SettingsProblem(page, f"{field} {exc}") from exc
+            self._check_addresses(endpoints, embed_url)
             self._carry_keys(endpoints)
             typed = self._as_typed(endpoints, embed_url)
-            # A key no header can carry (a line break, a zero-width space from
-            # a web page) is said here, where it is, and never shown.
-            for page, whose, key in typed_keys(typed):
-                if problem := key_problem(key, whose):
-                    raise SettingsProblem(page, problem)
+            self._check_keys(typed)
             self._ask_before_plain(typed)
         except ValueError as exc:
             # Said where it is, and that page shown: a bad address on another
@@ -2356,7 +2424,10 @@ class SettingsDialog(QDialog):
         self.config.authoring_model = self.authoring_model.text().strip() or None
         self.config.image_model = self.image_model.text().strip() or self.config.image_model
         self.config.image_size = self.image_size.currentText().strip() or self.config.image_size
-        self.config.image_count = self.image_count.value()
+        kept = self._kept  # a number left as it was saves what was there
+        self.config.image_count = kept(
+            self.image_count, self.image_count.value(), self.config.image_count
+        )
         self.config.image_prompt_model = self.image_prompt_model.text().strip() or None
         self.config.location_backgrounds = self.location_backgrounds.isChecked()
         self.config.portrait_model = (
@@ -2384,7 +2455,9 @@ class SettingsDialog(QDialog):
             if chosen != self._route_at_open:
                 self.story.defaults.main_route = chosen
         self.config.private_provider = typed.private_provider
-        self.config.private_budget = self.private_budget.value()
+        self.config.private_budget = kept(
+            self.private_budget, self.private_budget.value(), self.config.private_budget
+        )
         self.config.private_verify_tee = self.private_tee.isChecked()
         self.config.phone.start_on_launch = self.phone_on_launch.isChecked()
         self.config.phone.notify_connect = self.phone_notify.isChecked()
@@ -2398,29 +2471,48 @@ class SettingsDialog(QDialog):
         self.config.cache_ttl = self.cache_ttl.currentData()
 
         self.config.embedding_provider = typed.embedding_provider
-        self.config.lore_retrieval_k = self.retrieval_k.value()
-        self.config.lore_similarity_threshold = self.similarity.value()
-        self.config.lore_query_turns = self.query_turns.value()
-        self.config.lore_token_cap = self.lore_cap.value()
+        config = self.config
+        config.lore_retrieval_k = kept(
+            self.retrieval_k, self.retrieval_k.value(), config.lore_retrieval_k
+        )
+        config.lore_similarity_threshold = kept(
+            self.similarity, self.similarity.value(), config.lore_similarity_threshold
+        )
+        config.lore_query_turns = kept(
+            self.query_turns, self.query_turns.value(), config.lore_query_turns
+        )
+        config.lore_token_cap = kept(self.lore_cap, self.lore_cap.value(), config.lore_token_cap)
         self.config.lore_selector = self.lore_selector.currentData()
         self.config.lore_model = self._role_model(self.lore_model)
 
+        saved = self.config.generation
         stop = [item.strip() for item in self.stop.text().split(",") if item.strip()]
+
+        def number(field, read, was):
+            return kept(field, read(field.value()), was)
+
         self.config.generation = GenerationParams(
-            temperature=_optional_double(self.temperature.value()),
-            top_p=_optional_double(self.top_p.value()),
-            max_tokens=_optional_int(self.max_tokens.value()),
-            presence_penalty=_optional_double(self.presence_penalty.value()),
-            frequency_penalty=_optional_double(self.frequency_penalty.value()),
-            seed=_optional_int(self.seed.value()),
-            stop=stop,
+            temperature=number(self.temperature, _optional_double, saved.temperature),
+            top_p=number(self.top_p, _optional_double, saved.top_p),
+            max_tokens=number(self.max_tokens, _optional_int, saved.max_tokens),
+            presence_penalty=number(
+                self.presence_penalty, _optional_double, saved.presence_penalty
+            ),
+            frequency_penalty=number(
+                self.frequency_penalty, _optional_double, saved.frequency_penalty
+            ),
+            seed=number(self.seed, _optional_int, saved.seed),
+            stop=kept(self.stop, stop, list(saved.stop)),
         )
         levels = self._reasoning_levels()
         self.config.reasoning_story = levels["story"]
         self.config.reasoning_side = levels["side"]
 
         if self.story is not None:
-            self.story.defaults.context_token_budget = self.budget.value()
+            defaults = self.story.defaults
+            defaults.context_token_budget = kept(
+                self.budget, self.budget.value(), defaults.context_token_budget
+            )
             if self.story.chat and provider.model and provider.model != self._model_at_open:
                 current = self.story.defaults.main_model or ""
                 refusal = move_refusal(current, provider.model)
@@ -2440,14 +2532,24 @@ class SettingsDialog(QDialog):
         self.config.auto_archive = self.auto_archive.isChecked()
         self.config.story_ledger = self.story_ledger.isChecked()
         self.config.plot_chapter_days = self.plot_chapter_days.isChecked()
-        self.config.archive_chunk_turns = self.chunk_turns.value()
-        self.config.archive_target_ratio = self.archive_target.value() / 100
+        config.archive_chunk_turns = kept(
+            self.chunk_turns, self.chunk_turns.value(), config.archive_chunk_turns
+        )
+        config.archive_target_ratio = kept(
+            self.archive_target, self.archive_target.value() / 100, config.archive_target_ratio
+        )
         self.config.cast_limit = self.cast_limit.currentData()
-        self.config.cast_share = self.cast_share.value() / 100
-        self.config.cast_token_cap = self.cast_tokens.value()
-        self.config.summary_target_words = self.summary_words.value()
+        config.cast_share = kept(self.cast_share, self.cast_share.value() / 100, config.cast_share)
+        config.cast_token_cap = kept(
+            self.cast_tokens, self.cast_tokens.value(), config.cast_token_cap
+        )
+        config.summary_target_words = kept(
+            self.summary_words, self.summary_words.value(), config.summary_target_words
+        )
         self.config.recall, self.config.recall_in = self.recall.currentData().split("|")
-        self.config.recall_carry_turns = self.recall_carry.value()
+        config.recall_carry_turns = kept(
+            self.recall_carry, self.recall_carry.value(), config.recall_carry_turns
+        )
         # A key (or an address's password) the keychain said at the start it
         # hasn't got, saved here blank: the answer to "enter it again in
         # Settings" for one that needs none any more, so it is no longer said
