@@ -327,3 +327,65 @@ def test_the_model_button_and_the_session_line_name_the_endpoint(app, tmp_path: 
     assert window.model_button.text() == "glm-5.3 ▾"
     assert "via nano-gpt.com" in window.session_line.label.text()
     window.close()
+
+
+def test_a_rename_carries_the_models_that_name_the_endpoint(app):
+    """Renamed Anthropic → Claude, the Scene model was saved still naming
+    Anthropic: that role resolved to no endpoint and couldn't send, and
+    nothing said so (Remove and Make default both handle their case)."""
+    cfg = two_endpoints(scene_model="Anthropic::claude-haiku-4-5")
+    dialog = SettingsDialog(cfg, None)
+    dialog.endpoint_list.setCurrentRow(1)
+    for typed in ("Claud", "Claude"):  # as typed, a letter at a time
+        dialog.provider_name.setText(typed)
+    assert dialog.scene_model.text() == "Claude::claude-haiku-4-5"
+    assert "Scene model" in dialog.endpoints_note.text()
+    assert "Renamed Anthropic to Claude" in dialog.endpoints_note.text()
+    dialog._save()
+    assert [p.name for p in cfg.providers] == ["NanoGPT", "Claude"]
+    assert cfg.scene_model == "Claude::claude-haiku-4-5"
+    assert cfg.endpoint_for(cfg.scene_model).api_key == "ant-key", "the role can send"
+    dialog.deleteLater()
+
+
+def test_a_rename_waits_while_the_name_is_another_endpoints_or_blank(app):
+    cfg = two_endpoints(scene_model="Anthropic::claude-haiku-4-5", plot_model="z-ai/glm-5.3")
+    dialog = SettingsDialog(cfg, None)
+    dialog.endpoint_list.setCurrentRow(1)
+    dialog.provider_name.setText("")
+    dialog.provider_name.setText("NanoGPT")  # the other one's, on the way somewhere
+    assert dialog.scene_model.text() == "Anthropic::claude-haiku-4-5"
+    dialog.provider_name.setText("NanoGPT 2")
+    assert dialog.scene_model.text() == "NanoGPT 2::claude-haiku-4-5"
+    assert dialog.plot_model.text() == "z-ai/glm-5.3", "NanoGPT's own are left alone"
+    dialog.deleteLater()
+
+
+def test_a_rename_says_when_the_open_storys_own_model_still_names_the_old_one(app, story, cast):
+    cfg = two_endpoints()
+    story.defaults.main_model = "Anthropic::claude-opus-5-5"
+    dialog = SettingsDialog(cfg, story)
+    dialog.endpoint_list.setCurrentRow(1)
+    dialog.provider_name.setText("Claude")
+    assert "This story's own model still names Anthropic" in dialog.endpoints_note.text()
+    dialog._save()
+    assert story.defaults.main_model == "Anthropic::claude-opus-5-5", "the story's own, untouched"
+    dialog.deleteLater()
+
+
+def test_removing_the_default_keeps_its_models_named_and_says_so(app):
+    """The default removed, the Story model's bare z-ai/glm-5.3 was saved on
+    Anthropic, which doesn't serve it, and the note spoke only of the key."""
+    cfg = two_endpoints(scene_model="z-ai/glm-5.3")
+    dialog = SettingsDialog(cfg, None)
+    dialog.endpoint_list.setCurrentRow(0)
+    dialog._remove_endpoint()
+    note = dialog.endpoints_note.text()
+    assert "Anthropic is the default now" in note
+    assert "Story model" in note and "Scene model" in note and "still name NanoGPT" in note
+    assert dialog.model.text() == "NanoGPT::z-ai/glm-5.3"
+    dialog._save()
+    assert [(p.name, p.model) for p in cfg.providers] == [("Anthropic", "NanoGPT::z-ai/glm-5.3")]
+    assert cfg.endpoint_for(cfg.active_provider().model) is None, "not sent to Anthropic"
+    assert cfg.scene_model == "NanoGPT::z-ai/glm-5.3"
+    dialog.deleteLater()

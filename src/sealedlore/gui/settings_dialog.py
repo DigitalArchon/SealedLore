@@ -512,10 +512,50 @@ class SettingsDialog(QDialog):
         if self._selected is None or self._loading_endpoint:
             return
         self._store_endpoint_fields()
+        self._carry_name()
         item = self.endpoint_list.item(self._selected)
         if item is not None:
             item.setText(self._endpoint_row_text(self._selected))
         self._show_routes()
+
+    def _carry_name(self) -> None:
+        """A rename carries the Models page's references to the endpoint
+        with it. "Anthropic::claude-haiku-4-5" was left naming Anthropic once
+        it was renamed Claude, and saved so: that role resolved to no
+        endpoint and couldn't send, and nothing said so. Carried once the
+        new name is whole and no other endpoint's (a name half typed may be
+        another's on the way); stories' own models aren't Settings' to
+        change, so the open story's is named in the note instead."""
+        index = self._selected
+        if index is None:
+            return
+        old, new = self._named[index], self._endpoints[index].name
+        others = {p.name for i, p in enumerate(self._endpoints) if i != index}
+        if new == old or not new or new in others or ENDPOINT_SEPARATOR in new:
+            return
+        default = self._endpoints[self._default_index].name
+        carried = []
+        for label, field in self._model_fields():
+            name, bare = split_model(field.text().strip())
+            if name == old and bare:
+                field.setText(qualify(new, bare, default))
+                carried.append(label)
+        self._named[index] = new
+        was = self._origins[index] or old
+        if new == was:
+            if carried:
+                self.endpoints_note.setText(f"{', '.join(carried)} name {new} again.")
+            return
+        notes = [f"{', '.join(carried)} named {was}, and name {new} now."] if carried else []
+        if self.story is not None and any(
+            split_model(model)[0] == was for model in self.story.defaults.own_models().values()
+        ):
+            notes.append(
+                f"This story's own model still names {was}: change it in Story → Setup… → "
+                "Models, or it fails to send."
+            )
+        if notes:
+            self.endpoints_note.setText(f"Renamed {was} to {new}. " + " ".join(notes))
 
     def _unique_endpoint_name(self, base: str) -> str:
         taken = {p.name for p in self._endpoints}
@@ -533,6 +573,7 @@ class SettingsDialog(QDialog):
         name = self._unique_endpoint_name("New endpoint")
         self._endpoints.append(ProviderConfig(name=name).model_copy(update={"base_url": ""}))
         self._origins.append(None)
+        self._named.append(name)
         self._selected = len(self._endpoints) - 1
         self._load_endpoint_fields()
         self._refresh_endpoint_rows()
@@ -551,16 +592,28 @@ class SettingsDialog(QDialog):
         self._store_endpoint_fields()
         index = self._selected
         name = self._endpoints[index].name
+        was_default = self._default_index == index
+        successor = next(p.name for i, p in enumerate(self._endpoints) if i != index)
+        if was_default:
+            # A model named without an endpoint meant this one. Left bare, it
+            # went quietly to the next default, which doesn't serve it
+            # (z-ai/glm-5.3 saved on Anthropic): named, it means what it did,
+            # as Make default keeps it, and is said below with the others.
+            for _label, field in self._model_fields():
+                endpoint, bare = split_model(field.text().strip())
+                if endpoint is None and bare:
+                    field.setText(qualify(name, bare, successor))
         naming = [
             label for label, field in self._model_fields() if split_model(field.text())[0] == name
         ]
-        if self.story is not None and any(
-            split_model(model)[0] == name for model in self.story.defaults.own_models().values()
-        ):
+        own = self.story.defaults.own_models().values() if self.story is not None else ()
+        if any(split_model(model)[0] == name for model in own):
             naming.append("this story's own model")
+        bare_own = was_default and any(model and split_model(model)[0] is None for model in own)
         del self._endpoints[index]
         del self._origins[index]
-        if self._default_index == index:
+        del self._named[index]
+        if was_default:
             self._default_index = 0
         elif self._default_index > index:
             self._default_index -= 1
@@ -568,11 +621,17 @@ class SettingsDialog(QDialog):
         self._load_endpoint_fields()
         self._refresh_endpoint_rows()
         note = f"Removed {name}; its key goes from the keychain when you Save."
+        if was_default:
+            note += (
+                f" {successor} is the default now: a model named without an endpoint goes there."
+            )
         if naming:
             note += (
-                f" {', '.join(naming)} still name it and are left as they are: they will "
-                f"fail to send until you change them or add an endpoint called {name} again."
+                f" {', '.join(naming)} still name {name}: they will fail to send until you "
+                f"change them or add an endpoint called {name} again."
             )
+        if bare_own:
+            note += f" This story's own model, named without an endpoint, goes to {successor} now."
         self.endpoints_note.setText(note)
 
     def _model_fields(self) -> list[tuple[str, ModelField]]:
@@ -694,6 +753,9 @@ class SettingsDialog(QDialog):
         if not self._endpoints:
             self._endpoints = [ProviderConfig(name="default", base_url=DEFAULT_BASE_URL)]
             self._origins = [None]
+        # The name each one is named by on the Models page ("Name::model"): a
+        # rename carries those references along (`_carry_name`).
+        self._named: list[str] = [p.name for p in self._endpoints]
         self._default_index = next(
             (
                 i
