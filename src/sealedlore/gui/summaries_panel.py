@@ -27,6 +27,49 @@ from sealedlore.engine.archival import chapter_number
 from sealedlore.engine.recall import RecallReport
 from sealedlore.models.summary import Summary
 
+# What the page says of a story's chapters, and (True) of a simple chat's,
+# whose summaries are parts, as its transcript's cards call them.
+_WORDS: dict[bool, dict[str, str]] = {
+    False: {
+        "chapter": "chapter",
+        "caption": (
+            "Archived history. These chapters replace the original prose in every later "
+            "prompt: what is written here is what the model sees of them (older chapters "
+            "may be merged into one part, and the story ledger, if on, rides alongside)."
+        ),
+        "empty": "Chapters appear here once the oldest turns are archived.",
+        "list_tip": "Double-click a chapter to go to it in the story",
+        "save_tip": "Marks the chapter as your words; it won't be rebuilt without asking",
+        "keep_tip": (
+            "Never merge this chapter into a part: it is sent as it is however long the "
+            "story grows. Older chapters are merged around it."
+        ),
+        "merged": (
+            "merged into a part: the part is sent instead, and editing or rebuilding "
+            "this chapter takes the part apart until the next merge"
+        ),
+    },
+    True: {
+        "chapter": "part",
+        "caption": (
+            "Archived history. These parts replace the original messages in every later "
+            "request: what is written here is what the model sees of them (older parts "
+            "may be merged into one)."
+        ),
+        "empty": "Parts appear here once the oldest messages are archived.",
+        "list_tip": "Double-click a part to go to it in the chat",
+        "save_tip": "Marks the part as your words; it won't be rebuilt without asking",
+        "keep_tip": (
+            "Never merge this part with others: it is sent as it is however long the "
+            "chat grows. Older parts are merged around it."
+        ),
+        "merged": (
+            "merged with others into one: that is sent instead, and editing or "
+            "rebuilding this part takes it apart until the next merge"
+        ),
+    },
+}
+
 
 def chapter_title(
     position: int,
@@ -35,9 +78,10 @@ def chapter_title(
     on_path: bool,
     in_part: bool = False,
     rebuilding: bool = False,
+    chat: bool = False,
 ) -> str:
     """`position` is the chapter number (a part's first); `in_part`, a chapter a
-    part on the path stands in for."""
+    part on the path stands in for. `chat`: a simple chat's, called parts."""
     badges = []
     if rebuilding:
         badges.append("rebuilding…")
@@ -48,11 +92,12 @@ def chapter_title(
     if summary.keep_as_written:
         badges.append("kept as written")
     if in_part:
-        badges.append("merged into a part")
+        badges.append("merged with others" if chat else "merged into a part")
     elif not on_path:
         badges.append("other branch")
     last = position + summary.chapters - 1
-    number = f"Chapters {position}–{last}" if last > position else f"Chapter {position}"
+    one, many = ("Part", "Parts") if chat else ("Chapter", "Chapters")
+    number = f"{many} {position}–{last}" if last > position else f"{one} {position}"
     label = f"{number} · {len(summary.covered_node_ids)} messages"
     return f"{label}  ({', '.join(badges)})" if badges else label
 
@@ -69,6 +114,7 @@ class SummariesPanel(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._summaries: list[Summary] = []
+        self._numbers: dict[str, int] = {}
         self._on_path: set[str] = set()
         self._in_parts: set[str] = set()
         self._rebuilding: set[str] = set()
@@ -78,25 +124,20 @@ class SummariesPanel(QWidget):
         self._loaded: tuple[str, str, str] | None = None
         # The chapter was rewritten (a rebuild landed) under an unsaved edit.
         self._rewritten = False
-        # What one of these is called, for the questions ("part" in a chat).
-        self.chapter_word = "chapter"
+        # A simple chat's page (`set_chat_mode`): its summaries are parts.
+        self._chat = False
         # Turns Archive now would take, and why it can't now ("" when it can).
         self._archivable = 0
         self._paused = ""
 
-        caption = QLabel(
-            "Archived history. These chapters replace the original prose in every later "
-            "prompt: what is written here is what the model sees of them (older chapters "
-            "may be merged into one part, and the story ledger, if on, rides alongside)."
-        )
-        caption.setObjectName("hintLabel")
-        caption.setWordWrap(True)
+        self.caption = QLabel()
+        self.caption.setObjectName("hintLabel")
+        self.caption.setWordWrap(True)
 
         self.chapters = QListWidget()
         self.chapters.setMaximumHeight(140)
         self.chapters.currentRowChanged.connect(self._on_selection_changed)
         self.chapters.itemDoubleClicked.connect(self._go_to_chapter)
-        self.chapters.setToolTip("Double-click a chapter to go to it in the story")
 
         self.detail = QLabel()
         self.detail.setObjectName("hintLabel")
@@ -107,9 +148,6 @@ class SummariesPanel(QWidget):
         self.editor.textChanged.connect(self._on_text_changed)
 
         self.save_button = QPushButton("Save edits")
-        self.save_button.setToolTip(
-            "Marks the chapter as your words; it won't be rebuilt without asking"
-        )
         self.save_button.clicked.connect(self._commit)
         self.revert_button = QPushButton("Revert")
         self.revert_button.clicked.connect(self._reload_editor)
@@ -119,10 +157,6 @@ class SummariesPanel(QWidget):
         )
         self.rebuild_button.clicked.connect(self._rebuild)
         self.keep_box = QCheckBox("Keep as written")
-        self.keep_box.setToolTip(
-            "Never merge this chapter into a part: it is sent as it is however long the "
-            "story grows. Older chapters are merged around it."
-        )
         self.keep_box.toggled.connect(self._on_keep_toggled)
         self.archive_button = QPushButton("Archive now")
         self.archive_button.clicked.connect(self.archive_requested)
@@ -159,7 +193,7 @@ class SummariesPanel(QWidget):
         self.kept_warning.setObjectName("hintLabel")
         self.kept_warning.setWordWrap(True)
         self.kept_warning.hide()
-        layout.addWidget(caption)
+        layout.addWidget(self.caption)
         layout.addWidget(self.kept_warning)
         layout.addWidget(self.chapters)
         layout.addWidget(self.detail)
@@ -170,8 +204,36 @@ class SummariesPanel(QWidget):
         layout.addLayout(chapter_row)
         layout.addWidget(self.recall_note)
 
+        self._sync_words()
         self._update_buttons()
         self._sync_empty()
+
+    @property
+    def chapter_word(self) -> str:
+        """What one of these is called, for the questions ("part" in a chat)."""
+        return _WORDS[self._chat]["chapter"]
+
+    def set_chat_mode(self, chat: bool) -> None:
+        """A simple chat's page speaks of its parts, as its cards do; a
+        story's of its chapters."""
+        if chat == self._chat:
+            return
+        self._chat = chat
+        self._sync_words()
+        by_id = {summary.id: summary for summary in self._summaries}
+        for row in range(self.chapters.count()):
+            item = self.chapters.item(row)
+            summary = by_id.get(str(item.data(Qt.UserRole)))
+            if summary is not None:
+                item.setText(self._title_of(summary))
+        self.detail.setText(self._detail_text(self.selected()))
+
+    def _sync_words(self) -> None:
+        words = _WORDS[self._chat]
+        self.caption.setText(words["caption"])
+        self.chapters.setToolTip(words["list_tip"])
+        self.save_button.setToolTip(words["save_tip"])
+        self.keep_box.setToolTip(words["keep_tip"])
 
     def _sync_empty(self) -> None:
         """Until there is a chapter, the sentence saying when there will be
@@ -257,15 +319,7 @@ class SummariesPanel(QWidget):
         }
         self._in_parts = in_parts
         for summary in self._summaries:
-            item = QListWidgetItem(
-                chapter_title(
-                    self._numbers.get(summary.id) or chapter_number(self._summaries, summary),
-                    summary,
-                    on_path=summary.id in self._on_path,
-                    in_part=summary.id in in_parts,
-                    rebuilding=summary.id in self._rebuilding,
-                )
-            )
+            item = QListWidgetItem(self._title_of(summary))
             item.setData(Qt.UserRole, summary.id)
             self.chapters.addItem(item)
         row = next(
@@ -281,6 +335,16 @@ class SummariesPanel(QWidget):
         if draft is not None:
             self._keep_draft(*draft)
         self._sync_empty()
+
+    def _title_of(self, summary: Summary) -> str:
+        return chapter_title(
+            self._numbers.get(summary.id) or chapter_number(self._summaries, summary),
+            summary,
+            on_path=summary.id in self._on_path,
+            in_part=summary.id in self._in_parts,
+            rebuilding=summary.id in self._rebuilding,
+            chat=self._chat,
+        )
 
     def set_paused(self, reason: str) -> None:
         """Archive now is off while a private scene is open, with why as its
@@ -393,7 +457,7 @@ class SummariesPanel(QWidget):
 
     def _detail_text(self, summary: Summary | None) -> str:
         if summary is None:
-            return "Chapters appear here once the oldest turns are archived."
+            return _WORDS[self._chat]["empty"]
         bits = [f"Written by {summary.model}" if summary.model else "Writer not recorded"]
         if summary.hand_edited:
             bits.append("edited by you")
@@ -402,10 +466,7 @@ class SummariesPanel(QWidget):
         elif summary.stale:
             bits.append("stale: a message it covers has been edited")
         if summary.id in self._in_parts:
-            bits.append(
-                "merged into a part: the part is sent instead, and editing or rebuilding "
-                "this chapter takes the part apart until the next merge"
-            )
+            bits.append(_WORDS[self._chat]["merged"])
         if summary.id not in self._on_path:
             bits.append("not part of the branch you are on")
         if self._rewritten:

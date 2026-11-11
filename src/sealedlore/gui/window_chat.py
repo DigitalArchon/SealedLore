@@ -136,6 +136,20 @@ class ChatWindow:
         for action in (self.dice_rolls_action, self.stage_action, self.passage_faces_action):
             action.setVisible(not chat)
         self.close_story_action.setText("&Close chat" if chat else "&Close story")
+        # Restart makes "Title (new chat)" of a chat (restart_story).
+        self.restart_action.setText(
+            "&Restart as a new chat…" if chat else "&Restart as new playthrough…"
+        )
+        self.restart_action.setStatusTip(
+            "A new chat from this one's setup: the same system prompt and characters, from "
+            "the start"
+            if chat
+            else "A new story from this one's setup: the same world, cast, lore and plot, "
+            "from the start"
+        )
+        # Story so far and the branch bar speak of a chat's parts and lines.
+        self.summaries_panel.set_chat_mode(chat)
+        self.branch_bar.set_chat(chat)
         # People stays: a chat's characters are there for their pictures
         # (the author, Nov 7 2026), the rest is a story's.
         for page in (

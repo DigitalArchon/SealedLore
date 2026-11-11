@@ -362,3 +362,101 @@ def test_a_blank_new_branch_says_why_and_keeps_its_editor(app, tmp_path, story, 
     assert len(window.session.nodes) == before and not window._busy
     reopened.cancel_edit()
     window.close()
+
+
+# --- 9. a chat speaks of a chat ------------------------------------------------------
+
+
+def _with_a_chat(tmp_path: Path, story, cast) -> MainWindow:
+    """The story fixture's, and a chat whose first exchange is summarised."""
+    from sealedlore.models.node import CHAT_USER_ID, Node
+    from sealedlore.models.story import Story
+    from sealedlore.models.summary import Summary
+    from sealedlore.tree import link_child
+
+    window = _window(tmp_path, story, cast)
+    chat = Story(id="chat-1", title="Tutor", mode="chat", chat_prompt="You are a tutor.")
+    nodes, previous = [], None
+    for index in range(3):
+        user = Node(id=f"cu{index}", kind="user", speaker_id=CHAT_USER_ID, content=f"Q{index}?")
+        reply = Node(id=f"ca{index}", kind="assistant", speaker_id="__narrator__", content="A.")
+        if previous is not None:
+            link_child(previous, user)
+        link_child(user, reply)
+        nodes += [user, reply]
+        previous = reply
+    chat.active_leaf_id = "ca2"
+    summary = Summary(content="They began with Q0.", covered_node_ids=["cu0", "ca0"], model="m")
+    save_story_bundle(StoryBundle(story=chat, nodes=nodes, summaries=[summary]), root=tmp_path)
+    return window
+
+
+def _boxes(monkeypatch) -> list[str]:
+    """Every QMessageBox shown, its words kept, answered Cancel."""
+    seen: list[str] = []
+
+    def cancel(box) -> int:
+        seen.append(f"{box.windowTitle()} | {box.text()} | {box.informativeText()}")
+        box.button(QMessageBox.Cancel).click()
+        return 0
+
+    monkeypatch.setattr(QMessageBox, "exec", cancel)
+    return seen
+
+
+def test_a_chats_story_so_far_branch_bar_and_menus_speak_of_a_chat(
+    app, tmp_path, story, cast, monkeypatch
+):
+    window = _with_a_chat(tmp_path, story, cast)
+    panel, bar = window.summaries_panel, window.branch_bar
+    window.open_story("chat-1")
+    app.processEvents()
+    assert panel.caption.text().startswith("Archived history. These parts replace")
+    assert "ledger" not in panel.caption.text() and "prose" not in panel.caption.text()
+    assert [panel.chapters.item(i).text() for i in range(panel.chapters.count())] == [
+        "Part 1 · 2 messages"
+    ]
+    assert "chat" in panel.chapters.toolTip() and "story" not in panel.chapters.toolTip()
+    assert "the line of the chat" in bar.button.toolTip().lower()
+    assert "every branch of the chat" in bar.map_button.toolTip().lower()
+    assert window.restart_action.text() == "&Restart as a new chat…"
+    seen = _boxes(monkeypatch)
+    window._delete_node("cu0")
+    assert seen and "the messages it covered" in seen[0] and "chapter" not in seen[0]
+    assert "prose" not in seen[0]
+
+    # Back in a story, a story's words.
+    window.open_story(story.id)
+    app.processEvents()
+    assert "These chapters replace the original prose" in panel.caption.text()
+    assert panel.detail.text() == "Chapters appear here once the oldest turns are archived."
+    assert "the line of the story" in bar.button.toolTip().lower()
+    assert window.restart_action.text() == "&Restart as new playthrough…"
+    window.close()
+
+
+def test_a_chat_with_nothing_archived_says_parts_will_appear(app, tmp_path, story, cast):
+    from sealedlore.models.story import Story
+
+    window = _window(tmp_path, story, cast)
+    chat = Story(id="chat-2", title="Empty", mode="chat", chat_prompt="You are a tutor.")
+    save_story_bundle(StoryBundle(story=chat), root=tmp_path)
+    window.open_story("chat-2")
+    app.processEvents()
+    assert window.summaries_panel.detail.text() == (
+        "Parts appear here once the oldest messages are archived."
+    )
+    window.close()
+
+
+def test_deleting_a_branch_of_one_message_says_one_message(app, tmp_path, story, cast, monkeypatch):
+    window = _window(tmp_path, story, cast)
+    window._rewrite_from("a1", "Another ending.", "Alt")
+    branch = next(b for b in window.session.branch_list() if b.name == "Alt")
+    asked: list[str] = []
+    monkeypatch.setattr(
+        QMessageBox, "question", lambda _p, _t, text, *_a, **_k: asked.append(text) or 0
+    )
+    window._delete_branch(branch.start_id)
+    assert asked and "“Alt”: its one message?" in asked[0]
+    window.close()

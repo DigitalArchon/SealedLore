@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 
 from PySide6.QtCore import Signal
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QLabel, QMenu, QToolButton, QWidget
 
 from sealedlore.engine.branches import Branch
@@ -54,15 +55,33 @@ class BranchBar(QWidget):
         self.map_button.setObjectName("viewToggleButton")
         self.map_button.setText("Branches")
         self.map_button.setCheckable(True)
-        self.map_button.setToolTip("Every branch of the story on one diagram (Esc to go back)")
         self.map_button.toggled.connect(self.map_toggled)
+        # What the branches are lines of: "story", or "chat" in a simple chat.
+        self._of = "story"
         # Wraps under a large text size rather than widening the window.
         layout = WrapRow(self)
         layout.add_group([caption, self.button])
         layout.add_group([self.hint])
         layout.add_group([self.map_button])
         self._branches: list[Branch] = []
+        self._delete: QAction | None = None
         self.set_branches([])
+
+    def set_chat(self, chat: bool) -> None:
+        """Speak of a chat's lines in a chat, of a story's in a story."""
+        self._of = "chat" if chat else "story"
+        self._sync_tips()
+
+    def _sync_tips(self) -> None:
+        self.map_button.setToolTip(
+            f"Every branch of the {self._of} on one diagram (Esc to go back)"
+        )
+        self.button.setToolTip(
+            f"The line of the {self._of} you are reading. ⋯ → New branch from here… on any "
+            f"message starts another; the {self._of} as it was is kept under its own name."
+        )
+        if self._delete is not None:
+            self._delete.setToolTip(f"The first line of the {self._of} can't be deleted")
 
     def set_branches(
         self,
@@ -81,15 +100,12 @@ class BranchBar(QWidget):
         self.button.setEnabled(bool(branches))
         self.map_button.setEnabled(bool(branches))
         if pending:
-            self.hint.setText(f"“{pending}” starts with your next turn")
+            turn = "message" if self._of == "chat" else "turn"
+            self.hint.setText(f"“{pending}” starts with your next {turn}")
         elif len(branches) == 1:
             self.hint.setText("the only one")
         else:
             self.hint.setText(f"{len(branches)} branches" if branches else "")
-        self.button.setToolTip(
-            "The line of the story you are reading. ⋯ → New branch from here… on any "
-            "message starts another; the story as it was is kept under its own name."
-        )
         self.menu.clear()
         for branch in branches:
             action = self.menu.addAction(("   ↳ " * min(branch.depth, 1)) + branch_line(branch))
@@ -108,10 +124,11 @@ class BranchBar(QWidget):
         )
         delete = self.menu.addAction("Delete this branch…")
         delete.setEnabled(current is not None and not current.is_main)
-        delete.setToolTip("The first line of the story can't be deleted")
         delete.triggered.connect(
             lambda: current is not None and self.delete_requested.emit(current.start_id)
         )
+        self._delete = delete
+        self._sync_tips()
 
     def branches(self) -> list[Branch]:
         return list(self._branches)

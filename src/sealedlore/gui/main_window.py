@@ -2749,10 +2749,12 @@ class MainWindow(
             return
         doomed = self.session.deletion_for(start_id)
         inside = [b.name for b in self.session.branch_list() if b.parent_start_id == start_id]
+        count = len(doomed.node_ids)
+        messages = "its one message" if count == 1 else f"its {count} messages"
         answer = QMessageBox.question(
             self,
             "Delete branch",
-            f"Delete the branch “{branch.name}”: its {len(doomed.node_ids)} messages"
+            f"Delete the branch “{branch.name}”: {messages}"
             + (f", and the branches made from it ({', '.join(inside)})" if inside else "")
             + "? Pictures are kept. This can't be undone.",
             QMessageBox.Yes | QMessageBox.No,
@@ -3712,8 +3714,12 @@ class MainWindow(
         if deletion.other_branches:
             details.append(f"{deletion.other_branches} other take(s) below it will be deleted too.")
         if deletion.summaries:
+            # A chat's words, as Take back's box has them: a chat has parts.
             details.append(
-                "The chapter summary covering it will be removed; the prose it "
+                "The summary covering it will be removed; the messages it covered go back "
+                "to the model word for word."
+                if self.in_chat
+                else "The chapter summary covering it will be removed; the prose it "
                 "covered goes back to the model word for word."
             )
         if deletion.asides:
