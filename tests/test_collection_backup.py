@@ -96,7 +96,7 @@ def test_a_backup_brings_every_character_back_elsewhere_as_they_were(tmp_path: P
     there_store = DiskPictures(COLLECTION_ID, tmp_path / "there")
     with open_backup(path) as backup:
         done = restore(backup, there, there_store, replace=False)
-        entries = new_log_entries(backup, [])
+        entries = list(new_log_entries(backup, []))
     assert done.added == ["Elena", "Elena"] and done.missing == 0
     assert [c.id for c in there.cast] == [c.id for c in bundle.cast], "ids kept: links hold"
     assert there.cast[1].collection.family == bundle.cast[0].id
@@ -111,7 +111,7 @@ def test_a_backup_brings_every_character_back_elsewhere_as_they_were(tmp_path: P
 
 def new_log_entries_again(path: Path, log: list) -> list:
     with open_backup(path) as backup:
-        return new_log_entries(backup, log)
+        return list(new_log_entries(backup, log))
 
 
 def test_characters_here_already_are_kept_or_replaced_as_asked(tmp_path: Path):

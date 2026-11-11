@@ -4,7 +4,10 @@ synthetic, against the reader that takes it in."""
 
 from __future__ import annotations
 
+import io
 import json
+import struct
+import tracemalloc
 import zipfile
 from pathlib import Path
 
@@ -14,9 +17,16 @@ from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage, ImageRef
 from sealedlore.models.story import Story
 from sealedlore.models.video import GeneratedVideo
-from sealedlore.storage import collection
+from sealedlore.storage import collection, collection_backup, tavern_cards
 from sealedlore.storage.archive import read_archive, restore_archive, write_archive
-from sealedlore.storage.collection_backup import BACKUP_FORMAT, open_backup, restore
+from sealedlore.storage.collection_backup import (
+    BACKUP_FORMAT,
+    CHARACTERS,
+    BackupError,
+    new_log_entries,
+    open_backup,
+    restore,
+)
 from sealedlore.storage.images import is_safe_relative, is_story_file
 from sealedlore.storage.paths import COLLECTION_ID, collection_dir, story_dir
 from sealedlore.storage.picture_store import DiskPictures, MemoryPictures
@@ -141,3 +151,109 @@ def test_a_story_backup_still_brings_its_records_back(tmp_path):
     store = DiskPictures(restored.story.id, tmp_path / "other")
     assert [i.prompt for i in store.images()] == ["the farmhouse"]
     assert store.read("images/g.png") == png(5)
+
+
+# --- a zip member larger than it says -----------------------------------------------------
+
+MIB = 1024 * 1024
+
+
+def lying_zip(members: dict[str, bytes], name: str, inflated: int, claimed: int = 1000) -> bytes:
+    """A zip whose member `name` is `inflated` bytes of zeros and says it is
+    `claimed`, in its central directory and its own header."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for member, data in members.items():
+            archive.writestr(member, data)
+        archive.writestr(name, bytes(inflated))
+    raw = bytearray(buffer.getvalue())
+    central = raw.rfind(b"PK\x01\x02")
+    assert raw[central + 46 : central + 46 + len(name)] == name.encode()
+    struct.pack_into("<I", raw, central + 24, claimed)
+    local = struct.unpack_from("<I", raw, central + 42)[0]
+    struct.pack_into("<I", raw, local + 22, claimed)
+    return bytes(raw)
+
+
+def peak_while(read) -> int:
+    """The most memory Python held at once while `read` ran, in bytes."""
+    tracemalloc.start()
+    try:
+        read()
+        return tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+
+
+def test_a_charx_member_that_lies_about_its_size_is_damaged_and_never_inflated_whole(tmp_path):
+    card = {
+        "spec": "chara_card_v3",
+        "data": {
+            "name": "Jane",
+            "description": "d",
+            "assets": [{"type": "other", "name": "big", "uri": "embeded://big.bin", "ext": "bin"}],
+        },
+    }
+    path = tmp_path / "jane.charx"
+    path.write_bytes(lying_zip({"card.json": json.dumps(card).encode()}, "big.bin", 8 * MIB))
+    found: list = []
+    peak = peak_while(lambda: found.append(tavern_cards.read_card(path)))
+    assert peak < 2 * MIB, "a piece at a time, never the member whole"
+    assert all(file.data is None for file in found[0].files)
+    with zipfile.ZipFile(path) as archive:
+        with pytest.raises(tavern_cards.CardError, match="damaged"):
+            tavern_cards._member(archive, "big.bin", "jane.charx")
+
+
+def test_an_expression_pack_member_that_lies_is_left_out_unread(tmp_path):
+    path = tmp_path / "pack.zip"
+    path.write_bytes(lying_zip({"sad.png": png(6)}, "joy.png", 8 * MIB))
+    result: list = []
+    peak = peak_while(lambda: result.append(tavern_cards.expressions_from_zip(path)))
+    assert peak < 2 * MIB
+    found, notes = result[0]
+    assert [name for name, _data in found] == ["sad"] and notes
+
+
+def test_a_characters_backup_member_that_lies_is_missing_never_inflated(tmp_path):
+    jane = Character(name="Jane", reference_images=[ImageRef(file="images/refs/a.png")])
+    members = {
+        "manifest.json": json.dumps({"format": BACKUP_FORMAT, "version": 1}).encode(),
+        "characters.json": json.dumps([jane.model_dump(mode="json")]).encode(),
+    }
+    path = tmp_path / "lying.zip"
+    path.write_bytes(lying_zip(members, "files/images/refs/a.png", 8 * MIB))
+    read: list = []
+    with open_backup(path) as backup:
+        peak = peak_while(lambda: read.append(backup.read("images/refs/a.png")))
+    assert read == [None] and peak < 2 * MIB
+
+    path.write_bytes(lying_zip({"manifest.json": members["manifest.json"]}, CHARACTERS, 8 * MIB))
+    with pytest.raises(BackupError, match="damaged"):
+        with open_backup(path):
+            pass
+
+
+def test_a_backups_log_is_read_a_line_at_a_time_and_only_when_put_back(tmp_path, monkeypatch):
+    lines = b"\n" * (4 * MIB) + b'{"id": "e1", "kind": "image_response"}\n'
+    lines += b'{"id": "long", "text": "' + b"x" * (200 * 1024) + b'"}\n{"id": "e2"}\n'
+    lines += b'{"id": "e3"}'  # a last line with no newline
+    path = tmp_path / "log.zip"
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("manifest.json", json.dumps({"format": BACKUP_FORMAT, "version": 1}))
+        archive.writestr("characters.json", "[]")
+        archive.writestr("api_log.jsonl", lines)
+    del lines
+    monkeypatch.setattr(collection_backup, "MAX_LOG_LINE", 64 * 1024, raising=False)
+
+    def only_open():
+        with open_backup(path) as backup:
+            return backup.characters
+
+    opened = peak_while(only_open)
+    entries: list = []
+    with open_backup(path) as backup:
+        peak = peak_while(lambda: entries.extend(new_log_entries(backup, [{"id": "e2"}])))
+    assert opened < MIB, "opening it reads no log"
+    assert [entry["id"] for entry in entries] == ["e1", "e3"], "the long line passed over"
+    assert peak < 2 * MIB, "four million newlines cost nothing"

@@ -68,6 +68,7 @@ from sealedlore.storage.tavern_lore import (
     other_formats,
     read_json,
 )
+from sealedlore.storage.zip_members import read_member
 
 try:
     from lzma import LZMAError
@@ -435,8 +436,9 @@ def _member(archive: zipfile.ZipFile, member: str, name: str) -> bytes | None:
     if info.file_size > MAX_INFLATED:
         raise CardError(f"{name}: {member} is too large.")
     try:
-        # zipfile reads no more than the size it was told, and checks it.
-        return archive.read(info)
+        # A piece at a time: never more than the size it claims, and one that
+        # inflates past it reads as damaged.
+        return read_member(archive, info, MAX_INFLATED)
     except _DAMAGED as exc:
         raise CardError(f"{name}: {member} is damaged and can't be read.") from exc
 
@@ -641,7 +643,7 @@ def expressions_from_zip(path: Path) -> tuple[list[tuple[str, bytes]], list[str]
                 left += 1
                 continue
             try:
-                data = archive.read(info)
+                data = read_member(archive, info, MAX_INFLATED)
             except _DAMAGED:
                 left += 1  # damaged: the rest of the pack is read
                 continue

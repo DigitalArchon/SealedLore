@@ -407,13 +407,13 @@ def test_a_file_the_card_names_many_times_is_read_once_within_the_limits(
         archive.writestr("assets/other/big.bin", bytes(1000))
     monkeypatch.setattr(tavern_cards, "MAX_FILE_BYTES", 3500)
     reads: list[str] = []
-    real = zipfile.ZipFile.read
+    real = zipfile.ZipFile.open
 
-    def read(archive, name, pwd=None):
+    def opened(archive, name, *args, **kwargs):
         reads.append(getattr(name, "filename", name))
-        return real(archive, name, pwd)
+        return real(archive, name, *args, **kwargs)
 
-    monkeypatch.setattr(zipfile.ZipFile, "read", read)
+    monkeypatch.setattr(zipfile.ZipFile, "open", opened)
     card = read_card(path)
     assert [f.name for f in card.files] == ["big0", "big1", "big2"]
     assert reads.count("assets/other/big.bin") == 1

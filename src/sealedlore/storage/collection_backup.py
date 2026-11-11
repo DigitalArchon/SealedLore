@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import os
 import zipfile
+import zlib
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -43,6 +44,7 @@ from sealedlore.storage.image_meta import (
 from sealedlore.storage.images import is_safe_relative
 from sealedlore.storage.picture_store import PictureStore
 from sealedlore.storage.repository import StoryBundle
+from sealedlore.storage.zip_members import member_lines, read_member
 
 BACKUP_FORMAT = "sealedlore-characters"
 BACKUP_VERSION = 1
@@ -55,6 +57,19 @@ FILES = "files/"
 # Past any real one: a card's file is read to 32 MB, its JSON far less.
 MAX_MEMBER_BYTES = 64 * 1024 * 1024
 MAX_MEMBERS = 200_000
+# One entry of the log, past any a picture's request or reply writes: a line
+# longer is passed over, as a torn one is.
+MAX_LOG_LINE = 16 * 1024 * 1024
+# What reading a damaged member raises (zipfile's, and its decompressors'),
+# and a member past its limit (MemberTooLarge, a ValueError).
+_DAMAGED: tuple[type[Exception], ...] = (
+    zipfile.BadZipFile,
+    zlib.error,
+    EOFError,
+    OSError,
+    RuntimeError,
+    ValueError,
+)
 
 
 class BackupError(ValueError):
@@ -137,12 +152,11 @@ def write_backup(
 
 @dataclass
 class Backup:
-    """A backup read: its characters, drawn pictures and log, and its files,
-    read one at a time while it is open (`open_backup`)."""
+    """A backup read: its characters and drawn pictures, and its files and
+    log, read one at a time while it is open (`open_backup`)."""
 
     characters: list[Character]
     images: list[GeneratedImage]
-    log: list[dict[str, Any]]
     _archive: zipfile.ZipFile
 
     def read(self, relative: str) -> bytes | None:
@@ -153,12 +167,15 @@ class Backup:
             info = self._archive.getinfo(FILES + relative)
         except KeyError:
             return None
-        if info.file_size > MAX_MEMBER_BYTES:
-            return None
         try:
-            return self._archive.read(info)
-        except (zipfile.BadZipFile, OSError, NotImplementedError, RuntimeError):
-            return None  # damaged: said as missing
+            return read_member(self._archive, info, MAX_MEMBER_BYTES)
+        except _DAMAGED:
+            return None  # too large, or damaged: said as missing
+
+    def log(self) -> Iterator[dict[str, Any]]:
+        """Its log's entries, a line at a time: a log is read only when the
+        characters are put back, and never held whole."""
+        return _log(self._archive)
 
 
 @contextmanager
@@ -187,7 +204,7 @@ def open_backup(path: Path) -> Iterator[Backup]:
             images = [GeneratedImage.model_validate(i) for i in _json(archive, IMAGES, [])]
         except (ValidationError, TypeError) as exc:
             raise BackupError(f"{name} is damaged: its characters can't be read.") from exc
-        yield Backup(characters, images, _log(archive), archive)
+        yield Backup(characters, images, archive)
 
 
 def restore(
@@ -232,11 +249,12 @@ def restore(
     return done
 
 
-def new_log_entries(backup: Backup, log: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The backup's log entries the folder's log doesn't have yet (by id), to
-    append: what drawing the characters cost comes back with them."""
+def new_log_entries(backup: Backup, log: Sequence[dict[str, Any]]) -> Iterator[dict[str, Any]]:
+    """The backup's log entries the folder's log doesn't have yet (by id), one
+    at a time while the backup is open, to append as they come: what drawing
+    the characters cost comes back with them."""
     known = {entry.get("id") for entry in log if entry.get("id")}
-    return [entry for entry in backup.log if entry.get("id") and entry["id"] not in known]
+    return (entry for entry in backup.log() if entry.get("id") and entry["id"] not in known)
 
 
 def _put_files(
@@ -290,36 +308,23 @@ def _json(archive: zipfile.ZipFile, member: str, default: Any) -> Any:
     if info.file_size > MAX_MEMBER_BYTES:
         raise BackupError(f"its {member} is far larger than any backup's.")
     try:
-        return json.loads(archive.read(info).decode("utf-8"))
-    except (
-        zipfile.BadZipFile,
-        OSError,
-        NotImplementedError,
-        RuntimeError,
-        UnicodeDecodeError,
-        json.JSONDecodeError,
-        RecursionError,
-    ) as exc:
+        return json.loads(read_member(archive, info, MAX_MEMBER_BYTES).decode("utf-8"))
+    except (*_DAMAGED, json.JSONDecodeError, RecursionError) as exc:
         raise BackupError(f"its {member} is damaged.") from exc
 
 
-def _log(archive: zipfile.ZipFile) -> list[dict[str, Any]]:
+def _log(archive: zipfile.ZipFile) -> Iterator[dict[str, Any]]:
     try:
         info = archive.getinfo(LOG)
     except KeyError:
-        return []
-    if info.file_size > MAX_MEMBER_BYTES * 4:
-        return []
+        return
     try:
-        text = archive.read(info).decode("utf-8")
-    except (zipfile.BadZipFile, OSError, NotImplementedError, RuntimeError, UnicodeDecodeError):
-        return []
-    entries = []
-    for line in text.split("\n"):
-        try:
-            entry = json.loads(line) if line.strip() else None
-        except (json.JSONDecodeError, RecursionError):
-            continue  # a torn line, as a log reader skips one
-        if isinstance(entry, dict):
-            entries.append(entry)
-    return entries
+        for line in member_lines(archive, info, MAX_MEMBER_BYTES * 4, MAX_LOG_LINE):
+            try:
+                entry = json.loads(line) if line.strip() else None
+            except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
+                continue  # a torn line, as a log reader skips one
+            if isinstance(entry, dict):
+                yield entry
+    except _DAMAGED:
+        return  # too large, or damaged from here on: what came before stands

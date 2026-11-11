@@ -376,14 +376,14 @@ class CollectionWindow:
                         replace=replace,
                         clean=self._clean_picture,
                     )
+                    # What drawing them cost comes back with them (the log is
+                    # append-only), an entry at a time: never held whole.
                     log = read_api_log(COLLECTION_ID, root=self.root)
-                    entries = new_log_entries(backup, log)
+                    for entry in new_log_entries(backup, log):
+                        append_api_log(COLLECTION_ID, entry, root=self.root)
         except BackupError as exc:
             self._warn_plain("Couldn't restore your characters", str(exc))
             return
-        # What drawing them cost comes back with them (the log is append-only).
-        for entry in entries:
-            append_api_log(COLLECTION_ID, entry, root=self.root)
         self._save_collection()
         self.collection_page.forget_pictures()
         self.collection_page.forget_forms()
