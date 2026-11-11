@@ -80,6 +80,13 @@ def _quote_key(model_id: str, settings: dict[str, Any]) -> str:
     return repr((model_id, sorted(settings.items())))
 
 
+def _not_below(spin: QDoubleSpinBox, value: float, lowest: float) -> None:
+    """A number typed between "—" and the lowest value the model takes is
+    the lowest: shown, it would be left out of what is sent."""
+    if spin.minimum() < value < lowest:
+        spin.setValue(lowest)
+
+
 def cost_words(quote: VideoQuote) -> str:
     if quote.amount is None:
         return "Price unknown"
@@ -368,12 +375,17 @@ class VideoDialog(QDialog):
         if param.kind == "number":
             spin = QDoubleSpinBox()
             spin.setDecimals(0 if param.key == "seed" else 2)
-            spin.setRange(
-                param.minimum if param.minimum is not None else -1,
-                param.maximum if param.maximum is not None else 2_147_483_647,
-            )
+            # "—", not set (the model's default goes), is one step below the
+            # lowest value the model takes, so the lowest itself can be chosen
+            # and is sent. It was the lowest: 0 chosen for a setting from 0 to
+            # 1 showed "—", and the default was sent instead.
+            lowest = param.minimum
+            unset = lowest - spin.singleStep() if lowest is not None else -1
+            spin.setRange(unset, param.maximum if param.maximum is not None else 2_147_483_647)
             spin.setSpecialValueText("—")
-            spin.setValue(spin.minimum())
+            spin.setValue(unset)
+            if lowest is not None:
+                spin.valueChanged.connect(lambda value, s=spin: _not_below(s, value, lowest))
             spin.valueChanged.connect(self._sync)
             return spin
         edit = QLineEdit()

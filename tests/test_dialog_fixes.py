@@ -356,3 +356,39 @@ def test_a_quote_is_shown_only_for_the_settings_it_was_asked_for(app, window, mo
     finally:
         gate.set()
         catalog.wait()
+
+
+# --- a video's number setting at its lowest ----------------------------------------
+
+
+def test_a_number_setting_can_be_set_to_its_lowest_and_it_is_sent(app, window):
+    """The lowest value was the spin box's "—" (not set): 0 chosen for a
+    setting from 0 to 1 showed "—" and was left out, so the model's default
+    was sent instead of what was on screen."""
+    from sealedlore.providers.videos import VideoModelInfo, VideoParam
+
+    model = VideoModelInfo(
+        id="test/video",
+        name="Test video",
+        api="nanogpt",
+        params=(
+            VideoParam("guidance", "Guidance", "number", default=0.5, minimum=0.0, maximum=1.0),
+        ),
+    )
+    config = window.config
+    config.video_models = [model_entry(model)]
+    config.video_model = model.id
+    config.video_params = {}
+    dialog = VideoDialog(window.session, catalog=window.video_catalog, parent=window)
+    guidance = dialog._controls["guidance"]
+    assert guidance.value() == 0.5 and dialog.sent_settings()["guidance"] == 0.5
+    guidance.setValue(0.0)
+    assert guidance.text() not in ("—", ""), "the lowest is shown as itself"
+    assert dialog.sent_settings()["guidance"] == 0.0, "and sent as chosen"
+    guidance.stepBy(-1)
+    assert guidance.text() == "—" and "guidance" not in dialog.settings(), "below it: not set"
+    guidance.stepBy(1)
+    assert guidance.value() == 0.0 and dialog.settings()["guidance"] == 0.0
+    guidance.setValue(-0.4)  # under the lowest, above "—": the lowest
+    assert guidance.value() == 0.0 and dialog.sent_settings()["guidance"] == 0.0
+    dialog.done(0)
