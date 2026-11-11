@@ -50,7 +50,66 @@ def _delete_widgets(widgets) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _delete_the_tests_windows():
+def _the_apps_look_as_it_was():
+    """The app's look put back as the test found it, so every test starts in
+    the look the run began with: no stylesheet, Qt's own palette and font,
+    the default theme and fonts, 100% text. A text size or a theme set
+    through the window applies the whole stylesheet, and a test that put
+    back only 100% (test_ui_review's rebuilds, Nov 2026) left every later
+    test laid out in it: the Lore page's list and the cast board's measured
+    fewer rows than they were sized for, but only after it. Put back once
+    the test's windows are deleted (`_delete_the_tests_windows` asks for
+    this first), so a restyle reaches no more than older widgets."""
+    try:
+        from PySide6.QtWidgets import QApplication
+    except ImportError:
+        yield
+        return
+    app = QApplication.instance()
+    if app is None:
+        yield
+        return
+    look = app_look(app)
+    yield
+    put_back_look(app, look)
+
+
+def app_look(app) -> tuple:
+    """The app's look as it is: its stylesheet, palette and font, the theme,
+    the fonts chosen and the text size (`_the_apps_look_as_it_was`)."""
+    from sealedlore.gui import text_size, theme
+
+    return (
+        app.styleSheet(),
+        app.palette(),
+        app.font(),
+        theme.current().key,
+        theme.fonts(),
+        text_size.scale(),
+    )
+
+
+def put_back_look(app, look: tuple) -> None:
+    """The app's look as `app_look` found it, each part only if it changed:
+    a stylesheet or palette set restyles every widget alive."""
+    from sealedlore.gui import text_size, theme
+
+    sheet, palette, font, chosen, fonts, scale = look
+    if theme.current().key != chosen:
+        theme.set_theme(chosen)
+    if theme.fonts() != fonts:
+        theme.set_fonts(fonts.ui, fonts.story, fonts.mono)
+    text_size._scale = scale
+    if app.styleSheet() != sheet:
+        app.setStyleSheet(sheet)
+    if app.palette() != palette:
+        app.setPalette(palette)
+    if app.font() != font:
+        app.setFont(font)
+
+
+@pytest.fixture(autouse=True)
+def _delete_the_tests_windows(_the_apps_look_as_it_was):
     """Deletes the windows and dialogs a test made and left behind. Tests
     build them with no parent, and one kept alive by a connected lambda
     outlives the test: PySide6 6.12.0 then deletes it twice at interpreter

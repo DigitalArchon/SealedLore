@@ -15,6 +15,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
+from PySide6.QtCore import QEvent  # noqa: E402
 from PySide6.QtWidgets import QApplication, QFormLayout, QWidget  # noqa: E402
 
 from sealedlore.engine.retrieval import RetrievalReport  # noqa: E402
@@ -29,7 +30,7 @@ from sealedlore.models.image import ImageRef  # noqa: E402
 from sealedlore.models.lore import LoreEntry  # noqa: E402
 from sealedlore.models.summary import Summary  # noqa: E402
 from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa: E402
-from tests.conftest import make_exchange  # noqa: E402
+from tests.conftest import app_look, make_exchange, put_back_look  # noqa: E402
 from tests.test_ui_tidy import needs_real_fonts  # noqa: E402
 
 
@@ -122,6 +123,24 @@ def test_the_lore_list_shows_its_entries_and_an_empty_report_is_a_line(app):
     settle(app)
     assert not panel.injected.isHidden()
     panel.close()
+
+
+def test_a_text_size_set_through_the_window_never_reaches_the_next_test(app, tmp_path: Path):
+    """test_ui_review's rebuilds test set the text size through the window
+    and back to 100%, which leaves the whole stylesheet on the app: run
+    after it, the Lore list above and the cast board's (test_window_layout)
+    measured fewer rows than they were sized for. conftest puts the look a
+    test found back after it."""
+    look = app_look(app)
+    window = MainWindow(root=tmp_path, use_mock=True)
+    window.set_text_scale(1.15)
+    window.set_text_scale(1.0)
+    assert app.styleSheet() != look[0], "the window's 100% is the whole stylesheet"
+    window.close()
+    window.deleteLater()
+    app.sendPostedEvents(None, QEvent.DeferredDelete)
+    put_back_look(app, look)
+    assert app_look(app) == look
 
 
 def test_story_so_far_with_nothing_archived_says_so_and_no_more(app):
