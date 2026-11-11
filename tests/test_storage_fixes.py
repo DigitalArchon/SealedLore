@@ -4,6 +4,7 @@ synthetic, against the reader that takes it in."""
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 import shutil
@@ -436,3 +437,59 @@ def test_a_plot_file_of_unclosed_comments_is_read_in_one_pass():
     assert seconds(lambda: parse_plot_markdown(long_paragraph)) < 2
     assert _strip_comments("a<!-- x\n-->b<!--->c<!-- d") == "a\nb<!--->c<!-- d"
     assert _comments("<!-- one --><!----><!-- two -->") == [" one ", "", " two "]
+
+
+# --- a story backup of the wrong shapes -----------------------------------------------------
+
+
+def story_backup(tmp_path: Path, change, files: dict[str, bytes] | None = None) -> Path:
+    data = archive_data(StoryBundle(story=Story(title="Doomsville")), [], files or {})
+    change(data)
+    path = tmp_path / "shape.sealedlore-archive.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return path
+
+
+def b64(data: bytes) -> str:
+    return base64.b64encode(data).decode("ascii")
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda d: d.__setitem__("nodes", 5),
+        lambda d: d.__setitem__("lore", {"a": 1}),
+        lambda d: d.__setitem__("supporting", [1]),
+        lambda d: d["files"].__setitem__("images.json", b64(b"not json")),
+        lambda d: d["files"].__setitem__("images.json", b64(b'{"a": 1}')),
+        lambda d: d["files"].__setitem__("videos.json", b64(b'[{"x": 1}]')),
+        lambda d: d["files"].update({"images/a.png": b64(png(9)), "images/a.png/b.png": "eA=="}),
+    ],
+    ids=["nodes", "lore", "supporting", "images-text", "images-dict", "videos", "file-folder"],
+)
+def test_a_story_backup_of_the_wrong_shape_is_refused_before_anything_is_written(tmp_path, change):
+    with pytest.raises(ArchiveError):
+        read_archive(story_backup(tmp_path, change))
+    assert not stories_dir(tmp_path).exists()
+
+
+def test_a_name_no_file_system_takes_is_left_out(tmp_path):
+    path = story_backup(tmp_path, lambda d: d["files"].__setitem__("images/a\x00b.png", "eA=="))
+    bundle, log = read_archive(path)
+    assert bundle.pending_files == {}
+    restore_archive(bundle, log, root=tmp_path)
+
+
+def test_a_story_backup_that_fails_part_way_leaves_nothing_behind(tmp_path, monkeypatch):
+    from sealedlore.storage import repository
+
+    path = story_backup(tmp_path, lambda d: None, {"images/refs/a.png": png(10)})
+    bundle, log = read_archive(path)
+
+    def full(*args, **kwargs):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(repository, "write_story_file", full)
+    with pytest.raises(ArchiveError, match="No space left"):
+        restore_archive(bundle, log, root=tmp_path)
+    assert list(stories_dir(tmp_path).iterdir()) == []

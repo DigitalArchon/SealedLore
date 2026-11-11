@@ -16,8 +16,9 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+import shutil
 from collections.abc import Mapping
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from pydantic import ValidationError
@@ -26,14 +27,16 @@ from sealedlore.ids import new_id, utc_now_iso
 from sealedlore.models.aside import Aside
 from sealedlore.models.authoring import ReviewRecord
 from sealedlore.models.character import Character
+from sealedlore.models.image import GeneratedImage
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.node import Node
 from sealedlore.models.story import Story
 from sealedlore.models.summary import Summary
 from sealedlore.models.supporting import SupportingCast
+from sealedlore.models.video import GeneratedVideo
 from sealedlore.storage.atomic import atomic_write_json, nests_deeper
 from sealedlore.storage.image_meta import stripped_or_same
-from sealedlore.storage.images import RECORD_FILES, is_story_file
+from sealedlore.storage.images import IMAGES_FILE, RECORD_FILES, VIDEOS_FILE, is_story_file
 from sealedlore.storage.paths import is_safe_story_id, story_dir
 from sealedlore.storage.repository import StoryBundle, append_api_log, save_story_bundle
 
@@ -97,9 +100,12 @@ def write_archive(
     atomic_write_json(Path(path), archive_data(bundle, api_log, files))
 
 
-def _decoded_files(raw: Any) -> dict[str, bytes]:
+def _decoded_files(raw: Any, name: str) -> dict[str, bytes]:
     """The archive's pictures, dropping any path that could leave the story,
-    their hidden data removed where it can be."""
+    their hidden data removed where it can be. ArchiveError when its records
+    (images.json, videos.json) aren't records, or a file stands where
+    another's folder must: either would be found only once half of it was
+    written, or when the story was next opened."""
     if not isinstance(raw, dict):
         return {}
     files: dict[str, bytes] = {}
@@ -113,7 +119,42 @@ def _decoded_files(raw: Any) -> dict[str, bytes]:
         except (binascii.Error, ValueError):
             continue
         files[relative] = data if relative in RECORD_FILES else stripped_or_same(data)
+    for record, model in ((IMAGES_FILE, GeneratedImage), (VIDEOS_FILE, GeneratedVideo)):
+        if record in files and not _records(files[record], model):
+            raise ArchiveError(f"{name} is damaged: its {record} can't be read.")
+    folders = {
+        parent.as_posix() for relative in files for parent in PurePosixPath(relative).parents
+    }
+    if clash := sorted(folders.intersection(files)):
+        raise ArchiveError(f"{name} is damaged: {clash[0]} is both a file and a folder in it.")
     return files
+
+
+def _records(data: bytes, model: type[GeneratedImage] | type[GeneratedVideo]) -> bool:
+    """Whether a backup's images.json or videos.json is a list of records
+    this version reads, as the story reads them each time."""
+    try:
+        records = json.loads(data.decode("utf-8")) if data else []
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
+        return False
+    if not isinstance(records, list) or nests_deeper(records):
+        return False
+    try:
+        for record in records:
+            model.model_validate(record)
+    except ValidationError:
+        return False
+    return True
+
+
+def _items(data: dict[str, Any], section: str, name: str) -> list[Any]:
+    """A section that is a list, or none; ArchiveError for anything else."""
+    items = data.get(section)
+    if items is None:
+        return []
+    if not isinstance(items, list):
+        raise ArchiveError(f"{name} has invalid content — {section}: not a list")
+    return items
 
 
 def read_archive(path: Path) -> tuple[StoryBundle, list[dict[str, Any]]]:
@@ -144,17 +185,18 @@ def read_archive(path: Path) -> tuple[StoryBundle, list[dict[str, Any]]]:
             f"{name} is archive format version {version}; this SealedLore reads up to "
             f"version {ARCHIVE_VERSION}."
         )
+    # Everything checked before anything is written (`restore_archive`).
     try:
         bundle = StoryBundle(
             story=Story.model_validate(data["story"]),
-            cast=[Character.model_validate(c) for c in data.get("cast", [])],
+            cast=[Character.model_validate(c) for c in _items(data, "cast", name)],
             supporting=SupportingCast.model_validate(data.get("supporting") or {}),
-            lore=[LoreEntry.model_validate(e) for e in data.get("lore", [])],
-            nodes=[Node.model_validate(n) for n in data.get("nodes", [])],
-            summaries=[Summary.model_validate(s) for s in data.get("summaries", [])],
-            asides=[Aside.model_validate(a) for a in data.get("asides", [])],
-            reviews=[ReviewRecord.model_validate(r) for r in data.get("reviews", [])],
-            pending_files=_decoded_files(data.get("files")),
+            lore=[LoreEntry.model_validate(e) for e in _items(data, "lore", name)],
+            nodes=[Node.model_validate(n) for n in _items(data, "nodes", name)],
+            summaries=[Summary.model_validate(s) for s in _items(data, "summaries", name)],
+            asides=[Aside.model_validate(a) for a in _items(data, "asides", name)],
+            reviews=[ReviewRecord.model_validate(r) for r in _items(data, "reviews", name)],
+            pending_files=_decoded_files(data.get("files"), name),
         )
     except KeyError as exc:
         raise ArchiveError(f"{name} has no {exc.args[0]!r} section.") from exc
@@ -181,7 +223,12 @@ def restore_archive(
     """Write an archive already read (`read_archive`) as a story on disk.
 
     A chat exported from memory comes back as an ordinary saved chat: one
-    loaded from disk and still marked "memory" could never be saved."""
+    loaded from disk and still marked "memory" could never be saved.
+
+    All of it or none: a write that fails part way (a full disk, a name the
+    file system won't take) takes away what was written, and is an
+    ArchiveError. Left, a story without its pictures or its log was listed
+    though the import was said to have failed."""
     bundle.story.chat_keep = "disk"
     if not is_safe_story_id(bundle.story.id):
         # The id names a folder; one that could escape stories/ is replaced.
@@ -192,7 +239,15 @@ def restore_archive(
     # The vector cache isn't in the archive; entries re-embed on first use.
     for entry in bundle.lore:
         entry.embedding_hash = None
-    save_story_bundle(bundle, root=root)
-    for record in api_log:
-        append_api_log(bundle.story.id, record, root=root)
+    folder = story_dir(bundle.story.id, root)  # new: no story had it
+    try:
+        save_story_bundle(bundle, root=root)
+        for record in api_log:
+            append_api_log(bundle.story.id, record, root=root)
+    except (OSError, ValueError) as exc:
+        shutil.rmtree(folder, ignore_errors=True)
+        reason = exc.strerror if isinstance(exc, OSError) and exc.strerror else str(exc)
+        raise ArchiveError(
+            f"The story backup couldn't be written ({reason}), so nothing of it was kept."
+        ) from exc
     return bundle

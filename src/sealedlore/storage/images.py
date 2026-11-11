@@ -62,13 +62,14 @@ def is_safe_relative(relative: str) -> bool:
     Never images.json or videos.json, which only this module writes (a
     record naming one, from someone's backup, would have a picture written
     over the story's records, or removed with it), nor one of the images
-    folder's own folders. On Windows a colon is refused too: "images/a:b.png"
-    names stream b.png of a file "a" (NTFS), and "images/C:x" a
-    drive-relative path."""
+    folder's own folders, nor a name no file system takes (a NUL in it). On
+    Windows a colon is refused too: "images/a:b.png" names stream b.png of a
+    file "a" (NTFS), and "images/C:x" a drive-relative path."""
     path = PurePosixPath(relative)
     return (
         not path.is_absolute()
         and "\\" not in relative
+        and "\x00" not in relative
         and not (sys.platform == "win32" and ":" in relative)
         and len(path.parts) >= 2
         and path.parts[0] == IMAGES_DIR
