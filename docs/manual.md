@@ -448,8 +448,13 @@ a model on a NanoGPT endpoint; prices and reasoning facts are kept per
 reference, so the same id on two endpoints is two entries. Making another
 endpoint the default renames the models on the Models page to keep what
 they mean; a story's own model named without an endpoint then means the new
-default. A model naming an endpoint you have removed is left as it is and
-says so when it is sent. The terminal client adds an endpoint with
+default. Renaming an endpoint renames the models on the Models page that name
+it; a story's own model is the story's to change (Story → Setup… → Models),
+and Settings says when one still names the old name. A model naming an
+endpoint you have removed is left as it is and says so when it is sent;
+removing the default names the models that went to it after it
+(`NanoGPT::z-ai/glm-5.3`), so none goes quietly to the next default, which
+may not serve it. The terminal client adds an endpoint with
 `sealedlore configure --endpoint-name Anthropic --base-url
 https://api.anthropic.com --api-key …`.
 
