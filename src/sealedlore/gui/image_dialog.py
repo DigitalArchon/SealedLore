@@ -513,14 +513,22 @@ class ImageDialog(QDialog):
 
     def _prefill(self, image: GeneratedImage) -> None:
         open_span = self.session.open_span
-        if image.private_span is None or (
+        in_its_scene = image.private_span is None or (
             open_span is not None and open_span.id == image.private_span
-        ):
+        )
+        if in_its_scene:
             self.direction.setPlainText(image.direction)
         # A direction from a private scene that has ended is never offered to
         # another model's prompt writer: the approved prompt alone comes back.
         self.prompt.setPlainText(image.prompt)
-        self._set_refs(list(image.references))
+        refs = list(image.references)
+        if not in_its_scene:
+            # Nor are its references' captions as the scene's writer saw them:
+            # one from a scene picture since deleted held the start of its
+            # prompt. Each takes the caption it is offered with now, or none.
+            now = {choice.use.ref_id: choice.use.caption for choice in self._choices}
+            refs = [use.model_copy(update={"caption": now.get(use.ref_id, "")}) for use in refs]
+        self._set_refs(refs)
         self._written_with = [use.ref_id for use in image.references]
 
     # --- the image models ---------------------------------------------------

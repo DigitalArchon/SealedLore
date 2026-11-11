@@ -34,7 +34,7 @@ from sealedlore.gui.transcript import (  # noqa: E402
     PictureView,
 )
 from sealedlore.ids import utc_now_iso  # noqa: E402
-from sealedlore.models.image import ImageRef  # noqa: E402
+from sealedlore.models.image import GeneratedImage, ImageRef, RefUse  # noqa: E402
 from sealedlore.models.story import Story  # noqa: E402
 from sealedlore.providers.images import ImageClient  # noqa: E402
 from sealedlore.providers.mock import MockChatProvider  # noqa: E402
@@ -137,6 +137,43 @@ def test_the_writer_fills_the_prompt_and_its_pictures(app, window: MainWindow):
         "Photorealistic photograph, natural light, sharp focus. "
         "The man in image 1 waits by the door."
     )
+
+
+def test_a_scene_pictures_references_bring_back_no_words_of_the_scene(app, window: MainWindow):
+    """Generate again on a picture made in a private scene, after it ended:
+    its references were saved with their captions as the scene's writer saw
+    them, one of them the start of another scene picture's prompt. That
+    picture deleted, the saved caption would have gone to the story model's
+    prompt writer with the next Write prompt. Each reference now takes the
+    caption it is offered with now, or none."""
+    marker = "ZQX-SCENE-WORDS"
+    cast_ref = next(c.use for c in window.session.image_ref_choices() if c.use.caption == "")
+    image = GeneratedImage(
+        anchor_node_id="a1",
+        file="images/gone.png",
+        prompt="Two figures by a window.",
+        model="hidream",
+        size="1024x1024",
+        private_span="span-ended",
+        references=[
+            RefUse(
+                owner_kind="picture",
+                owner_id="deleted-picture",
+                owner_name="An earlier picture",
+                ref_id="deleted-picture",
+                file="images/deleted.png",
+                caption=f"A note reading {marker}",
+            ),
+            cast_ref.model_copy(update={"caption": f"as in the scene, {marker}"}),
+        ],
+    )
+    dialog = ImageDialog(window.session, prefill=image, parent=window)
+    try:
+        assert [use.ref_id for use in dialog._refs] == ["deleted-picture", cast_ref.ref_id]
+        assert all(marker not in use.caption for use in dialog._refs)
+        assert dialog._refs[1].caption == cast_ref.caption
+    finally:
+        dialog.deleteLater()
 
 
 def test_a_story_can_add_a_picture_from_disk(app, window: MainWindow, tmp_path, monkeypatch):
