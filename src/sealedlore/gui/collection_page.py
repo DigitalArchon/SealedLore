@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from PySide6.QtCore import QEvent, QRectF, QSize, Qt, Signal
+from PySide6.QtCore import QEvent, QItemSelectionModel, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QIcon, QKeySequence, QPainter, QPainterPath, QPen, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -729,20 +729,55 @@ class CollectionPage(QWidget):
         self._on_chosen()
 
     def _select_person(self) -> None:
+        """The row of the one shown current and alone chosen (the page chose
+        them: a tile, a version, the window)."""
         card = self._card(self._current)
         main_id = collection.main_of(card, self._characters).id if card is not None else None
         self.people.blockSignals(True)
         for row in range(self.people.count()):
             if self.people.item(row).data(Qt.UserRole) == main_id:
-                self.people.setCurrentRow(row)
+                self.people.setCurrentRow(row, QItemSelectionModel.ClearAndSelect)
                 break
         else:
-            self.people.setCurrentRow(-1)
+            self.people.setCurrentRow(-1, QItemSelectionModel.ClearAndSelect)
         self.people.blockSignals(False)
 
-    def _on_person(self, item: QListWidgetItem | None, _previous=None) -> None:
-        if item is not None and len(self.chosen_ids()) < 2:
-            self.show_character(item.data(Qt.UserRole))
+    def _on_person(self, _item: QListWidgetItem | None, _previous=None) -> None:
+        # Never selects anything itself: Qt makes the clicked row current in
+        # the middle of the press, before the press changes the selection, and
+        # a row re-selected here made the press's Ctrl toggle let go of it
+        # (Ctrl+click chose nobody, the choice ran a click behind).
+        self._follow_list()
+
+    def _follow_list(self) -> None:
+        """The page shows what the list shows: several chosen, the one chosen,
+        else the row that is current (a Ctrl+click let go of the last one
+        chosen). With nothing chosen and no row current (a search left them
+        out) the one shown stays shown."""
+        ids = self.chosen_ids()
+        if len(ids) >= 2:
+            self._show_chosen(ids)
+            return
+        if ids:
+            card_id: str | None = ids[0]
+        elif self.people.selectedItems():
+            card_id = None  # Everyone
+        elif (item := self.people.currentItem()) is not None:
+            card_id = item.data(Qt.UserRole)
+        else:
+            if self.pages.currentIndex() == CHOSEN_PAGE:
+                self._show()
+            return
+        shown = self._card(self._current)
+        if (
+            card_id is not None
+            and shown is not None
+            and collection.main_of(shown, self._characters).id == card_id
+        ):
+            card_id = self._current  # the version of theirs being shown
+        if card_id != self._current or self.pages.currentIndex() == CHOSEN_PAGE:
+            self._current = card_id if self._card(card_id) is not None else None
+            self._show()
 
     # --- several at once ---------------------------------------------------------------------
 
@@ -801,11 +836,9 @@ class CollectionPage(QWidget):
         return [card_id for card_id in ids if card_id]
 
     def _on_chosen(self) -> None:
-        ids = self.chosen_ids()
-        if len(ids) < 2:
-            if self.pages.currentIndex() == CHOSEN_PAGE:
-                self._show()
-            return
+        self._follow_list()
+
+    def _show_chosen(self, ids: list[str]) -> None:
         names = [card.name for card_id in ids if (card := self._card(card_id)) is not None]
         self.title.setText(f"{len(ids)} characters")
         self.chosen_names.setText(", ".join(names))
