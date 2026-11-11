@@ -88,6 +88,27 @@ def test_the_chat_key_entered_for_video_by_hand_is_marked_shared():
     assert cfg.videos().shared_key
 
 
+def test_any_other_key_entered_for_video_is_marked_shared():
+    """Not the default chat endpoint's alone: with several chat endpoints the
+    video key may be another's, or the embeddings' or the private model's."""
+    from sealedlore.models.config import EmbeddingProviderConfig
+
+    cfg = config(
+        embedding_provider=EmbeddingProviderConfig(base_url="https://embed.example/v1"),
+        private_provider=ProviderConfig(name="private", base_url="https://nano-gpt.com/api/v1"),
+    )
+    cfg.providers.append(
+        ProviderConfig(name="Anthropic", base_url="https://api.anthropic.com", api_key="anth")
+    )
+    cfg.embedding_provider.api_key = "embed"
+    cfg.private_provider.api_key = "priv"
+    for key in ("anth", "embed", "priv"):
+        cfg.video_endpoint.api_key = key
+        assert cfg.videos().shared_key, key
+    cfg.video_endpoint.api_key = "video-key"
+    assert not cfg.videos().shared_key
+
+
 def test_a_media_address_must_be_https():
     with pytest.raises(ValueError):
         MediaEndpoint(base_url="http://example.com")

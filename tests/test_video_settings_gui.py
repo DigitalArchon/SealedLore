@@ -31,10 +31,28 @@ def test_video_says_it_is_off_until_it_has_a_key(app):
     dialog.video_key.setText("video-key")
     assert "key of its own" in dialog.video_key_note.text()
     dialog.video_key.setText("chat")
-    assert "same key as chat" in dialog.video_key_note.text()
+    assert "same key as another one here" in dialog.video_key_note.text()
     dialog.video_key.setText("")
     dialog._save()
     assert dialog.config.videos() is None
+
+
+def test_the_note_knows_every_other_key_typed_in_settings(app):
+    """Not the endpoint shown and the pictures' alone, as `Config.videos`
+    compares them: another chat endpoint's, the embeddings' and the private
+    model's too."""
+    cfg = config()
+    cfg.providers.append(
+        ProviderConfig(name="Anthropic", base_url="https://api.anthropic.com", api_key="anth")
+    )
+    dialog = SettingsDialog(cfg, None)
+    dialog.embed_api_key.setText("embed")
+    dialog.private_key.setText("priv")
+    for key in ("anth", "embed", "priv"):
+        dialog.video_key.setText(key)
+        assert "same key as another one here" in dialog.video_key_note.text(), key
+    dialog.private_key.setText("other")
+    assert "key of its own" in dialog.video_key_note.text(), "followed as it is typed"
 
 
 def test_saving_keeps_each_endpoint_and_key_apart(app):

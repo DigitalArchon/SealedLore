@@ -8,8 +8,9 @@ sent, whatever happens after. So the dialog:
 - says what this video will cost, in dollars and in pictures' worth, before
   anything else, and makes the author tick that they accept it: a price it
   could not work out must be accepted as unknown, in so many words;
-- warns every time when the video key is also the chat's or the pictures'
-  (the author's rule: allowed, but only typed in by hand, and warned about);
+- warns every time when the video key is also another key the app has (a
+  chat endpoint's, the pictures', the embeddings' or the private model's;
+  the author's rule: allowed, but only typed in by hand, and warned about);
 - shows every setting the model takes, from its own listing, and sends
   nothing the listing doesn't offer (`VideoModelInfo.clean`);
 - has the prompt written for video by the same prompt writer as pictures,
@@ -145,9 +146,9 @@ class VideoDialog(QDialog):
         self.cost_banner.setObjectName("warningLabel")
         self.cost_banner.setWordWrap(True)
         self.shared_warning = QLabel(
-            "⚠ The video key is the same as your chat or picture key (Settings → Video). "
-            "Its spending can't be capped for video alone. A key of its own, with a daily "
-            "limit set on it at the service, is the safe way."
+            "⚠ The video key is the same as another key you use, a chat endpoint's or the "
+            "pictures', say (Settings → Video). Its spending can't be capped for video alone. "
+            "A key of its own, with a daily limit set on it at the service, is the safe way."
         )
         self.shared_warning.setObjectName("warningLabel")
         self.shared_warning.setWordWrap(True)
@@ -710,8 +711,9 @@ class VideoDialog(QDialog):
             answer = QMessageBox.warning(
                 self,
                 "The video key is shared",
-                "This video goes on the same key as your chat or pictures, so nothing at the "
-                "service caps what video spends on it. Send it anyway?",
+                "This video goes on a key you use for something else too (a chat endpoint, "
+                "pictures), so nothing at the service caps what video spends on it. Send it "
+                "anyway?",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )

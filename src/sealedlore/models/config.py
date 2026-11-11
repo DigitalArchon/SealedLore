@@ -1094,8 +1094,14 @@ class Config(BaseModel):
         settings = self.video_endpoint
         if not settings.base_url or not settings.api_key.strip():
             return None
-        chat = self.active_provider()
-        others = {chat.api_key if chat is not None else "", self.image_endpoint.api_key}
+        # Every other key the author has entered, not the default chat
+        # endpoint's alone: with several chat endpoints the video key may be
+        # any one's, and its spending is then that endpoint's too.
+        others = {provider.api_key for provider in self.providers}
+        others.add(self.image_endpoint.api_key)
+        for holder in (self.embedding_provider, self.private_provider):
+            if holder is not None:
+                others.add(holder.api_key)
         return ResolvedMedia(
             base_url=settings.base_url,
             api_key=settings.api_key,

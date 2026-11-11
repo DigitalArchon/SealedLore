@@ -1627,6 +1627,9 @@ class SettingsDialog(QDialog):
         self.private_key.setPlaceholderText(
             "blank: the main endpoint's key on the same host, else none"
         )
+        # The Video page, built before this one, says when its key is this one too.
+        self.private_key.textChanged.connect(self._sync_video_key_note)
+        self._sync_video_key_note()
         self._private_catalog = ModelCatalog(self)
 
         def browse(current: str) -> str | None:
@@ -1886,7 +1889,7 @@ class SettingsDialog(QDialog):
         self.video_key_note.setObjectName("hintLabel")
         self.video_key_note.setWordWrap(True)
         form.addRow(self.video_key_note)
-        for field in (self.video_key, self.api_key, self.image_key):
+        for field in (self.video_key, self.api_key, self.image_key, self.embed_api_key):
             field.textChanged.connect(self._sync_video_key_note)
         self._sync_video_key_note()
         return widget
@@ -1896,6 +1899,22 @@ class SettingsDialog(QDialog):
 
         return pick_video_model(self.video_catalog, current, self)
 
+    def _keys_but_videos(self) -> set[str]:
+        """Every other key typed here: each chat endpoint's (not the default's
+        alone), the pictures', the embeddings' and the private model's, as
+        `Config.videos` compares them."""
+        keys = {
+            endpoint.api_key.strip()
+            for index, endpoint in enumerate(self._endpoints)
+            if index != self._selected
+        }
+        keys.add(self.api_key.text().strip())
+        for name in ("image_key", "embed_api_key", "private_key"):
+            field = getattr(self, name, None)  # the Private page is built after this one
+            if field is not None:
+                keys.add(field.text().strip())
+        return keys - {""}
+
     def _sync_video_key_note(self, *_args) -> None:
         key = self.video_key.text().strip()
         if not key:
@@ -1903,11 +1922,12 @@ class SettingsDialog(QDialog):
                 "Video is off: there is no video key. None is taken from the chat's, so "
                 "video is never paid for by a key that wasn't meant for it."
             )
-        elif key in {self.api_key.text().strip(), self.image_key.text().strip()} - {""}:
+        elif key in self._keys_but_videos():
             self.video_key_note.setText(
-                "⚠ This is the same key as chat or pictures. That works, but its spending "
-                "can't be capped for video alone, so every video will warn you again "
-                "before it is sent."
+                "⚠ This is the same key as another one here (a chat endpoint's, the pictures', "
+                "the embeddings' or the private model's). That works, but its spending can't "
+                "be capped for video alone, so every video will warn you again before it is "
+                "sent."
             )
         else:
             self.video_key_note.setText("Video is on, with a key of its own.")

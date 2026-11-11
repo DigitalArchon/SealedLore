@@ -2361,9 +2361,10 @@ even if you stop waiting or delete it afterwards. So:
   at the service and set a daily spending limit on it there (on NanoGPT, when
   you create or edit the key): that limit is the one that holds whatever
   happens in the app. When the limit is reached the service refuses, and the
-  app says so rather than trying again. You may type your chat or picture key
-  in there instead; then every video warns you and asks again before it is
-  sent.
+  app says so rather than trying again. You may type in a key you use for
+  something else instead (a chat endpoint's, the pictures', the embeddings' or
+  the private model's); then every video warns you and asks again before it
+  is sent.
 - **The dialog says first what this video will cost**, in dollars and in
   pictures' worth, worked out from the model's own price list, and **Generate
   video** stays off until you tick that you accept that price. Changing a
