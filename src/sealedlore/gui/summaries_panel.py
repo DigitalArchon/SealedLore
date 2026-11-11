@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
@@ -72,6 +73,13 @@ class SummariesPanel(QWidget):
         self._in_parts: set[str] = set()
         self._rebuilding: set[str] = set()
         self._loading = False
+        # The chapter in the editor: its id, its text as stored and as the
+        # editor shows it (toPlainText makes U+00A0 a space), when loaded.
+        self._loaded: tuple[str, str, str] | None = None
+        # The chapter was rewritten (a rebuild landed) under an unsaved edit.
+        self._rewritten = False
+        # What one of these is called, for the questions ("part" in a chat).
+        self.chapter_word = "chapter"
         # Turns Archive now would take, and why it can't now ("" when it can).
         self._archivable = 0
         self._paused = ""
@@ -226,8 +234,14 @@ class SummariesPanel(QWidget):
 
         `numbers` are the chapter numbers along the active path (as the
         navigator and the transcript count them); a chapter off the path
-        falls back to its place among all chapters."""
+        falls back to its place among all chapters.
+
+        An edit not yet saved stays in the editor while its chapter is
+        there (a turn, a saved message or a rebuild refreshes the panel, and
+        used to put the stored text back without a word); rewritten
+        meanwhile, the line above says so."""
         self._numbers = dict(numbers or {})
+        draft = self._unsaved()
         selected = self.selected_id()
         self._summaries = list(summaries)
         self._on_path = set(on_path_ids)
@@ -264,6 +278,8 @@ class SummariesPanel(QWidget):
         self._archivable = archivable_turns
         self._sync_archive()
         self._reload_editor()
+        if draft is not None:
+            self._keep_draft(*draft)
         self._sync_empty()
 
     def set_paused(self, reason: str) -> None:
@@ -303,14 +319,75 @@ class SummariesPanel(QWidget):
     # --- editing ----------------------------------------------------------
 
     def _on_selection_changed(self) -> None:
-        if not self._loading:
-            self._reload_editor()
+        if self._loading:
+            return
+        loaded = self._loaded
+        if loaded is not None and self.selected_id() != loaded[0] and self.unsaved_edit():
+            # Choosing another chapter puts its text in the editor: what was
+            # typed in this one goes only if the author says so.
+            answer = QMessageBox.question(
+                self,
+                "Discard your edit?",
+                f"The {self.chapter_word} you were editing hasn't been saved. Discard the edit?",
+                QMessageBox.Discard | QMessageBox.Cancel,
+                QMessageBox.Cancel,
+            )
+            if answer != QMessageBox.Discard:
+                self._loading = True
+                self.select(loaded[0])
+                self._loading = False
+                return
+        self._reload_editor()
 
     def _reload_editor(self) -> None:
         summary = self.selected()
         self._loading = True
         self.editor.setPlainText(summary.content if summary else "")
         self._loading = False
+        self._loaded = (summary.id, summary.content, self.editor.toPlainText()) if summary else None
+        self._rewritten = False
+        self.detail.setText(self._detail_text(summary))
+        self._update_buttons()
+
+    def unsaved_edit(self) -> bool:
+        """Whether the editor holds words the chapter doesn't have."""
+        return self._loaded is not None and self.editor.toPlainText() != self._loaded[2]
+
+    def drop_edit(self) -> None:
+        """The unsaved edit the author agreed to lose (the window asks)."""
+        self._reload_editor()
+
+    def _unsaved(self) -> tuple[str, str, str, int, int] | None:
+        """The edit not yet saved: the chapter, the text typed, the chapter's
+        text when it was loaded, and where the cursor and the scroll were."""
+        if not self.unsaved_edit():
+            return None
+        assert self._loaded is not None
+        return (
+            self._loaded[0],
+            self.editor.toPlainText(),
+            self._loaded[1],
+            self.editor.textCursor().position(),
+            self.editor.verticalScrollBar().value(),
+        )
+
+    def _keep_draft(self, summary_id: str, text: str, was: str, cursor: int, scroll: int) -> None:
+        """Put the edit back over the chapter just reloaded, while it is
+        still the one selected (gone with its messages, there is nothing to
+        keep it for) and still differs from what is stored (saved as typed)."""
+        summary = self.selected()
+        if summary is None or summary.id != summary_id or self._loaded is None:
+            return
+        if text == self._loaded[2]:
+            return
+        self._loading = True
+        self.editor.setPlainText(text)
+        self._loading = False
+        place = self.editor.textCursor()
+        place.setPosition(min(cursor, len(text)))
+        self.editor.setTextCursor(place)
+        self.editor.verticalScrollBar().setValue(scroll)
+        self._rewritten = summary.content != was
         self.detail.setText(self._detail_text(summary))
         self._update_buttons()
 
@@ -331,6 +408,11 @@ class SummariesPanel(QWidget):
             )
         if summary.id not in self._on_path:
             bits.append("not part of the branch you are on")
+        if self._rewritten:
+            bits.append(
+                "rewritten while you were editing it: Save edits keeps your words, Revert "
+                "takes the new text"
+            )
         return " · ".join(bits)
 
     def _on_text_changed(self) -> None:
@@ -338,8 +420,7 @@ class SummariesPanel(QWidget):
             self._update_buttons()
 
     def _is_dirty(self) -> bool:
-        summary = self.selected()
-        return summary is not None and self.editor.toPlainText() != summary.content
+        return self.selected() is not None and self.unsaved_edit()
 
     def _update_buttons(self) -> None:
         summary = self.selected()

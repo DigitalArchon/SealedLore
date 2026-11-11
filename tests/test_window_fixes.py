@@ -190,3 +190,108 @@ def test_a_story_that_cant_be_read_lets_nothing_go_in_the_story_open(
     assert editor is not None and editor._editor.toPlainText() == "Typed and not saved."
     editor.cancel_edit()
     window.close()
+
+
+# --- 3. a chapter's edit on Story so far is never lost without a word ---------------
+
+
+def _with_chapters(tmp_path: Path, story, cast) -> MainWindow:
+    from sealedlore.models.summary import Summary
+
+    nodes = make_exchange(6)
+    story.active_leaf_id = nodes[-1].id
+    story.held_character_id = "char-serrik"
+    summaries = [
+        Summary(content="Chapter one as written.", covered_node_ids=["u0", "a0"], model="m"),
+        Summary(content="Chapter two as written.", covered_node_ids=["u1", "a1"], model="m"),
+    ]
+    save_story_bundle(
+        StoryBundle(story=story, cast=cast, nodes=nodes, summaries=summaries), root=tmp_path
+    )
+    window = MainWindow(root=tmp_path, use_mock=True)
+    window.config.scene_reads = "manual"
+    window.config.suggest_characters = False
+    window.config.auto_archive = False
+    window.show()
+    window.open_story(story.id)
+    window._provider = MockChatProvider(["A passage."])
+    return window
+
+
+def test_a_chapters_unsaved_edit_outlives_a_turn_and_a_saved_message(app, tmp_path, story, cast):
+    """Typed into a chapter and not saved, the text went back to the stored
+    one at the next turn, a message's edit saved, or Close story, without a
+    word (the review after 3.1.0b8)."""
+    window = _with_chapters(tmp_path, story, cast)
+    panel = window.summaries_panel
+    panel.editor.setPlainText("My own rewrite of chapter one.")
+    assert panel.save_button.isEnabled()
+    window.composer.input.setPlainText("I go on.")
+    window.send_turn()
+    _idle(app, window)
+    assert panel.editor.toPlainText() == "My own rewrite of chapter one."
+    assert panel.save_button.isEnabled()
+    window._edit_node("u5", "Edited turn 5.")
+    assert panel.editor.toPlainText() == "My own rewrite of chapter one."
+    assert window.session.summaries[0].content == "Chapter one as written.", "nothing saved"
+    # Saved, the editor is the stored text and nothing is unsaved any more.
+    panel.save_button.click()
+    assert window.session.summaries[0].content == "My own rewrite of chapter one."
+    assert not panel.unsaved_edit() and not panel.save_button.isEnabled()
+    window.close()
+
+
+def test_a_chapter_rewritten_under_an_edit_keeps_the_edit_and_says_so(app, tmp_path, story, cast):
+    window = _with_chapters(tmp_path, story, cast)
+    panel = window.summaries_panel
+    panel.editor.setPlainText("My own rewrite.")
+    window.session.summaries[0].content = "A rebuild's new text."  # landed meanwhile
+    window.refresh_summaries()
+    assert panel.editor.toPlainText() == "My own rewrite."
+    assert "rewritten while you were editing it" in panel.detail.text()
+    panel.revert_button.click()
+    assert panel.editor.toPlainText() == "A rebuild's new text."
+    assert "rewritten" not in panel.detail.text()
+    window.close()
+
+
+def test_choosing_another_chapter_with_an_edit_asks_and_cancel_keeps_it(
+    app, tmp_path, story, cast, monkeypatch
+):
+    window = _with_chapters(tmp_path, story, cast)
+    panel = window.summaries_panel
+    asked: list[tuple[str, object]] = []
+    answer = [QMessageBox.Cancel]
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda _p, title, _t, _b=None, default=None: asked.append((title, default)) or answer[0],
+    )
+    panel.editor.setPlainText("Typed into chapter one.")
+    panel.chapters.setCurrentRow(1)
+    assert asked == [("Discard your edit?", QMessageBox.Cancel)]
+    assert panel.chapters.currentRow() == 0
+    assert panel.editor.toPlainText() == "Typed into chapter one."
+    answer[0] = QMessageBox.Discard
+    panel.chapters.setCurrentRow(1)
+    assert panel.chapters.currentRow() == 1
+    assert panel.editor.toPlainText() == "Chapter two as written."
+    window.close()
+
+
+def test_leaving_the_story_with_a_chapters_edit_asks_first(app, tmp_path, story, cast, monkeypatch):
+    window = _with_chapters(tmp_path, story, cast)
+    panel = window.summaries_panel
+    titles: list[str] = []
+    answer = [QMessageBox.Cancel]
+    monkeypatch.setattr(
+        QMessageBox, "question", lambda _p, title, *_a, **_k: titles.append(title) or answer[0]
+    )
+    panel.editor.setPlainText("Typed and not saved.")
+    window.close_story()
+    assert titles == ["Discard your edit?"] and window.session is not None
+    assert panel.editor.toPlainText() == "Typed and not saved."
+    answer[0] = QMessageBox.Discard
+    window.close_story()
+    assert window.session is None and not panel.unsaved_edit()
+    window.close()

@@ -2078,7 +2078,7 @@ class MainWindow(
             self._warn_plain("Could not open story", str(exc))
             return
         if self.session is not None:
-            self._discard_edits()
+            self._discard_edits(leaving=True)
             self._discard_memory_scene()
         self.show_collection(False)
         self.show_cast_board(False)
@@ -2631,18 +2631,35 @@ class MainWindow(
         self._select_from_map(start_id, node_id)
         self.show_map(False)
 
-    def _edit_allows_leave(self, *, keeping: Collection[str] = (), discard: bool = True) -> bool:
+    def _edit_allows_leave(
+        self, *, keeping: Collection[str] = (), discard: bool = True, leaving: bool = False
+    ) -> bool:
         """Messages' edits open and changed: asked about before the story goes
         or moves on (they were dropped without a word), every one of them (it
         asked about the first only). `keeping`: the messages still shown
         after the rebuild that follows, whose editors it opens again with
         what was typed (transcript `_reopen`): only the others are asked
         about. On Discard they are closed, unless `discard` is False: closing
-        the window asks every question before it lets go of anything."""
+        the window asks every question before it lets go of anything.
+        `leaving`: the story itself goes, and with it a chapter's edit on
+        Story so far not yet saved (the panel keeps one through anything
+        else), asked about in the same question."""
         changed = self._edits_lost(keeping)
-        if not changed:
+        chapter = leaving and self.summaries_panel.unsaved_edit()
+        if not changed and not chapter:
             return True
-        if len(changed) == 1:
+        word = self.summaries_panel.chapter_word
+        if chapter and changed:
+            title = "Discard your edits?"
+            messages = f"{len(changed)} message{'s' if len(changed) != 1 else ''}"
+            text = (
+                f"{messages} and a {word} on Story so far you were editing haven't been "
+                "saved. Discard them?"
+            )
+        elif chapter:
+            title = "Discard your edit?"
+            text = f"A {word} you were editing on Story so far hasn't been saved. Discard the edit?"
+        elif len(changed) == 1:
             title = "Discard your edit?"
             text = "A message you were editing hasn't been saved. Discard the edit?"
         else:
@@ -2654,7 +2671,7 @@ class MainWindow(
         if answer != QMessageBox.Discard:
             return False
         if discard:
-            self._discard_edits(keeping)
+            self._discard_edits(keeping, leaving=leaving)
         return True
 
     def _edits_lost(self, keeping: Collection[str] = ()) -> list[MessageWidget]:
@@ -2664,10 +2681,12 @@ class MainWindow(
             if widget.edit_changed() and widget.node_id not in keeping
         ]
 
-    def _discard_edits(self, keeping: Collection[str] = ()) -> None:
+    def _discard_edits(self, keeping: Collection[str] = (), *, leaving: bool = False) -> None:
         """The changed edits the author agreed to lose (`_edit_allows_leave`)."""
         for widget in self._edits_lost(keeping):
             widget.cancel_edit()
+        if leaving:
+            self.summaries_panel.drop_edit()
 
     def _path_ids_without(self, node_ids: Collection[str]) -> set[str]:
         """The messages the transcript will still show once `node_ids` go."""

@@ -980,7 +980,7 @@ class PrivateWindow:
         question used to find the edit already gone."""
         if not self._private_may_close():
             return False
-        self._discard_edits()
+        self._discard_edits(leaving=True)
         self._discard_memory_scene()
         return True
 
@@ -988,7 +988,7 @@ class PrivateWindow:
         """`_private_allows_close`'s questions, with nothing let go: closing the
         window during a job asks them before the job is stopped, and the
         scene is discarded only once the job is done (closeEvent)."""
-        if not self._edit_allows_leave(discard=False):
+        if not self._edit_allows_leave(discard=False, leaving=True):
             return False
         session = self.session
         if session is not None and session.memory_only:
