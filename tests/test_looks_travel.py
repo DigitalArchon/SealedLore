@@ -6,6 +6,7 @@ it is."""
 
 from __future__ import annotations
 
+import os
 import zlib
 from pathlib import Path
 
@@ -216,6 +217,48 @@ def test_pictures_kept_for_a_template_go_on_its_next_story(tmp_path: Path):
     # Another template's story takes nothing; forgotten, nothing is offered.
     assert read_kept("The Silverwood", root=root) is None
     assert forget_kept("Doomsville", root=root) and read_kept("Doomsville", root=root) is None
+
+
+def test_kept_pictures_are_put_back_when_the_data_folder_is_reached_through_a_link(
+    tmp_path: Path,
+):
+    """A home folder at /var/home behind /home, or a data folder moved to
+    another disk and linked back: the kept folder, compared as written with
+    each picture's resolved path, never held one, so nothing came back."""
+    import pytest
+
+    from sealedlore.storage.template_pictures import _folder, apply_kept, keep_pictures, read_kept
+
+    real = tmp_path / "real"
+    real.mkdir()
+    try:
+        (tmp_path / "link").symlink_to(real, target_is_directory=True)
+    except OSError:
+        pytest.skip("no symbolic links here")
+    root = tmp_path / "link" / "sealedlore"
+    john = Character(
+        name="John", reference_images=[ImageRef(file="images/refs/a.png", look="coat")]
+    )
+    keep_pictures("Doomsville", "Doomsville", [john], {"images/refs/a.png": png(30)}.get, root=root)
+    kept = read_kept("Doomsville", root=root)
+    assert kept is not None
+    fresh, written = Character(name="John"), {}
+    assert apply_kept(kept, [fresh], lambda file: None, written.__setitem__, root=root) == 1
+    assert [ref.look for ref in fresh.reference_images] == ["coat"]
+    assert list(written.values()) == [png(30)]
+
+    # Still never a file outside the kept folder, however a row names it.
+    outside = tmp_path / "outside.png"
+    outside.write_bytes(png(60))
+    folder = _folder("Doomsville", root)
+    for row in kept.cards["John"]["pictures"]:
+        row["file"], row["sha256"] = os.path.relpath(outside, folder), ""
+        assert (folder / row["file"]).is_file()
+    (folder / "elsewhere").symlink_to(outside)
+    kept.cards["John"]["pictures"].append({"file": "elsewhere", "sha256": ""})
+    other, written = Character(name="John"), {}
+    assert apply_kept(kept, [other], lambda file: None, written.__setitem__, root=root) == 0
+    assert written == {}
 
 
 def test_a_story_remembers_its_template_through_restart_and_scenario_files(tmp_path: Path):

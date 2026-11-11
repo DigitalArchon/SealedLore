@@ -171,7 +171,14 @@ def apply_kept(
     """Put what was kept on the characters of the same names: `read` and
     `write` are the new story's picture files. How many pictures were added
     (the template's own are matched, not added again)."""
-    folder = _folder(kept.template, root)
+    # Resolved, as each file's path is below: a data folder reached through
+    # a link (a home folder at /var/home, a data folder moved to another
+    # disk) compared as written was never among a resolved path's parents,
+    # and nothing kept was put back.
+    try:
+        folder = _folder(kept.template, root).resolve()
+    except (OSError, RuntimeError):
+        return 0
     added = 0
     for character in characters:
         card = kept.cards.get(character.name)
@@ -188,8 +195,11 @@ def apply_kept(
                 continue
             ref = own.pop(str(row.get("sha256")), None)
             if ref is None:
-                path = folder / str(row.get("file") or "")
-                if folder not in path.resolve().parents or not path.is_file():
+                try:
+                    path = (folder / str(row.get("file") or "")).resolve()
+                except (OSError, RuntimeError):
+                    continue
+                if folder not in path.parents or not path.is_file():
                     continue
                 data = path.read_bytes()
                 suffix = picture_kind(data)
