@@ -606,6 +606,7 @@ class MainWindow(
         self.cast_panel = CastPanel(self._story_pictures)
         self.cast_panel.changed.connect(self._on_cast_changed)
         self.cast_panel.renamed.connect(self._on_character_renamed)
+        self.cast_panel.remove_requested.connect(self._remove_character)
         self.cast_panel.promote_requested.connect(self._promote_character)
         self.cast_panel.demote_requested.connect(self._demote_character)
         self.cast_panel.accept_requested.connect(self._accept_suggestion)
@@ -4035,6 +4036,21 @@ class MainWindow(
         )
         if character is not None:
             self.session.rename_on_rosters(character, old_name)
+
+    def _remove_character(self, character_id: str) -> None:
+        """The cast board's Remove (in Setup and the guide too): out of the
+        story, everything that named them by id with them."""
+        if self.session is None:
+            return
+        setup = self._setup_dialog
+        untouched = setup is not None and not setup.edited()
+        try:
+            self.session.remove_character(character_id)
+        except ValueError as exc:
+            QMessageBox.information(self._dialog_parent(), "Playing this character", str(exc))
+            return
+        if setup is not None:
+            setup.character_removed(untouched=untouched)
 
     def _on_cast_changed(self) -> None:
         if self.session is None:

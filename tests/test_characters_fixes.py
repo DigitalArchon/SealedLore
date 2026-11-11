@@ -444,3 +444,146 @@ def test_a_cast_members_name_left_blank_is_never_kept(app, story_window):
     assert [c.name for c in saved.cast] == ["Serrik Vaun", "Maela Orr", "Captain Idris"]
     held = window.composer.held
     assert "" not in [held.itemText(i).strip() for i in range(held.count())]
+
+
+# --- a character removed takes their id with them ----------------------------------------
+
+
+def answer_questions(monkeypatch, answer) -> list[str]:
+    """Every QMessageBox.question answered `answer`; their titles kept."""
+    from PySide6.QtWidgets import QMessageBox
+
+    asked: list[str] = []
+
+    def question(_parent, title, *_args, **_kwargs):
+        asked.append(title)
+        return answer
+
+    monkeypatch.setattr(QMessageBox, "question", question)
+    return asked
+
+
+def run_setup(window, monkeypatch, drive) -> bool:
+    """Story → Setup…, `drive` doing what the author does in it."""
+    from sealedlore.gui.setup_dialog import SetupDialog
+
+    def exec_(dialog):
+        dialog.show()
+        dialog._remember_opened()
+        settle(QApplication.instance())
+        return drive(dialog)
+
+    monkeypatch.setattr(SetupDialog, "exec", exec_)
+    monkeypatch.setattr(window, "_offer_new_playthrough", lambda: None)
+    return window.open_setup()
+
+
+def remove_on_the_tab(app, window, dialog, card_id: str) -> None:
+    tabs = [dialog.tabs.tabText(i) for i in range(dialog.tabs.count())]
+    dialog.tabs.setCurrentIndex(tabs.index("Characters"))
+    settle(app)
+    window.cast_panel._select(card_id)
+    window.cast_panel.remove_button.click()
+    settle(app)
+
+
+def test_characters_removed_in_setup_leave_its_starting_scene(app, story_window, monkeypatch):
+    """Maela and Idris taken out on Setup's Characters tab, then Save: the
+    starting scene still had Maela present and Idris pinned elsewhere, and
+    Maela was still the character suggested."""
+    from PySide6.QtWidgets import QDialog, QMessageBox
+
+    window = story_window
+    session = window.session
+    setup = session.story.setup
+    setup.starting_scene.present_character_ids = ["char-serrik", "char-maela"]
+    setup.absent_at_start = ["char-idris"]
+    setup.suggested_character_id = "char-maela"
+    session.save()
+    answer_questions(monkeypatch, QMessageBox.Yes)
+
+    def drive(dialog):
+        remove_on_the_tab(app, window, dialog, "char-maela")
+        remove_on_the_tab(app, window, dialog, "char-idris")
+        dialog._save()
+        return QDialog.Accepted
+
+    assert run_setup(window, monkeypatch, drive)
+    assert [c.id for c in session.cast] == ["char-serrik"]
+    setup = session.story.setup
+    assert setup.starting_scene.present_character_ids == ["char-serrik"]
+    assert setup.absent_at_start == [] and setup.suggested_character_id is None
+    assert "char-maela" not in session.story.scene.present_character_ids
+    from sealedlore.storage.repository import load_story_bundle
+
+    saved = load_story_bundle(session.story.id, root=window.root)
+    assert saved.story.setup.starting_scene.present_character_ids == ["char-serrik"]
+    assert all(
+        "char-maela" not in node.meta.scene.present_character_ids
+        for node in saved.nodes
+        if node.meta.scene is not None
+    )
+
+
+def test_a_character_removed_in_setup_is_not_a_change_cancel_asks_about(
+    app, story_window, monkeypatch
+):
+    """Cards on the Characters tab are kept as they are made; a card taken
+    out there is not something of Setup's that Cancel would throw away."""
+    from PySide6.QtWidgets import QDialog, QMessageBox
+
+    window = story_window
+    session = window.session
+    session.story.setup.starting_scene.present_character_ids = ["char-serrik", "char-maela"]
+    session.save()
+    asked = answer_questions(monkeypatch, QMessageBox.Yes)
+
+    def drive(dialog):
+        remove_on_the_tab(app, window, dialog, "char-maela")
+        dialog.reject()
+        return QDialog.Rejected
+
+    assert not run_setup(window, monkeypatch, drive)
+    assert asked == ["Remove this character?"]
+    assert session.story.setup.starting_scene.present_character_ids == ["char-serrik"]
+
+
+def test_removing_the_character_played_lets_go_of_them(app, story_window, monkeypatch):
+    """Serrik, the one played, removed on the cast board: the story still
+    held him, and the scene still had him present."""
+    from PySide6.QtWidgets import QMessageBox
+
+    window = story_window
+    session = window.session
+    answer_questions(monkeypatch, QMessageBox.Yes)
+    window.show_cast_page("char-serrik")
+    settle(app)
+    window.cast_panel._select("char-serrik")
+    window.cast_panel.remove_button.click()
+    settle(app)
+    assert [c.id for c in session.cast] == ["char-maela", "char-idris"]
+    assert session.story.held_character_id is None
+    assert "char-serrik" not in session.story.scene.present_character_ids
+    window.show_cast_board(False)
+    settle(app)
+    from sealedlore.storage.repository import load_story_bundle
+
+    saved = load_story_bundle(session.story.id, root=window.root)
+    assert saved.story.held_character_id is None
+    snapshots = [node.meta.scene for node in saved.nodes if node.meta.scene is not None]
+    assert snapshots and all("char-serrik" not in s.present_character_ids for s in snapshots)
+
+
+def test_a_supporting_card_removed_leaves_the_rosters(app, story_window, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    window = story_window
+    session = window.session
+    answer_questions(monkeypatch, QMessageBox.Yes)
+    window.show_cast_page("sup-hale")
+    settle(app)
+    window.cast_panel._select("sup-hale")
+    window.cast_panel.remove_button.click()
+    settle(app)
+    assert [c.id for c in session.supporting] == ["sup-price"]
+    assert all(roster == ["Sergeant Price"] for roster in rosters(session))

@@ -93,6 +93,10 @@ class CastPanel(QWidget):
     changed = Signal()
     # (character id, the name before): the rosters hold supporting cards by name.
     renamed = Signal(str, str)
+    # (character id): Remove, asked and answered. The window takes them out
+    # of the story (`StorySession.remove_character`): out of the list alone,
+    # they stayed in the scenes and in whatever began the story.
+    remove_requested = Signal(str)
     promote_requested = Signal(str)
     demote_requested = Signal(str)
     accept_requested = Signal(str, bool)
@@ -1023,8 +1027,10 @@ class CastPanel(QWidget):
         )
         if answer != QMessageBox.Yes:
             return
-        tier = self._supporting if self._is_supporting(self._current) else self._cast
-        tier.remove(self._current)
+        character = self._current
+        self.remove_requested.emit(character.id)
+        if any(other is character for other in (*self._cast, *self._supporting)):
+            return  # refused, and the window said why
         self._current = None
         self.set_cast(self._cast)
         self.changed.emit()

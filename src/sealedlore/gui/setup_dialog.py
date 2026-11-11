@@ -745,7 +745,22 @@ class SetupDialog(QDialog):
         hidden = self._hidden
         present += [i for i in setup.starting_scene.present_character_ids if i in hidden]
         absent += [i for i in setup.absent_at_start if i in hidden]
-        return present, absent
+        # Someone taken out on the Characters tab meanwhile is still a row
+        # here until the tab is shown again: never pinned back into the story.
+        live = self._live_ids()
+        return [i for i in present if i in live], [i for i in absent if i in live]
+
+    def _live_ids(self) -> set[str]:
+        return {character.id for character in self._live_cast}
+
+    def character_removed(self, *, untouched: bool) -> None:
+        """Someone taken out on the Characters tab (the lent card list): the
+        story has let them go from whatever begins it, and Save writes nothing
+        of them back. Cancel asks only about what was changed here: when
+        nothing had been (`untouched`), what Setup opened with is what it
+        holds now."""
+        if untouched and self._opened is not None:
+            self._opened = self._written()
 
     def _starting_scene(self) -> SceneState:
         present, _ = self._pinned()
@@ -792,5 +807,6 @@ class SetupDialog(QDialog):
         setup.starting_scene = self._starting_scene()
         setup.absent_at_start = self._pinned()[1]
         if self.suggested is not None:
-            setup.suggested_character_id = self.suggested.currentData()
+            suggested = self.suggested.currentData()
+            setup.suggested_character_id = suggested if suggested in self._live_ids() else None
         self._save_models(story)

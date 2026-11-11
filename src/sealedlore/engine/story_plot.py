@@ -26,7 +26,7 @@ and `set_story_document` apply them to an open story.
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 
 from sealedlore.engine.picture_styles import write_style
@@ -686,15 +686,19 @@ def plot_uses(plot: Plot | None, item_id: str) -> bool:
     return any(place.lore_id == item_id for place in plot.places)
 
 
-def take_out_character(bundle: StoryBundle, card: Character) -> None:
-    """A character out of a story that hasn't begun: `_take_out`."""
-    _take_out(bundle, card)
+def take_out_character(
+    bundle: StoryBundle, card: Character, *, scenes: Iterable[SceneState] = ()
+) -> None:
+    """A character out of the story: `_take_out`. `scenes`: the snapshots on
+    the nodes of a story under way (the scene anywhere is the nearest above,
+    so the leaf's would bring them back)."""
+    _take_out(bundle, card, scenes=scenes)
 
 
-def _take_out(bundle: StoryBundle, card: Character) -> None:
+def _take_out(bundle: StoryBundle, card: Character, *, scenes: Iterable[SceneState] = ()) -> None:
     """A character the document no longer has, out of the story: its lists,
     whom it begins with, and either scene (an unplayed story's live scene is
-    its starting scene)."""
+    its starting scene), and any `scenes` besides."""
     setup = bundle.story.setup
     for tier in (bundle.cast, bundle.supporting.characters, setup.set_aside):
         index = _index(tier, card)
@@ -706,7 +710,7 @@ def _take_out(bundle: StoryBundle, card: Character) -> None:
         setup.suggested_character_id = None
     if bundle.story.held_character_id == card.id:
         bundle.story.held_character_id = None
-    for scene in (setup.starting_scene, bundle.story.scene):
+    for scene in (setup.starting_scene, bundle.story.scene, *scenes):
         scene.present_character_ids = [i for i in scene.present_character_ids if i != card.id]
         scene.offstage_but_nearby = [
             e for e in scene.offstage_but_nearby if e.character_id != card.id
