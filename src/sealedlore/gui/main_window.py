@@ -4057,13 +4057,16 @@ class MainWindow(
             # Closing once this is done: nothing is offered, or its dialog
             # would stand in the way as the window goes.
             return
+        # What the job's starter wanted done once it is in (`_after_job`:
+        # Fill with lore characters…, window_cast.py). Taken before anything
+        # is offered: an offer may start the next job with its own (approving
+        # a private scene's summary), which this one's end used to run at
+        # once, while that job was still adding the summary.
+        after, self._after_job = getattr(self, "_after_job", None), None
         self._offer_pending_tiers()
         self._offer_pending_review()
         self._offer_pending_scene()
         self._offer_private_summary()
-        # What the job's starter wanted done once it is in (`_after_job`:
-        # Fill with lore characters…, window_cast.py).
-        after, self._after_job = getattr(self, "_after_job", None), None
         if after is not None:
             QTimer.singleShot(0, self, after)
         if self._queued is not None:

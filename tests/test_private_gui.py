@@ -277,6 +277,42 @@ def test_what_was_typed_in_a_private_scene_goes_with_it(app, window, monkeypatch
     assert not window.session.in_private and window.composer.text() == ""
 
 
+def test_the_scenes_draft_goes_only_once_its_summary_is_in(app, window, monkeypatch):
+    """Approving the summary dropped what was typed in the scene at once,
+    while "Adding the summary" still ran: when adding it failed, the scene
+    was still open and its draft gone (the review after 3.1.0b8)."""
+    window.composer.private_toggle.click()
+    send(app, window, f"I whisper {MARKER}.")
+    monkeypatch.setattr(window_private, "PrivateSummaryDialog", _Approve)
+    warned: list[str] = []
+    monkeypatch.setattr(window, "_warn_plain", lambda title, _text: warned.append(title))
+    session = window.session
+
+    def failing(_text):
+        raise RuntimeError("HTTP 503 from the story's endpoint")
+        yield
+
+    adding = session.close_private
+    monkeypatch.setattr(session, "close_private", failing)
+    window.composer.input.setPlainText("The next thing I was writing in the scene")
+    window.private_mock.responses = ["They spoke."]
+    window.composer.private_toggle.click()  # end: the summary, approved, then adding it
+    for _ in range(3):  # the summary's job, then the adding job
+        wait_for(app, lambda: not window._busy)
+        app.processEvents()
+    assert warned == ["Adding the summary failed"]
+    assert session.in_private
+    assert window.composer.text() == "The next thing I was writing in the scene"
+
+    monkeypatch.setattr(session, "close_private", adding)  # it works again
+    window.private_mock.responses = ["They spoke."]
+    window.composer.private_toggle.click()
+    wait_for(app, lambda: not window._busy and not session.in_private)
+    for _ in range(5):
+        app.processEvents()
+    assert window.composer.text() == ""
+
+
 def test_a_failed_summary_says_why_in_the_box_that_follows(app, window, monkeypatch):
     """The No summary box came before the failure's reason, and Try again
     started a job that cleared it: the reason was never shown."""

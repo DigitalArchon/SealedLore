@@ -837,8 +837,15 @@ class PrivateWindow:
         session = self.session
         if dialog.choice == PrivateSummaryDialog.APPROVE:
             text = dialog.text()
-            # The scene's draft goes with it once the summary is in.
-            self._after_job = self._drop_scene_draft
+
+            def drop_once_in() -> None:
+                # The scene's draft goes with it once the summary is in: if
+                # adding it failed, the scene is still open, and so is what
+                # was typed in it.
+                if self.session is session and not session.in_private:
+                    self._drop_scene_draft()
+
+            self._after_job = drop_once_in
             self._start(
                 lambda: session.close_private(text),
                 streaming=False,
