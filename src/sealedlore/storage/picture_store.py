@@ -26,7 +26,6 @@ from sealedlore.models.image import GeneratedImage
 from sealedlore.models.video import GeneratedVideo
 from sealedlore.storage.images import (
     IMAGES_FILE,
-    RECORD_FILES,
     VIDEOS_FILE,
     add_generated_images,
     all_image_files,
@@ -158,7 +157,7 @@ class MemoryPictures:
 
     @staticmethod
     def _checked(relative: str) -> str:
-        if relative in RECORD_FILES or not is_safe_relative(relative):
+        if not is_safe_relative(relative):
             raise ValueError(f"not a path inside the story's images: {relative!r}")
         return relative
 

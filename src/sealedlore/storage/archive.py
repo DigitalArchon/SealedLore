@@ -33,7 +33,7 @@ from sealedlore.models.summary import Summary
 from sealedlore.models.supporting import SupportingCast
 from sealedlore.storage.atomic import atomic_write_json
 from sealedlore.storage.image_meta import stripped_or_same
-from sealedlore.storage.images import RECORD_FILES, is_safe_relative
+from sealedlore.storage.images import RECORD_FILES, is_story_file
 from sealedlore.storage.paths import is_safe_story_id, story_dir
 from sealedlore.storage.repository import StoryBundle, append_api_log, save_story_bundle
 
@@ -106,7 +106,7 @@ def _decoded_files(raw: Any) -> dict[str, bytes]:
     for relative, text in raw.items():
         if not isinstance(relative, str) or not isinstance(text, str):
             continue
-        if not is_safe_relative(relative):
+        if not is_story_file(relative):
             continue
         try:
             data = base64.b64decode(text, validate=True)

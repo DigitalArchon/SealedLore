@@ -31,7 +31,7 @@ from sealedlore.models.image import ImageRef
 from sealedlore.models.story import Story
 from sealedlore.models.tavern import CardAsset, TavernFields
 from sealedlore.storage.image_meta import MetadataError, picture_kind, raster_kind, strip_metadata
-from sealedlore.storage.images import REFS_DIR
+from sealedlore.storage.images import ASSETS_DIR, REFS_DIR
 from sealedlore.storage.paths import COLLECTION_ID
 from sealedlore.storage.picture_store import PictureStore
 from sealedlore.storage.repository import StoryBundle, load_story_bundle
@@ -161,7 +161,7 @@ def copied(
 # each character's in a folder of their own, named by their id (it stays
 # right when they are renamed), each under the name the card gave it (the
 # author, Nov 4 2026: one folder for every character's files gets messy).
-FILES_DIR = "images/assets"
+FILES_DIR = ASSETS_DIR
 # Names Windows won't give a file, whatever its extension: the superscript
 # digits too, which it reads as COM1 to COM3 and LPT1 to LPT3.
 _RESERVED = {"con", "prn", "aux", "nul"} | {

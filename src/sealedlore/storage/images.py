@@ -35,10 +35,17 @@ IMAGES_FILE = "images.json"
 # check, backup and memory chat that holds pictures holds them too.
 VIDEOS_DIR = "images/videos"
 VIDEOS_FILE = "videos.json"
+# A card's other files, each character's in a folder of their own
+# (storage/collection.py).
+ASSETS_DIR = "images/assets"
 # Records, carried by backups and copies, and never part of a scenario. (A
 # story kept from the map's days may still hold a world_art.json: nothing
 # reads it, and a backup leaves it behind.)
 RECORD_FILES = (IMAGES_FILE, VIDEOS_FILE)
+# The images folder's own folders: a file by one of these names would stand
+# where the folder belongs, and every picture in it after that fails.
+# Compared casefolded, as a file system that ignores case would.
+STORE_FOLDERS = frozenset(name.casefold() for name in (REFS_DIR, VIDEOS_DIR, ASSETS_DIR))
 
 MEDIA_TYPES = {
     ".png": "image/png",
@@ -49,12 +56,15 @@ MEDIA_TYPES = {
 
 
 def is_safe_relative(relative: str) -> bool:
-    """A path inside the story's images folder, or images.json itself.
+    """A file inside the story's images folder: what any record (a picture,
+    a video, a card's file, the background) may name.
 
-    On Windows a colon is refused too: "images/a:b.png" names stream b.png of
-    a file "a" (NTFS), and "images/C:x" a drive-relative path."""
-    if relative in RECORD_FILES:
-        return True
+    Never images.json or videos.json, which only this module writes (a
+    record naming one, from someone's backup, would have a picture written
+    over the story's records, or removed with it), nor one of the images
+    folder's own folders. On Windows a colon is refused too: "images/a:b.png"
+    names stream b.png of a file "a" (NTFS), and "images/C:x" a
+    drive-relative path."""
     path = PurePosixPath(relative)
     return (
         not path.is_absolute()
@@ -63,13 +73,27 @@ def is_safe_relative(relative: str) -> bool:
         and len(path.parts) >= 2
         and path.parts[0] == IMAGES_DIR
         and all(part not in ("", ".", "..") for part in path.parts)
+        and path.as_posix().casefold() not in STORE_FOLDERS
     )
+
+
+def is_story_file(relative: str) -> bool:
+    """What a story's backup carries: a file inside its images folder, or one
+    of its records (images.json, videos.json)."""
+    return relative in RECORD_FILES or is_safe_relative(relative)
 
 
 def story_path(story_id: str, relative: str, root: Path | None = None) -> Path:
     if not is_safe_relative(relative):
         raise ValueError(f"not a path inside the story's images: {relative!r}")
     return story_dir(story_id, root) / relative
+
+
+def write_record_file(story_id: str, name: str, data: bytes, root: Path | None = None) -> None:
+    """images.json or videos.json as a backup brought it, and nothing else."""
+    if name not in RECORD_FILES:
+        raise ValueError(f"not one of the story's records: {name!r}")
+    write_bytes_atomic(story_dir(story_id, root) / name, data)
 
 
 def write_bytes_atomic(path: Path, data: bytes) -> None:

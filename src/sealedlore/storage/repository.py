@@ -34,7 +34,12 @@ from sealedlore.storage.atomic import (
     read_json,
     read_jsonl,
 )
-from sealedlore.storage.images import copy_image_files, write_story_file
+from sealedlore.storage.images import (
+    RECORD_FILES,
+    copy_image_files,
+    write_record_file,
+    write_story_file,
+)
 from sealedlore.storage.paths import (
     config_file,
     ensure_data_home,
@@ -270,7 +275,10 @@ def save_story_bundle(bundle: StoryBundle, root: Path | None = None) -> None:
     atomic_write_json(directory / "supporting.json", bundle.supporting.model_dump())
     atomic_write_json(directory / "reviews.json", [r.model_dump() for r in bundle.reviews])
     for relative, data in bundle.pending_files.items():
-        write_story_file(story_id, relative, data, root)
+        if relative in RECORD_FILES:
+            write_record_file(story_id, relative, data, root)  # a story backup's
+        else:
+            write_story_file(story_id, relative, data, root)
     bundle.pending_files = {}
 
 

@@ -19,7 +19,7 @@ from sealedlore.models.story import Story, StorySetup
 from sealedlore.models.supporting import SupportingCast
 from sealedlore.storage.atomic import atomic_write_json
 from sealedlore.storage.image_meta import MetadataError, strip_metadata, stripped_or_same
-from sealedlore.storage.images import RECORD_FILES, is_safe_relative
+from sealedlore.storage.images import is_safe_relative
 from sealedlore.storage.repository import StoryBundle
 
 SCENARIO_SUFFIX = ".sealedlore-scenario.json"
@@ -102,7 +102,7 @@ def _decoded_files(encoded: Mapping[str, str]) -> dict[str, bytes]:
     readable, their hidden data removed where it can be."""
     files: dict[str, bytes] = {}
     for relative, text in encoded.items():
-        if not is_safe_relative(relative) or relative in RECORD_FILES:
+        if not is_safe_relative(relative):
             continue
         try:
             files[relative] = stripped_or_same(base64.b64decode(text, validate=True))

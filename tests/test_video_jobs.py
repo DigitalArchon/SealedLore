@@ -25,7 +25,12 @@ from sealedlore.providers.mock import MockChatProvider
 from sealedlore.providers.videos import VideoClient, parse_nanogpt_video_models
 from sealedlore.storage.archive import read_archive, write_archive
 from sealedlore.storage.image_meta import stripped_or_same
-from sealedlore.storage.images import all_image_files, is_safe_relative, write_story_file
+from sealedlore.storage.images import (
+    all_image_files,
+    is_safe_relative,
+    is_story_file,
+    write_story_file,
+)
 from sealedlore.storage.picture_store import DiskPictures, MemoryPictures
 from sealedlore.storage.repository import StoryBundle, read_api_log, save_story_bundle
 from sealedlore.storage.video_meta import strip_video_metadata
@@ -264,7 +269,7 @@ def test_videos_travel_in_a_backup_unless_left_out(tmp_path: Path, saved: StoryB
     videos = client(Endpoint())
     done = follow_video(videos, submit_video(videos, request(saved), store), store, poll_seconds=0)
     store.put_video(done)
-    assert is_safe_relative("videos.json") and is_safe_relative(done.file)
+    assert is_story_file("videos.json") and is_safe_relative(done.file)
     whole = all_image_files(saved.story.id, tmp_path)
     assert done.file in whole and "videos.json" in whole
     lean = all_image_files(saved.story.id, tmp_path, videos=False)

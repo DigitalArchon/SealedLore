@@ -39,6 +39,7 @@ from sealedlore.storage.images import (
     add_generated_images,
     all_image_files,
     is_safe_relative,
+    is_story_file,
     load_generated_images,
     read_story_file,
     reference_files,
@@ -435,7 +436,8 @@ def test_rewriting_around_the_authors_pictures_keeps_their_order(
 
 def test_only_paths_inside_the_images_folder_are_accepted():
     assert is_safe_relative("images/refs/a.png")
-    assert is_safe_relative("images.json")
+    # The records travel in a story's backup, but no record may name one.
+    assert is_story_file("images.json") and not is_safe_relative("images.json")
     for bad in ("../x.png", "/etc/passwd", "images/../story.json", "story.json", "images"):
         assert not is_safe_relative(bad)
 
