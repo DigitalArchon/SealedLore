@@ -1995,13 +1995,19 @@ class MainWindow(
             without_pictures=offered,
             kept=kept,
         )
-        if dialog.exec() != StartDialog.Accepted:
-            return
+        accepted = dialog.exec() == StartDialog.Accepted
         held = dialog.held_character_id()
-        if kept is not None and dialog.kept_wanted():
+        kept_wanted = kept is not None and dialog.kept_wanted()
+        pinned = dialog.pinned()
+        pictures_wanted = dialog.pictures_wanted()
+        # Read, then freed: kept as the window's child, every Start stayed.
+        dialog.deleteLater()
+        if not accepted:
+            return
+        if kept_wanted:
             self._add_kept_pictures(kept)
         # Before holding: pinning resets the roster the held character joins.
-        if (pinned := dialog.pinned()) is not None:
+        if pinned is not None:
             self.session.pin_at_start(*pinned)
         # On the GUI thread first, so the composer shows who is held (and not
         # whoever wasn't picked) before the opening streams in; begin()
@@ -2011,7 +2017,7 @@ class MainWindow(
         self._on_held_changed(held or "")
         # Characters from Your characters put in before anyone was played.
         self.name_kept_users()
-        if dialog.pictures_wanted():
+        if pictures_wanted:
             # Before the opening: drawn in the background while it runs. Of
             # the cards still in the story: whoever wasn't picked of a "play
             # one of these" is set aside, and their portrait was lost.
@@ -3009,7 +3015,9 @@ class MainWindow(
             self.config.model_prices,
             cache_ttl=self.config.cache_ttl,
         )
-        UsageDialog(self.session.story.title, report, self).exec()
+        dialog = UsageDialog(self.session.story.title, report, self)
+        dialog.exec()
+        dialog.deleteLater()
 
     def _usage_from_status(self) -> None:
         """A click on the spend readout: Story → Usage and cost…, when the
@@ -4270,8 +4278,9 @@ class MainWindow(
             return None
         bad_hosts().keep = not context.memory_only
         dialog = ModelTroubleDialog(context, mode, self)  # type: ignore[arg-type]
-        self._trouble_dialog = dialog
         dialog.exec()
+        # Freed once back in the event loop: each one kept the story's prompt.
+        dialog.deleteLater()
         return dialog
 
     def _use_host(self, role: str, model: str, host: Host) -> None:
@@ -4329,16 +4338,19 @@ class MainWindow(
         )
         accepted = dialog.exec() == GenerateDialog.Accepted
         self._remember_authoring_model(dialog.model_text())
-        if not accepted or dialog.draft is None:
+        draft = dialog.draft
+        wishes = dialog.plot_wishes() if accepted and draft is not None else None
+        # Read, then freed: kept as the window's child, each held its premise.
+        dialog.deleteLater()
+        if not accepted or draft is None:
             return
-        wishes = dialog.plot_wishes()
         try:
-            if getattr(dialog.draft, "characters", None):
-                bundle, warnings = dialog.draft.build(
+            if getattr(draft, "characters", None):
+                bundle, warnings = draft.build(
                     root=self.root, kept=self._kept(), read=self._collection_store().read
                 )
             else:
-                bundle, warnings = dialog.draft.build(root=self.root)
+                bundle, warnings = draft.build(root=self.root)
         except ValueError as exc:
             self._warn_plain("Could not use the draft", str(exc))
             return
@@ -4398,19 +4410,21 @@ class MainWindow(
             parent=self,
         )
         accepted = dialog.exec() == ReviewRequestDialog.Accepted
+        typed_model = dialog.model_text()
+        complaint = dialog.complaint_text()
+        replies = dialog.reply_count()
+        whole_prompt = dialog.include_whole_prompt()
+        side_texts = dialog.include_side_texts()
+        dialog.deleteLater()  # read, then freed: kept, each held its complaint
         if not accepted:
             self.reload_transcript()  # the marks may have been cleared
             return
         if self.session.story.defaults.authoring_model:
             # This story's own stays its own: a model typed here is this story's.
-            self.session.story.defaults.authoring_model = dialog.model_text() or None
+            self.session.story.defaults.authoring_model = typed_model or None
         else:
-            self._remember_authoring_model(dialog.model_text())
-        complaint = dialog.complaint_text()
-        replies = dialog.reply_count()
-        whole_prompt = dialog.include_whole_prompt()
-        side_texts = dialog.include_side_texts()
-        model = dialog.model_text() or None
+            self._remember_authoring_model(typed_model)
+        model = typed_model or None
         self.session.provider = self._current_provider()
         self._pending_review = None
         self._review_request = (complaint, model or self.session.authoring_model)
@@ -4453,11 +4467,13 @@ class MainWindow(
         dialog = ReviewResultDialog(
             review, self.session.bundle, parent=self, complaint=complaint, model=model
         )
-        if dialog.exec() != ReviewResultDialog.Accepted:
+        accepted = dialog.exec() == ReviewResultDialog.Accepted
+        chosen = dialog.selected_changes() if accepted else []
+        send_direction = accepted and dialog.send_director_turn() and bool(review.director_turn)
+        dialog.deleteLater()  # read, then freed: kept, each held the story's bundle
+        if not accepted:
             self._update_controls()
             return
-        chosen = dialog.selected_changes()
-        send_direction = dialog.send_director_turn() and bool(review.director_turn)
         results = self.session.apply_review(chosen, sent_director_turn=send_direction)
         applied = [change for change in chosen if results.get(change.id) is None]
         problems = [
@@ -4590,6 +4606,7 @@ class MainWindow(
             read_only=True,
         )
         dialog.exec()
+        dialog.deleteLater()
 
     def undo_review(self) -> None:
         if self.session is None or self._busy or self.session.review_undo is None:
@@ -5109,9 +5126,12 @@ class MainWindow(
         if self.session is None or self._busy or (chronicle := self.session.chronicle) is None:
             return
         dialog = ClockDialog(chronicle.minutes, parent=self)
-        if dialog.exec() != ClockDialog.Accepted:
+        accepted = dialog.exec() == ClockDialog.Accepted
+        minutes = dialog.minutes()
+        dialog.deleteLater()
+        if not accepted:
             return
-        self.session.set_clock(dialog.minutes())
+        self.session.set_clock(minutes)
         self._refresh_plot_panel()
         self._reassemble_inspector()
 
@@ -5376,7 +5396,11 @@ class MainWindow(
             for index in range(dialog.tabs.count()):
                 if dialog.tabs.tabText(index) == tab:
                     dialog.tabs.setCurrentIndex(index)
-        if dialog.exec() == SettingsDialog.Accepted:
+        accepted = dialog.exec() == SettingsDialog.Accepted
+        # Freed once closed: kept as the window's child, every Settings opened
+        # stayed, each holding in its fields the keys typed there, Cancel too.
+        dialog.deleteLater()
+        if accepted:
             save_config(self.config, root=self.root)
             if keychain.last_problem and self.config.key_storage == "keychain":
                 self.statusBar().showMessage(
@@ -5417,9 +5441,12 @@ class MainWindow(
         if import_path is not None and not dialog.import_set(import_path):
             dialog.deleteLater()
             return
-        if dialog.exec() != PromptEditorDialog.Accepted:
+        accepted = dialog.exec() == PromptEditorDialog.Accepted
+        if accepted:
+            dialog.apply_to(self.config, story)
+        dialog.deleteLater()  # read, then freed: kept, every one opened stayed
+        if not accepted:
             return
-        dialog.apply_to(self.config, story)
         save_config(self.config, root=self.root)
         if self.session is not None:
             # Undo restores the story's settings wholesale; after a save here

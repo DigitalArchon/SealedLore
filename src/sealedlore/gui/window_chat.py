@@ -57,10 +57,7 @@ class ChatWindow:
             hosts_of=self._hosts_of,
             saved=self.saved_prompts(),
         )
-        # Asked once the chat is wanted, not before: a Cancel of the dialog had
-        # already cost a memory-only scene or chat.
-        if dialog.exec() != NewChatDialog.Accepted or not self._leave_for_new():
-            return
+        accepted = dialog.exec() == NewChatDialog.Accepted
         story = Story(
             title=dialog.title.text().strip(),
             mode="chat",
@@ -72,6 +69,12 @@ class ChatWindow:
         # The chat's own route: on the chat, never in the settings (a chat
         # kept in memory teaches them nothing).
         story.defaults.main_route = dialog.route()
+        # Read, then freed: kept as the window's child, each held its prompt.
+        dialog.deleteLater()
+        # Asked once the chat is wanted, not before: a Cancel of the dialog had
+        # already cost a memory-only scene or chat.
+        if not accepted or not self._leave_for_new():
+            return
         bundle = StoryBundle(story=story)
         if story.chat_keep == "memory":
             self.open_memory_chat(bundle)

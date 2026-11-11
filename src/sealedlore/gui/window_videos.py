@@ -154,6 +154,10 @@ class VideosWindow:
         if self._shows_private():
             exclude_from_capture(dialog, True)
         accepted = dialog.exec()
+        request = dialog.request
+        writer = dialog.writer_model()
+        # Read, then freed: kept as the window's child, each held its session.
+        dialog.deleteLater()
         # Its prompt writer may have attested a TEE/ model again, or written a
         # reply that failed its check (window_private).
         self._take_reattestation()
@@ -164,18 +168,18 @@ class VideosWindow:
             self.status_strip.add_cost(usage)
         self.session.unreported_usage.clear()
         self._refresh_story_cost()
-        if not accepted or dialog.request is None:
+        if not accepted or request is None:
             return
         if not private:
             # The next video starts from these, as the picture dialog's size does.
-            self.config.video_model = dialog.request.model.id
-            self.config.video_params = dict(dialog.request.settings)
-            self.session.keep_prompt_writer(dialog.writer_model())
+            self.config.video_model = request.model.id
+            self.config.video_params = dict(request.settings)
+            self.session.keep_prompt_writer(writer)
             save_config(self.config, root=self.root)
         client = self.session.video_client()
         if client is None:
             return
-        self.video_jobs.start(dialog.request, client, self.session.pictures)
+        self.video_jobs.start(request, client, self.session.pictures)
         self.statusBar().showMessage(
             "Sending the video. It takes a few minutes; play on, it appears after its passage.",
             10000,

@@ -101,10 +101,10 @@ class TextSizeWindow:
 
     def choose_fonts(self) -> None:
         dialog = FontsDialog(theme.fonts(), parent=self)
-        if dialog.exec() != QDialog.Accepted:
-            return
+        accepted = dialog.exec() == QDialog.Accepted
         chosen = dialog.chosen()
-        if chosen == theme.fonts():
+        dialog.deleteLater()
+        if not accepted or chosen == theme.fonts():
             return
         self.config.ui_font, self.config.story_font, self.config.mono_font = (
             chosen.ui,

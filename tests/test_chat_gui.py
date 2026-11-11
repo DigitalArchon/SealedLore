@@ -473,10 +473,11 @@ def test_a_chat_can_hold_a_part_in_private_and_take_back_a_summary(app, window, 
 
     # Ending it: the private model writes the summary, the author approves.
     private.responses = ["They talked something over in private and settled it."]
-    seen: list[PrivateSummaryDialog] = []
+    seen: list[str] = []
 
     def approve(dialog):
-        seen.append(dialog)
+        # Its title as shown: the dialog is freed once it is read.
+        seen.append(dialog.windowTitle())
         dialog.choice = PrivateSummaryDialog.APPROVE
         return PrivateSummaryDialog.Accepted
 
@@ -484,7 +485,7 @@ def test_a_chat_can_hold_a_part_in_private_and_take_back_a_summary(app, window, 
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
     window.end_private()
     wait_for(app, lambda: not window._busy and not window.session.in_private)
-    assert seen and seen[0].windowTitle() == "Private part summary"
+    assert seen == ["Private part summary"]
     assert not window.session.in_private
     assert composer.private_toggle.text() == "Private"
     assert composer.input.property("private") == "false"

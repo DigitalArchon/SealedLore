@@ -606,3 +606,88 @@ def test_chat_with_them_and_the_video_dialog_fit_the_screen_at_larger_text(app, 
     finally:
         text_size.apply(app, 1.0)
         app.setStyleSheet("")
+
+
+# --- every dialog the window opens is freed once read ------------------------------
+
+# Kept while they are open and deleted when they close (`_phone_dialog_closed`,
+# `_pair_sheet_closed`): Phone devices… is one window, raised again if asked
+# for twice, and its pairing sheet one at a time.
+KEPT_OPEN = {("window_phone.py", "open_phone_devices"), ("phone_dialog.py", "pair")}
+
+
+def test_every_dialog_made_in_a_function_is_freed_there():
+    """A dialog made with the window as its parent stays the window's child
+    until it is deleted: every Settings opened stayed, each holding in its
+    fields the API keys typed there, Cancel too; every video dialog held its
+    session, every Review its story, a private scene's summary its text. A
+    dialog made in a function is deleted there (`deleteLater` once read, or
+    deleted on close), or handed back to the caller. The source is read, as
+    test_timers.py reads it."""
+    import ast
+
+    gui = Path(__file__).resolve().parents[1] / "src" / "sealedlore" / "gui"
+    trees = {path: ast.parse(path.read_text(encoding="utf-8")) for path in sorted(gui.glob("*.py"))}
+    # The program's dialogs: QDialog and every class made from one.
+    bases = {
+        node.name: {ast.unparse(base).rsplit(".", 1)[-1] for base in node.bases}
+        for tree in trees.values()
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef)
+    }
+    dialogs = {"QDialog"}
+    while grown := {name for name, of in bases.items() if of & dialogs} - dialogs:
+        dialogs |= grown
+    kept = []
+    for path, tree in trees.items():
+        text = path.read_text(encoding="utf-8")
+        for function in ast.walk(tree):
+            if not isinstance(function, ast.FunctionDef):
+                continue
+            body = ast.get_source_segment(text, function) or ""
+            for node in ast.walk(function):
+                if not (isinstance(node, ast.Assign) and isinstance(node.value, ast.Call)):
+                    continue
+                func = node.value.func
+                name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", "")
+                if name not in dialogs:
+                    continue
+                held = ast.unparse(node.targets[0])
+                freed = (
+                    f"{held}.deleteLater()" in body
+                    or "WA_DeleteOnClose" in body
+                    or f"return {held}" in body
+                    or (path.name, function.name) in KEPT_OPEN
+                )
+                if not freed:
+                    kept.append(f"{path.name}:{node.lineno} {held} = {name}(...)")
+    assert kept == []
+
+
+def test_settings_cancelled_leaves_no_dialog_holding_the_key_typed(app, window, monkeypatch):
+    from PySide6.QtCore import QEvent
+    from PySide6.QtWidgets import QDialog
+
+    from sealedlore.gui.prompt_editor import PromptEditorDialog
+    from sealedlore.gui.settings_dialog import SettingsDialog
+
+    typed = "sk-typed-then-cancelled"
+
+    def cancel(dialog):
+        dialog.api_key.setText(typed)
+        return QDialog.Rejected
+
+    monkeypatch.setattr(SettingsDialog, "exec", cancel)
+    monkeypatch.setattr(PromptEditorDialog, "exec", lambda _dialog: QDialog.Rejected)
+    monkeypatch.setattr(VideoDialog, "exec", lambda _dialog: QDialog.Rejected)
+    for _ in range(3):
+        window.open_settings()
+        window.open_prompt_editor()
+        window.generate_video()
+    app.sendPostedEvents(None, QEvent.DeferredDelete)
+    settle(app)
+    assert window.findChildren(SettingsDialog) == []
+    assert window.findChildren(PromptEditorDialog) == []
+    assert window.findChildren(VideoDialog) == []
+    held = [field for field in window.findChildren(QLineEdit) if field.text() == typed]
+    assert held == [], "no field anywhere still holds the key"

@@ -311,12 +311,14 @@ class PrivateWindow:
         if not fit.fits:
             dialog = FitDialog(fit, self.session.model, self, chat=self.in_chat)
             dialog.exec()
-            if dialog.choice == FitDialog.CANCEL:
+            choice = dialog.choice
+            dialog.deleteLater()
+            if choice == FitDialog.CANCEL:
                 self.session.discard_private()
                 self._sync_private_ui()
                 self._update_controls()
                 return
-            if dialog.choice == FitDialog.SUMMARISE:
+            if choice == FitDialog.SUMMARISE:
                 self._start_handoff()
         self.statusBar().showMessage(
             f"Private: your messages go to {settings.model} only, and the chat's own model "
@@ -834,9 +836,12 @@ class PrivateWindow:
         )
         exclude_from_capture(dialog, True)  # a window of its own
         dialog.exec()
+        choice, text = dialog.choice, dialog.text()
+        # Read, then freed: kept as the window's child, each held the scene's
+        # summary (a memory-only scene's included) for as long as the window.
+        dialog.deleteLater()
         session = self.session
-        if dialog.choice == PrivateSummaryDialog.APPROVE:
-            text = dialog.text()
+        if choice == PrivateSummaryDialog.APPROVE:
 
             def drop_once_in() -> None:
                 # The scene's draft goes with it once the summary is in: if
@@ -855,9 +860,9 @@ class PrivateWindow:
                 provider=session.provider,
                 job="Adding the summary",
             )
-        elif dialog.choice == PrivateSummaryDialog.AGAIN:
+        elif choice == PrivateSummaryDialog.AGAIN:
             self.end_private()
-        elif dialog.choice == PrivateSummaryDialog.DISCARD:
+        elif choice == PrivateSummaryDialog.DISCARD:
             self._confirm_discard_private()
 
     def _confirm_discard_private(self) -> None:

@@ -117,6 +117,9 @@ def test_a_private_scene_from_first_turn_to_approved_summary(app, window: MainWi
         def text(self):
             return "They spoke in private and agreed to meet at dawn."
 
+        def deleteLater(self):  # noqa: N802 - the window frees its dialogs
+            pass
+
     monkeypatch.setattr(window_private, "PrivateSummaryDialog", Approve)
     window.private_mock.responses = ["They spoke in private."]
     window.composer.private_toggle.click()  # end the scene: the summary job runs
@@ -185,6 +188,9 @@ class _Approve:
 
     def text(self):
         return "They spoke in private."
+
+    def deleteLater(self):  # noqa: N802 - the window frees its dialogs
+        pass
 
 
 def _ended_scene(app, window: MainWindow, monkeypatch, keep: str):
@@ -783,6 +789,9 @@ def test_a_scene_whose_model_was_retired_is_summarised_by_another(app, window, m
 
         def text(self):
             return self._summary
+
+        def deleteLater(self):  # noqa: N802 - the window frees its dialogs
+            pass
 
     monkeypatch.setattr(window_private, "PrivateSummaryDialog", Approve)
 

@@ -731,6 +731,9 @@ def test_saving_settings_replaces_the_welcome(app, tmp_path: Path, monkeypatch):
             self.config.active_provider_name = "default"
             return self.Accepted
 
+        def deleteLater(self) -> None:  # noqa: N802 - the window frees its dialogs
+            pass
+
     window = _start_screen(app, tmp_path)
     try:
         monkeypatch.setattr(main_window, "SettingsDialog", FilledIn)
@@ -1379,6 +1382,9 @@ def test_a_premise_draft_begins_only_once_setup_is_saved(app, window: MainWindow
 
         def plot_wishes(self):
             return None  # no plot: Start follows Setup at once
+
+        def deleteLater(self):  # noqa: N802 - the window frees its dialogs
+            pass
 
     monkeypatch.setattr(mw, "GenerateDialog", Generate)
     monkeypatch.setattr(window, "open_story", lambda _id: None)
