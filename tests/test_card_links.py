@@ -20,6 +20,7 @@ from sealedlore.providers.card_links import (
     WEB_PAGE,
     LinkError,
     LinkLarge,
+    LinkRefused,
     LinkStopped,
     fetch_link,
     read_link,
@@ -336,6 +337,27 @@ def test_nothing_there_and_a_busy_site_are_said_plainly():
     sites = Sites({link: httpx.ReadTimeout("slow")})
     with pytest.raises(LinkError, match="didn't answer in time"):
         fetch_link(link, transport=sites.transport())
+
+
+def test_a_refusal_is_read_only_as_far_as_its_words():
+    """A refusal's body was read whole: a 404 streaming 300 MB was held in
+    memory, all of it. Only its start is read now, a piece at a time."""
+    link = "https://example.com/card.png"
+    sent: list[int] = []
+
+    def endless():
+        message = json.dumps({"message": "No such card here"}).encode()
+        sent.append(len(message))
+        yield message
+        for _ in range(64):  # 64 MB, were it all read
+            sent.append(1024 * 1024)
+            yield b" " * (1024 * 1024)
+
+    sites = Sites({link: httpx.Response(410, content=endless())})
+    with pytest.raises(LinkRefused, match="No such card here") as refused:
+        fetch_link(link, transport=sites.transport())
+    assert refused.value.status == 410
+    assert sum(sent) < 2 * 1024 * 1024, "read no further than its words"
 
 
 def test_too_large_is_refused_by_what_it_says_and_by_what_comes(monkeypatch):

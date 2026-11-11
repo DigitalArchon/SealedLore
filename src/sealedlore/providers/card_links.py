@@ -51,6 +51,8 @@ SPOOL_BYTES = 8 * 1024 * 1024
 # Past this a card's file is asked about before it is downloaded: a card is
 # text and a picture, a few megabytes at most.
 ASK_BYTES = 20 * 1024 * 1024
+# Of a site's refusal, only its message is read: from the start of the body.
+REFUSAL_BYTES = 20_000
 TIMEOUT = httpx.Timeout(60.0, connect=15.0)
 USER_AGENT = "SealedLore"
 CHUB_API = "https://api.chub.ai"
@@ -394,13 +396,25 @@ class _Getter:
             raise LinkStopped("Stopped.")
 
 
+def _refusal_body(response: httpx.Response) -> bytes:
+    """The start of a refusal's body, all of it that `_refusal` reads: a piece
+    at a time and no further, decoded. Read whole, a refusal could be as large
+    as the site liked (a 404 of 300 MB was held in memory, all of it)."""
+    kept = bytearray()
+    try:
+        for piece in response.iter_bytes():
+            kept += piece[: REFUSAL_BYTES - len(kept)]
+            if len(kept) >= REFUSAL_BYTES:
+                break
+    except httpx.HTTPError:
+        pass  # the words as far as they came
+    return bytes(kept)
+
+
 def _refusal(response: httpx.Response, site: str) -> str:
     """A site's no, in words: its own message when it gives one."""
     status = response.status_code
-    try:
-        body = response.read()[:20_000]
-    except httpx.HTTPError:
-        body = b""
+    body = _refusal_body(response)
     if status in (403, 503) and b"just a moment" in body.lower():
         return BOT_CHECK.format(host=response.request.url.host)
     said = ""
