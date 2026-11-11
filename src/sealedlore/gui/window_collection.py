@@ -973,6 +973,7 @@ class CollectionWindow:
             if not collection.has_tag(card, tag):
                 card.tavern.tags.append(tag)
                 collection.touch(card)
+        self.collection_page.tags_changed()
         self._save_collection()
         self._refresh_collection()
         self.statusBar().showMessage(f"Tagged {len(mains)} characters “{tag}”.", 8000)
@@ -996,6 +997,7 @@ class CollectionWindow:
             if card.tavern is not None and collection.has_tag(card, tag):
                 card.tavern.tags = [t for t in card.tavern.tags if t.casefold() != tag.casefold()]
                 collection.touch(card)
+        self.collection_page.tags_changed()
         self._save_collection()
         self._refresh_collection()
         self.statusBar().showMessage(f"Took “{tag}” off {len(mains)} characters.", 8000)

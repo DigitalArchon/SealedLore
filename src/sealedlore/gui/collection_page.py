@@ -623,6 +623,11 @@ class CollectionPage(QWidget):
             form.load(card)
         self._show()
 
+    def tags_changed(self) -> None:
+        """Tags were added or taken off from outside the forms (several chosen
+        at once): the About tab shows them, whoever it holds."""
+        self.about_form.show_tags()
+
     def forget_forms(self) -> None:
         """The forms loaded afresh the next time a card shows: its fields
         may have changed while the page was put away."""

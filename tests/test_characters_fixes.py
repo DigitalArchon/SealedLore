@@ -140,3 +140,58 @@ def test_shift_and_arrows_choose_and_let_go_as_a_list_does(app, kept_window):
     settle(app)
     assert chosen(page) == ["Jane"] and page.title.text() == "Jane"
     assert page.current == kept_id(kept_window, "Jane")
+
+
+# --- Your characters: a tag for several reaches the forms of the one shown ----------------
+
+
+def test_a_tag_added_to_several_is_kept_by_the_card_whose_forms_were_loaded(
+    app, kept_window, monkeypatch
+):
+    """Elena shown, Elena and Marcus chosen, Add a tag… "winter": back on
+    Elena, a key typed in her maker's notes wrote the About tab's old tags
+    back over it, and "winter" was gone from the disk."""
+    from PySide6.QtWidgets import QInputDialog
+
+    window = kept_window
+    page = window.collection_page
+    click(app, page, "Elena")
+    page.show_tab("About")
+    click(app, page, "Marcus", Qt.ControlModifier)
+    assert page.title.text() == "2 characters"
+    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("winter", True))
+    page._chosen("tag")
+    click(app, page, "Elena")
+    assert page.title.text() == "Elena"
+    assert page.about_form.tags.text() == "winter"
+    page.about_form.creator_notes.setFocus()
+    QTest.keyClicks(page.about_form.creator_notes, "Drawn in winter")
+    window._flush_collection()
+    saved = {c.name: c for c in collection.load_collection(window.root).cast}
+    assert saved["Elena"].tavern.tags == ["winter"]
+    assert saved["Elena"].tavern.creator_notes == "Drawn in winter"
+    assert saved["Marcus"].tavern.tags == ["winter"]
+
+
+def test_a_tag_taken_off_several_doesnt_come_back_on_the_card_shown(app, kept_window, monkeypatch):
+    from PySide6.QtWidgets import QInputDialog
+
+    window = kept_window
+    page = window.collection_page
+    for name in ("Elena", "Marcus"):
+        window._kept_card(kept_id(window, name)).tavern.tags = ["survival", "road"]
+    window._save_collection()
+    window._refresh_collection()
+    click(app, page, "Elena")
+    page.show_tab("About")
+    assert page.about_form.tags.text() == "survival, road"
+    click(app, page, "Marcus", Qt.ControlModifier)
+    monkeypatch.setattr(QInputDialog, "getItem", lambda *a, **k: ("survival", True))
+    page._chosen("untag")
+    click(app, page, "Elena")
+    assert page.about_form.tags.text() == "road"
+    page.about_form.creator.setFocus()
+    QTest.keyClicks(page.about_form.creator, "me")
+    window._flush_collection()
+    saved = {c.name: c for c in collection.load_collection(window.root).cast}
+    assert saved["Elena"].tavern.tags == ["road"] and saved["Elena"].tavern.creator == "me"

@@ -640,9 +640,28 @@ class AboutForm(QWidget):
         self._loading = False
         kept = character.collection
         self.came_from.setText((kept.came_from if kept else "") or "Made here")
+        self._show_dates()
+
+    def _show_dates(self) -> None:
+        kept = self._character.collection if self._character is not None else None
         if kept is not None:
             added, changed = when_played(kept.added_at), when_played(kept.changed_at)
             self.dates.setText(f"Added {added} · changed {changed}")
+
+    def show_tags(self) -> None:
+        """Their tags again, changed from outside the form (a tag added to or
+        taken off several at once): otherwise the next key typed anywhere in
+        the form writes the field's old tags back over the change. Left as
+        typed when it already says the same tags."""
+        character = self._character
+        if character is None:
+            return
+        tags = _tavern(character).tags
+        if [tag.strip() for tag in self.tags.text().split(",") if tag.strip()] != tags:
+            self._loading = True
+            set_field_text(self.tags, ", ".join(tags))
+            self._loading = False
+        self._show_dates()
 
     def _apply(self) -> None:
         character = self._character
