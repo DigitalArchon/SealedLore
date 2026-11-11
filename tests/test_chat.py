@@ -519,6 +519,8 @@ def test_a_private_part_s_picture_prompt_is_written_at_the_private_budget(tmp_pa
     long = "word " * 900
     config = make_config(auto_archive=False)
     session, _provider = chat_session(tmp_path, [long] * 40, config=config)
+    # The mock's usage would teach the counts between the two prompts.
+    session.learn_corrections = False
     for i in range(20):
         say(session, f"Question {i}: " + long)
     private = MockChatProvider([long, '{"prompt": "a cat", "references": []}'])

@@ -412,14 +412,30 @@ class PrivateRuntime:
 
     # --- the scene's prompt ------------------------------------------------------
 
+    def private_model(self) -> str | None:
+        """The model a private scene's prompts go to: the open scene's, else
+        the one Settings → Private names (before the scene has begun)."""
+        span = self.open_span
+        if span is not None and span.model:
+            return span.model
+        settings = self.config.private_provider
+        return settings.model if settings is not None and settings.model else None
+
     def private_options(self):
+        # Counted for the private model, and what its replies teach the
+        # estimator is its own (`_update_correction_factor`): with the story
+        # model's, a private model that counts differently moved the story's.
+        model = self.private_model()
         if self.story.chat:
             # A chat has no rules to replace: its own system prompt goes, at
             # the private model's budget.
-            return replace(self.assembly_options(), token_budget=self.config.private_budget)
+            return replace(
+                self.assembly_options(), token_budget=self.config.private_budget, model=model
+            )
         full = story_rules_sections(self.story, texts=self.texts)
         return replace(
             self.assembly_options(),
+            model=model,
             token_budget=self.config.private_budget,
             rules_override=tuple(private_rules_sections(self.story, full, texts=self.texts)),
             # The cast's room at the private budget; a card with no condensed

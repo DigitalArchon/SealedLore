@@ -502,3 +502,30 @@ def test_a_memory_only_chat_teaches_the_config_nothing(tmp_path: Path):
     assert session.price_for("TEE/gemma-3-27b") is not None
     assert config.model_dump() == before
     assert not (tmp_path / "config.json").exists()
+
+
+def test_a_memory_only_chat_teaches_the_windows_config_nothing_either(tmp_path: Path):
+    """The window's estimator holds the config's own factors: a factor learned
+    from a memory-only chat was set there, and written by the next save."""
+    from sealedlore.engine.session import StorySession
+    from sealedlore.engine.tokens import TokenEstimator, fallback_counter
+    from sealedlore.models.node import Usage
+    from sealedlore.models.story import Story
+    from sealedlore.storage.repository import StoryBundle
+    from tests.test_chat import say
+
+    story = Story(title="Incognito", mode="chat", chat_prompt="Be brief.", chat_keep="memory")
+    story.defaults.main_model = "some/model"
+    config = Config()
+    before = config.model_dump()
+    estimator = TokenEstimator(factors=config.token_correction_factors, counter=fallback_counter)
+    session = StorySession(
+        StoryBundle(story=story),
+        config,
+        MockChatProvider(["Reply."], usage=Usage(prompt_tokens=5_000, completion_tokens=5)),
+        root=tmp_path,
+        estimator=estimator,
+    )
+    say(session, "Hello there.")
+    assert estimator.factor_for("some/model") > 1.0  # learned, for this run
+    assert config.model_dump() == before

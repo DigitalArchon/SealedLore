@@ -43,6 +43,11 @@ class TokenEstimator:
         encoding_name: str = DEFAULT_ENCODING,
     ) -> None:
         self.factors = factors if factors is not None else {}
+        # Learned for this process alone, from calls that must teach the
+        # config nothing (a chat or a private scene kept in memory only).
+        # Apart from `factors`, which the window shares with the config: set
+        # there, a factor reached config.json with its next save.
+        self.process_factors: dict[str, float] = {}
         self._encoding_name = encoding_name
         self._counter = counter
         self._counter_is_exact = counter is not None
@@ -77,6 +82,8 @@ class TokenEstimator:
     def factor_for(self, model: str | None) -> float:
         if model is None:
             return 1.0
+        if model in self.process_factors:
+            return self.process_factors[model]
         return self.factors.get(model, 1.0)
 
     def raw_count(self, text: str) -> int:

@@ -2319,7 +2319,7 @@ class StorySession(
             span,
         )
 
-        self._update_correction_factor(prompt, usage)
+        self._update_correction_factor(prompt, usage, span)
         self.last_result = GenerationResult(
             node=node,
             text=text,
@@ -4172,7 +4172,7 @@ class StorySession(
                 },
                 span,
             )
-            self._update_correction_factor(prompt, usage)
+            self._update_correction_factor(prompt, usage, span)
             self.save()
 
     def prune_shortcuts(self, node: Node) -> None:
@@ -4194,7 +4194,12 @@ class StorySession(
         self.story.active_leaf_id = node.id
         self.story.updated_at = utc_now_iso()
 
-    def _update_correction_factor(self, prompt: AssembledPrompt, usage: Usage) -> None:
+    def _update_correction_factor(
+        self, prompt: AssembledPrompt, usage: Usage, span: PrivateSpan | None = None
+    ) -> None:
+        """Teach the estimator how far its count for `prompt` was from the
+        model's own. A private scene's prompt is the private model's
+        (`private_options`), so it never moves the story model's factor."""
         if not self.learn_corrections:
             return
         model = prompt.model or self.model
@@ -4204,12 +4209,14 @@ class StorySession(
         rolled = updated_correction_factor(current, prompt.budget.total, usage.prompt_tokens)
         if abs(rolled - current) < 1e-6:
             return
-        self.estimator.factors[model] = rolled
-        if self.memory_only:
+        if self.memory_only or (span is not None and span.keep == "memory"):
             # The estimator learns for this process; the config doesn't: an
-            # entry keyed by the chat's model would reach config.json with the
-            # window's next save.
+            # entry keyed by the chat's model, or the scene's, would reach
+            # config.json with the window's next save.
+            self.estimator.process_factors[model] = rolled
             return
+        self.estimator.process_factors.pop(model, None)
+        self.estimator.factors[model] = rolled
         self.config.token_correction_factors[model] = rolled
         self._save_config()
 

@@ -26,9 +26,15 @@ from sealedlore.engine.usage import usage_report
 from sealedlore.models.config import Config, ProviderConfig
 from sealedlore.models.image import GeneratedImage
 from sealedlore.models.lore import LoreEntry
+from sealedlore.models.node import Usage
 from sealedlore.providers.base import ProviderError
 from sealedlore.providers.mock import MockChatProvider, MockEmbeddings
-from sealedlore.storage.repository import load_story_bundle, read_api_log, save_story_bundle
+from sealedlore.storage.repository import (
+    load_config,
+    load_story_bundle,
+    read_api_log,
+    save_story_bundle,
+)
 from sealedlore.storage.scenario import bundle_from_scenario
 
 MARKER = "ZQX-PRIVATE"
@@ -1017,3 +1023,38 @@ def test_a_questions_recall_carries_nothing_from_a_private_scene(tmp_path: Path,
         assert all(item.carried for item in session.last_recall.items)
         assert all(MARKER not in item.text for item in session.last_recall.items)
     assert MARKER not in everything_sent(main, session.embeddings)
+
+
+@pytest.mark.parametrize("keep", ["memory", "disk"])
+def test_a_scene_teaches_its_own_model_s_count_and_never_the_story_model_s(
+    tmp_path: Path, keep: str
+):
+    """A private turn's prompt was counted, and its reply taught, as the story
+    model's: a private model counting differently moved the story's factor
+    (and wrote it to config.json). A scene kept in memory teaches the config
+    nothing, as a chat kept in memory doesn't, even through the window's
+    estimator, whose factors are the config's own."""
+    session, main, held = build(tmp_path)
+    session.learn_corrections = True
+    session.estimator = TokenEstimator(
+        factors=session.config.token_correction_factors, counter=fallback_counter
+    )
+    main.usage = Usage(prompt_tokens=2_000, completion_tokens=50)
+    play(session, turn(held, "Before."))
+    story_model = session.model
+    learned = session.estimator.factor_for(story_model)
+
+    private = enter(session, keep=keep)
+    private.usage = Usage(prompt_tokens=9_000, completion_tokens=50)
+    for i in range(3):
+        play(session, turn(held, f"{MARKER} {i}"))
+    assert session.last_prompt.model == "local/model"
+    assert session.estimator.factor_for(story_model) == learned
+    assert session.estimator.factor_for("local/model") > 1.0
+    written = load_config(root=tmp_path).token_correction_factors
+    assert written[story_model] == learned
+    if keep == "memory":
+        assert "local/model" not in session.config.token_correction_factors
+        assert "local/model" not in written
+    else:
+        assert written["local/model"] == session.estimator.factor_for("local/model")
