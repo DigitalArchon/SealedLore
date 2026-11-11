@@ -1485,7 +1485,12 @@ class StorySession(
             # A chat's first message usually sets it up: kept in full unless
             # the author says otherwise.
             user_node.meta.keep_full = True
-        self._attach(user_node, parent=history[-1] if history else None)
+        # Under the last message the author sees, not the last a model reads:
+        # an ended private scene's (its summary deleted) is the story's to
+        # read, and attached before it, the turn took the scene off the page.
+        # No model is sent it either way (`path()`).
+        shown = self.full_path()
+        self._attach(user_node, parent=shown[-1] if shown else None)
         turn = replace(turn, turn_node_id=user_node.id)
 
         turn = yield from self.direct_turn(turn, user_node, history)
@@ -2886,10 +2891,11 @@ class StorySession(
         ]
 
         if self.story.active_leaf_id in doomed:
-            # Not into an ended scene's messages (a private scene's summary
-            # deleted): the next scene would begin among them, and a memory
-            # scene's are never saved.
-            self.story.active_leaf_id = self.out_of_ended_scenes(node.parent_id)
+            # A private scene's summary deleted leaves the story on the scene's
+            # last message: its messages are the story's to read, kept only
+            # from the models (and a memory scene's from the disk, by
+            # `bundle_to_save`).
+            self.story.active_leaf_id = node.parent_id
         self.story.updated_at = utc_now_iso()
         self.last_result = None
         if node.parent_id is None and node.meta.scene is not None and not self.path():

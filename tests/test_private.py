@@ -388,48 +388,85 @@ def test_a_summary_rewritten_after_a_scene_s_unanswered_turn_never_sends_that_tu
     assert MARKER not in json.dumps(main.payloads)
 
 
+def shown_scene(session) -> list[str]:
+    """The ended scenes' messages on the page: the story as the author reads it."""
+    return [node.id for node in session.full_path() if node.meta.private_span]
+
+
+@pytest.mark.parametrize("keep", ["memory", "disk"])
+def test_a_scenes_summary_deleted_leaves_the_scene_in_the_story_as_read(tmp_path: Path, keep: str):
+    """A private scene's messages are the story's to read and only kept from
+    the models. Its summary deleted, the story stands on the scene's last
+    message, and the next turn goes after it: attached under the last message
+    a model reads, it took the scene off the page. A memory scene's messages
+    are then saved around (they never reach the disk), and the story opens."""
+    session, main, held = build(tmp_path)
+    play(session, turn(held, "Before."))
+    private = enter(session, keep=keep)
+    play(session, turn(held, f"{MARKER} a"))
+    private.responses = ["They agreed to meet at dawn."]
+    for _event in session.close_private(session.summarise_private()):
+        pass
+    scene = shown_scene(session)
+    assert scene
+    session.delete_from(session.full_path()[-1].id)
+    assert session.story.active_leaf_id == scene[-1]
+
+    play(session, turn(held, "Next morning."))
+    assert shown_scene(session) == scene, "the scene stays on the page"
+    assert session.full_path()[-3].id == scene[-1]  # then the turn and its passage
+    assert not any(node.meta.private_span for node in session.path())
+    assert MARKER not in json.dumps(main.payloads)
+
+    again = reopened(session, tmp_path)
+    assert ids_and_text(again.path()) == ids_and_text(session.path())
+    assert shown_scene(again) == (scene if keep == "disk" else [])
+
+
 @pytest.mark.parametrize("second", ["memory", "disk"])
-def test_a_memory_scenes_summary_deleted_steps_the_story_out_of_the_scene(
+def test_a_scene_begun_after_one_whose_summary_was_deleted_is_saved_whole(
     tmp_path: Path, second: str
 ):
-    """Deleting the summary left the story standing on the scene's last
-    message, and the next scene began there: neither is ever saved, and the
-    story couldn't be opened again (an unknown message, a missing parent)."""
+    """The next scene begins after the ended one's last message, which stays
+    on the page; one kept only in memory is never saved, and the story opened
+    with an unknown message or a missing parent."""
     session, _main, held = closed_memory_scene(tmp_path)
-    before = session.path()[-2].id
     session.delete_from(session.full_path()[-1].id)
-    assert session.story.active_leaf_id == before
+    scene = shown_scene(session)
 
     private = enter(session, keep=second)
-    assert session.open_span.start_parent_id == before
+    assert session.open_span.start_parent_id == scene[-1]
     play(session, turn(held, f"{MARKER} again"))
+    assert shown_scene(session)[: len(scene)] == scene
     again = reopened(session, tmp_path)
     assert ids_and_text(again.path()) == ids_and_text(session.path())
     private.responses = ["They met again."]
     for _event in session.close_private(session.summarise_private()):
         pass
     play(session, turn(held, "Morning."))
+    assert shown_scene(session)[: len(scene)] == scene
     assert ids_and_text(reopened(session, tmp_path).path()) == ids_and_text(session.path())
 
 
 @pytest.mark.parametrize("second", ["memory", "disk"])
 def test_a_scene_after_one_ended_with_no_summary_is_saved_whole(tmp_path: Path, second: str):
-    """A scene ended without a summary leaves the story at its last message;
-    the next began under it, a message never saved."""
+    """A scene ended without a summary leaves the story at its last message,
+    still on the page; the next began under it, a message never saved."""
     session, _main, held = build(tmp_path)
     play(session, turn(held, "Before."))
-    before = session.story.active_leaf_id
     enter(session)
     play(session, turn(held, f"{MARKER} a"))
     for _event in session.close_private(""):
         pass
+    scene = shown_scene(session)
     private = enter(session, keep=second)
-    assert session.open_span.start_parent_id == before
+    assert session.open_span.start_parent_id == scene[-1]
     play(session, turn(held, f"{MARKER} b"))
     assert ids_and_text(reopened(session, tmp_path).path()) == ids_and_text(session.path())
     private.responses = ["They spoke."]
     for _event in session.close_private(session.summarise_private()):
         pass
+    assert shown_scene(session)[: len(scene)] == scene
     assert ids_and_text(reopened(session, tmp_path).path()) == ids_and_text(session.path())
 
 

@@ -306,23 +306,6 @@ class PrivateRuntime:
         """The scene's messages on the active path, in order."""
         return [node for node in self.full_path() if node.meta.private_span == span.id]
 
-    def out_of_ended_scenes(self, node_id: str | None) -> str | None:
-        """`node_id`, or the nearest message above it that isn't one of an
-        ended private scene's: the story goes on only from a scene's summary,
-        and a memory scene's own messages are never saved."""
-        ended = {span.id for span in self.story.private_spans if span.status != "open"}
-        if not ended:
-            return node_id
-        index = {node.id: node for node in self.nodes}
-        seen: set[str] = set()
-        while node_id is not None and node_id not in seen:
-            node = index.get(node_id)
-            if node is None or node.meta.private_span not in ended:
-                return node_id
-            seen.add(node_id)
-            node_id = node.parent_id
-        return node_id
-
     def enter_private(
         self, *, keep: PrivateKeep, provider: ChatProvider, model: str, base_url: str = ""
     ) -> PrivateSpan:
@@ -334,14 +317,11 @@ class PrivateRuntime:
                 "no other model to keep a part of it from"
             )
         full = self.full_path()
-        start = self.out_of_ended_scenes(full[-1].id if full else None)
-        if full and start != full[-1].id:
-            # The story stood at the end of a scene closed with no summary:
-            # this one begins where the story goes on from, as a turn would,
-            # never among that scene's messages (a memory one's aren't saved).
-            self.story.active_leaf_id = start
         span = PrivateSpan(
-            start_parent_id=start,
+            # After the last message the author sees, an ended scene's
+            # included: its messages stay in the story as read (a memory
+            # scene's are saved under the nearest written one, `bundle_to_save`).
+            start_parent_id=full[-1].id if full else None,
             model=model,
             host=urlparse(base_url).hostname or "",
             keep=keep,
