@@ -36,6 +36,7 @@ from sealedlore.storage.tavern_cards import (
     CardError,
     card_charx,
     card_data,
+    greeting_shown,
     read_card,
     scenario_from_card,
 )
@@ -363,6 +364,32 @@ def test_a_story_from_the_card_has_its_background_and_its_greetings_pictures(tmp
     assert base64.b64decode(scenario.reference_files[scenario.background_image]) == BARN
     assert any("background is behind the story" in note for note in made.notes)
     assert any("under the opening" in note for note in made.notes)
+
+
+def test_a_greeting_looked_at_first_is_the_opening_the_story_from_the_card_has(tmp_path: Path):
+    """The dialog before a story is made from the card's own scenario shows
+    its greeting as the story opens with it (`greeting_shown`): the same
+    words, the same pictures, the character's expression pictures only when
+    they come, and none for a world."""
+    emotion = {"type": "emotion", "uri": "embeded://assets/emotion/happy.png", "name": "happy"}
+    data = {**ELENA, "first_mes": GREETING + " {{emotion::happy}}", "assets": [*ASSETS, emotion]}
+    path = tmp_path / "elena.charx"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("card.json", json.dumps({"spec": "chara_card_v3", "data": data}))
+        for member, raw in {**MEMBERS, "assets/emotion/happy.png": png_of(6)}.items():
+            archive.writestr(member, raw)
+    card = read_card(path)
+    for world, expressions, names in [
+        (False, True, ["Farmhouse", "snow", "happy"]),
+        (False, False, ["Farmhouse", "snow"]),
+        (True, True, ["Farmhouse", "snow"]),
+    ]:
+        made = scenario_from_card(card, player="John", world=world, expressions=expressions)
+        shown = greeting_shown(card, 0, player="John", world=world, expressions=expressions)
+        assert shown.text == made.scenario.opening_text and "{{" not in shown.text
+        assert [p.card_file for p in made.scenario.opening_pictures] == names
+        told = [p.name if isinstance(p, CardAsset) else p.expression for p in shown.pictures]
+        assert told == names
 
 
 def test_the_opening_shows_them_once_and_a_restart_keeps_them(tmp_path: Path):

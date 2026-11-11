@@ -9,13 +9,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QComboBox, QLabel, QLineEdit
 
 from sealedlore.engine import card_chat
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.gui.new_chat_dialog import NewChatDialog
 from sealedlore.gui.sizing import GrowingText, size_to_screen
+from sealedlore.gui.tavern_dialog import pictures_named
 from sealedlore.models.character import Character
+from sealedlore.storage.card_files import greeting_pictures
 
 NO_GREETING = "None: they answer the first message"
 
@@ -69,8 +72,10 @@ class CardChatDialog(NewChatDialog):
         self.about.setPlaceholderText("Optional: who you are, as a SillyTavern persona says")
         self.first = GrowingText(lines=6, most=16)
         self.greeting = QComboBox()
+        assets = card.tavern.assets if card.tavern else []
         for number, text in enumerate(card_chat.greetings(card, user="")):
-            self.greeting.addItem(f"Greeting {number + 1}: {_words(text)}", number)
+            words = greeting_pictures(text, assets, card.reference_images).text
+            self.greeting.addItem(f"Greeting {number + 1}: {_words(words)}", number)
         self.greeting.addItem(NO_GREETING, None)
         self.greeting_text = GrowingText(lines=3, most=12)
         first_hint = QLabel(
@@ -79,6 +84,14 @@ class CardChatDialog(NewChatDialog):
         )
         first_hint.setObjectName("hintLabel")
         first_hint.setWordWrap(True)
+        # The pictures of the card's each box names (`{{img::…}}` and the
+        # like), as the chat will have them: under the message, the names
+        # taken out of what the model reads (`_sync_pictures`).
+        self.first_pictures, self.greeting_pictures = QLabel(), QLabel()
+        for label in (self.first_pictures, self.greeting_pictures):
+            label.setObjectName("hintLabel")
+            label.setWordWrap(True)
+            label.setTextFormat(Qt.PlainText)
 
         form = self.form
         row, _role = form.getWidgetPosition(self.title)
@@ -86,13 +99,17 @@ class CardChatDialog(NewChatDialog):
         form.insertRow(row + 2, "About you", self.about)
         row, _role = form.getWidgetPosition(self.keep)
         form.insertRow(row, "First message", self.first)
-        form.insertRow(row + 1, "", first_hint)
-        form.insertRow(row + 2, "Their greeting", self.greeting)
-        form.insertRow(row + 3, "", self.greeting_text)
+        form.insertRow(row + 1, "", self.first_pictures)
+        form.insertRow(row + 2, "", first_hint)
+        form.insertRow(row + 3, "Their greeting", self.greeting)
+        form.insertRow(row + 4, "", self.greeting_text)
+        form.insertRow(row + 5, "", self.greeting_pictures)
 
         self.user.textChanged.connect(lambda _text: self._refill())
         self.about.textChanged.connect(self._refill)
         self.greeting.currentIndexChanged.connect(lambda _index: self._choose_greeting())
+        self.first.textChanged.connect(self._sync_pictures)
+        self.greeting_text.textChanged.connect(self._sync_pictures)
         self._refill()
 
     def _put(self, box, text: str) -> None:
@@ -128,10 +145,30 @@ class CardChatDialog(NewChatDialog):
         in it."""
         index = self.greeting.currentData()
         self.greeting_text.setVisible(index is not None)
-        if index is None:
-            return
-        texts = card_chat.greetings(self.card, user=self._name())
-        self._put(self.greeting_text, texts[index])
+        if index is not None:
+            texts = card_chat.greetings(self.card, user=self._name())
+            self._put(self.greeting_text, texts[index])
+        self._sync_pictures()
+
+    def _sync_pictures(self) -> None:
+        """The pictures each box names, as the chat started from it shows
+        them (gui/window_card_start.py reads both with `greeting_pictures`):
+        said under the box, since the names stay in it to be edited."""
+        card = self.card
+        assets = card.tavern.assets if card.tavern else []
+        boxes = (
+            (self.first_pictures, self.first, True),
+            (self.greeting_pictures, self.greeting_text, self.greeting.currentData() is not None),
+        )
+        for label, box, used in boxes:
+            shown = greeting_pictures(box.toPlainText().strip(), assets, card.reference_images)
+            named = pictures_named(shown) if used else ""
+            label.setText(
+                f"Shown under it, as pictures: {named}. The model doesn't read their names."
+                if named
+                else ""
+            )
+            label.setVisible(bool(named))
 
     def _choose_greeting(self) -> None:
         # Another greeting chosen is that greeting, whatever was written.

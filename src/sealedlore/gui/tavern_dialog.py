@@ -6,6 +6,7 @@ lorebook is fetched by (providers/card_links.py)."""
 
 from __future__ import annotations
 
+from pathlib import PurePosixPath
 from typing import Any
 
 from PySide6.QtCore import QSize, Qt
@@ -28,8 +29,15 @@ from PySide6.QtWidgets import (
 
 from sealedlore.gui.ref_images import thumbnail_of
 from sealedlore.gui.sizing import GrowingText, size_to_screen
+from sealedlore.models.tavern import CardAsset
 from sealedlore.providers.card_links import LinkError, read_link
-from sealedlore.storage.tavern_cards import TavernCard, first_sentence, macro_filler
+from sealedlore.storage.card_files import GreetingPictures
+from sealedlore.storage.tavern_cards import (
+    TavernCard,
+    first_sentence,
+    greeting_shown,
+    macro_filler,
+)
 
 NO_OPENING = "None: I write the first turn"
 # The Cast and Lore pages' menus, and Story → Export's (the manual names them).
@@ -61,6 +69,22 @@ def _first_words(text: str, count: int = 9) -> str:
 def _counted(count: int, one: str, many: str) -> str:
     """ "1 lore entry", "3 greetings"; "" for none."""
     return f"{count} {one if count == 1 else many}" if count else ""
+
+
+def pictures_named(shown: GreetingPictures) -> str:
+    """The pictures a greeting shows (storage/card_files.py), in words and
+    in its order: "“Farmhouse” and their “happy” picture"; "" for none."""
+    names = []
+    for picture in shown.pictures:
+        if isinstance(picture, CardAsset):
+            name = picture.name or PurePosixPath(picture.path).name
+            names.append(f"“{name}”" if name else "a picture of the card's")
+        else:
+            label = picture.expression.strip()
+            names.append(f"their “{label}” picture" if label else "their picture")
+    if len(names) < 2:
+        return "".join(names)
+    return ", ".join(names[:-1]) + " and " + names[-1]
 
 
 class CardImportDialog(QDialog):
@@ -132,8 +156,14 @@ class CardImportDialog(QDialog):
         for number, _greeting in enumerate(card.greetings, start=1):
             self.opening.addItem(f"Greeting {number}", number - 1)
         self.opening.addItem(NO_OPENING, None)
+        # The greeting as the story opens with it: the pictures it shows
+        # taken out of its words, and named under it (`_sync`).
         self.preview = GrowingText(lines=4, most=10)
         self.preview.setReadOnly(True)
+        self.preview_pictures = QLabel()
+        self.preview_pictures.setObjectName("hintLabel")
+        self.preview_pictures.setWordWrap(True)
+        self.preview_pictures.setTextFormat(Qt.PlainText)
 
         self.instructions = QCheckBox("Add the card's own instructions to Style → Other notes")
         self.instructions.setToolTip(
@@ -159,6 +189,7 @@ class CardImportDialog(QDialog):
         form.addRow("About you", self.about_player)
         form.addRow("Opening", self.opening)
         form.addRow("", self.preview)
+        form.addRow("", self.preview_pictures)
         form.addRow("", self.instructions)
         form.addRow("", self.expressions)
 
@@ -183,6 +214,10 @@ class CardImportDialog(QDialog):
 
         self.player.textChanged.connect(lambda _text: self._sync())
         self.opening.currentIndexChanged.connect(lambda _index: self._sync())
+        # A world shows none of the character's expression pictures, and
+        # they come only when kept.
+        self.as_world.toggled.connect(lambda _on: self._sync())
+        self.expressions.toggled.connect(lambda _on: self._sync())
         self._sync()
 
     def _sync(self) -> None:
@@ -194,12 +229,28 @@ class CardImportDialog(QDialog):
         self.about.setText(
             first_sentence(fill(card.text("description") or card.text("personality")), 300)
         )
-        for number, greeting in enumerate(card.greetings):
-            self.opening.setItemText(
-                number, f"Greeting {number + 1}: {_first_words(fill(greeting))}"
+        options = self.options()
+
+        def shown(number: int) -> GreetingPictures:
+            return greeting_shown(
+                card,
+                number,
+                player=name or None,
+                world=options["world"],
+                expressions=options["expressions"],
             )
-        self.preview.setPlainText("" if index is None else fill(card.greetings[index]))
-        self.preview.setVisible(index is not None)
+
+        for number in range(len(card.greetings)):
+            self.opening.setItemText(
+                number, f"Greeting {number + 1}: {_first_words(shown(number).text)}"
+            )
+        opened = None if index is None else shown(index)
+        self.preview.setPlainText("" if opened is None else opened.text)
+        self.preview.setVisible(opened is not None)
+        named = pictures_named(opened) if opened is not None else ""
+        said = f"Shown under the opening, as pictures: {named}." if named else ""
+        self.preview_pictures.setText(said)
+        self.preview_pictures.setVisible(bool(said))
 
     def options(self) -> dict[str, Any]:
         """`scenario_from_card`'s choices, as the dialog has them."""

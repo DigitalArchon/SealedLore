@@ -15,10 +15,12 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import Qt  # noqa: E402
-from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
+from PySide6.QtWidgets import QApplication, QDialog, QMessageBox  # noqa: E402
 
 from sealedlore.gui import window_collection  # noqa: E402
+from sealedlore.gui.card_chat_dialog import NO_GREETING, CardChatDialog  # noqa: E402
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
+from sealedlore.gui.tavern_dialog import NO_OPENING, CardImportDialog  # noqa: E402
 from sealedlore.gui.transcript import ImageMessageWidget  # noqa: E402
 from sealedlore.models.character import Character  # noqa: E402
 from sealedlore.models.story import Story  # noqa: E402
@@ -26,7 +28,7 @@ from sealedlore.storage import collection  # noqa: E402
 from sealedlore.storage.paths import COLLECTION_ID  # noqa: E402
 from sealedlore.storage.picture_store import DiskPictures  # noqa: E402
 from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa: E402
-from sealedlore.storage.tavern_cards import read_card  # noqa: E402
+from sealedlore.storage.tavern_cards import read_card, scenario_from_card  # noqa: E402
 from tests.test_card_files import BARN, FARMHOUSE, WIND, risu_charx  # noqa: E402
 from tests.test_card_link_gui import chat_dialog  # noqa: E402
 
@@ -129,6 +131,57 @@ def test_a_chat_with_them_shows_its_greetings_pictures_and_background(app, windo
     assert widgets and widgets[-1].header.text() == "From Elena's card  ·  Farmhouse"
     actions = [a.text() for a in widgets[-1].more_button.menu().actions()]
     assert "Show the prompt" not in actions and "Generate again…" not in actions
+
+
+def test_a_story_from_the_cards_scenario_looks_at_its_greeting_as_the_story_opens(app, tmp_path):
+    """The dialog showed the greeting as written, `{{img::Farmhouse}}` and
+    `<img src="{{raw::snow.png}}">` and all, where the story made from it
+    shows those as pictures under the opening and takes them out of its
+    words. Now the words as the story has them, and the pictures named."""
+    card = read_card(risu_charx(tmp_path))
+    dialog = CardImportDialog(card)
+    dialog.player.setText("John")
+    made = scenario_from_card(card, **dialog.options()).scenario
+    assert dialog.preview.toPlainText() == made.opening_text
+    assert "{{" not in dialog.preview.toPlainText() and "<img" not in dialog.preview.toPlainText()
+    assert not dialog.preview_pictures.isHidden()
+    assert dialog.preview_pictures.text() == (
+        "Shown under the opening, as pictures: “Farmhouse” and “snow”."
+    )
+    first = dialog.opening.itemText(0)
+    assert first == 'Greeting 1: Elena lowers the rifle an inch. "Who sent you,…'
+    dialog.opening.setCurrentIndex(dialog.opening.findText(NO_OPENING))
+    assert dialog.preview_pictures.isHidden()
+    dialog.deleteLater()
+
+
+def test_chat_with_them_says_which_pictures_their_greeting_shows(app, window, monkeypatch):
+    """Chat with them… lets the greeting be edited, names and all (a name
+    taken out is a picture not shown); under it, which pictures the chat
+    will show and that the model doesn't read their names."""
+    elena = window._kept()[0]
+    seen: dict[str, object] = {}
+
+    def exec_(dialog: CardChatDialog) -> int:
+        dialog.user.setText("John")
+        seen["item"] = dialog.greeting.itemText(0)
+        seen["greeting"] = dialog.greeting_pictures.text()
+        seen["first"] = dialog.first_pictures.isHidden()
+        dialog.greeting_text.setPlainText("She waits. {{img::snow}}")
+        seen["edited"] = dialog.greeting_pictures.text()
+        dialog.greeting.setCurrentIndex(dialog.greeting.findText(NO_GREETING))
+        seen["none"] = dialog.greeting_pictures.isHidden()
+        return QDialog.Rejected
+
+    monkeypatch.setattr(CardChatDialog, "exec", exec_)
+    window.chat_with_kept(elena.id)
+    assert "{{" not in seen["item"] and "<img" not in seen["item"]
+    assert seen["greeting"] == (
+        "Shown under it, as pictures: “Farmhouse” and “snow”. The model doesn't read their names."
+    )
+    assert seen["first"] is True, "nothing on her card's own text names a picture"
+    assert seen["edited"].startswith("Shown under it, as pictures: “snow”.")
+    assert seen["none"] is True
 
 
 def test_a_memory_chat_with_them_keeps_its_pictures_in_memory(app, window, monkeypatch):

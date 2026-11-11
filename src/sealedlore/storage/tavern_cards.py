@@ -48,7 +48,7 @@ from sealedlore.models.scene import SceneState
 from sealedlore.models.story import OpeningPicture, StyleDirectives
 from sealedlore.models.tavern import CardAsset, TavernFields
 from sealedlore.storage.atomic import atomic_write_json
-from sealedlore.storage.card_files import background_of, greeting_pictures
+from sealedlore.storage.card_files import GreetingPictures, background_of, greeting_pictures
 from sealedlore.storage.image_meta import (
     MetadataError,
     picture_kind,
@@ -1114,6 +1114,49 @@ def _new_member(asset: CardAsset, taken: set[str]) -> str:
     return member
 
 
+def _held_files(card: TavernCard) -> list[tuple[CardAsset, bytes]]:
+    """The files the card holds (not those it links to), each a CardAsset
+    with a place among a story's images, and its bytes."""
+    held: list[tuple[CardAsset, bytes]] = []
+    for found in card.files:
+        if found.data is not None:
+            asset = CardAsset(type=found.type, name=found.name, ext=found.ext, path=found.path)
+            asset.file = f"{IMAGES_DIR}/{new_id()}.{found.ext or 'bin'}"
+            held.append((asset, found.data))
+    return held
+
+
+def greeting_shown(
+    card: TavernCard,
+    opening: int,
+    *,
+    player: str | None,
+    world: bool = False,
+    expressions: bool = True,
+) -> GreetingPictures:
+    """Greeting `opening` as the story `scenario_from_card` makes with the
+    same choices opens with it, for a look before it is made: the names in,
+    the pictures it shows (the card's files, or the character's own
+    expression pictures; never a world's) taken out of its words and
+    listed. Nothing of the pictures is copied."""
+    fill = macro_filler(card.name, player)
+    pictures: list[ImageRef] = []
+    if not world:
+        # The character's pictures as the story has them, labelled: the
+        # portrait, then the expression pictures when they come too.
+        if card.picture and picture_kind(card.picture):
+            portrait = card.picture_labels.get(ICON_NAME, ("", "", "", ""))[1]
+            pictures.append(ImageRef(file=ICON_NAME, expression=portrait))
+        if expressions:
+            pictures += expression_refs(
+                card.expressions,
+                lambda _data, suffix, label: ImageRef(file=suffix, expression=label),
+                card.picture_labels,
+            )[0]
+    assets = [asset for asset, _data in _held_files(card)]
+    return greeting_pictures(fill(card.greetings[opening]).strip(), assets, pictures)
+
+
 def scenario_from_card(
     card: TavernCard,
     *,
@@ -1209,14 +1252,9 @@ def scenario_from_card(
 
     # The card's other files: its background behind the story, and the
     # pictures its greeting shows under the opening (storage/card_files.py).
-    held: dict[str, bytes] = {}
-    assets: list[CardAsset] = []
-    for found in card.files:
-        if found.data is not None:
-            asset = CardAsset(type=found.type, name=found.name, ext=found.ext, path=found.path)
-            asset.file = f"{IMAGES_DIR}/{new_id()}.{found.ext or 'bin'}"
-            held[asset.file] = found.data
-            assets.append(asset)
+    files = _held_files(card)
+    assets = [asset for asset, _data in files]
+    held = {asset.file: data for asset, data in files}
     background = None
     greetings = [fill(text).strip() for text in card.greetings]
     if opening is not None and 0 <= opening < len(greetings):
