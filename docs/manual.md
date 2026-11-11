@@ -2590,8 +2590,12 @@ verifier:
 
 Replies are marked "end-to-end encrypted", and the attestation is redone
 every five minutes (time the computer spends asleep counts). Tinfoil's
-verifier follows no redirect off https, nor one from the internet into your
-own network. A model written with a capital or a stray space
+verifier, and the Sigstore library it checks the release with (Sigstore's
+public trust root included), follow no redirect off https, nor one from the
+internet into your own network, and Sigstore's trust root at most five: one
+they may not follow fails the attestation, and nothing is sent. Should a
+version of that software not let the app hold its fetches to this, the
+attestation is refused, saying why, rather than made without it. A model written with a capital or a stray space
 (`Private/glm-5-3`) is still end-to-end encrypted, never sent the plain way.
 What NanoGPT's relay writes in an error is shown as its own ("NanoGPT's relay
 said (unauthenticated)"), on one line and without characters you can't see.
@@ -2983,8 +2987,8 @@ crash reporting.
   is fetched from `api.redpill.ai`, directly, with the session's id alone.
   A `private/` model's attestation is fetched through
   NanoGPT and checked against Sigstore's public records and Tinfoil's latest
-  release on GitHub; what the app sends it is sealed first (see "Private
-  scenes"). Everything else the app does with the story is paused until the
+  release on GitHub, over https only, its checks' redirects included; what
+  the app sends it is sealed first (see "Private scenes"). Everything else the app does with the story is paused until the
   scene ends, and only the summary you approve goes back into it. "In
   memory" keeps the scene's messages off the disk; its calls are logged
   without content, so the cost still adds up.
