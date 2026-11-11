@@ -155,6 +155,7 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
         finish_reason: str | None = None
         response_id: str | None = None
         saw_done = False
+        saw_data = False
         reasoning_chars = 0
 
         with self._get_client().stream(
@@ -167,6 +168,10 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
             if response.status_code >= 400:
                 raise self._http_error(url, response)
             self._accept(response)
+            if response.status_code >= 300:
+                # Not followed (the client follows none), and never read as
+                # an empty reply.
+                raise self._redirected(url, response)
             # A TEE reply's receipt names the hash of the exact bytes the
             # stream carried (providers/tee.py): hashed as they come, to the
             # end, and the receipt's id and route kept.
@@ -179,6 +184,7 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
             for line in _lines(response, body):
                 if saw_done or not line or not line.startswith(SSE_DATA_PREFIX):
                     continue
+                saw_data = True
                 data = line[len(SSE_DATA_PREFIX) :].strip()
                 if data == SSE_DONE:
                     # Read on (nothing after it is taken), so the hash covers
@@ -235,6 +241,10 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
             # Shut down mid-stream, the connection just reads as ended.
             raise StreamCancelled()
         self._finish(finish_reason, saw_done)
+        if not saw_data:
+            # Not one event: whatever came wasn't a reply, and an empty
+            # passage would say nothing of why.
+            raise self._no_stream(url, response)
         usage_raw = with_reported_cost(usage_raw, pricing)
         completed = StreamCompleted(
             usage=parse_usage(usage_raw),

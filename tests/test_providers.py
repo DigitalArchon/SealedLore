@@ -300,6 +300,68 @@ def test_odd_choice_shapes_are_skipped_not_fatal():
     assert "".join(e.text for e in events if isinstance(e, TextDelta)) == "fine"
 
 
+@pytest.mark.parametrize("status", [301, 302, 307, 308])
+def test_a_redirect_is_said_with_where_to_and_never_taken_for_an_empty_reply(status):
+    """The client follows no redirect (it would re-send the prompt and the
+    key): a 308 from www to the bare host ended the turn with an empty
+    passage, and no reason."""
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(status, headers={"location": "https://apex.test/api/v1/chat/x"})
+
+    with pytest.raises(ProviderError) as info:
+        list(provider_with(handler).stream(request_for()))
+    said = str(info.value)
+    assert f"redirected (HTTP {status}) to https://apex.test/api/v1/chat/x" in said
+    assert "Settings → Endpoints" in said and info.value.status_code == status
+    assert len(seen) == 1, "nothing was followed, nor retried"
+
+
+def test_a_relative_redirect_names_the_whole_address():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(308, headers={"location": "/v2/chat/completions"})
+
+    with pytest.raises(ProviderError, match=r"to https://example\.test/v2/chat/completions"):
+        list(provider_with(handler).stream(request_for()))
+
+
+@pytest.mark.parametrize(
+    ("body", "kind"),
+    [
+        (b"<html><body>Sign in to the Wi-Fi</body></html>", "text/html"),
+        (b"", "text/event-stream"),
+        (b'{"id": "x", "choices": []}', "application/json"),
+    ],
+)
+def test_an_answer_with_no_stream_in_it_is_said_never_an_empty_passage(body, kind):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=body, headers={"content-type": kind})
+
+    with pytest.raises(ProviderError) as info:
+        list(provider_with(handler).stream(request_for()))
+    said = str(info.value)
+    assert f"answered HTTP 200 ({kind}) with no reply in it" in said
+    assert "Settings → Endpoints" in said
+
+
+def test_a_stream_is_read_whatever_its_content_type_says():
+    """Real servers label their streams every way (llama.cpp, proxies): a body
+    with `data:` lines is the reply."""
+    for kind in ("text/html", "application/json", "text/plain", None):
+
+        def handler(request: httpx.Request, kind=kind) -> httpx.Response:
+            headers = {"content-type": kind} if kind else {}
+            return httpx.Response(200, content=sse(delta_chunk("fine")), headers=headers)
+
+        events = list(provider_with(handler).stream(request_for()))
+        assert "".join(e.text for e in events if isinstance(e, TextDelta)) == "fine", kind
+    # And one that says nothing but [DONE] is an empty reply, as the endpoint sent it.
+    done = provider_with(lambda r: httpx.Response(200, content=b"data: [DONE]\n\n"))
+    assert isinstance(list(done.stream(request_for()))[-1], StreamCompleted)
+
+
 def test_stream_ignores_keepalive_and_comment_lines():
     def handler(request: httpx.Request) -> httpx.Response:
         body = b": keepalive\n\n" + sse(delta_chunk("fine"))

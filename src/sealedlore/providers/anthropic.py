@@ -229,6 +229,7 @@ class AnthropicProvider(StreamingHttpProvider):
         stop_reason: str | None = None
         response_id: str | None = None
         reasoning_chars = 0
+        saw_data = False
 
         with self._get_client().stream(
             "POST",
@@ -239,11 +240,15 @@ class AnthropicProvider(StreamingHttpProvider):
         ) as response:
             if response.status_code >= 400:
                 raise self._http_error(url, response)
+            if response.status_code >= 300:
+                # Not followed, and never read as an empty reply.
+                raise self._redirected(url, response)
 
             for line in response.iter_lines():
                 # "event:" lines name what the data line says itself.
                 if not line.startswith(SSE_DATA_PREFIX):
                     continue
+                saw_data = True
                 data = line[len(SSE_DATA_PREFIX) :].strip()
                 if not data:
                     continue
@@ -295,6 +300,8 @@ class AnthropicProvider(StreamingHttpProvider):
         if self._cancelled:
             # Shut down mid-stream, the connection just reads as ended.
             raise StreamCancelled()
+        if not saw_data:
+            raise self._no_stream(url, response)
         usage_raw = app_usage(usage_raw) if usage_raw else usage_raw
         completed = StreamCompleted(
             usage=parse_usage(usage_raw),

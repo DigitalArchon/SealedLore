@@ -19,7 +19,7 @@ from typing import Any
 
 import httpx
 
-from sealedlore.models.config import ProviderConfig
+from sealedlore.models.config import ProviderConfig, shown
 from sealedlore.providers.base import (
     ChatProvider,
     ChatRequest,
@@ -195,6 +195,41 @@ class StreamingHttpProvider(ChatProvider):
         )
         error.retry_after = _seconds(response.headers.get("retry-after"))
         return error
+
+    def _redirected(self, url: str, response: httpx.Response) -> ProviderError:
+        """A redirect (a 308 from www to the bare host, say), as the error to
+        raise. The client follows none: a redirect re-sends the prompt, and the
+        key, to wherever it points. So it is said, and where to, for the
+        author to put that address in Settings if the endpoint has moved; and
+        it is never taken for a reply with nothing in it."""
+        location = response.headers.get("location")
+        target = None
+        if location:
+            try:
+                target = str(response.request.url.join(location))
+            except httpx.InvalidURL:
+                target = location
+        where = f" to {shown(target)[:200]}" if target else ""
+        return ProviderError(
+            f"{url} redirected (HTTP {response.status_code}){where}. Nothing was sent there: if "
+            "the endpoint has moved, put its new address in Settings → Endpoints.",
+            status_code=response.status_code,
+        )
+
+    def _no_stream(self, url: str, response: httpx.Response) -> ProviderError:
+        """An answer that carried no event stream at all (a web page where the
+        API was expected, a sign-in page on a local network), as the error to
+        raise: nothing in it was a reply, and an empty passage would say
+        nothing of why. A body with SSE `data:` lines is a stream whatever its
+        content type says; only one with none comes here."""
+        kind = response.headers.get("content-type", "").split(";")[0].strip() or "no content type"
+        return ProviderError(
+            f"{url} answered HTTP {response.status_code} ({kind[:80]}) with no reply in it, not "
+            "the stream a chat endpoint sends. Check the endpoint's address in Settings → "
+            "Endpoints: a web page answers like this where the API was expected (an address "
+            "without its /v1, say).",
+            status_code=response.status_code,
+        )
 
     @abstractmethod
     def _stream(self, request: ChatRequest) -> Iterator[StreamEvent]:

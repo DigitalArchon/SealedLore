@@ -428,6 +428,18 @@ def test_overloaded_is_waited_out_before_anything_streams(monkeypatch):
     assert text == "The door gives." and waits == [3.0]
 
 
+def test_a_redirect_or_an_answer_with_no_stream_is_said_never_an_empty_reply():
+    moved = provider_with(
+        lambda request: httpx.Response(308, headers={"location": "https://elsewhere.test/v1"})
+    )
+    with pytest.raises(ProviderError, match=r"redirected \(HTTP 308\) to https://elsewhere\.test"):
+        list(moved.stream(request_for()))
+    html = {"content-type": "text/html"}
+    page = provider_with(lambda request: httpx.Response(200, text="<html></html>", headers=html))
+    with pytest.raises(ProviderError, match=r"answered HTTP 200 \(text/html\) with no reply"):
+        list(page.stream(request_for()))
+
+
 def test_a_malformed_event_raises():
     provider = provider_with(lambda request: httpx.Response(200, content=b"data: {nope}\n\n"))
     with pytest.raises(ProviderError, match="malformed stream event"):
