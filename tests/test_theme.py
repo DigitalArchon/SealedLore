@@ -187,19 +187,28 @@ def test_placeholders_are_drawn_in_the_themes_colours_on_or_off(app):
         )
         return max(colours, key=lambda c: abs(c.lightness() - ground.lightness())).name()
 
+    # A stylesheet change restyles every widget alive: earlier tests' windows go first.
+    for other in app.topLevelWidgets():
+        if isinstance(other, MainWindow):
+            other.deleteLater()
+    app.sendPostedEvents(None, QEvent.DeferredDelete)
     theme.set_theme("high_contrast")
+    fields = []
     try:
         text_size.apply(app, 1.0)
         for kind in (QLineEdit, GrowingText):
             on, off = kind(), kind()
+            fields += [on, off]
             off.setEnabled(False)
             assert _contrast(drawn(on), HC["field"]) >= 7, kind.__name__
             assert _contrast(drawn(off), HC["field_disabled"]) >= 4.5, kind.__name__
-            on.deleteLater()
-            off.deleteLater()
     finally:
+        for field in fields:
+            field.deleteLater()
+        app.sendPostedEvents(None, QEvent.DeferredDelete)
         theme.set_theme(theme.DEFAULT_THEME)
         text_size.apply(app, 1.0)
+        app.setStyleSheet("")
 
 
 def test_what_is_drawn_in_code_follows_the_theme():
