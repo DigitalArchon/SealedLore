@@ -51,6 +51,7 @@ from sealedlore.engine.session import StorySession
 from sealedlore.engine.video_price import VideoQuote, pictures_worth, quote_video
 from sealedlore.engine.videos import VideoRequest
 from sealedlore.gui.crop_dialog import cropped_picture
+from sealedlore.gui.fields import FormScroll
 from sealedlore.gui.model_picker import ModelField, _Row
 from sealedlore.gui.picture_style import (
     DEFAULT_TIP,
@@ -289,11 +290,16 @@ class VideoDialog(QDialog):
         form.addRow("", self.status)
         form.addRow("Prompt", self.prompt)
 
+        # The settings and the prompt scroll; the cost, the warnings, the tick
+        # and Generate stay in view. At 150% text the dialog was 1036px tall
+        # and the tick and Generate fell off a 1080p screen.
+        body = QWidget()
+        body.setLayout(form)
         layout = QVBoxLayout(self)
         layout.addWidget(self.cost_banner)
         layout.addWidget(self.shared_warning)
         layout.addWidget(self.private_warning)
-        layout.addLayout(form)
+        layout.addWidget(FormScroll(body), 1)
         layout.addWidget(self.price)
         layout.addWidget(self.accept_cost)
         layout.addWidget(self.buttons)

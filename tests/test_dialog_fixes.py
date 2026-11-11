@@ -553,3 +553,56 @@ def test_nothing_shown_names_a_cast_page_or_tab():
         assert not [
             line for line in lines if stale.search(line) and "has gone into it" not in line
         ], doc
+
+
+# --- larger text sizes still fit the screen -----------------------------------------
+
+
+@pytest.mark.parametrize("scale", [1.5, 2.0])
+def test_chat_with_them_and_the_video_dialog_fit_the_screen_at_larger_text(app, window, scale):
+    """Chat with them… had no scroll area: at 150% text it asked for 1,088px
+    of height, past a 1080p screen. The video dialog asked for 1,036px at
+    150% and 1,298px at 200%, its price tick and Generate off the screen. The
+    forms scroll now; the buttons (and the video's price) stay in view."""
+    from PySide6.QtCore import QEvent
+
+    from sealedlore.gui import text_size
+    from sealedlore.gui.app import load_stylesheet
+    from sealedlore.gui.card_chat_dialog import CardChatDialog
+    from sealedlore.gui.sizing import MOST_OF_SCREEN
+    from sealedlore.models.character import Character
+
+    for other in app.topLevelWidgets():
+        if isinstance(other, MainWindow) and other is not window:
+            other.deleteLater()
+    app.sendPostedEvents(None, QEvent.DeferredDelete)
+    app.setStyleSheet(load_stylesheet())
+    card = Character(
+        id="c1",
+        name="Jane Moss",
+        summary="A farmer.",
+        description="Keeps a farm at the edge of the woods, and a dog. " * 20,
+    )
+    try:
+        text_size.apply(app, scale)
+        # As much as a dialog may take (sizing.size_to_screen): a desktop's
+        # panels take the rest.
+        room = int(window.screen().availableGeometry().height() * MOST_OF_SCREEN)
+        chat = CardChatDialog(card, model="zai-org/glm-5.3", parent=window)
+        video = VideoDialog(window.session, catalog=window.video_catalog, parent=window)
+        for dialog, kept in (
+            (chat, [chat.ok_button]),
+            (video, [video.generate_button, video.accept_cost, video.price]),
+        ):
+            dialog.show()
+            settle(app)
+            assert dialog.minimumSizeHint().height() <= room, type(dialog).__name__
+            assert dialog.height() <= room, type(dialog).__name__
+            for widget in kept:
+                bottom = widget.mapTo(dialog, widget.rect().bottomLeft()).y()
+                assert widget.isVisible() and bottom <= dialog.height(), widget
+            dialog.done(0)
+            dialog.deleteLater()
+    finally:
+        text_size.apply(app, 1.0)
+        app.setStyleSheet("")

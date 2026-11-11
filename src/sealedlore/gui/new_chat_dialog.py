@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.gui.attest_check import AttestationButton
+from sealedlore.gui.fields import FormScroll
 from sealedlore.gui.model_picker import Browse, BrowseRoute, ModelField
 from sealedlore.gui.saved_prompts import SavedPrompts, SavedPromptsButton
 from sealedlore.gui.sizing import GrowingText, may_discard, size_to_screen, typed_texts
@@ -154,9 +155,14 @@ class NewChatDialog(QDialog):
         buttons.rejected.connect(self.reject)
         self.ok_button = buttons.button(QDialogButtonBox.Ok)
 
+        # The form scrolls and the buttons stay in view: Chat with them…
+        # adds a card's fields to it, and at 150% text it asked for 1,088px,
+        # past a 1080p screen, with Start chat off its bottom.
+        body = QWidget()
+        body.setLayout(form)
         layout = QVBoxLayout(self)
         layout.addWidget(intro)
-        layout.addLayout(form)
+        layout.addWidget(FormScroll(body), 1)
         layout.addWidget(buttons)
 
         self.model.textChanged.connect(lambda _text: self._sync())
