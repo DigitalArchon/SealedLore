@@ -37,6 +37,15 @@ fun to play. This app will remain focused on text based roleplay.
 
 ### New in version 3
 
+- **TEE models say what was attested** (3.1.0b9). The model button says
+  whether the attested machine is the model's own or RedPill's TEE gateway,
+  which passes requests on to the provider that runs the model, and what that
+  leaves to someone's word. Your own messages are marked as received by the
+  attested TEE only when a reply proves it. **Name the provider behind each
+  TEE reply** (Settings → Private, off by default) shows who ran it ("run by
+  Phala"). The release also fixes about fifty bugs found in a review of the
+  whole app, the most serious being ways a private scene could reach another
+  model.
 - **The cast board, in one place** (3.1.0b2). A story's characters are on
   one page, laid out as Your characters is: **Cast board…** on the People page
   shows everyone down the left, and each one's card and pictures in two tabs
@@ -249,8 +258,11 @@ summary you approve.
 Of NanoGPT's models, the end-to-end encrypted `private/` ones are the
 stronger choice. A `TEE/` model's text still passes NanoGPT's gateway in the
 clear, and for now some of what its checks should prove can't be checked
-through NanoGPT. The app says what fell short on the model button and under
-each reply, attests a TEE model again before a message once 15 minutes have
+through NanoGPT. For most of them what is attested is RedPill's TEE gateway,
+which passes each request on to the provider that runs the model: that
+provider is the gateway's word, not something the app checks. The app says
+what was attested and what fell short on the model button and under each
+message, attests a TEE model again before a message once 15 minutes have
 passed, and refuses the TEE models it can't attest at all.
 
 ### Author-driven plots
@@ -573,8 +585,12 @@ encrypts the whole way.
   key): the prompt you approved and the start and end pictures you chose.
 - **A private scene** goes to the private model alone. Checking a TEE model
   sends the enclave's GPU evidence to NVIDIA and fetches Intel's public
-  certificates; nothing from your story goes to either. A `private/` model is
-  end-to-end encrypted, so NanoGPT relays only ciphertext.
+  certificates; nothing from your story goes to either. With **Name the
+  provider behind each TEE reply** on (off by default), RedPill's public
+  record of the session that ran a reply is fetched from `api.redpill.ai`
+  directly, which sees your address; only the session's id is sent. A
+  `private/` model is end-to-end encrypted, so NanoGPT relays only
+  ciphertext.
 - **Phone access**, off unless you turn it on, runs SealedLore's own tor,
   which publishes your computer's onion address on the Tor network. Only
   phones you paired get anything, and only from the stories you share. What a

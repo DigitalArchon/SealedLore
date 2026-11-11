@@ -526,7 +526,9 @@ have chosen to see spoilers.
 
 **Managing stories.** Right-click a story in the Stories list:
 - **Open folder** shows the story's files in your file manager (also for a
-  story that can't be read).
+  story that can't be read). A story's folder copied or renamed there by
+  hand is a story of its own: it is saved in its own folder from then on,
+  the one it came from left as it was, and says so when it first opens.
 - **Duplicate settings only** makes a new, unplayed story with the same world,
   cast, lore, style and opening.
 - **Duplicate entire story** copies everything: every branch, summary and
@@ -1567,7 +1569,10 @@ the model drafted the card. Choose one and the right side has two tabs:
 **Pictures**, their pictures as a sheet of looks and expressions (see "The
 cast board" under The People page). **Everyone** shows each character's
 pictures in a row; click one for their sheet. **Add** and **Remove** under
-the list make a card and take one off. When turns are archived, or when you
+the list make a card and take one off. A character the plot brings in or
+names can't be removed until the plot no longer does (change it with Story →
+Open in the plot editor… first), nor the one you are playing while a private
+scene is open. When turns are archived, or when you
 press **Scan recent story** (under the list too), the model suggests named
 characters who aren't on file yet:
 - **Add** keeps them as supporting characters, shown to the model only when
@@ -1915,8 +1920,10 @@ where the passage stops and asked to pick up exactly there; if it writes the
 passage out again before going on, the repeat is left out and the status bar
 says so. Once the new text is in, the scene and the plot are read again over
 the whole passage. In a simple chat it is **⋯ → Continue this reply**. In a
-private scene only the scene's own passages can be continued: one written
-before it is the story model's. A paired phone has Continue too.
+private scene only the scene's own passages can be continued, and only by
+the scene's own model: one written before it is the story model's, and a
+scene kept on disk, reopened with no private model set up, can't be
+continued until one is (Settings → Private). A paired phone has Continue too.
 
 A **branch** is a line of the story you split off on purpose. **Edit** on a
 message corrects it in place (a typo, a name); on a turn of yours the editor
@@ -2163,7 +2170,9 @@ keeps it as it is.
 Whatever comes in has its hidden data removed before it is kept: where and
 when a photo was taken, the camera, any thumbnail, comments, editing history
 and anything after the image. Pictures in a scenario file or a story backup
-are cleaned the same way as they are imported.
+are cleaned the same way as they are imported. Only JPEG, PNG, WebP, GIF,
+BMP and TIFF are read as pictures; a file of any other kind named as one (an
+SVG, say, which could draw in files from your computer) is never read as one.
 
 ### Pictures for the cards
 
@@ -2395,8 +2404,9 @@ after the passage says so, with **Stop waiting**. It is already paid for, so
 it is never lost: stopped, or with the app closed, it is fetched when you
 press **Check again** or next open the story. (In a chat kept in memory only
 it is lost with the chat, and closing the chat says so.) When it arrives,
-its hidden data (the encoder's name and settings, creation times) is blanked
-without re-encoding, and it shows as its first frame: click to play it in
+its hidden data is removed without re-encoding: only the parts a player needs
+are kept, and in them the encoder's name and settings, creation times,
+handler names and padding are blanked in place. It shows as its first frame: click to play it in
 place, with sound and a position bar. Its ⋯ menu opens it in your default
 player, saves it, shows its prompt, makes the next video from its last frame,
 or uses that frame as a reference picture. Videos are listed in the Media
@@ -2551,9 +2561,14 @@ discard it, and the approved summary is all the story's model will ever know
 of the scene. If the summary is stopped or fails, you can ask again, end the
 scene without a summary, or keep playing. While a scene is open, Settings,
 switching stories or branches, the review and Restart are paused (the app
-says so when the scene begins); end the scene to use them again. **In memory** keeps the scene's messages off the disk
-altogether (closing the app loses them); **On disk** keeps them as a side
-branch no model is sent. A scene that outgrows the private model's context is
+says so when the scene begins); end the scene to use them again. Once it
+ends, the scene's messages stay on the page where they were played, for you
+to read back; they are kept from every model but the private one, and the
+story's model goes on from the summary. Delete the summary (⋯ → Delete from
+here…) and the story stands on the scene's last message, the story's model
+knowing nothing of the scene at all. **In memory** keeps the scene's
+messages off the disk altogether (they show until the story or the app is
+closed, which loses them); **On disk** saves them with the story. A scene that outgrows the private model's context is
 condensed by the private model itself, never by the story's. Set the model under Settings → Private, where
 **Detect** asks a local server how much context the model is running with. The
 endpoint there starts as NanoGPT's, and with its key left blank it uses the
