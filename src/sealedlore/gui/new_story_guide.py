@@ -45,7 +45,7 @@ from sealedlore.engine.response_style import PRESET_ORDER, PRESETS
 from sealedlore.gui.picture_style import PictureStyleField
 from sealedlore.gui.plot_wishes import ABOUT as PLOT_ABOUT
 from sealedlore.gui.plot_wishes import PlotWishesForm
-from sealedlore.gui.sizing import GrowingText, size_to_screen
+from sealedlore.gui.sizing import GrowingText, may_discard, size_to_screen, typed_texts
 from sealedlore.models.story import DEFAULT_RESPONSE_STYLE, Story
 from sealedlore.storage.repository import StoryBundle
 
@@ -126,6 +126,8 @@ class NewStoryGuide(QDialog):
         self.full_setup = False
         self.discarded = False
         self._panel: QWidget | None = None
+        # What the boxes held as the guide opened (`reject`, before a story is made).
+        self._typed: list[str] | None = None
         self._player_timer = QTimer(self)
         self._player_timer.setSingleShot(True)
         self._player_timer.timeout.connect(self._fill_players)
@@ -379,7 +381,8 @@ class NewStoryGuide(QDialog):
     def _enter_characters(self) -> bool:
         if not self.made and not self._make():
             return False
-        if self._panel is None:
+        first = self._panel is None
+        if first:
             self._panel = self._host.lend_cast_panel()
             self._panel_host.addWidget(self._panel)
             self._panel.show()
@@ -388,8 +391,10 @@ class NewStoryGuide(QDialog):
                 signal.connect(self._player_timer.start)
             # The card's portrait at the left, the fields beside it: room.
             size_to_screen(self, 0.62, 0.86)
-        if not self._cast():
+        if first and not self._cast():
             # A card to begin with, its name ready to type: the author's own.
+            # The first time only: back on this step with nobody, the author
+            # took it out (playing Nobody), and a new one was a stray card.
             self._panel.add_character()
         self._fill_players()
         return True
@@ -443,7 +448,31 @@ class NewStoryGuide(QDialog):
 
     # --- leaving ----------------------------------------------------------------
 
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        super().showEvent(event)
+        # Once filled in: what changes from here on is the author's typing.
+        if self._typed is None:
+            QTimer.singleShot(0, self, lambda: setattr(self, "_typed", typed_texts(self)))
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        """Enter in the lent card (its name, say) is the card's: it pressed
+        Next and moved on from the characters while one was being named."""
+        focus = self.focusWidget()
+        if (
+            event.key() in (Qt.Key_Return, Qt.Key_Enter)
+            and self._panel is not None
+            and focus is not None
+            and self._panel.isAncestorOf(focus)
+        ):
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
     def reject(self) -> None:
+        if not self.made and not may_discard(self, self._typed):
+            # Nothing made yet: a title and a world typed on the first step
+            # were lost to Esc with no word (nothing typed lost).
+            return
         if self.made and not self.discarded:
             if self._waiting():
                 return

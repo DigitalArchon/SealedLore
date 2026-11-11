@@ -587,3 +587,93 @@ def test_a_supporting_card_removed_leaves_the_rosters(app, story_window, monkeyp
     settle(app)
     assert [c.id for c in session.supporting] == ["sup-price"]
     assert all(roster == ["Sergeant Price"] for roster in rosters(session))
+
+
+# --- the new-story guide ------------------------------------------------------------------
+
+
+@pytest.fixture
+def guide(app, story_window):
+    from sealedlore.gui.new_story_guide import NewStoryGuide
+
+    guide = NewStoryGuide(story_window)
+    story_window._guide = guide
+    guide.show()
+    settle(app)
+    yield guide
+    guide.made, guide.discarded = True, True  # closed with nothing to ask
+    guide.done(0)
+    story_window._guide = None
+    story_window.return_cast_panel()
+    guide.deleteLater()
+
+
+def test_the_guide_asks_before_esc_loses_what_its_first_step_holds(app, guide, monkeypatch):
+    """Esc on the first step, a title and a long world typed: closed with no
+    question, and everything typed was gone."""
+    from PySide6.QtWidgets import QMessageBox
+
+    asked: list[tuple[str, object]] = []
+
+    def question(_parent, title, _text, _buttons, default):
+        asked.append((title, default))
+        return QMessageBox.Cancel
+
+    monkeypatch.setattr(QMessageBox, "question", question)
+    guide.title.setFocus()
+    QTest.keyClicks(guide.title, "The Long Night")
+    guide.world.setPlainText("A farm in a Canadian winter, after the end of the world. " * 20)
+    QTest.keyClick(guide.world, Qt.Key_Escape)
+    settle(app)
+    assert asked == [("Discard what you wrote?", QMessageBox.Cancel)]
+    assert guide.isVisible() and not guide.made
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Discard)
+    QTest.keyClick(guide.world, Qt.Key_Escape)
+    settle(app)
+    assert not guide.isVisible()
+
+
+def test_nothing_typed_in_the_guide_closes_it_without_a_question(app, guide):
+    QTest.keyClick(guide.title, Qt.Key_Escape)
+    settle(app)
+    assert not guide.isVisible()
+
+
+def to_characters(app, guide) -> None:
+    guide.title.setText("The Long Night")
+    guide.next_button.click()
+    settle(app)
+
+
+def test_back_on_the_characters_step_with_nobody_adds_no_card(
+    app, guide, story_window, monkeypatch
+):
+    """The first card taken out, Nobody chosen to play, on to the opening and
+    back: a stray "New character" was added again."""
+    from PySide6.QtWidgets import QMessageBox
+
+    to_characters(app, guide)
+    session = story_window.session
+    assert [c.name for c in session.cast] == ["New character"]
+    answer_questions(monkeypatch, QMessageBox.Yes)
+    story_window.cast_panel.remove_button.click()
+    settle(app)
+    assert session.cast == []
+    guide.player.setCurrentIndex(guide.player.count() - 1)
+    guide.next_button.click()
+    guide.back_button.click()
+    settle(app)
+    assert guide.stack.currentIndex() == 1 and session.cast == []
+
+
+def test_enter_in_the_guides_card_doesnt_move_to_the_next_step(app, guide, story_window):
+    """Enter in the lent card's Name pressed Next."""
+    to_characters(app, guide)
+    panel = story_window.cast_panel
+    panel.name.setFocus()
+    panel.name.selectAll()
+    QTest.keyClicks(panel.name, "John")
+    QTest.keyClick(panel.name, Qt.Key_Return)
+    settle(app)
+    assert guide.stack.currentIndex() == 1
+    assert [c.name for c in story_window.session.cast] == ["John"]
