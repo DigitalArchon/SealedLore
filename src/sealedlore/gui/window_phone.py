@@ -25,7 +25,7 @@ from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QObject, QTimer, Slot
+from PySide6.QtCore import QObject, Qt, QTimer, Slot
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from sealedlore import __version__
@@ -243,12 +243,18 @@ class PhoneWindow:
         box = QMessageBox(self)
         box.setWindowTitle("Allow this phone?")
         box.setIcon(QMessageBox.Question)
+        # The name is the phone's own: read as rich text, "<font color=…>"
+        # in it drew the rest of the sentence, the check digits too, unseen.
+        box.setTextFormat(Qt.PlainText)
         box.setText(
             f"A phone called “{claim.name}” asks to connect to SealedLore.\n\n"
             f"Allow it only if that phone shows: {claim.check}"
         )
         allow = box.addButton("Allow", QMessageBox.AcceptRole)
-        box.addButton("Refuse", QMessageBox.RejectRole)
+        refuse = box.addButton("Refuse", QMessageBox.RejectRole)
+        # Enter and Esc refuse: allowing takes a click on Allow.
+        box.setDefaultButton(refuse)
+        box.setEscapeButton(refuse)
 
         def answered() -> None:
             allowed = box.clickedButton() is allow

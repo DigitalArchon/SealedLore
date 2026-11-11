@@ -12,6 +12,7 @@ from __future__ import annotations
 import weakref
 from datetime import date
 
+from PySide6 import QtGui
 from PySide6.QtCore import QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (
@@ -335,11 +336,15 @@ class PhoneDevicesDialog(QDialog):
         window = self._window()
         if window is None:
             return
-        # Enter on a box that cuts a phone off must not do it.
+        # Enter on a box that cuts a phone off must not do it. The name is the
+        # phone's own: as rich text, its tags would draw (or hide) the words
+        # around it, so it is shown as written, whatever it holds.
         answer = QMessageBox.question(
             self,
             "Revoke a phone",
-            f"Revoke “{name}”? It can't connect again until it is paired again.",
+            QtGui.Qt.convertFromPlainText(
+                f"Revoke “{name}”? It can't connect again until it is paired again."
+            ),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )

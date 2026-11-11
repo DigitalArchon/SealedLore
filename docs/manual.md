@@ -2698,7 +2698,8 @@ is never written down.
    ends it.
 4. On the phone, give it a name and tap **Connect**. The computer asks
    whether to allow the phone and shows four digits: allow it only if the
-   phone shows the same four.
+   phone shows the same four (Enter or Esc refuses; allowing takes a click on
+   **Allow**).
 5. Bookmark the page the phone then shows (⋮ menu → ☆) and tap **I've
    bookmarked it**. **The bookmark is the phone's login**: Tor Browser forgets
    its pages when it closes and has no "Add to home screen", so open the

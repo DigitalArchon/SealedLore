@@ -195,6 +195,54 @@ def test_a_refused_phone_is_not_kept(app, place, story):
     window.close()
 
 
+TAGGED = "<font color=#efefef>Pixel"
+
+
+def test_a_phones_name_is_shown_as_written_and_enter_refuses(app, place, story):
+    """The name is the phone's own, `<` and all: read as rich text, a font tag
+    in it drew the rest of the question, the four check digits too, unseen.
+    And Enter or Esc on the question refuses: allowing takes a click."""
+    from PySide6.QtCore import QEvent
+    from PySide6.QtGui import QKeyEvent
+
+    window = window_with(place, story, [])
+    turned_on(app, window)
+    for key in (Qt.Key_Return, Qt.Key_Escape):
+        code = window._phone.pairing.open()
+        claim = window._phone.pairing.claim(code, TAGGED)
+        window._phone_claim(claim)
+        box = next(w for w in app.topLevelWidgets() if isinstance(w, QMessageBox) and w.isVisible())
+        assert box.textFormat() == Qt.PlainText
+        assert f"A phone called “{TAGGED}”" in box.text() and claim.check in box.text()
+        assert box.defaultButton().text() == "Refuse" and box.escapeButton().text() == "Refuse"
+        app.sendEvent(box, QKeyEvent(QEvent.KeyPress, key, Qt.NoModifier))
+        app.processEvents()  # answered, and the box let go of
+        assert window._phone.pairing.poll(claim.id) == ("refused", ""), key
+    assert window.config.phone.devices == []
+    window.close()
+
+
+def test_revoking_names_the_phone_as_written(app, place, story, monkeypatch):
+    from PySide6.QtGui import QTextDocument
+
+    window = window_with(place, story, [])
+    window.config.phone.devices.append(
+        PhoneDevice(id="p1", name=TAGGED, token_sha256="0" * 64, paired_at="2026-11-01")
+    )
+    asked: list[str] = []
+    monkeypatch.setattr(
+        QMessageBox, "question", lambda _p, _t, text, *_a: asked.append(text) or QMessageBox.No
+    )
+    dialog = PhoneDevicesDialog(window)
+    dialog._revoke("p1", TAGGED)
+    shown = QTextDocument()
+    shown.setHtml(asked[0])  # as the box draws it: the name's tag is text
+    assert f"Revoke “{TAGGED}”?" in shown.toPlainText()
+    assert [d.id for d in window.config.phone.devices] == ["p1"], "No: kept"
+    dialog.deleteLater()
+    window.close()
+
+
 def test_stories_are_shared_from_the_dialog_and_a_visual_game_never(app, place, story, cast):
     """A Visual Story left in the data folder (an app of its own now) can't
     be opened, so it isn't offered to the phones."""
