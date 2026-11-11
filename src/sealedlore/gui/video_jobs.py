@@ -67,8 +67,9 @@ def model_from_entry(entry: dict) -> VideoModelInfo | None:
 
 class VideoCatalog(QObject):
     changed = Signal()
-    # (model id, price or None, what it rests on): WaveSpeed's own quote.
-    priced = Signal(str, object, str)
+    # (model id, the settings asked about, price or None, what it rests on):
+    # WaveSpeed's own quote, for those settings alone.
+    priced = Signal(str, object, object, str)
 
     def __init__(
         self,
@@ -87,6 +88,9 @@ class VideoCatalog(QObject):
         self._held: tuple[list[dict], str] | None = None
         self._price_thread: QThread | None = None
         self._price_worker: GenerationWorker | None = None
+        # The price being asked, and the one asked for meanwhile.
+        self._price_asking: tuple[str, dict[str, Any]] | None = None
+        self._price_next: tuple[str, dict[str, Any]] | None = None
 
     def _listing(self) -> tuple[list[dict], str | None]:
         if self._held is not None and self._in_memory():
@@ -155,11 +159,20 @@ class VideoCatalog(QObject):
         self.changed.emit()
 
     def price(self, model_id: str, inputs: dict[str, Any]) -> None:
-        """Ask WaveSpeed what a request costs; `priced` says, with None if it
-        wouldn't. One at a time: a newer ask waits for the one running."""
+        """Ask WaveSpeed what a request costs; `priced` says, with the
+        settings it was asked for and None if it wouldn't. One at a time: a
+        newer ask waits for the one running and is asked once it is done
+        (only the latest: the settings the author has now). A newer ask used
+        to be dropped, and the answer for the old settings was taken for the
+        new ones."""
         media = self.config.videos()
-        if media is None or self._price_thread is not None:
+        if media is None:
             return
+        asked = (model_id, dict(inputs))
+        if self._price_thread is not None:
+            self._price_next = None if asked == self._price_asking else asked
+            return
+        self._price_asking, self._price_next = asked, None
         answer: list[Any] = [None, ""]
 
         def job():
@@ -179,13 +192,19 @@ class VideoCatalog(QObject):
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.finished.connect(thread.quit)
-        thread.finished.connect(lambda: self._on_priced(model_id, answer))
+        thread.finished.connect(lambda: self._on_priced(model_id, asked[1], answer))
         self._price_worker, self._price_thread = worker, thread
         thread.start()
 
-    def _on_priced(self, model_id: str, answer: list[Any]) -> None:
+    def _on_priced(self, model_id: str, inputs: dict[str, Any], answer: list[Any]) -> None:
         self._price_worker, self._price_thread = None, None
-        self.priced.emit(model_id, answer[0], answer[1])
+        self._price_asking = None
+        waiting, self._price_next = self._price_next, None
+        self.priced.emit(model_id, inputs, answer[0], answer[1])
+        # The settings asked about meanwhile, unless the answer just given
+        # led to asking again already.
+        if waiting is not None and self._price_thread is None:
+            self.price(*waiting)
 
     def wait(self) -> None:
         for thread in (self._thread, self._price_thread):

@@ -286,3 +286,73 @@ def test_enter_in_a_field_never_presses_the_button_that_spends(app, window, whic
     assert pressed == [button.text()], "Enter on the button presses it"
     dialog.hide()
     dialog.deleteLater()
+
+
+# --- WaveSpeed's quote is for the settings it was asked about ----------------------
+
+
+def test_a_quote_is_shown_only_for_the_settings_it_was_asked_for(app, window, monkeypatch):
+    """WaveSpeed's quote for 5 s, answered after 10 s was chosen, was shown
+    beside 10 s as "its own quote for these settings", ticked and sent as
+    the price of 10 s, and 10 s was never asked: a newer ask was dropped
+    while one ran. Now each answer is kept for its own settings, and the
+    settings the author has are asked once the running ask is done."""
+    import threading
+
+    import sealedlore.gui.video_jobs as video_jobs
+    from sealedlore.providers.videos import VideoModelInfo, VideoParam
+
+    model = VideoModelInfo(
+        id="ws/test-video",
+        name="Test video",
+        api="wavespeed",
+        params=(
+            VideoParam(
+                "duration",
+                "Duration",
+                "select",
+                options=(("5", "5 s"), ("10", "10 s")),
+                default="5",
+            ),
+        ),
+    )
+    config = window.config
+    config.video_endpoint.base_url = "https://api.wavespeed.ai/api/v3"
+    config.video_models = [model_entry(model)]
+    config.video_models_fetched_at = utc_now_iso()
+    config.video_models_source = config.videos().base_url
+    config.video_model = model.id
+    config.video_params = {}
+    gate = threading.Event()
+    asked: list[str] = []
+
+    def price(_http, _model_id, inputs):
+        asked.append(str(inputs.get("duration")))
+        gate.wait(5)
+        return 0.30 if str(inputs.get("duration")) == "5" else 0.60
+
+    monkeypatch.setattr(video_jobs.wavespeed, "price", price)
+    catalog = window.video_catalog
+    try:
+        dialog = VideoDialog(window.session, catalog=catalog, parent=window)
+        dialog.prompt.setPlainText("A lantern swings.")
+        duration = dialog._controls["duration"]
+        duration.setCurrentIndex(duration.findData("10"))  # the 5 s quote still out
+        gate.set()
+        wait_for(app, lambda: asked == ["5", "10"] and catalog._price_thread is None)
+        settle(app, 10)
+        assert "$0.60" in dialog.price.text() and "$0.30" not in dialog.price.text()
+        dialog.accept_cost.setChecked(True)
+        assert "$0.60" in dialog.accept_cost.text()
+        dialog._approve()
+        assert dialog.request.settings["duration"] == "10"
+        assert dialog.request.quote == pytest.approx(0.60)
+        # Back to 5 s: its own answer, given already, with no new ask; and
+        # a tick for $0.60 doesn't stand for it.
+        duration.setCurrentIndex(duration.findData("5"))
+        settle(app, 5)
+        assert "$0.30" in dialog.price.text() and asked == ["5", "10"]
+        assert not dialog.accept_cost.isChecked()
+    finally:
+        gate.set()
+        catalog.wait()

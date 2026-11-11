@@ -75,6 +75,11 @@ NO_FRAME = "(none)"
 ADD_FROM_DISK = "Add a picture from disk…"
 
 
+def _quote_key(model_id: str, settings: dict[str, Any]) -> str:
+    """A quote's settings, as one string: the model and every setting sent."""
+    return repr((model_id, sorted(settings.items())))
+
+
 def cost_words(quote: VideoQuote) -> str:
     if quote.amount is None:
         return "Price unknown"
@@ -113,8 +118,8 @@ class VideoDialog(QDialog):
         self._written_lead = ""
         self._writing_lead = ""
         self._failure: str | None = None
-        # WaveSpeed's own quote, for the settings it was asked about.
-        self._remote_quote: tuple[str, float | None, str] | None = None
+        # WaveSpeed's own quotes, by the settings each was asked about.
+        self._remote_quotes: dict[str, tuple[float | None, str]] = {}
         media = session.config.videos()
         self._shared_key = bool(media and media.shared_key)
         self._api = media.api if media is not None else ""
@@ -528,20 +533,21 @@ class VideoDialog(QDialog):
             return VideoQuote(None, "the model isn't in the endpoint's list")
         settings = self.sent_settings()
         if info.api == "wavespeed":
-            key = repr((info.id, sorted(settings.items())))
-            if self._remote_quote is not None and self._remote_quote[0] == key:
-                return VideoQuote(self._remote_quote[1], self._remote_quote[2])
+            known = self._remote_quotes.get(_quote_key(info.id, settings))
+            if known is not None:
+                return VideoQuote(*known)
             if self.catalog is not None:
-                self._asked_quote = key
+                # Asked now, or once the ask under way is answered.
                 self.catalog.price(info.id, settings)
             return VideoQuote(None, "asking WaveSpeed for its price…")
         return quote_video(info, settings, start_frame=self.frame(self.start_choice) is not None)
 
-    def _on_priced(self, model_id: str, amount, basis: str) -> None:
-        key = getattr(self, "_asked_quote", None)
-        if key is not None:
-            self._remote_quote = (key, amount, basis)
-            self._sync()
+    def _on_priced(self, model_id: str, inputs, amount, basis: str) -> None:
+        """WaveSpeed's answer, kept for the settings it was asked about and
+        no others: one asked for 5 s, answered after 10 s was chosen, was
+        shown, ticked and sent as the price of 10 s."""
+        self._remote_quotes[_quote_key(model_id, inputs)] = (amount, basis)
+        self._sync()
 
     # --- writing the prompt ------------------------------------------------------
 
