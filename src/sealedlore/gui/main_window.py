@@ -1225,8 +1225,21 @@ class MainWindow(
             self._refresh_people()
 
     def _play_as(self, card_id: str) -> None:
-        """Play as this character, as choosing them under Playing does."""
-        if self.session is None or self._busy or self.session.in_private:
+        """Play as this character, as choosing them under Playing does. What
+        can't be done now says why: it did nothing, without a word."""
+        if self.session is None:
+            return
+        if self.session.in_private:
+            self.statusBar().showMessage(
+                "Who you are playing is paused while the private scene is open: end it with "
+                "End private beside the message box to play as someone else.",
+                8000,
+            )
+            return
+        if self._busy:
+            self.statusBar().showMessage(
+                "Someone else can be played once the story's current job is done.", 6000
+            )
             return
         index = self.composer.held.findData(card_id)
         if index >= 0:

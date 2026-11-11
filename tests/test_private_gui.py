@@ -313,6 +313,27 @@ def test_the_scenes_draft_goes_only_once_its_summary_is_in(app, window, monkeypa
     assert window.composer.text() == ""
 
 
+def test_play_as_on_a_people_card_says_why_it_waits_in_a_scene(app, window):
+    """Play as … on a People card did nothing and said nothing in a private
+    scene, where who is played is paused (the review after 3.1.0b8)."""
+    window.right_tabs.setCurrentWidget(window.people_page)
+
+    def play() -> None:
+        app.processEvents()
+        card = window.people_page.cards["char-maela"]
+        dict(card.menu_actions())["Play as Maela Orr"]()
+        app.processEvents()
+
+    window.composer.private_toggle.click()
+    window.statusBar().clearMessage()
+    play()
+    assert window.composer.held_character_id() == "char-serrik"
+    assert "paused while the private scene is open" in window.statusBar().currentMessage()
+    window.composer.private_toggle.click()  # nothing written: ended at once
+    play()
+    assert window.composer.held_character_id() == "char-maela"
+
+
 def test_a_failed_summary_says_why_in_the_box_that_follows(app, window, monkeypatch):
     """The No summary box came before the failure's reason, and Try again
     started a job that cleared it: the reason was never shown."""
