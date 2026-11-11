@@ -30,13 +30,40 @@ jobs:
           python-version: ${{ matrix.python }}
           cache: pip
 
+      # GitHub's runners fetch packages from an Azure mirror of Ubuntu's archive
+      # (mirror+file:/etc/apt/apt-mirrors.txt). On Nov 11 2026 its name stopped
+      # resolving, and every CI and release run failed here, the list's own
+      # fallbacks with it. Ubuntu's archive itself, over HTTPS, and apt retries.
+      - name: Ubuntu's own archive, not the runner's mirror
+        run: |
+          . /etc/os-release
+          sudo rm -f /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list
+          printf '%s\n' \
+            "Types: deb" \
+            "URIs: https://archive.ubuntu.com/ubuntu/" \
+            "Suites: $VERSION_CODENAME $VERSION_CODENAME-updates $VERSION_CODENAME-backports" \
+            "Components: main restricted universe multiverse" \
+            "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg" \
+            "" \
+            "Types: deb" \
+            "URIs: https://security.ubuntu.com/ubuntu/" \
+            "Suites: $VERSION_CODENAME-security" \
+            "Components: main restricted universe multiverse" \
+            "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg" \
+            | sudo tee /etc/apt/sources.list.d/ubuntu.sources
+          echo 'Acquire::Retries "5";' | sudo tee /etc/apt/apt.conf.d/80-retries
+
       # PySide6's wheels link against these; the offscreen platform plugin
       # needs them even with no display.
       - name: Qt system libraries
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libegl1 libgl1 libxkbcommon0 libdbus-1-3 libfontconfig1 libglib2.0-0
+          for attempt in 1 2 3; do
+            sudo apt-get update || true
+            sudo apt-get install -y --no-install-recommends \
+              libegl1 libgl1 libxkbcommon0 libdbus-1-3 libfontconfig1 libglib2.0-0 && break
+            [ "$attempt" = 3 ] && exit 1
+            sleep 30
+          done
 
       - name: Install
         run: |

@@ -34,17 +34,44 @@ jobs:
         with:
           persist-credentials: false
 
+      # GitHub's runners fetch packages from an Azure mirror of Ubuntu's archive
+      # (mirror+file:/etc/apt/apt-mirrors.txt). On Nov 11 2026 its name stopped
+      # resolving, and every CI and release run failed here, the list's own
+      # fallbacks with it. Ubuntu's archive itself, over HTTPS, and apt retries.
+      - name: Ubuntu's own archive, not the runner's mirror
+        run: |
+          . /etc/os-release
+          sudo rm -f /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list
+          printf '%s\n' \
+            "Types: deb" \
+            "URIs: https://archive.ubuntu.com/ubuntu/" \
+            "Suites: $VERSION_CODENAME $VERSION_CODENAME-updates $VERSION_CODENAME-backports" \
+            "Components: main restricted universe multiverse" \
+            "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg" \
+            "" \
+            "Types: deb" \
+            "URIs: https://security.ubuntu.com/ubuntu/" \
+            "Suites: $VERSION_CODENAME-security" \
+            "Components: main restricted universe multiverse" \
+            "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg" \
+            | sudo tee /etc/apt/sources.list.d/ubuntu.sources
+          echo 'Acquire::Retries "5";' | sudo tee /etc/apt/apt.conf.d/80-retries
+
       # Not bundled: what the build's checks resolve Qt against (the xcb
       # plugin's libraries, QtMultimedia's, and the import test). Nothing here goes into the
       # AppImage.
       - name: Host libraries for the checks
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libegl1 libgl1 libxkbcommon0 libdbus-1-3 libfontconfig1 libglib2.0-0t64 \
-            libx11-6 libx11-xcb1 libxcb1 libxcb-randr0 libxcb-render0 libxcb-shape0 \
-            libxcb-shm0 libxcb-sync1 libxcb-xfixes0 libxcb-xkb1 \
-            libpulse0 libxrandr2 libxext6
+          for attempt in 1 2 3; do
+            sudo apt-get update || true
+            sudo apt-get install -y --no-install-recommends \
+              libegl1 libgl1 libxkbcommon0 libdbus-1-3 libfontconfig1 libglib2.0-0t64 \
+              libx11-6 libx11-xcb1 libxcb1 libxcb-randr0 libxcb-render0 libxcb-shape0 \
+              libxcb-shm0 libxcb-sync1 libxcb-xfixes0 libxcb-xkb1 \
+              libpulse0 libxrandr2 libxext6 && break
+            [ "$attempt" = 3 ] && exit 1
+            sleep 30
+          done
 
       - name: Build
         id: build
