@@ -163,14 +163,19 @@ def test_a_save_that_fails_for_what_a_character_holds_says_so(app, window, monke
     warned: list[str] = []
     monkeypatch.setattr(window, "_warn_plain", lambda title, text: warned.append(text))
     session = window._collection_session()
-    mallory = collection.kept("Mallory")
-    deep: list = []
-    for _ in range(3000):
-        deep = [deep]
-    mallory.tavern.extensions["x"] = deep  # as a backup read before it was refused
-    session.bundle.cast.append(mallory)
-    assert window._save_collection() is False
-    assert warned and "couldn't be saved" in warned[0]
+    session.bundle.cast.append(collection.kept("Mallory"))
+    # How deep a save goes before it gives up is Python's: 3,000 levels raised
+    # RecursionError on 3.12 and was written on 3.14 (the lab). The save is
+    # made to fail as each would, so the handler is what is tested.
+    for error in (RecursionError("maximum recursion depth exceeded"), ValueError("Circular")):
+
+        def failing(error=error):
+            raise error
+
+        monkeypatch.setattr(session, "save", failing)
+        warned.clear()
+        assert window._save_collection() is False
+        assert warned and "couldn't be saved" in warned[0]
 
 
 def test_a_new_character_and_a_search_for_one(app, window, monkeypatch):
