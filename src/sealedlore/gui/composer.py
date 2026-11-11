@@ -12,14 +12,17 @@ from collections.abc import Sequence
 from PySide6.QtCore import QEvent, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QKeyEvent
 from PySide6.QtWidgets import (
+    QAbstractSpinBox,
     QComboBox,
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMenu,
     QPlainTextEdit,
     QPushButton,
     QSizePolicy,
+    QTextEdit,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -183,6 +186,13 @@ def _sent_or_new_line(editor: QPlainTextEdit, event: QKeyEvent) -> bool:
     return False
 
 
+def _takes_text(widget: QWidget) -> bool:
+    """Whether the author may be typing into `widget`."""
+    if isinstance(widget, QComboBox):
+        return widget.isEditable()
+    return isinstance(widget, (QLineEdit, QPlainTextEdit, QTextEdit, QAbstractSpinBox))
+
+
 class TurnEditor(QPlainTextEdit):
     """The turn itself, as tall as the divider above the composer leaves it."""
 
@@ -310,6 +320,10 @@ class Composer(QWidget):
         self.private_toggle.clicked.connect(self._on_private_clicked)
         self._private_offered = True
         self._keep_fixed: str | None = None
+        # Where Qt put the keyboard when the box was turned off under the
+        # author's cursor (`set_busy`): only from there is it taken back.
+        self._parked: QWidget | None = None
+        self._focus_was_ours = False
         self.private_keep = QComboBox()
         self.private_keep.addItem("In memory", "memory")
         self.private_keep.addItem("On disk", "disk")
@@ -982,6 +996,12 @@ class Composer(QWidget):
         """`background`: the passage is in and only reads remain, so the author
         may write and send their next turn, which waits for them (`queued`)."""
         writable = has_story and (not busy or (background and not queued))
+        if not busy:
+            self._parked, self._focus_was_ours = None, False
+        # The window's own focus, which it keeps while a dialog or another
+        # program is in front.
+        focus = self.window().focusWidget()
+        ours = focus is not None and self.isAncestorOf(focus)
         self.input.setEnabled(writable)
         if not has_story:
             self.input.setPlaceholderText(NO_STORY_PLACEHOLDER)
@@ -1012,6 +1032,31 @@ class Composer(QWidget):
             self.ooc_toggle,
         ):
             widget.setEnabled(writable)
+        if ours and self.window().focusWidget() is not focus:
+            # Turned off under the cursor, Qt handed the keyboard on to the
+            # next widget along, which only minds it until the box opens.
+            self._parked = self.window().focusWidget()
+            self._focus_was_ours = True
+
+    def take_focus_back(self, *, also: QWidget | None = None) -> None:
+        """Give the box the keyboard again once it is open, but only from
+        nowhere, from the composer itself, from where Qt put it when the box
+        was turned off under the author's cursor, or from `also` (the
+        window's transcript): never out of a field or a page the author has
+        gone to since. The passage landing used to take it from the find
+        bar, a message being edited or a card's field mid-word, and the rest
+        of what was typed there, Enter and all, went out as a turn."""
+        focus = self.window().focusWidget()
+        parked, was_ours = self._parked, self._focus_was_ours
+        self._parked, self._focus_was_ours = None, False
+        if not (self.isVisible() and self.input.isEnabled()):
+            return
+        if focus is None or self.isAncestorOf(focus):
+            self.focus_input()
+        elif was_ours and focus is parked and not _takes_text(focus):
+            self.focus_input()
+        elif also is not None and also.isAncestorOf(focus) and not _takes_text(focus):
+            self.focus_input()
 
     def _on_private_clicked(self, checked: bool) -> None:
         # The window decides: until it says the scene has begun or ended, the

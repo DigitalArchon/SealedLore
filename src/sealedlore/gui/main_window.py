@@ -3183,7 +3183,10 @@ class MainWindow(
         """The passage is in: the composer opens while the reads run."""
         self._background = True
         self._update_controls()
-        self.composer.focus_input()
+        # Back in the box only if the author wasn't busy elsewhere: the find
+        # bar, a message's editor or a full-window page keep the keyboard.
+        if not (self._page_covers() or self.map_shown()):
+            self.composer.take_focus_back(also=self.transcript)
 
     def _run_queued(self) -> None:
         run, self._queued, self._queued_text = self._queued, None, None
