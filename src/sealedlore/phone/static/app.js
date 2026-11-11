@@ -344,6 +344,20 @@
     memory: "Kept in memory only.",
     tee: "Written on an attested private model.",
   };
+  const PRIVATE_PICTURE = {
+    scene: "A picture made in a private scene.",
+    memory: "A picture from a scene kept in memory only.",
+    tee: "A picture from a chat on an attested private model.",
+  };
+  const PRIVATE_QUESTION = {
+    scene: "A Question asked in a private scene.",
+    memory: "A Question kept in memory only.",
+    tee: "A Question asked on an attested private model.",
+  };
+
+  function privatePlaceholder(words, kind) {
+    return button(words[kind] + " Tap to see it.", () => askToShow(kind), "placeholder");
+  }
 
   function renderBanner() {
     const banner = $("banner");
@@ -446,12 +460,23 @@
       showContinuing();
     }
     if (message.ooc) card.appendChild(el("div", { cls: "ooc", text: "Out of character: " + message.ooc }));
+    // A picture or a Question has its own tag: one made in a private scene
+    // before its first message hangs on a public passage, and is held back
+    // as a private message is (not even fetched) until it is acknowledged.
     if (message.pictures && message.pictures.length) {
       const strip = el("div", { cls: "pictures" });
-      for (const id of message.pictures) strip.appendChild(thumbnail(id));
+      for (const picture of message.pictures) {
+        strip.appendChild(
+          hidden(picture.private) ? privatePlaceholder(PRIVATE_PICTURE, picture.private) : thumbnail(picture.id)
+        );
+      }
       card.appendChild(strip);
     }
     for (const aside of message.asides || []) {
+      if (hidden(aside.private)) {
+        card.appendChild(privatePlaceholder(PRIVATE_QUESTION, aside.private));
+        continue;
+      }
       card.appendChild(
         el("details", {}, [
           el("summary", { text: "Question: " + aside.question }),
@@ -573,7 +598,12 @@
 
   function privateKinds() {
     const kinds = new Set();
-    for (const message of S.messages) if (message.private) kinds.add(message.private);
+    for (const message of S.messages) {
+      if (message.private) kinds.add(message.private);
+      for (const each of [...(message.pictures || []), ...(message.asides || [])]) {
+        if (each.private) kinds.add(each.private);
+      }
+    }
     if (S.state && S.state.private) kinds.add(S.state.private);
     return kinds;
   }

@@ -569,6 +569,44 @@ def test_a_memory_scene_reaches_the_phone_tagged_and_nothing_is_written(
     window.close()
 
 
+def test_a_scenes_question_and_picture_on_a_public_passage_carry_their_own_tag(
+    app, tmp_path, sockets, story, cast
+):
+    """A Question asked, or a picture made, in a private scene before its first
+    message hangs on the story's last public passage: tagged only by that
+    passage, it was shown with no "Before this is shown". Each carries its own
+    tag now, and the passage stays as public as it is."""
+    from sealedlore.models.image import GeneratedImage
+
+    window, phone = open_window(tmp_path, sockets, story, cast, ["The door gives."])
+    phone.ask("POST", "/api/turn", {"text": "I push.", "speaker": NARRATOR_SPEAKER_ID})
+    wait_for(app, lambda: not window._busy and window._phone.entries)
+    passage = window.session.path()[-1]
+    private = MockChatProvider([f"An answer that holds {MARKER}."])
+    span = window.session.enter_private(keep="memory", provider=private, model="local/model")
+    _, options = phone.ask("GET", "/api/composer")
+    phone.ask("POST", "/api/turn", {"text": f"Why {MARKER}?", "speaker": options["question"]})
+    wait_for(app, lambda: not window._busy and window.session.bundle.asides)
+    window._images.append(
+        GeneratedImage(
+            anchor_node_id=passage.id,
+            file="images/scene.png",
+            prompt="p",
+            model="m",
+            size="1k",
+            private_span=span.id,
+        )
+    )
+    window.reload_transcript()
+    messages = phone.ask("GET", "/api/transcript")[1]["messages"]
+    shown = next(m for m in messages if m["id"] == passage.id)
+    assert shown["private"] is None, "the passage itself is the story's"
+    assert [a["private"] for a in shown["asides"]] == ["memory"]
+    assert shown["pictures"] == [{"id": window._images[-1].id, "private": "memory"}]
+    window.session.discard_private()
+    window.close()
+
+
 def test_phone_access_off_by_default_and_on_only_when_started(app, tmp_path, story, cast):
     save_story_bundle(StoryBundle(story=story, cast=cast), root=tmp_path)
     window = MainWindow(root=tmp_path, use_mock=True)

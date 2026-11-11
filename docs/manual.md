@@ -2734,7 +2734,9 @@ Android may keep it (the open tab, screenshots and the recent-apps preview,
 what the keyboard learns, backups), and SealedLore can't promise for a phone
 what it promises for your computer. The first time the page reaches
 something private it says so, full screen, and shows it only after **Show
-it**; **Not now** leaves a placeholder you can tap later.
+it**; **Not now** leaves a placeholder you can tap later. That holds for a
+Question asked or a picture made in a private scene too, wherever it sits in
+the story.
 
 **Phones you no longer want.** **Revoke** beside a phone in **File → Phone
 devices…** cuts it off at once; its bookmark stops working. **Forget this

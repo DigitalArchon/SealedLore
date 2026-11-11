@@ -95,6 +95,23 @@ def test_story_text_never_goes_in_as_html_and_nothing_is_kept_on_the_phone():
         assert banned not in script, banned
 
 
+def test_a_private_picture_or_question_is_held_back_by_its_own_tag():
+    """One made in a private scene before its first message hangs on a public
+    passage (gui/window_phone.py `_entries` tags each): the page gates it as a
+    private message, not fetched until the kind is acknowledged, and asks
+    "Before this is shown" for its kind too. A browser drive of the page is
+    the real check; this holds the page to reading the tag."""
+    script = text("app.js")
+    card = script[script.index("function messageCard") : script.index("function renderMessages")]
+    pictures = card[card.index("message.pictures") : card.index("message.asides")]
+    assert "hidden(picture.private)" in pictures
+    assert pictures.index("hidden(picture.private)") < pictures.index("thumbnail(picture.id)")
+    asides = card[card.index("message.asides") :]
+    assert asides.index("hidden(aside.private)") < asides.index("aside.question")
+    kinds = script[script.index("function privateKinds") : script.index("function offerPrivate")]
+    assert "message.pictures" in kinds and "message.asides" in kinds
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="node isn't installed")
 def test_the_script_parses():
     result = subprocess.run(

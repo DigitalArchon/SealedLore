@@ -636,6 +636,18 @@ def _entries(window) -> tuple[list[dict], dict[str, str]]:
     faces = window._faces_along(path) or {}
     starts = session.branch_start_names()
     spans = {span.id: span for span in session.story.private_spans}
+
+    def private(*span_ids: str | None) -> str | None:
+        """The tag of the first span named, as the page gates by: a Question
+        or a picture of a private scene has its own, since one made before
+        the scene's first message hangs on a public passage."""
+        return views.private_tag(
+            next((span for span in span_ids if span), None),
+            spans,
+            memory_chat=session.memory_only,
+            tee_chat=session.tee_chat,
+        )
+
     show_rolls = window.config.show_dice_rolls
     pictures: dict[str, list] = {}
     for image in window._images:
@@ -659,16 +671,21 @@ def _entries(window) -> tuple[list[dict], dict[str, str]]:
                 "take": [position, count] if count > 1 else None,
                 "branch_start": starts.get(node.id),
                 "archived": node.id in archived,
-                "private": views.private_tag(
-                    node.meta.private_span,
-                    spans,
-                    memory_chat=session.memory_only,
-                    tee_chat=session.tee_chat,
-                ),
+                "private": private(node.meta.private_span),
                 "private_summary": bool(node.meta.private_summary_of),
-                "pictures": [image.id for image in shown],
+                # Each with its own tag: the page holds a private one back
+                # until it is acknowledged, as it does a private message.
+                "pictures": [
+                    {"id": image.id, "private": private(image.private_span, node.meta.private_span)}
+                    for image in shown
+                ],
                 "asides": [
-                    {"question": a.question, "answer": a.answer} for a in session.asides_at(node.id)
+                    {
+                        "question": a.question,
+                        "answer": a.answer,
+                        "private": private(a.private_span, node.meta.private_span),
+                    }
+                    for a in session.asides_at(node.id)
                 ],
                 "can_regenerate": assistant,
                 "can_reroll": assistant and index == len(path) - 1 and node.meta.roll is not None,
