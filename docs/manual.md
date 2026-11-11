@@ -2474,9 +2474,10 @@ included, to a fresh nonce of ours. Where NanoGPT has no such report for a
 model, the model button says "receipt keys not in the quote": the receipt's
 word that the model was verified then rests on NanoGPT's relay. A model whose
 own attestation is relayed for a nonce that isn't ours, or times out twice,
-but which the gateway answers, is attested through the gateway: its replies
-are checked as any other's, and the model button says "no GPU evidence",
-since its own enclave is then the gateway's word in each receipt. Any other
+but which the gateway answers, is attested through the gateway: the model
+button says "no GPU evidence", since its own enclave is then the gateway's
+word in each receipt, and a reply of it is verified only with a receipt that
+holds (one without shows as not verified). Any other
 failure (a rate limit, an outage) refuses the model as before, so that a
 model Chutes answers first is never sent to instances that weren't attested
 this time. Models Chutes answers (several Kimi, GLM and

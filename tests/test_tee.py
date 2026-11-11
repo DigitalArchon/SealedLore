@@ -810,6 +810,7 @@ def receipt_server(
     not_after: object = 4_000_000_000,
     aci: str = "none",
     plain=None,
+    with_receipt: bool = True,
 ):
     """nano-gpt as live (Nov 4 2026): the attestation's quote binds the signing
     key; the keyset beside it lists that key as its e2ee key ("e2ee"), or the
@@ -820,7 +821,8 @@ def receipt_server(
     `aci` is what `report=aci` answers (Nov 10 2026): RedPill's report
     binding the keyset to our nonce ("bound"), to another ("unbound"), a 400
     ("400"), or the plain report as before nano-gpt offered it ("none").
-    `plain(nonce) -> (status, body)` stands in for the plain report."""
+    `plain(nonce) -> (status, body)` stands in for the plain report.
+    `with_receipt` False: the record comes with no receipt in it."""
     import hashlib
 
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -940,7 +942,7 @@ def receipt_server(
                     "signature": sign(personal_hash(text.encode()), KEY, 4242).hex(),
                     "signing_address": address,
                     "signing_algo": "ecdsa",
-                    "receipt": receipt,
+                    **({"receipt": receipt} if with_receipt else {}),
                 },
             )
         return httpx.Response(404)
@@ -1141,6 +1143,20 @@ def test_the_gateway_stands_in_for_a_model_whose_own_evidence_was_relayed():
     # Without the gateway, refused as before.
     with pytest.raises(TeeRefused, match="nonce the relay chose"):
         receipt_client(aci="400", plain=lambda nonce: (200, RELAYED))
+
+
+def test_through_the_gateway_alone_a_reply_without_a_receipt_is_not_verified():
+    """The gateway's signature says only that the reply passed through it; the
+    receipt is its word that the model's own enclave answered. A record with no
+    receipt was "verified" all the same, as for a model attested itself."""
+    bare = receipt_client(aci="bound", plain=lambda nonce: (200, RELAYED), with_receipt=False)
+    assert bare.attest().shortfalls == ["no GPU evidence"]
+    with pytest.raises(ProviderError, match="no receipt"):
+        bare.check_reply("req_9", receipt_id="rcpt-1", body_hash=streamed())
+    # A model attested itself needs none: its own key signed the reply.
+    itself = receipt_client(with_receipt=False)
+    assert not itself.receipt_required
+    assert itself.check_reply("req_9", body_hash=streamed()) == "verified"
 
 
 def test_a_slow_attestation_is_asked_again_with_a_new_nonce_then_the_gateway_stands_in():
