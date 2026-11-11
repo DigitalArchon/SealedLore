@@ -68,7 +68,13 @@ def request() -> ChatRequest:
     )
 
 
-def run_and_cancel(provider: OpenAICompatibleProvider, after: float) -> tuple[list, object, float]:
+def run_and_cancel(
+    provider: OpenAICompatibleProvider, after: float, *, first_text: bool = False
+) -> tuple[list, object, float]:
+    """Stream in a thread and cancel `after` seconds in; with `first_text`,
+    `after` seconds once the first text has come (at most 5 s waited for it):
+    on the lab's Windows 11 a new client's first chunk took 0.6-0.8 s, and a
+    fixed half second cancelled before anything had arrived."""
     events: list = []
     outcome: dict = {}
 
@@ -81,6 +87,10 @@ def run_and_cancel(provider: OpenAICompatibleProvider, after: float) -> tuple[li
 
     thread = threading.Thread(target=consume)
     thread.start()
+    if first_text:
+        deadline = time.monotonic() + 5
+        while not any(isinstance(e, TextDelta) for e in events) and time.monotonic() < deadline:
+            time.sleep(0.01)
     time.sleep(after)
     started = time.monotonic()
     provider.cancel()
@@ -98,7 +108,7 @@ def test_cancel_ends_a_request_still_waiting_for_its_first_byte(server: str):
 
 def test_cancel_ends_a_stream_gone_quiet_without_calling_it_complete(server: str):
     provider = provider_at(server + "/quiet")
-    events, error, took = run_and_cancel(provider, after=0.5)
+    events, error, took = run_and_cancel(provider, after=0.3, first_text=True)
     # A cut-off stream must never pass for a finished one.
     assert isinstance(error, StreamCancelled)
     assert [e.text for e in events if isinstance(e, TextDelta)] == ["word "]
