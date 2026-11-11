@@ -219,6 +219,9 @@ def test_a_videos_hidden_data_is_blanked_in_place():
     assert len(stripped) == len(MP4), "nothing moves: the sample offsets stay right"
     assert b"test title" not in stripped and b"Lavf" not in stripped
     assert b"x264 - core" not in stripped
+    # The encoder's name as the compressor's, and the handlers' names.
+    assert b"libx264" not in stripped and b"VideoHandler" not in stripped
+    assert b"SoundHandler" not in stripped and b"vide" in stripped and b"soun" in stripped
     assert strip_video_metadata(stripped) == stripped
     assert stripped_or_same(MP4) == stripped, "coming in from a backup, it is stripped too"
 

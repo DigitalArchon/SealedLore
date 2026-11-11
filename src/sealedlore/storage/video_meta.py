@@ -5,11 +5,15 @@ encoder's name in `udta/meta/ilst`, XMP and C2PA in `uuid` boxes, a
 top-level `meta`), creation and modification times in the movie, track and
 media headers, and the encoder's settings as text inside the video stream
 (x264 writes them into an SEI message of the first frame). Seedance's
-videos from NanoGPT carried the first and the last (Sept 2026).
+videos from NanoGPT carried the first and the last (Sept 2026). And
+whatever a writer leaves in padding (`free`, `skip`), a handler's name, a
+video track's compressor name (ffmpeg's "Lavc60.31.102 libx264") and any
+top-level box a player has no use for.
 
 Nothing is removed from the file, only blanked where it stands: a metadata
-box becomes a `free` box of the same size with its contents zeroed, the
-times become zero, and the encoder's text becomes spaces. So every offset
+box, padding, or a top-level box that isn't one a player needs becomes a
+`free` box of the same size with its contents zeroed, the times, names and
+vendor become zero, and the encoder's text becomes spaces. So every offset
 in the file (the sample tables point into `mdat`) stays right, and a player
 reads it as before. Blanking a blanked file changes nothing.
 
@@ -37,8 +41,30 @@ _CONTAINERS = {
 }
 # Boxes that are metadata and nothing else: blanked wherever they are.
 _METADATA = {b"udta", b"meta", b"uuid", b"XMP_", b"ID32"}
+# Room left over, holding whatever its writer left in it (ffmpeg's encoder
+# settings, a marker): blanked wherever it is.
+_PADDING = {b"free", b"skip", b"wide"}
+# The top-level boxes a player needs, a fragmented MP4's among them. Any
+# other at the top is blanked as metadata is: listing only what to blank
+# let a marker through in every box nobody had listed.
+_STRUCTURAL = {b"ftyp", b"moov", b"mdat", b"moof", b"mfra", b"sidx", b"ssix", b"styp"}
 # Headers with a creation and a modification time.
 _TIMED = {b"mvhd", b"tkhd", b"mdhd"}
+# A handler's (`hdlr`) name begins after its type and reserved fields;
+# its type, which a player reads, stays.
+_HANDLER_NAME = 24
+# In a video track's sample entry (`stsd`): the vendor a QuickTime one
+# names (zero in an MP4's), and the compressor's name, where ffmpeg writes
+# its encoder's ("Lavc60.31.102 libx264").
+_VENDOR = (12, 16)
+_COMPRESSOR = (42, 74)
+# Video sample entries by their own type, for a track that names no
+# handler (a player then can't tell either; a sound's entry, laid out
+# otherwise, is never touched).
+_VIDEO_ENTRIES = {
+    b"avc1", b"avc2", b"avc3", b"avc4", b"hvc1", b"hev1", b"vvc1", b"vvi1", b"mp4v", b"vp08",
+    b"vp09", b"av01", b"encv", b"dvh1", b"dvhe", b"dvav", b"dva1", b"dav1", b"s263", b"mjp2",
+}  # fmt: skip
 # Encoder settings written as text into the video stream. Long markers only:
 # a short one could turn up by chance in compressed data.
 _ENCODER_TEXT = (b"x264 - core ", b"x265 (build ")
@@ -89,20 +115,51 @@ def _zero_times(out: bytearray, payload: int, stop: int) -> None:
         out[first:end] = bytes(2 * width)
 
 
-def _walk(out: bytearray, start: int, end: int) -> None:
-    """Every box inside [start, end), containers walked into. With a list of
-    those still to walk, never by recursing: a 24 KB file of 3,000 nested
-    `trak` boxes recursed too far (RecursionError, which no reader of a
-    backup or a scenario expects)."""
-    pending = [(start, end)]
+def _blank_names(out: bytearray, payload: int, stop: int, handler: bytes) -> None:
+    """A video track's sample entries with their vendor and compressor's
+    name blanked; an entry too short to have them, or entries that don't
+    read as boxes, left as they are (as they were before these were
+    blanked: never a reason to refuse the file)."""
+    if handler not in (b"vide", b""):
+        return
+    try:
+        entries = list(_boxes(out, payload + 8, stop))  # after version, flags and count
+    except MetadataError:
+        return
+    for kind, _box, entry, entry_stop in entries:
+        video = handler == b"vide" or kind in _VIDEO_ENTRIES
+        if video and entry_stop - entry >= _COMPRESSOR[1]:
+            for first, last in (_VENDOR, _COMPRESSOR):
+                out[entry + first : entry + last] = bytes(last - first)
+
+
+def _walk(out: bytearray, start: int, end: int, parent: bytes = b"") -> None:
+    """Every box inside [start, end) (a `parent` box's), containers walked
+    into. With a list of those still to walk, never by recursing: a 24 KB
+    file of 3,000 nested `trak` boxes recursed too far (RecursionError,
+    which no reader of a backup or a scenario expects). Each carries its
+    track's handler type, read from `mdia`'s `hdlr`, for its sample
+    entries: a video's are laid out as a picture's, a sound's otherwise."""
+    pending = [(start, end, parent, b"")]
     while pending:
-        for kind, box, payload, stop in _boxes(out, *pending.pop()):
-            if kind in _METADATA:
+        start, end, parent, handler = pending.pop()
+        children = list(_boxes(out, start, end))
+        if parent == b"mdia":
+            for kind, _box, payload, stop in children:
+                if kind == b"hdlr" and stop - payload >= 12:
+                    handler = bytes(out[payload + 8 : payload + 12])
+        for kind, box, payload, stop in children:
+            if kind in _METADATA or kind in _PADDING:
                 _blank_box(out, box, payload, stop)
             elif kind in _TIMED:
                 _zero_times(out, payload, stop)
+            elif kind == b"hdlr":
+                name = min(payload + _HANDLER_NAME, stop)
+                out[name:stop] = bytes(stop - name)
+            elif kind == b"stsd":
+                _blank_names(out, payload, stop, handler)
             elif kind in _CONTAINERS:
-                pending.append((payload, stop))
+                pending.append((payload, stop, kind, handler))
 
 
 def _blank_encoder_text(out: bytearray, payload: int, stop: int) -> None:
@@ -130,10 +187,11 @@ def strip_video_metadata(data: bytes) -> bytes:
     if not any(kind == b"moov" for kind, *_ in top):
         raise MetadataError("the video has no movie header")
     for kind, box, payload, stop in top:
-        if kind in _METADATA:
-            _blank_box(out, box, payload, stop)
-        elif kind in _CONTAINERS:
-            _walk(out, payload, stop)
-        elif kind == b"mdat":
+        if kind == b"mdat":
             _blank_encoder_text(out, payload, stop)
+        elif kind in _CONTAINERS:
+            _walk(out, payload, stop, kind)
+        elif kind not in _STRUCTURAL:
+            # Metadata, padding, and anything else no player needs.
+            _blank_box(out, box, payload, stop)
     return bytes(out)

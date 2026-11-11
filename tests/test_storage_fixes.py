@@ -53,6 +53,7 @@ from sealedlore.storage.repository import (
     save_story_bundle,
 )
 from sealedlore.storage.scenario import ScenarioError, read_scenario
+from sealedlore.storage.video_meta import strip_video_metadata
 from tests.test_collection_backup import png
 
 
@@ -501,6 +502,40 @@ def test_a_story_backup_that_fails_part_way_leaves_nothing_behind(tmp_path, monk
 
 def mp4_box(kind: bytes, payload: bytes) -> bytes:
     return struct.pack(">I4s", 8 + len(payload), kind) + payload
+
+
+MARK = b"MARKER-48.8566N"
+
+
+def track(handler: bytes, entry: bytes) -> bytes:
+    hdlr = mp4_box(b"hdlr", bytes(8) + handler + bytes(12) + b"Handler " + MARK + b"\x00")
+    stsd = mp4_box(b"stsd", b"\x00\x00\x00\x00\x00\x00\x00\x01" + entry)
+    return mp4_box(b"trak", mp4_box(b"mdia", hdlr + mp4_box(b"minf", mp4_box(b"stbl", stsd))))
+
+
+def test_a_videos_padding_names_and_unknown_boxes_are_blanked_in_place():
+    """The stripper blanked what it listed: a marker survived in top-level
+    `free` and `skip` boxes, any box it hadn't listed, a handler's name and
+    a video's compressor name (where ffmpeg writes its encoder's)."""
+    avc1 = mp4_box(b"avc1", bytes(12) + b"FFMP" + bytes(26) + b"\x0f" + MARK + bytes(16) + bytes(4))
+    sound = bytes(8) + bytes(20) + mp4_box(b"esds", b"\x03" * 40)  # its own layout: kept
+    mp4a = mp4_box(b"mp4a", sound)
+    sidx = mp4_box(b"sidx", b"\x01" * 24)
+    moov = mp4_box(b"moov", mp4_box(b"free", MARK) + track(b"vide", avc1) + track(b"soun", mp4a))
+    video = (
+        mp4_box(b"ftyp", b"isom\x00\x00\x02\x00isom")
+        + mp4_box(b"free", MARK)
+        + mp4_box(b"skip", MARK)
+        + mp4_box(b"zzzz", MARK)
+        + moov
+        + sidx
+        + mp4_box(b"mdat", b"\x00\x00\x00\x01")
+    )
+    stripped = strip_video_metadata(video)
+    assert len(stripped) == len(video) and MARK not in stripped and b"FFMP" not in stripped
+    assert sound in stripped and sidx in stripped, "what a player reads is kept"
+    assert b"vide" in stripped and b"soun" in stripped, "a handler's type is kept"
+    assert strip_video_metadata(stripped) == stripped
 
 
 def test_a_video_of_boxes_nested_thousands_deep_is_stripped_without_recursing():
