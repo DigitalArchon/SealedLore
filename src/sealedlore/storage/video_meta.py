@@ -90,13 +90,19 @@ def _zero_times(out: bytearray, payload: int, stop: int) -> None:
 
 
 def _walk(out: bytearray, start: int, end: int) -> None:
-    for kind, box, payload, stop in _boxes(out, start, end):
-        if kind in _METADATA:
-            _blank_box(out, box, payload, stop)
-        elif kind in _TIMED:
-            _zero_times(out, payload, stop)
-        elif kind in _CONTAINERS:
-            _walk(out, payload, stop)
+    """Every box inside [start, end), containers walked into. With a list of
+    those still to walk, never by recursing: a 24 KB file of 3,000 nested
+    `trak` boxes recursed too far (RecursionError, which no reader of a
+    backup or a scenario expects)."""
+    pending = [(start, end)]
+    while pending:
+        for kind, box, payload, stop in _boxes(out, *pending.pop()):
+            if kind in _METADATA:
+                _blank_box(out, box, payload, stop)
+            elif kind in _TIMED:
+                _zero_times(out, payload, stop)
+            elif kind in _CONTAINERS:
+                pending.append((payload, stop))
 
 
 def _blank_encoder_text(out: bytearray, payload: int, stop: int) -> None:

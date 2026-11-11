@@ -40,6 +40,7 @@ from sealedlore.storage.collection_backup import (
     open_backup,
     restore,
 )
+from sealedlore.storage.image_meta import stripped_or_same
 from sealedlore.storage.images import is_safe_relative, is_story_file
 from sealedlore.storage.library import story_listings
 from sealedlore.storage.paths import COLLECTION_ID, collection_dir, stories_dir, story_dir
@@ -493,3 +494,19 @@ def test_a_story_backup_that_fails_part_way_leaves_nothing_behind(tmp_path, monk
     with pytest.raises(ArchiveError, match="No space left"):
         restore_archive(bundle, log, root=tmp_path)
     assert list(stories_dir(tmp_path).iterdir()) == []
+
+
+# --- smaller escapes ---------------------------------------------------------------------------
+
+
+def mp4_box(kind: bytes, payload: bytes) -> bytes:
+    return struct.pack(">I4s", 8 + len(payload), kind) + payload
+
+
+def test_a_video_of_boxes_nested_thousands_deep_is_stripped_without_recursing():
+    inner = mp4_box(b"udta", b"made by someone")
+    for _ in range(3000):
+        inner = mp4_box(b"trak", inner)
+    video = mp4_box(b"ftyp", b"isom\x00\x00\x02\x00isom") + mp4_box(b"moov", inner)
+    stripped = stripped_or_same(video)
+    assert len(stripped) == len(video) and b"made by someone" not in stripped
