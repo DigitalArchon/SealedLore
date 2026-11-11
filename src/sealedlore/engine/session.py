@@ -4021,12 +4021,25 @@ class StorySession(
         return True
 
     def rename_on_rosters(self, character: Character, old_name: str) -> None:
-        """A card renamed by hand keeps its place on every roster it was on by name."""
-        if old_name.strip() == character.name.strip():
+        """A card renamed by hand keeps its place on every roster it was on by
+        name, the starting scene's too: once, from the name it had to the one
+        it has. Never from or to a blank name, nor onto another card's name,
+        and never an entry that is another card's own: renamed a key at a
+        time, "Sergeant Hale" retyped through "Sergeant Price" took Sergeant
+        Price's place in every scene."""
+        new_name = character.name.strip()
+        if not old_name.strip() or not new_name or old_name.strip() == new_name:
+            return
+        others = {
+            other.name.strip().casefold()
+            for other in (*self.cast, *self.supporting)
+            if other.id != character.id and other.name.strip()
+        }
+        if new_name.casefold() in others:
             return
         before = Character(id=character.id, name=old_name, aliases=list(character.aliases))
-        for scene in self._all_scenes():
-            rename_in_scene(scene, before, character.name)
+        for scene in (*self._all_scenes(), self.story.setup.starting_scene):
+            rename_in_scene(scene, before, character.name, keep=others)
         self.save()
 
     def first_appearance(self, character: Character) -> Node | None:

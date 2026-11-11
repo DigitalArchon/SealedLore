@@ -334,3 +334,113 @@ def test_an_ordinary_rename_still_follows_as_it_is_typed(app, plot_editor):
     assert "Elena Cruz" in named and "Elena Ruiz" not in named
     editor.check_now()
     assert not [p for p in editor.problems if p.error]
+
+
+# --- the cast board's card: a name retyped renames the rosters once ------------------------
+
+
+@pytest.fixture
+def story_window(app, tmp_path: Path, story, cast):
+    """The small test story, two exchanges in, with Sergeant Hale and Sergeant
+    Price (supporting) in every scene and the starting one."""
+    from sealedlore.models.character import Character
+    from sealedlore.models.supporting import SupportingCast
+    from sealedlore.storage.repository import StoryBundle
+    from tests.conftest import make_exchange
+
+    nodes = make_exchange(2)
+    bundle = StoryBundle(
+        story=story,
+        cast=list(cast),
+        nodes=nodes,
+        supporting=SupportingCast(
+            characters=[
+                Character(id="sup-hale", name="Sergeant Hale", summary="A watch sergeant."),
+                Character(id="sup-price", name="Sergeant Price", summary="Another."),
+            ]
+        ),
+    )
+    bundle.story.active_leaf_id = nodes[-1].id
+    bundle.story.held_character_id = "char-serrik"
+    for scene in (bundle.story.scene, bundle.story.setup.starting_scene):
+        scene.present_others = ["Sergeant Hale", "Sergeant Price"]
+        scene.tracked = True
+    nodes[1].meta.scene = bundle.story.scene.model_copy(deep=True)
+    save_story_bundle(bundle, root=tmp_path)
+    window = MainWindow(root=tmp_path, use_mock=True)
+    window.resize(1600, 1000)
+    window.show()
+    window.open_story(story.id)
+    settle(app)
+    yield window
+    window.close()
+
+
+def rosters(session) -> list[list[str]]:
+    scenes = [*session._all_scenes(), session.story.setup.starting_scene]
+    return [list(scene.present_others) for scene in scenes]
+
+
+def open_card(app, window, card_id: str):
+    window.show_cast_page(card_id)
+    settle(app)
+    panel = window.cast_panel
+    panel._select(card_id)
+    panel.name.setFocus()
+    return panel
+
+
+def test_a_name_emptied_and_retyped_keeps_its_place_on_every_roster(app, story_window):
+    """Sergeant Hale's name backspaced to nothing and retyped "Corporal Dunn"
+    left "S" on every roster: each key renamed them from the key before, and
+    nothing was renamed from a blank name."""
+    window = story_window
+    session = window.session
+    panel = open_card(app, window, "sup-hale")
+    panel.name.end(False)
+    for _ in "Sergeant Hale":
+        QTest.keyClick(panel.name, Qt.Key_Backspace)
+    hale = next(c for c in session.supporting if c.id == "sup-hale")
+    assert hale.name == "Sergeant Hale", "a blank name isn't kept"
+    QTest.keyClicks(panel.name, "Corporal Dunn")
+    QTest.keyClick(panel.name, Qt.Key_Return)
+    settle(app)
+    assert hale.name == "Corporal Dunn"
+    assert all(roster == ["Corporal Dunn", "Sergeant Price"] for roster in rosters(session))
+
+
+def test_a_name_typed_through_anothers_leaves_them_on_the_rosters(app, story_window):
+    """Hale chosen whole and retyped "Sergeant Price Jr": at "Sergeant Price"
+    he took the real Sergeant Price's entry, and the rosters ended with one
+    man where there were two."""
+    window = story_window
+    session = window.session
+    panel = open_card(app, window, "sup-hale")
+    panel.name.selectAll()
+    QTest.keyClicks(panel.name, "Sergeant Price Jr")
+    window.show_cast_board(False)
+    settle(app)
+    assert all(roster == ["Sergeant Price Jr", "Sergeant Price"] for roster in rosters(session))
+    from sealedlore.storage.repository import load_story_bundle
+
+    saved = load_story_bundle(session.story.id, root=window.root)
+    assert saved.story.scene.present_others == ["Sergeant Price Jr", "Sergeant Price"]
+
+
+def test_a_cast_members_name_left_blank_is_never_kept(app, story_window):
+    """A cast member's name backspaced away was saved as "" and the composer's
+    Playing list showed an empty entry."""
+    window = story_window
+    panel = open_card(app, window, "char-maela")
+    panel.name.end(False)
+    for _ in "Maela Orr":
+        QTest.keyClick(panel.name, Qt.Key_Backspace)
+    window.show_cast_board(False)
+    settle(app)
+    assert panel.name.text() == "Maela Orr", "the field shows the name the card kept"
+    from sealedlore.storage.repository import load_story_bundle
+
+    saved = load_story_bundle(window.session.story.id, root=window.root)
+    assert [c.name for c in saved.cast] == ["Serrik Vaun", "Maela Orr", "Captain Idris"]
+    held = window.composer.held
+    assert "" not in [held.itemText(i).strip() for i in range(held.count())]

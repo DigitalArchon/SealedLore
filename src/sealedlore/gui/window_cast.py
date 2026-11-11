@@ -212,6 +212,7 @@ class CastWindow:
         return self.cast_page.detach()
 
     def return_cast_panel(self) -> None:
+        self.cast_panel.finish_rename()
         if self.cast_page.lent():
             self.cast_page.attach()
 

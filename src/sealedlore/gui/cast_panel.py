@@ -137,6 +137,10 @@ class CastPanel(QWidget):
         self._suggestions: list[CharacterSuggestion] = []
         self._current: Character | None = None
         self._loading = False
+        # The card being renamed and the name it had as its rename began: the
+        # rosters (supporting cards are on them by name) follow once, when
+        # the name is typed in full (`finish_rename`), never a key at a time.
+        self._renaming: tuple[Character, str] | None = None
         # How the cast fits its room in the prompt (gui/cast_room.py).
         self._room: CastRoom | None = None
 
@@ -394,6 +398,7 @@ class CastPanel(QWidget):
         ):
             widget.textChanged.connect(self._apply_edits)
         self.name.textChanged.connect(self._apply_edits)
+        self.name.editingFinished.connect(self.finish_rename)
         self.aliases.textChanged.connect(self._apply_edits)
         self.canon.textChanged.connect(self._apply_edits)
         self.player_available.toggled.connect(self._apply_edits)
@@ -844,6 +849,8 @@ class CastPanel(QWidget):
 
     def _load_editor(self) -> None:
         character = self._current
+        if self._renaming is not None and self._renaming[0] is not character:
+            self.finish_rename()
         self.current_changed.emit(character.id if character is not None else "")
         enabled = character is not None
         self._form_host.setEnabled(enabled)
@@ -883,10 +890,17 @@ class CastPanel(QWidget):
         if self._loading or self._current is None:
             return
         character = self._current
-        old_name = character.name
-        character.name = self.name.text().strip()
-        if character.name and character.name != old_name:
-            self.renamed.emit(character.id, old_name)
+        typed = self.name.text().strip()
+        if typed != character.name and (
+            self._renaming is None or self._renaming[0] is not character
+        ):
+            self._renaming = (character, character.name)
+        # A blank name isn't kept (the Playing list showed an empty entry):
+        # until one is typed the card keeps the name it had.
+        if typed:
+            character.name = typed
+        elif self._renaming is not None and self._renaming[0] is character:
+            character.name = self._renaming[1]
         character.aliases = [
             alias.strip() for alias in self.aliases.text().split(",") if alias.strip()
         ]
@@ -906,6 +920,20 @@ class CastPanel(QWidget):
             mark = MODEL_MARK if character.origin == "model" else ""
             item.setText((character.name or "(unnamed)") + mark)
         self.changed.emit()
+
+    def finish_rename(self) -> None:
+        """The name typed in full (the field left, Return, another card shown,
+        the board closed): the rosters follow it once, from the name the card
+        had to the one it ends on. Typed a key at a time, each key renamed them
+        from the one before, so "Sergeant Hale" emptied and retyped left "S" on
+        every roster. A field left blank shows the name the card kept."""
+        renaming, self._renaming = self._renaming, None
+        if renaming is not None and renaming[0].name != renaming[1]:
+            self.renamed.emit(renaming[0].id, renaming[1])
+        if self._current is not None and not self.name.text().strip():
+            self._loading = True
+            set_field_text(self.name, self._current.name)
+            self._loading = False
 
     def _condensed_edited(self) -> None:
         """The author's own words for the condensed card: kept as written,

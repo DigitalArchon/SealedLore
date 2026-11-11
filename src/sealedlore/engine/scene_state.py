@@ -179,17 +179,25 @@ def move_into_cast(scene: SceneState, character: Character) -> None:
         scene.present_character_ids.append(character.id)
 
 
-def rename_in_scene(scene: SceneState, character: Character, new_name: str) -> bool:
+def rename_in_scene(
+    scene: SceneState, character: Character, new_name: str, *, keep: Collection[str] = ()
+) -> bool:
     """A supporting character renamed keeps their place on the roster.
 
     `present_others` holds names, not ids, so a rename would otherwise leave
     the old name in every snapshot: someone in the room the card no longer
     answers to. Cast members are on the roster by id and need nothing.
+    `keep`: names (casefolded) that are other cards' own, never taken for
+    this one's even where a part of the name is shared.
     """
     changed = False
     renamed: list[str] = []
     for name in scene.present_others:
-        if same_person(name, character) and name != new_name:
+        if (
+            same_person(name, character)
+            and name != new_name
+            and name.strip().casefold() not in keep
+        ):
             if new_name not in renamed:
                 renamed.append(new_name)
             changed = True

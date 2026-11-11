@@ -111,6 +111,9 @@ class CastBoardWindow:
             self.cast_page.show_character(card_id, card=card)
             self.cast_page.setFocus()
             return
+        # A name being typed on a card is typed in full: the story's rosters
+        # follow it before the story is left or closed.
+        self.cast_panel.finish_rename()
         if not self.board_shown():
             return
         self.centre_stack.setCurrentWidget(self.transcript)
