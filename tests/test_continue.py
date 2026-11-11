@@ -417,3 +417,31 @@ def test_in_a_private_scene_it_goes_to_the_private_model_only(tmp_path: Path):
     assert session.full_path()[-1].meta.private_span == session.open_span.id
     usage = session.full_path()[-1].meta.usage
     assert usage.completion_tokens == 2 * private.usage.completion_tokens
+
+
+def test_a_scene_reopened_with_no_private_model_is_never_carried_on(tmp_path: Path):
+    """A scene kept on disk, the app opened again in it with no private model
+    set up: Continue is not offered, and refuses as a turn does, rather than
+    sending the scene to the story's own model."""
+    session, main, held = build_private(tmp_path)
+    enter_private(session, keep="disk")
+    for _event in session.send(
+        TurnRequest(speaker_id=held, user_text="I whisper to her.", controlled_character_id=held)
+    ):
+        pass
+    session.save()
+    reopened = StorySession(
+        load_story_bundle(session.story.id, root=tmp_path),
+        session.config,
+        main,
+        root=tmp_path,
+        estimator=TokenEstimator(counter=fallback_counter),
+        learn_corrections=False,
+    )
+    assert reopened.in_private and reopened.private_provider is None
+    sent = len(main.requests)
+
+    assert not reopened.can_continue()
+    with pytest.raises(ValueError, match="no model to send to"):
+        list(reopened.continue_passage())
+    assert len(main.requests) == sent

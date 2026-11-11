@@ -262,6 +262,11 @@ MAX_AUTO_ARCHIVE_ROUNDS = 8
 # The notes kept under one message (`_kept_notice`): the latest, a retake
 # or a resent turn can repeat its warnings.
 MAX_NOTES = 6
+# A private scene open with no model to send it to: one kept on disk, the app
+# reopened in it with nothing set under Settings → Private.
+PRIVATE_NO_MODEL = (
+    "the private scene has no model to send to (Settings → Private); end the scene to go on"
+)
 
 
 @dataclass(frozen=True)
@@ -1461,10 +1466,7 @@ class StorySession(
         if self.in_private:
             # The scene's own flow: the private model, nothing else called.
             if self.private_provider is None:
-                raise ValueError(
-                    "the private scene has no model to send to (Settings → Private); "
-                    "end the scene to go on"
-                )
+                raise ValueError(PRIVATE_NO_MODEL)
             # Marked before it is attached: a turn that can't be sent must never
             # stand in the tree as a public message.
             user_node.meta.private_span = self.open_span.id
@@ -2012,6 +2014,10 @@ class StorySession(
         path = self.full_path()
         if not continuable(path):
             return False
+        if self.in_private and self.private_provider is None:
+            # A scene kept on disk, reopened with no private model to resume
+            # it on: nothing may carry it on (`continue_passage` refuses).
+            return False
         open_id = self.open_span.id if self.open_span is not None else None
         return path[-1].meta.private_span == open_id
 
@@ -2041,6 +2047,10 @@ class StorySession(
             raise ValueError("that private scene has ended; its messages can't be continued")
         if span_id is None and self.in_private:
             raise ValueError("leave the private scene before continuing a passage from outside it")
+        if span_id is not None and self.private_provider is None:
+            # As `send` refuses: a scene reopened from disk with no private
+            # model would otherwise be carried on by the story's own.
+            raise ValueError(PRIVATE_NO_MODEL)
         history = self.model_nodes(path[:-2], include_span=span_id)
         turn = self._turn_of(user_node)
         if shape is not None:
@@ -2161,6 +2171,10 @@ class StorySession(
     ) -> Iterator[StreamEvent | SessionNotice]:
         """Stream a passage into a new message under `parent`, or, with
         `extend`, onto the end of that one (Continue)."""
+        if span is not None and provider is None:
+            # A private scene's passage goes to its own model or nowhere:
+            # never the story's provider by default.
+            raise ValueError(PRIVATE_NO_MODEL)
         provider = provider or self.provider
         model = model or self.model
         request = ChatRequest(
