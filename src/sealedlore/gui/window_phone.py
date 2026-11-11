@@ -22,7 +22,7 @@ from __future__ import annotations
 import dataclasses
 import sys
 import uuid
-from collections.abc import Collection
+from collections.abc import Collection, Sequence
 from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -38,7 +38,7 @@ from sealedlore.gui.ref_images import image_of
 from sealedlore.gui.transcript import message_kind, speaker_label
 from sealedlore.ids import utc_now_iso
 from sealedlore.models.config import PhoneDevice
-from sealedlore.models.node import CHAT_USER_ID
+from sealedlore.models.node import CHAT_USER_ID, Node
 from sealedlore.phone import views
 from sealedlore.phone.api import Api, PhoneTurn, Refused, Retake, StoryRow
 from sealedlore.phone.page import page_files
@@ -872,7 +872,7 @@ class _Backend:
             raise Refused(409, "That passage isn't in the story as it stands.")
         return node_id or ids[-1]
 
-    def _retake_refused(self, path) -> None:
+    def _retake_refused(self, path: Sequence[Node]) -> None:
         """Why the window would decline to retake the last of `path`, said to
         the phone (the window says it only in its status bar)."""
         refusal = self.window._retake_refusal(path)
