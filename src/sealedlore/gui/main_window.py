@@ -4752,7 +4752,8 @@ class MainWindow(
             else:
                 self.model_button.setToolTip(
                     "A TEE chat: every call goes to this model, attested when the chat "
-                    "opened. Click to move to another TEE model." + self._tee_tip()
+                    "opened and again every 15 minutes. Click to move to another TEE "
+                    "model." + self._tee_tip()
                 )
                 self.model_button.setEnabled(not self._busy)
             self.model_button.setVisible(True)

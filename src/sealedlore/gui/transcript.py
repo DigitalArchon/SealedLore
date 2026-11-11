@@ -1392,50 +1392,79 @@ class _FaceLabel(QLabel):
 # The reply's mark (providers/tee.py `check_reply`: "verified" when the
 # attested key's record is for the exact bytes received, "signed" when they
 # couldn't be compared, "unchecked" when no record could be read; the manual,
-# "Private scenes") and the author's message's (how it was sent). Anything
-# short of verified says so in the mark itself (the author, Nov 2026: warn
-# wherever it is less secure than wanted), not only in its tooltip.
+# "Private scenes") and the author's message's (how it was sent, and whether a
+# reply's record shows the attested enclave received it). Anything short of
+# verified says so in the mark itself (the author, Nov 2026: warn wherever it
+# is less secure than wanted; Nov 11 2026: "always make clear to the user what
+# is actually happening and if it is properly attested or not"), not only in
+# its tooltip.
 TEE_MARKS = {
     "verified": "  ·  TEE verified",
     "signed": "  ·  TEE signed, text not compared",
     "failed": "  ·  TEE ⚠ check failed",
     "unchecked": "  ·  TEE ⚠ reply not verified",
     "encrypted": "  ·  end-to-end encrypted",
-    "attested": "  ·  sent to the attested TEE",
+    "received": "  ·  received by the attested TEE",
+    "unproven": "  ·  TEE ⚠ not shown to reach the attested enclave",
 }
+# What every mark short of end-to-end encryption leaves out.
+_CLEAR = (
+    " The text passed NanoGPT's servers in the clear. A private/ model is end-to-end "
+    "encrypted instead."
+)
 TEE_MARK_TIPS = {
     "verified": (
         "TEE verified: the attested enclave's key signed this reply's record, and the "
-        "record is for the exact text this app received. Where the gateway keeps a "
-        "signed receipt it was read too, saying the model the reply came from was "
-        "verified; that part is only as strong as the receipt's key, which the model "
-        "button names when the hardware's quote doesn't bind it. The text passed "
-        "NanoGPT's gateway in the clear."
+        "record is for the exact text this app received. For a model RedPill serves, "
+        "that enclave is RedPill's gateway, which passed the request on to the machine "
+        "running the model: the gateway's signed receipt, read too, says that machine "
+        "was verified, which is the gateway's word, not checked by this app (the model "
+        "button says what was attested)." + _CLEAR
     ),
     "signed": (
         "TEE signed: the attested enclave's key signed this reply's record, but the "
         "reply's text can't be compared with it (NanoGPT rebuilds this model's replies), "
-        "so a change on the way here wouldn't show. The text passed NanoGPT's gateway "
-        "in the clear."
+        "so a change on the way here wouldn't show. As for a verified reply, the machine "
+        "running the model is the gateway's word." + _CLEAR
     ),
     "failed": (
         "This reply doesn't match its record: not signed by the attested key, not the "
         "text that was signed, or its receipt doesn't hold (another key, another reply, "
-        "or a model that wasn't verified)."
+        "or a model that wasn't verified). The model is attested again before anything "
+        "more is sent to it."
     ),
     "unchecked": (
         "Not verified: no signed record of this reply could be read (this model's "
-        "provider keeps none, or the check couldn't be reached), so nothing shows it "
-        "came from the enclave that was attested when the chat or scene began. The "
-        "text passed NanoGPT's gateway in the clear. A private/ model is end-to-end "
-        "encrypted instead."
+        "provider keeps none, as Chutes doesn't, or the check couldn't be reached), so "
+        "nothing shows it came from the enclave attested for this chat or scene. "
+        "NanoGPT routes each request, and a model may be served elsewhere when its "
+        "provider is busy." + _CLEAR
     ),
     "encrypted": (
         "End-to-end encrypted: sealed on this machine to the attested enclave's key, and "
         "the reply opened with it. NanoGPT relayed ciphertext."
     ),
-    "attested": "Sent to the enclave that was attested when this chat or scene began.",
+    "received": (
+        "Received by the attested TEE: sent while the model's attestation held, and a "
+        "reply's record, signed by the attested key, names this exchange." + _CLEAR
+    ),
+    "unproven": (
+        "Sent to the TEE model while its attestation held, but no reply's signed record "
+        "shows the attested enclave received it: NanoGPT routes each request, and this "
+        "model's provider signs no replies (Chutes) or the check couldn't be made. A "
+        "model may be served elsewhere when its provider is busy." + _CLEAR
+    ),
 }
+
+
+def sent_mark(message: Node, reply: Node | None) -> str | None:
+    """The author's message's TEE mark as shown. Before Nov 11 2026 it was
+    "attested" whatever the reply showed: read now by the reply shown with it."""
+    mark = message.meta.tee
+    if mark != "attested":
+        return mark
+    shown = reply is not None and reply.meta.tee in ("verified", "signed")
+    return "received" if shown else "unproven"
 
 
 class TranscriptView(QScrollArea):
@@ -1835,11 +1864,13 @@ class TranscriptView(QScrollArea):
                 show_rolls=show_rolls,
                 branch_start=(branch_starts or {}).get(node.id),
                 turn=turn_of.get(node.id),
+                reply=reply_of.get(node.id),
             )
             add_asides(node.id)
 
         retakeable = _retakeable_ids(nodes)
         turn_of = {node.id: before for before, node in zip(nodes, nodes[1:], strict=False)}
+        reply_of = {before.id: node for before, node in zip(nodes, nodes[1:], strict=False)}
         carries_on = continuable(nodes) if can_continue is None else can_continue
 
         units: list[_Unit] = [(None, lambda: add_asides(None))]
@@ -1902,10 +1933,12 @@ class TranscriptView(QScrollArea):
                 show_rolls=show_rolls,
                 branch_start=(branch_starts or {}).get(node.id),
                 turn=turn_of.get(node.id),
+                reply=reply_of.get(node.id),
             )
 
         retakeable = _retakeable_ids(nodes)
         turn_of = {node.id: before for before, node in zip(nodes, nodes[1:], strict=False)}
+        reply_of = {before.id: node for before, node in zip(nodes, nodes[1:], strict=False)}
         units: list[_Unit] = [(None, note)]
         units += [(None, lambda chapter=chapter: card(chapter)) for chapter in chapters]
         units += [(node.id, lambda node=node: build(node)) for node in nodes]
@@ -1934,10 +1967,13 @@ class TranscriptView(QScrollArea):
         show_rolls: bool = True,
         branch_start: str | None = None,
         turn: Node | None = None,
+        reply: Node | None = None,
     ) -> MessageWidget:
         """`turn`: the message before this one, the author turn a passage
-        answers, for what a private scene lets ⋯ offer."""
+        answers, for what a private scene lets ⋯ offer. `reply`: the one
+        after it, which an older TEE mark on the author's is read by."""
         label = speaker_label(node, cast_by_id, self._chat)
+        tee = sent_mark(node, reply) if node.kind == "user" else node.meta.tee
         if node.kind == "assistant":
             # How the author judges whether a length preset is working.
             label += f"  ·  {word_count(node.content)} words"
@@ -1954,7 +1990,7 @@ class TranscriptView(QScrollArea):
             if node.meta.private_span:
                 label += "  ·  private"
             # How the reply's check went (TEE_MARKS), or how the message went.
-            label += TEE_MARKS.get(node.meta.tee or "", "")
+            label += TEE_MARKS.get(tee or "", "")
         widget = self.add_message(
             label,
             node.content,
@@ -1975,12 +2011,15 @@ class TranscriptView(QScrollArea):
         )
         if self._tee_look:
             widget.setProperty("private", "true")
-            widget.setToolTip("A TEE chat: every message goes to the attested model only.")
+            widget.setToolTip(
+                "A TEE chat: every message goes to its TEE model only, and only while its "
+                "attestation holds; each message's mark says what its check showed."
+            )
         if node.meta.private_span:
             widget.setProperty("private", "true")
             widget.setToolTip(f"Written in a private {part}: only the private model ever saw it.")
-        if node.meta.tee in TEE_MARK_TIPS:
-            widget.setToolTip(TEE_MARK_TIPS[node.meta.tee])
+        if tee in TEE_MARK_TIPS:
+            widget.setToolTip(TEE_MARK_TIPS[tee])
         if node.meta.private_summary_of:
             widget.setProperty("privatesummary", "true")
             widget.setToolTip(

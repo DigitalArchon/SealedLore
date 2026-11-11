@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 from sealedlore.models.config import ProviderConfig
 from sealedlore.providers.base import ProviderError
-from sealedlore.providers.tee import TeeRefused, is_private_mode, is_tee
+from sealedlore.providers.tee import TeeRefused, is_private_mode, is_tee, what_was_attested
 
 
 @dataclass(frozen=True)
@@ -83,10 +83,15 @@ def check_attestation(settings: ProviderConfig) -> AttestationCheck:
     if attestation.tcb_status:
         parts.append(f"Intel {attestation.tcb_status}")
     summary = f" ({', '.join(parts)})" if parts else ""
+    # What was attested leads the details (the author, Nov 11 2026: "always
+    # make clear to the user what is actually happening"): RedPill's gateway
+    # is not the machine that runs the model.
+    what = "TEE gateway attested" if attestation.attested == "gateway" else "TEE attested"
+    detail = "\n\n".join(p for p in (what_was_attested(attestation), attestation.detail) if p)
     if attestation.level == "partial":
         return AttestationCheck(
             "partial",
-            f"⚠ TEE attested, partially: {', '.join(attestation.shortfalls)}{summary}",
-            attestation.detail,
+            f"⚠ {what}, partially: {', '.join(attestation.shortfalls)}{summary}",
+            detail,
         )
-    return AttestationCheck("full", f"✓ TEE attested{summary}", attestation.detail)
+    return AttestationCheck("full", f"✓ {what}{summary}", detail)

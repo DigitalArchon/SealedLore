@@ -762,9 +762,61 @@ def test_the_authors_messages_say_how_they_were_sent(app, window, monkeypatch):
     list(session.send(window._chat_turn("Hello")))
     window.reload_transcript()
     mine, reply = session.path()
-    assert "sent to the attested TEE" in window.transcript.message_widget(mine.id).header.text()
+    assert "received by the attested TEE" in window.transcript.message_widget(mine.id).header.text()
     assert "TEE verified" in window.transcript.message_widget(reply.id).header.text()
     assert "signed" not in window.transcript.message_widget(mine.id).header.text()
+
+
+def test_an_older_sent_mark_is_read_by_the_reply_shown_with_it(app, window, monkeypatch):
+    """Before Nov 11 2026 the author's message read "sent to the attested TEE"
+    whatever its reply showed: a saved story's is read by its reply now."""
+    monkeypatch.setattr(window, "_attest_chat", lambda: None)
+    make_chat(window, monkeypatch, model="TEE/gemma-3-27b")
+    session = window.session
+    session.private_tee = _FakeTee()
+    session.provider.responses = ["Hi.", "Again."]
+    list(session.send(window._chat_turn("Hello")))
+    list(session.send(window._chat_turn("More")))
+    first, first_reply, second, second_reply = session.path()
+    first.meta.tee = second.meta.tee = "attested"
+    second_reply.meta.tee = "unchecked"  # a provider that signs no replies
+    window.reload_transcript()
+
+    def header(node):
+        return window.transcript.message_widget(node.id).header.text()
+
+    assert "received by the attested TEE" in header(first)
+    assert "not shown to reach the attested enclave" in header(second)
+    assert "sent to the attested TEE" not in header(first) + header(second)
+    tip = window.transcript.message_widget(second.id).toolTip()
+    assert "no reply's signed record shows the attested enclave received it" in tip
+
+
+def test_the_model_button_says_what_was_attested(app, window, monkeypatch):
+    """RedPill's gateway is what is attested for a model it serves, not the
+    machine that runs the model: the button says so, and what it leaves to
+    the gateway's word (the author, Nov 11 2026)."""
+    from sealedlore.models.private import Attestation
+
+    monkeypatch.setattr(window, "_attest_chat", lambda: None)
+    make_chat(window, monkeypatch, model="TEE/glm-5.3-flash")
+    attestation = Attestation(
+        verified=True,
+        level="partial",
+        shortfalls=["GPUs not tied to the quote"],
+        gpus=8,
+        attested="gateway",
+    )
+    window.session.story.chat_attestation = attestation
+    window._tee_state = window._attested_state(attestation)
+    window._refresh_model_button()
+    assert "TEE gateway attested (⚠ partial: GPUs not tied to the quote)" in (
+        window.model_button.text()
+    )
+    tip = window.model_button.toolTip()
+    assert "Attested: RedPill's TEE gateway" in tip
+    assert "That machine isn't attested by this app" in tip
+    assert "may be another machine's" in tip, "the shortfall said plainly"
 
 
 def test_a_tee_chat_with_checking_off_says_so_on_the_model_button(app, window, monkeypatch):

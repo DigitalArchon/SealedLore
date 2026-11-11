@@ -79,6 +79,35 @@ def test_a_tee_models_check_says_full_partial_or_refused(fake_tee):
     assert "Nothing would be sent" in refused.detail
 
 
+def test_a_check_says_what_it_attested_and_what_is_someones_word(fake_tee):
+    """The author, Nov 11 2026: "always make clear to the user what is actually
+    happening and if it is properly attested or not". RedPill's gateway is not
+    the machine that runs the model; Chutes' instances sign no replies."""
+    fake_tee.outcome = Attestation(
+        verified=True,
+        level="partial",
+        shortfalls=["GPUs not tied to the quote"],
+        gpus=8,
+        tcb_status="UpToDate",
+        attested="gateway",
+        detail="the Intel TDX quote binds the signing key to our nonce",
+    )
+    gateway = check_attestation(settings("TEE/glm-5.3-flash"))
+    assert gateway.headline.startswith("⚠ TEE gateway attested, partially: GPUs not tied")
+    assert gateway.detail.startswith("Attested: RedPill's TEE gateway")
+    assert "isn't attested by this app" in gateway.detail
+    assert "in the clear" in gateway.detail
+    assert gateway.detail.endswith("binds the signing key to our nonce")
+
+    fake_tee.outcome = Attestation(
+        verified=True, level="full", gpus=80, instances=10, attested="instances"
+    )
+    chutes = check_attestation(settings("TEE/deepseek-v3.2"))
+    assert chutes.headline == "✓ TEE attested (10 instances, 80 GPUs verified)"
+    assert "each of the 10 instances" in chutes.detail
+    assert "nothing shows which machine answered" in chutes.detail
+
+
 def test_an_encrypted_models_check_is_its_own_attestation(monkeypatch):
     from sealedlore.providers.private_mode import PrivateModeProvider, attestation_record
 

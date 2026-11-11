@@ -262,12 +262,16 @@ def test_a_tee_chat_keeps_its_summaries_on_its_own_model(tmp_path):
 
 
 class FakeTee:
-    def __init__(self, signed: bool) -> None:
+    def __init__(self, signed: bool = False, *, unchecked: bool = False) -> None:
         self.signed = signed
+        # As TeeClient raises when no record can be read (Chutes signs none).
+        self.unchecked = unchecked
         self.asked: list[str | None] = []
 
     def check_reply(self, response_id, **_record):
         self.asked.append(response_id)
+        if self.unchecked:
+            raise ProviderError("this model's provider signs no replies")
         return "verified" if self.signed else "failed"
 
 
@@ -277,10 +281,33 @@ def test_a_tee_chats_replies_are_marked_by_their_signature(tmp_path):
     session.private_tee = FakeTee(signed=True)
     say(session, "Hello")
     assert session.path()[-1].meta.tee == "verified"
-    assert session.path()[-2].meta.tee == "attested", "the author's message, sent to the enclave"
+    # The reply's record, signed by the attested key, shows the enclave had it.
+    assert session.path()[-2].meta.tee == "received", "the author's message reached the enclave"
     session.private_tee = FakeTee(signed=False)
     say(session, "Again")
     assert session.path()[-1].meta.tee == "failed"
+    # Nothing shows this one reached it: said so, never "received".
+    assert session.path()[-2].meta.tee == "unproven"
+
+
+def test_a_tee_chats_message_is_received_only_as_far_as_a_reply_shows(tmp_path):
+    """The author, Nov 11 2026: "always make clear to the user what is actually
+    happening". A reply with no signed record (Chutes signs none; a model may be
+    served elsewhere) leaves the author's message unproven; once one take's
+    record shows it received, a later take that shows nothing doesn't take that
+    back: the same text was received."""
+    session, _provider = chat_session(tmp_path, ["Unsigned.", "Signed.", "Unsigned again."])
+    session.story.defaults.main_model = "TEE/gemma-3-27b"
+    session.private_tee = FakeTee(unchecked=True)
+    say(session, "Hello")
+    mine, reply = session.path()[-2:]
+    assert (mine.meta.tee, reply.meta.tee) == ("unproven", "unchecked")
+    session.private_tee = FakeTee(signed=True)
+    list(session.regenerate())
+    assert (mine.meta.tee, session.path()[-1].meta.tee) == ("received", "verified")
+    session.private_tee = FakeTee(unchecked=True)
+    list(session.regenerate())
+    assert (mine.meta.tee, session.path()[-1].meta.tee) == ("received", "unchecked")
 
 
 class BreaksAfterText(MockChatProvider):

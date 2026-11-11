@@ -770,12 +770,19 @@ class PrivateRuntime:
             return
         if node is None or self.private_tee is None:
             return
-        # The author's message went to the enclave that attested (the guard
-        # refuses otherwise): marked too, or it looked less protected than the
-        # reply (the author, Sept 2026). Not "signed": that is the reply's.
-        self._mark_sent(node, "attested")
         mark = self._tee_mark(getattr(self, "_last_completed", None)) or "unchecked"
         node.meta.tee = self._with_carried(node, mark)
+        # The author's message is marked too, or it looked less protected than
+        # the reply (the author, Sept 2026), and only as far as the reply shows
+        # (the author, Nov 11 2026: "always make clear to the user what is
+        # actually happening"): the guard sent it only while the model was
+        # attested, but nano-gpt routes it, and only a record the attested key
+        # signed shows that enclave received it. Chutes signs none, and a model
+        # may be served elsewhere (TEE/gemma4-31b falls back to Tinfoil).
+        # Never "signed": that is the reply's. Once shown received, a take
+        # that shows nothing doesn't take it back: the same text was received.
+        received = mark in ("verified", "signed")
+        self._mark_sent(node, "received" if received else "unproven", keep_received=True)
 
     def _with_carried(self, node: Node, mark: str) -> str | None:
         """A passage just carried on (Continue) is only as proven as its less
@@ -790,11 +797,14 @@ class PrivateRuntime:
             return None
         return max(before, mark, key=_MARK_ORDER.index)
 
-    def _mark_sent(self, reply: Node, how: str) -> None:
+    def _mark_sent(self, reply: Node, how: str, *, keep_received: bool = False) -> None:
         """Mark the author's message a reply answers with how it was sent."""
         parent = next((n for n in self.nodes if n.id == reply.parent_id), None)
-        if parent is not None and parent.kind == "user":
-            parent.meta.tee = how
+        if parent is None or parent.kind != "user":
+            return
+        if keep_received and parent.meta.tee == "received":
+            return
+        parent.meta.tee = how
 
     def _log_turn(self, kind: str, body: dict[str, Any], span: PrivateSpan | None) -> str:
         """The API log for a turn: as usual, but a memory-only scene's calls

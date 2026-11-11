@@ -41,6 +41,11 @@ class Attestation(BaseModel):
     gpus: int = 0
     # Per-instance providers (Chutes): how many instances were each attested.
     instances: int = 0
+    # What the TEE/ check attested (providers/tee.py `what_was_attested`):
+    # "gateway", RedPill's gateway, which passes the model's requests on;
+    # "instances", each instance the provider listed; "enclave", the one
+    # whose key signs the replies, not shown to be either. "" before Nov 2026.
+    attested: Literal["gateway", "instances", "enclave", ""] = ""
     # End-to-end encrypted models only.
     encrypted: bool = False
     enclave: str = ""

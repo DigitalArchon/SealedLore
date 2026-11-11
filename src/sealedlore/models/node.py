@@ -112,9 +112,25 @@ class NodeMeta(BaseModel):
     # went (providers/tee.py `check_reply`: "verified", "signed", "failed", or
     # "unchecked" when no check could be made), or "encrypted": it came back
     # sealed by the attested enclave's key (providers/private_mode.py).
-    # On the author's message: "encrypted" (sent sealed) or "attested" (sent to
-    # the attested TEE/ enclave; its text still passed nano-gpt's gateway).
-    tee: Literal["verified", "signed", "failed", "unchecked", "encrypted", "attested"] | None = None
+    # On the author's message: "encrypted" (sent sealed); "received" (a reply's
+    # record, signed by the attested TEE/ key, shows it reached that enclave;
+    # its text still passed nano-gpt's gateway); "unproven" (sent to a TEE/
+    # model, and no reply's record shows the attested enclave received it).
+    # "attested" is the mark before Nov 11 2026, set whatever the reply showed:
+    # read by the reply shown with it (gui/transcript.py `sent_mark`).
+    tee: (
+        Literal[
+            "verified",
+            "signed",
+            "failed",
+            "unchecked",
+            "encrypted",
+            "received",
+            "unproven",
+            "attested",
+        ]
+        | None
+    ) = None
     # The first message of a branch carries its name (engine/branches.py).
     # A branch is made only by rewriting an earlier message; takes are not.
     branch_name: str | None = None

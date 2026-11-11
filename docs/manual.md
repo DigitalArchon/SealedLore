@@ -2433,11 +2433,35 @@ keys past the time the gateway holds them until, or a model that offers no
 attestation is **refused**, and nothing is sent to it. Refused when it is
 attested again, nothing more is sent until you choose **Try again**, and the
 message that found it so comes back to the box you type in. What couldn't be
-checked (no GPU evidence offered, Intel's or NVIDIA's service out of reach,
-NVIDIA's signing keys out of reach, a rating below up to date, receipt keys
-the quote doesn't bind, receipt keys that name no time they hold until) is
-shown as **⚠ partial**, with the reasons on the model button and what each
-one means in its tooltip. Sending still goes ahead.
+checked (no GPU evidence offered, GPUs the quote doesn't commit to, Intel's
+or NVIDIA's service out of reach, NVIDIA's signing keys out of reach, a
+rating below up to date, receipt keys the quote doesn't bind, receipt keys
+that name no time they hold until) is shown as **⚠ partial**, with the
+reasons on the model button and what each one means in its tooltip. Sending
+still goes ahead.
+
+**What is attested** is said on the model button and in Test attestation,
+with what it leaves to someone's word:
+- For every model RedPill serves (most of NanoGPT's `TEE/` models), the
+  attested machine is **RedPill's TEE gateway**, and the button says "TEE
+  gateway attested". The gateway passes each request on to the machine that
+  runs the model (in November 2026 Phala's, Fortanix's, NEAR AI's, 0G's,
+  Tinfoil's router or Chutes'). That machine isn't attested by the app: that
+  it is a verified TEE is the gateway's word, in each reply's signed receipt.
+  The GPU evidence NanoGPT's report carries is made for our nonce, but the
+  gateway's quote doesn't commit to it, so the button says "GPUs not tied to
+  the quote": they may be another machine's.
+- For a model Chutes serves itself, **each instance** Chutes lists, each with
+  its own GPUs. Chutes signs no replies, so nothing shows which machine
+  answered: NanoGPT routes each request, and a model may be served elsewhere
+  when its provider is busy.
+
+Each receipt names the gateway's session with the machine that answered,
+and RedPill publishes that session's record, saying which provider it is.
+The app doesn't fetch it: a model Chutes serves through RedPill has a
+session for each instance, about 3.4 MB each for `TEE/deepseek-v3.2`, and
+replies are spread across them, so it would be a download of megabytes
+nearly every message.
 
 After each reply the app fetches the record NanoGPT keeps for it, signed by
 the attested key. The record holds a hash of the reply as the enclave's
@@ -2447,17 +2471,22 @@ Each reply is marked with what its check showed:
 - **TEE verified**: the record is for the exact text the app received. Where
   the gateway also keeps a signed receipt (NanoGPT's TEE models served
   through RedPill), that is checked too: for the same reply, and saying the
-  model it came from was verified.
+  machine it came from was verified. That last part is the gateway's word.
 - **TEE signed, text not compared**: the record was signed by the attested
   key, but NanoGPT rebuilds this model's replies, so the text can't be
   compared with it.
 - **TEE ⚠ reply not verified**: no record of the reply could be read (the
-  provider keeps none for this model, or the check couldn't be reached), so
-  nothing shows it came from the attested enclave.
+  provider keeps none for this model, as Chutes doesn't, or the check
+  couldn't be reached), so nothing shows it came from the attested enclave.
 - **TEE ⚠ check failed**: the reply doesn't match its record.
 
-Your own messages are marked with how they were sent: "sent to the attested
-TEE", or "end-to-end encrypted" on a `private/` model.
+Your own messages are marked with what their replies showed: **received by
+the attested TEE** when a reply's record, signed by the attested key, names
+the exchange; **TEE ⚠ not shown to reach the attested enclave** when no
+reply's record does (Chutes signs none, or the check couldn't be made); or
+"end-to-end encrypted" on a `private/` model. Messages in stories from
+before November 11 2026 read "sent to the attested TEE" whatever their
+replies showed; they are now marked by the reply shown with them.
 
 Every reply of the attested model is checked this way, not only the
 passages: a Question's answer carries its mark beside it, as a passage does.

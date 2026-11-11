@@ -23,11 +23,13 @@ from sealedlore.providers import make_chat_provider
 from sealedlore.providers.base import ChatProvider
 from sealedlore.providers.private_mode import ModelRetired, PrivateModeProvider
 from sealedlore.providers.tee import (
+    GPUS_LOOSE,
     RECEIPT_KEYS_LOOSE,
     TeeClient,
     is_private_mode,
     is_tee,
     move_refusal,
+    what_was_attested,
 )
 from sealedlore.storage.repository import save_config
 
@@ -50,6 +52,11 @@ SHORTFALL_TIPS = {
         "No GPU evidence: none was offered, so no GPU was checked. For a model attested "
         "through RedPill's gateway, each reply's receipt carries the gateway's word that "
         "the model was verified."
+    ),
+    GPUS_LOOSE: (
+        "GPUs not tied to the quote: NVIDIA vouches for these GPUs, for this check, but "
+        "the attested machine's quote doesn't commit to their evidence, so they may be "
+        "another machine's (the one running the model, say), passed on."
     ),
     "GPUs unverified": "GPUs unverified: NVIDIA's attestation service couldn't be reached.",
     "NVIDIA signature unchecked": (
@@ -212,14 +219,15 @@ class PrivateWindow:
             return ""
         span = session.open_span
         attestation = span.attestation if span is not None else session.story.chat_attestation
-        if attestation is None or not attestation.shortfalls:
+        if attestation is None or attestation.encrypted:
             return ""
-        lines = [
+        lines = [what_was_attested(attestation)] if attestation.attested else []
+        lines += [
             SHORTFALL_TIPS.get(what)
             or (f"{what}: Intel rates the machine below up to date." if "TCB" in what else what)
             for what in attestation.shortfalls
         ]
-        return "\n\n" + "\n".join(lines)
+        return "\n\n" + "\n".join(lines) if lines else ""
 
     def _tee_badge(self) -> str:
         if not self._tee_state:
@@ -500,21 +508,23 @@ class PrivateWindow:
             self._offer_reattest(reason, for_chat)
             return
         self.session.tee_block = None
-        shortfalls = ", ".join(attestation.shortfalls)
         self._tee_state = self._attested_state(attestation)
         self._refresh_model_button()
+        # What was attested, not only that something was: "Each reply is
+        # checked" was said of a provider that signs none (Chutes).
         self.statusBar().showMessage(
-            f"TEE attested{' (partial: ' + shortfalls + ')' if shortfalls else ''}: "
-            f"{attestation.detail}. Each reply is checked against the record the attested "
-            "key signs for it.",
+            f"TEE {self._attested_state(attestation)}. "
+            + (what_was_attested(attestation) or attestation.detail),
             15000,
         )
 
     @staticmethod
     def _attested_state(attestation) -> str:
-        """The model button's word for an attestation that held."""
+        """The model button's word for an attestation that held: what was
+        attested (RedPill's gateway, or each instance), and what fell short."""
         shortfalls = ", ".join(attestation.shortfalls)
-        state = f"attested (⚠ partial: {shortfalls})" if shortfalls else "attested"
+        what = "gateway attested" if attestation.attested == "gateway" else "attested"
+        state = f"{what} (⚠ partial: {shortfalls})" if shortfalls else what
         if attestation.instances > 1:
             state += f", {attestation.instances} instances"
         return state
