@@ -4138,7 +4138,7 @@ class MainWindow(
         try:
             self.session.remove_character(character_id)
         except ValueError as exc:
-            QMessageBox.information(self._dialog_parent(), "Playing this character", str(exc))
+            QMessageBox.information(self._dialog_parent(), "This character stays", str(exc))
             return
         if setup is not None:
             setup.character_removed(untouched=untouched)

@@ -207,6 +207,18 @@ def test_a_card_or_a_place_the_plot_uses_can_t_be_taken_out(tmp_path: Path):
     assert any("change the plot first" in line for line in turn.refused)
 
 
+def test_the_cast_boards_remove_keeps_a_card_the_plot_brings_in(tmp_path: Path):
+    """The board's Remove (Setup and the guide too) goes through
+    `remove_character`, which took Vask out though the plot's events bring
+    him in: the follow-up's removal had always refused that."""
+    session = session_for(harbour(), tmp_path, [PLOT_EXAMPLE])
+    run(session.draft_plot(PlotWishes()))
+    vask = next(c for c in (*session.cast, *session.supporting) if c.name == "Teodor Vask")
+    with pytest.raises(ValueError, match="change the plot first"):
+        session.remove_character(vask.id)
+    assert any(c.id == vask.id for c in (*session.cast, *session.supporting))
+
+
 # --- the plot ----------------------------------------------------------------------------
 
 CRUELLER = PLOT_EXAMPLE.replace(

@@ -172,7 +172,7 @@ from sealedlore.engine.session_private import PrivateRuntime, checked_where_mark
 from sealedlore.engine.session_reasoning import ReasoningRuntime
 from sealedlore.engine.session_rebuild import RebuildRuntime
 from sealedlore.engine.session_recall import RecallRuntime
-from sealedlore.engine.story_plot import take_out_character
+from sealedlore.engine.story_plot import plot_uses, take_out_character
 from sealedlore.engine.tokens import TokenEstimator, updated_correction_factor
 from sealedlore.engine.validators import locate_quote, mentions
 from sealedlore.ids import new_id, utc_now_iso
@@ -3543,8 +3543,15 @@ class StorySession(
         scene's roster and out of who is played. Removed from the list alone
         they stayed in all of those, and a story begun from Setup began with
         someone who wasn't in it. In a private scene the one played can't be
-        taken out: who is played stays as it is until it ends."""
+        taken out: who is played stays as it is until it ends. Nor can one
+        the plot names (an event brings them, a condition asks where they
+        are): its events would name nobody, as a follow-up's removal says."""
         card = next(c for c in (*self.cast, *self.supporting) if c.id == character_id)
+        if plot_uses(self.story.plot, card.id):
+            raise ValueError(
+                f"The plot brings {card.name} in: change the plot first "
+                "(Story → Open in the plot editor…)."
+            )
         if self.in_private and card.id == self.story.held_character_id:
             raise ValueError(
                 f"You are playing {card.name} in a private scene: who is played stays as "
