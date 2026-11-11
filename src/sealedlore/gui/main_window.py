@@ -3997,6 +3997,8 @@ class MainWindow(
         )
 
     def _on_generation_finished(self) -> None:
+        # The job's thread: what finishing it offers may start the next job.
+        done = self._thread
         self._busy = False
         self._background = False
         self._waits.stop()
@@ -4012,16 +4014,29 @@ class MainWindow(
             # thread.finished fires just before the thread exits; wait out that
             # moment, or closeEvent could still see it running and ignore the
             # close again with nothing left to retry it.
-            if self._thread is not None:
-                self._thread.wait()
+            self._free_thread(done)
             # The worker's finalizer has saved; closeEvent does the rest.
             QTimer.singleShot(0, self, self.close)
             return
+        self._free_thread(done)
         if returned and self._failed is None:
             self.statusBar().showMessage(
                 "No passage came: your turn is back in the composer, ready to send again.", 10000
             )
         self._say_failed(returned)
+
+    def _free_thread(self, thread: QThread | None) -> None:
+        """A job's thread, finished, deleted once its signal is delivered
+        (deleteLater). Made the window's child, it stayed until the window
+        closed: one more for every turn, read and summary of the session."""
+        if thread is None:
+            return
+        # finished is emitted just before the thread exits: deleted while it
+        # still runs, Qt aborts the process.
+        thread.wait()
+        if self._thread is thread:
+            self._thread = None
+        thread.deleteLater()
 
     def _finish_job(self) -> None:
         # The worker mutated the session on its own thread; rebuild the view

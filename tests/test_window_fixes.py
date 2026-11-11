@@ -542,3 +542,34 @@ def test_a_long_branchs_name_stays_beside_its_first_message(styled, tmp_path, st
             lane = view.lanes[name.data(_LANE_KEY)]
             assert name.pos().y() == y_of(lane.first), lane.branch.name
     window.close()
+
+
+# --- 11. a job's thread goes once the job is done ----------------------------------
+
+
+def test_a_finished_jobs_thread_is_freed(app, tmp_path, story, cast):
+    """Each job left its finished thread as a child of the window until the
+    window closed: six turns, six threads (the review after 3.1.0b8)."""
+    from PySide6.QtCore import QEvent, QThread
+
+    window = _window(tmp_path, story, cast, ["A passage."] * 4)
+    before = len(window.findChildren(QThread))
+    for turn in range(4):
+        window.composer.input.setPlainText(f"Turn {turn}.")
+        window.send_turn()
+        _idle(app, window)
+    QApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    app.processEvents()
+    assert len(window.findChildren(QThread)) == before
+    assert len(window.session.path()) == 4 + 8, "every turn was answered"
+    # A job still runs and stops as before, and the window closes after it.
+    window._provider.delay = 0.05
+    window._provider.responses = [LONG]
+    window.composer.input.setPlainText("One more.")
+    window.send_turn()
+    wait_for(app, lambda: window._busy)
+    window.stop_generation()
+    _idle(app, window)
+    QApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    assert len(window.findChildren(QThread)) == before and window._thread is None
+    window.close()
