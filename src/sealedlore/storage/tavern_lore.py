@@ -169,9 +169,12 @@ def _decorators(content: str) -> tuple[list[str], str]:
 
 
 def _int(value: Any, default: int) -> int:
+    """A number of the book's as a whole number, or `default` for anything
+    else: JSON's `1e999`, `Infinity` and `NaN` too (OverflowError and
+    ValueError from int())."""
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
 
 
@@ -468,11 +471,14 @@ def _js_key(value: Any) -> str:
 
 def _array_index(key: str) -> bool:
     """A key JavaScript puts first in an object, in number order: a whole
-    number written plainly ("7", never "07" or "²"), below 2**32 - 1."""
+    number written plainly ("7", never "07" or "²"), below 2**32 - 1. (Ten
+    digits at most, before int() is asked: Python refuses to read one of
+    thousands, with a ValueError.)"""
     return (
         key.isascii()
         and key.isdigit()
         and (key == "0" or not key.startswith("0"))
+        and len(key) <= 10
         and int(key) < 2**32 - 1
     )
 

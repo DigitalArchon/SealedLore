@@ -23,7 +23,7 @@ from sealedlore.models.scenario import Scenario
 from sealedlore.models.story import Story
 from sealedlore.models.tavern import CardAsset
 from sealedlore.models.video import GeneratedVideo
-from sealedlore.storage import collection, collection_backup, tavern_cards
+from sealedlore.storage import collection, collection_backup, tavern_cards, tavern_lore
 from sealedlore.storage.archive import (
     ArchiveError,
     archive_data,
@@ -510,3 +510,25 @@ def test_a_video_of_boxes_nested_thousands_deep_is_stripped_without_recursing():
     video = mp4_box(b"ftyp", b"isom\x00\x00\x02\x00isom") + mp4_box(b"moov", inner)
     stripped = stripped_or_same(video)
     assert len(stripped) == len(video) and b"made by someone" not in stripped
+
+
+def test_a_cards_numbers_past_any_whole_number_are_read_as_none(tmp_path):
+    """JSON's 1e999, Infinity and NaN in a card's dates or its lorebook's
+    numbers raised OverflowError or ValueError from int()."""
+    entry = '{"keys": ["barn"], "content": "The barn.", "insertion_order": 1e999, "id": NaN, '
+    entry += '"extensions": {"probability": Infinity, "useProbability": true, "sticky": -Infinity}}'
+    text = (
+        '{"spec": "chara_card_v3", "spec_version": "3.0", "data": {"name": "Jane", '
+        '"description": "A farmer.", "creation_date": 1e999, "modification_date": NaN, '
+        f'"character_book": {{"entries": [{entry}]}}}}}}'
+    )
+    path = tmp_path / "jane.json"
+    path.write_text(text, encoding="utf-8")
+    card = tavern_cards.read_card(path)
+    character, _notes = collection.kept_from_card(card, MemoryPictures(lambda kind, body: ""))
+    assert character.tavern.creation_date is None and character.tavern.modification_date is None
+    assert [e.content for e in tavern_lore.lore_from_book(character.tavern.character_book).entries]
+    assert tavern_cards.scenario_from_card(card, player="Pat").scenario.cast
+    # A book keyed by a number of thousands of digits: Python reads none.
+    world = {"entries": {"9" * 5000: {"key": ["a"], "content": "c", "comment": "t"}}}
+    assert tavern_lore.book_from_world(world)["entries"]

@@ -25,6 +25,7 @@ import base64
 import binascii
 import io
 import json
+import math
 import re
 import struct
 import zipfile
@@ -794,8 +795,11 @@ def example_dialogue(text: str) -> str:
 
 
 def _number(value: object) -> int | None:
-    """A V3 date (seconds since 1970); None for anything else a card holds."""
+    """A V3 date (seconds since 1970); None for anything else a card holds,
+    JSON's `1e999`, `Infinity` and `NaN` among them (no whole number)."""
     if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    if isinstance(value, float) and not math.isfinite(value):
         return None
     return int(value)
 
