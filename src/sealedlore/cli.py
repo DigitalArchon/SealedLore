@@ -310,11 +310,18 @@ def cmd_generate(args: argparse.Namespace) -> int:
 
 def cmd_scenario_export(args: argparse.Namespace) -> int:
     root: Path | None = args.data_dir
-    bundle = load_story_bundle(args.story_id, root=root)
+    try:
+        bundle = load_story_bundle(args.story_id, root=root)
+    except (FileNotFoundError, ValueError) as exc:
+        print(exc, file=sys.stderr)
+        return 1
     try:
         write_scenario(args.file, scenario_from_bundle(bundle, reference_files(bundle, root)))
     except ScenarioError as exc:
         print(exc, file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(f"Couldn't write {args.file}: {exc.strerror or exc}", file=sys.stderr)
         return 1
     print(f"Exported {bundle.story.title!r} to {args.file}")
     return 0
@@ -336,29 +343,39 @@ def cmd_scenario_import(args: argparse.Namespace) -> int:
 
 def cmd_export(args: argparse.Namespace) -> int:
     root: Path | None = args.data_dir
-    bundle = load_story_bundle(args.story_id, root=root)
-    if args.markdown:
+    try:
+        bundle = load_story_bundle(args.story_id, root=root)
         # As the app exports it: a private scene's messages left out, its
         # approved summary standing in for them.
         path = StorySession.model_nodes(active_path(bundle.nodes, bundle.story.active_leaf_id))
-        args.file.write_text(
-            render_markdown(
-                bundle.story.title,
-                path,
-                bundle.cast,
-                user_name=markdown_user_name(bundle.story, bundle.cast),
-            ),
-            encoding="utf-8",
-        )
+    except (FileNotFoundError, ValueError) as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    try:
+        if args.markdown:
+            args.file.write_text(
+                render_markdown(
+                    bundle.story.title,
+                    path,
+                    bundle.cast,
+                    user_name=markdown_user_name(bundle.story, bundle.cast),
+                ),
+                encoding="utf-8",
+            )
+        else:
+            write_archive(
+                args.file,
+                bundle,
+                read_api_log(bundle.story.id, root=root),
+                all_image_files(bundle.story.id, root),
+            )
+    except OSError as exc:
+        print(f"Couldn't write {args.file}: {exc.strerror or exc}", file=sys.stderr)
+        return 1
+    if args.markdown:
         print(f"Wrote {len(path)} messages of {bundle.story.title!r} to {args.file}")
-        return 0
-    write_archive(
-        args.file,
-        bundle,
-        read_api_log(bundle.story.id, root=root),
-        all_image_files(bundle.story.id, root),
-    )
-    print(f"Archived {bundle.story.title!r} ({len(bundle.nodes)} messages) to {args.file}")
+    else:
+        print(f"Archived {bundle.story.title!r} ({len(bundle.nodes)} messages) to {args.file}")
     return 0
 
 
@@ -579,6 +596,19 @@ class Repl:
             # they were stored on its messages and never sent.
             print(f"  /{name} is for stories; a chat has only its messages")
             return True
+        try:
+            self.run_command(name, rest)
+        except ValueError as exc:
+            # Refused by the story as it stands (a private scene left open
+            # in the app, above all): said, and the terminal goes on, as the
+            # window says it and stays open.
+            print(f"  {exc}")
+        session.save()
+        return True
+
+    def run_command(self, name: str, rest: str) -> None:
+        session = self.session
+        story = session.story
         if name == "help":
             print(HELP)
         elif name == "cast":
@@ -586,9 +616,10 @@ class Repl:
         elif name == "hold":
             character = self.resolve(rest)
             if character:
+                # First: refused (in a private scene), nobody is taken up.
+                moved = session.hold(character.id)
                 self.controlled_id = character.id
                 self.speaker_id = character.id
-                moved = session.hold(character.id)
                 print(
                     f"  holding {character.name}" + ("; the scene moves to them" if moved else "")
                 )
@@ -688,9 +719,6 @@ class Repl:
         else:
             print(f"  unknown command {name!r} — /help")
 
-        session.save()
-        return True
-
     def command_review(self, rest: str) -> None:
         if not rest:
             print("  /review <what you'd like to be different>")
@@ -772,7 +800,10 @@ class Repl:
             print(f"  {chip_text(roll)}")
 
     def command_undo(self) -> None:
-        path = self.session.path()
+        # In a private scene, its own last exchange: `path()` leaves the
+        # scene out, and took the exchange before it, the scene with it.
+        session = self.session
+        path = session.full_path() if session.in_private else session.path()
         if not path:
             print("  nothing to undo")
             return

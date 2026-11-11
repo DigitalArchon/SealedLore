@@ -2850,6 +2850,13 @@ class StorySession(
         deletion = self.deletion_for(node_id)
         doomed = set(deletion.node_ids)
         node = index_nodes(self.nodes)[node_id]
+        span = self.open_span
+        if span is not None and node.meta.private_span != span.id:
+            # As the window refuses it: deleting a message before the scene
+            # would take the scene with it, and the place it returns to.
+            raise ValueError(
+                "End the private scene first: the messages before it are where it returns to."
+            )
         if node.parent_id is not None:
             parent = index_nodes(self.nodes)[node.parent_id]
             parent.children = [child for child in parent.children if child != node_id]

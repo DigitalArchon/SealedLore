@@ -2855,7 +2855,11 @@ a character), `/present`, `/scene`, `/where`, `/privacy` (who can know what
 happens here), `/speaker`, `/ooc`, `/mode`, `/dice`, `/len`, `/style`,
 `/regen`, `/undo`, `/ask`, `/review`, `/inspect`, `/budget`, `/summaries`,
 `/archive`, `/lore`. The length presets are named as in the app, with
-`adaptive` for "Match my turn". To talk to a real endpoint:
+`adaptive` for "Match my turn". A story the app left inside a private scene
+stays in it: the terminal sends nothing to the scene's model and refuses,
+saying why, whatever the window refuses during a scene (`/undo` takes back
+only the scene's own messages); end the scene in the app. To talk to a real
+endpoint:
 
 ```bash
 sealedlore configure --api-key <key> --model anthropic/claude-sonnet-4.5
