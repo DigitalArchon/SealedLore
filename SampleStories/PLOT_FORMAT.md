@@ -83,7 +83,7 @@ These settings go straight after the heading:
 | key | meaning |
 |---|---|
 | `mode` | `generate` (default): the model writes the opening from the notes. `as written` (or `written`): the notes *are* the first passage. |
-| `location`, `time`, `situation` | Where the starting scene is. |
+| `location`, `time`, `situation` | Where the starting scene is. A `location` that names one of the file's places ("The farmhouse, an hour before dark") is where the plot takes the story to open; a `time` that names an hour or a time of day ("mid-morning", "15:30") starts the clock there when the file has no `start:`. |
 
 ## Characters
 

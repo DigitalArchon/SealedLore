@@ -260,8 +260,8 @@ def test_a_plot_written_again_keeps_its_people_on_their_cards_and_undo_brings_it
     again = next(c for c in session.bundle.cast if c.name == "Teodor Vask")
     assert again.id == vask.id and again.plot_hidden
     assert "he enjoys a confession" in again.full_description
-    assert turn.changed == ["The plot: 4 events"] and not turn.undone
-    assert draft.events == 4
+    assert turn.changed == ["The plot: 5 events"] and not turn.undone
+    assert draft.events == 5
     assert session.undo_follow_up("plot")
     assert state(session) == kept
 

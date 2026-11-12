@@ -4482,6 +4482,15 @@ PLOT_EXAMPLE = "\n".join(
         "",
         "# Events",
         "",
+        "## A crate nobody claims",
+        "- pacing: quiet moment",
+        "- at: The Salt Market",
+        "- trigger: The player's character is in the Salt Market with nothing pressing.",
+        "- tell: A porter sets a crate down by the next stall and walks off without a "
+        "word. Nobody claims it. It is stamped with a mark no trader here uses, and the "
+        "stallholders look anywhere else. What the player's character does about it is "
+        "theirs.",
+        "",
         "## Vask calls in the favour",
         "- pacing: quiet moment",
         "- requires: owes_vask, The customs captain arrives happened, The raid not happened",
@@ -4622,6 +4631,9 @@ Pacing:
   not.
 - Give an any-time event with `at:` a trigger: with none, a passage that names
   the place starts it.
+- An event that belongs to a time of day, or that has someone come in, says so
+  in its trigger ("It is night, and the mate is not with them"): the director
+  goes by the trigger, and begins an any-time event as soon as it holds.
 
 Timeline events:
 - A timeline event always resolves when its window closes: on screen at the
@@ -4630,7 +4642,14 @@ Timeline events:
   moved past it (`requires: town = standing` on an attack on the town).
 - An event that waits on a watched fact nothing in the plot sets may never
   come: have an earlier event set the fact, or give it a second way in.
-- Space the windows as the author asks, and leave day 1 to the opening.
+- Space the windows as the author asks, and leave the story's first scene to
+  the opening.
+- A player may play a whole evening before the clock passes its first day,
+  and until then the timeline is silent. Beside the timeline, give the story
+  one or two events under `# Events` that can come in its first hours, small
+  enough to sit beside what the author is doing there. At least one has a
+  trigger the opening scene itself meets: the place the story opens in, with
+  the people it opens with.
 
 Lead-ins:
 - The event's own text (the lines under its settings) is what a lead-in shows

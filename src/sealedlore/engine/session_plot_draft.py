@@ -85,7 +85,7 @@ class PlotDraftRuntime:
         merged, notes = merge_reply(
             base, read_reply(text).document, newcomers=newcomers, revise=revise
         )
-        problems = plot_problems(merged)
+        problems = plot_problems(merged, opening=not self.nodes)
         if completed.finish_reason == "length":
             problems.insert(0, "The reply was cut off before its end: write the plot shorter.")
         repaired = False
@@ -103,7 +103,7 @@ class PlotDraftRuntime:
             raise ValueError("the model wrote no event the story could use: ask again")
         notes += dropped
         # What it couldn't put right but the story can play past: said, kept.
-        notes += plot_problems(document)
+        notes += plot_problems(document, opening=not self.nodes)
         if completed.finish_reason == "length":
             notes.append("The model ran out of room: the plot may be missing its last part.")
         notes += self.set_plot_document(document)

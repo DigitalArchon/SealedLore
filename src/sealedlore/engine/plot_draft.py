@@ -43,6 +43,7 @@ from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.story_plot import PlotDocumentError, made_of
 from sealedlore.engine.validators import name_forms
 from sealedlore.messages import ContentPart, PromptMessage
+from sealedlore.models.plot import MINUTES_PER_DAY, Plot
 from sealedlore.models.plot_file import OpeningDoc, PlotDocument
 
 # A plot of a dozen events with their variants passed 8k tokens in drafting
@@ -455,13 +456,38 @@ def _newcomer_clashes(document: PlotDocument, people) -> list[str]:
     return found
 
 
-def plot_problems(document: PlotDocument) -> list[str]:
+NOTHING_AT_FIRST = (
+    "Nothing can happen in the story's first hours: every event waits for a later day or for "
+    "another event. Under `# Events`, give one event no `when:` (or one that opens on day {day}) "
+    "and a trigger the opening scene itself meets: the place the story opens in, with the people "
+    "it opens with."
+)
+
+
+def nothing_at_first(plot: Plot) -> str:
+    """The problem to put to the model when no event can come on the story's
+    first day, or "". A player may play a whole evening before the clock
+    passes its first day, and until then such a plot is silent: live, plots
+    written with every other choice left to the model gave a talkative player
+    nothing in two sessions of fourteen turns, three times running."""
+    first = plot.start_minutes // MINUTES_PER_DAY + 1
+    for event in plot.events:
+        opens = event.window is None or event.window[0] <= first
+        waits = any(c.event_id is not None and c.happened for c in event.requires)
+        if opens and not waits:
+            return ""
+    return NOTHING_AT_FIRST.format(day=first)
+
+
+def plot_problems(document: PlotDocument, *, opening: bool = False) -> list[str]:
     """What stops the plot working as written, in words for the model: the
     importer's errors, a newcomer's name another answers to, and a secret
     named before its time. All at once: live (GLM 5.3), a reply sent back
     with its one error alone came back with that put right and seven secrets
     still named early, none of which it had been told of. The importer reads
-    past what it refuses, so what it made of the rest is judged too."""
+    past what it refuses, so what it made of the rest is judged too.
+    `opening`: the story hasn't begun, so a plot with nothing for its first
+    hours is said too (`nothing_at_first`)."""
     rendered, problems = check_plot_document(document)
     found = [
         f"{describe_where(document, problem.where)}: {problem.message}"
@@ -482,6 +508,8 @@ def plot_problems(document: PlotDocument) -> list[str]:
             told_from_start(document),
         )
     ]
+    if opening and (gap := nothing_at_first(scenario.plot)):
+        found.append(gap)
     return found
 
 

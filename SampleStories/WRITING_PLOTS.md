@@ -133,6 +133,21 @@ which matters.
   event and a lead-in are asked every turn. Tight `requires:` and `at:` lines
   are what keep that short.
 
+**Say the hour in the trigger, not only in the text.** The director goes by
+the trigger, and begins an any-time event as soon as it holds. An event whose
+text says "in the small hours" and whose trigger says only "below decks" can
+begin at ten in the morning. Write "It is night, and the player's character
+is below decks", and if the event has someone come in, say that they are not
+there already.
+
+**Give the first evening something.** The clock moves with the story, and a
+player who talks and never skips time may play a whole sitting inside the
+first day. If every event waits for day 2 or for another event, the plot is
+silent until then. One or two events under `# Events` with no `when:`, and a
+trigger the opening scene itself meets, give it something to do from the
+start. The file's `start:` (or the opening's `time:`, when the file names no
+start) sets the hour the clock begins at.
+
 **Don't fix the hour in a quiet-moment event.** Lulls fall at night as often as
 not, so "the council will see them at noon today" can arrive at midnight. Leave
 the hour to the story ("the council will see them as soon as they can come"),
@@ -159,6 +174,14 @@ in a passage would start the welcome five miles out.
 ```
 
 Once the event is seen to happen, `at:` also records the character there.
+
+**Say in the opening where the story starts.** The program takes the opening's
+`location:` as the character's first place when it names one of your places:
+at the start of the line ("The farmhouse, an hour before dark") or after a
+comma ("The barracks, Hollowmouth"). A place the line only measures from ("five
+miles south of Hellsville") is not where they are. If the location names no
+place, the plot knows nobody is anywhere until a passage puts them somewhere
+by name, and an event `at:` the opening place waits for that.
 
 ## Windows, must-happen, and conditions that fail
 

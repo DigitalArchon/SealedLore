@@ -104,6 +104,7 @@ def test_the_prompt_s_example_reads_cleanly_into_a_story_that_has_its_market():
     assert [e.title for e in plot.events] == [
         "The customs captain arrives",
         "The raid",
+        "A crate nobody claims",
         "Vask calls in the favour",
         "The chapel at low tide",
     ]
@@ -299,7 +300,7 @@ def test_what_the_importer_refuses_is_left_out_with_what_needed_it():
 def test_the_session_writes_the_plot_logs_it_and_gives_it_to_the_story(tmp_path: Path):
     session = session_for(harbour(), tmp_path, [PLOT_EXAMPLE])
     draft, notices = run(session.draft_plot(PlotWishes(events="few")))
-    assert draft.notes == [] and not draft.repaired and draft.events == 4
+    assert draft.notes == [] and not draft.repaired and draft.events == 5
     plot = session.story.plot
     vask = next(c for c in session.cast if c.name == "Teodor Vask")
     chapel = next(e for e in session.bundle.lore if e.title == "The Drowned Chapel")
@@ -380,14 +381,22 @@ def test_what_is_still_wrong_after_that_is_left_out_and_said(tmp_path: Path):
     session = session_for(harbour(), tmp_path, [broken, broken])
     draft, _ = run(session.draft_plot(PlotWishes()))
     titles = [event.title for event in session.story.plot.events]
-    assert titles == ["The customs captain arrives", "The raid", "Vask calls in the favour"]
+    assert titles == [
+        "The customs captain arrives",
+        "The raid",
+        "A crate nobody claims",
+        "Vask calls in the favour",
+    ]
     assert any("Left out Event “The chapel at low tide”" in note for note in draft.notes)
     # Its hidden chapel stays a card no event reveals: the importer's note says so.
     assert "The Drowned Chapel" in [e.title for e in session.bundle.lore]
 
 
 def test_a_broken_event_takes_what_needed_it_and_nothing_left_is_an_error(tmp_path: Path):
-    broken = PLOT_EXAMPLE.replace("requires: suspicion = calm", "requires: suspicion = sleepy")
+    # Without the example's one event that needs nothing else.
+    start = PLOT_EXAMPLE.index("## A crate nobody claims")
+    chained = PLOT_EXAMPLE[:start] + PLOT_EXAMPLE[PLOT_EXAMPLE.index("## Vask calls in") :]
+    broken = chained.replace("requires: suspicion = calm", "requires: suspicion = sleepy")
     session = session_for(harbour(), tmp_path, [broken, broken])
     with pytest.raises(ValueError, match="no event"):
         run(session.draft_plot(PlotWishes()))
@@ -452,3 +461,27 @@ def test_a_chat_and_a_private_scene_have_no_plot_written(tmp_path: Path):
     with pytest.raises(ValueError, match="simple chat"):
         run(session.draft_plot(PlotWishes()))
     assert session.provider.requests == []
+
+
+def test_a_plot_with_nothing_for_the_first_hours_is_sent_back_for_it():
+    """A player may play a whole evening before the clock passes its first
+    day: a plot whose every event waits for a later day gave them nothing."""
+    from sealedlore.engine.plot_draft import NOTHING_AT_FIRST, nothing_at_first
+    from sealedlore.models.plot import Condition, EventDef, Plot
+
+    later = EventDef(id="later", title="Later", kind="timed", window=(3, 5), text="Later.")
+    chained = EventDef(
+        id="after",
+        title="After",
+        kind="optional",
+        text="After.",
+        requires=[Condition(event_id="later")],
+    )
+    assert nothing_at_first(Plot(events=[later, chained])) == NOTHING_AT_FIRST.format(day=1)
+    # An event with no days of its own, or one whose days begin where the story does.
+    free = EventDef(id="free", title="Free", kind="optional", text="Free.")
+    assert nothing_at_first(Plot(events=[later, free])) == ""
+    first = EventDef(id="first", title="First", kind="timed", window=(1, 2), text="First.")
+    assert nothing_at_first(Plot(events=[later, first])) == ""
+    # A story that opens on its third day counts from there.
+    assert nothing_at_first(Plot(start_minutes=2 * 1440 + 600, events=[later])) == ""
