@@ -2576,10 +2576,11 @@ main endpoint's key; only the model is left to choose, and private scenes stay
 off until one is.
 
 **End-to-end encrypted models (`private/…`).** NanoGPT's Private Mode
-models (`private/glm-5-3`, `private/kimi-k3`, `private/gemma4-31b` and the
-rest; Choose lists them as "end-to-end encrypted") close the gap above: the
-prompt is sealed on your machine to a key only the model's enclave holds, and
-the reply comes back sealed the same way, so NanoGPT relays ciphertext.
+models (`private/glm-5-3`, `private/kimi-k3-1-pro`, `private/gemma4-31b`
+and the rest; Choose lists them as "end-to-end encrypted") close the gap
+above: the prompt is sealed on your machine to a key only the model's
+enclave holds, and the reply comes back sealed the same way, so NanoGPT
+relays ciphertext.
 Before anything is sent the app attests the enclave with Tinfoil's own
 verifier:
 - the hardware's signed report must match the router code Tinfoil
