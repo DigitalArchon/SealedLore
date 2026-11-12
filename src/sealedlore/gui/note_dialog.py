@@ -1,5 +1,6 @@
 """A few words from the author for one passage: what a new take should do
-differently (⋯ → Regenerate with a note…).
+differently (⋯ → Regenerate with a note…), or what should change in the one
+there is (⋯ → Change this passage…).
 
 One box and two buttons. The words go to the model with the request that
 follows, so Enter in the box is a new line and never sends them (gui/sizing.py
@@ -32,6 +33,24 @@ CHAT_RETAKE_HINT = (
     "you have now is kept (‹ ›) and isn't shown to the model."
 )
 RETAKE_PLACEHOLDER = "She should refuse this time, and say why."
+
+# Change this passage… in a story's words and a chat's (False, True).
+CHANGE_TITLES = {False: "Change this passage", True: "Change this reply"}
+CHANGE_ASKS = "What should change?"
+CHANGE_BUTTON = "Change"
+CHANGE_HINTS = {
+    False: (
+        "The storyteller writes this passage again with your change made, keeping the rest "
+        "in the same words wherever it can. The result is a new take in this one's place; "
+        "this one is kept (‹ ›)."
+    ),
+    True: (
+        "The model writes this reply again with your change made, keeping the rest in the "
+        "same words wherever it can. The result is a new take in this one's place; this one "
+        "is kept (‹ ›)."
+    ),
+}
+CHANGE_PLACEHOLDER = "It was raining. And she calls him by his first name."
 
 
 class NoteDialog(QDialog):
@@ -99,6 +118,11 @@ class NoteDialog(QDialog):
 
 
 __all__ = [
+    "CHANGE_ASKS",
+    "CHANGE_BUTTON",
+    "CHANGE_HINTS",
+    "CHANGE_PLACEHOLDER",
+    "CHANGE_TITLES",
     "CHAT_RETAKE_HINT",
     "RETAKE_ASKS",
     "RETAKE_BUTTON",

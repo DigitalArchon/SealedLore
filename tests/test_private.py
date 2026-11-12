@@ -125,6 +125,11 @@ def test_nothing_from_a_private_scene_reaches_another_model(tmp_path: Path, keep
     for _event in session.regenerate(note=f"Closer, and name {MARKER}."):
         pass
     assert session.full_path()[-1].meta.retake_note
+    # And the passage written again with a change: the turn, the passage and
+    # the change asked for all go to the scene's model.
+    for _event in session.revise_passage(session.full_path()[-1].id, f"Add {MARKER} twice."):
+        pass
+    assert session.full_path()[-1].meta.revise_note
     private.responses = ["They spoke quietly and agreed to meet at dawn by the well."]
     summary = session.summarise_private()
     assert MARKER not in summary
@@ -137,6 +142,12 @@ def test_nothing_from_a_private_scene_reaches_another_model(tmp_path: Path, keep
     for i in range(6):
         play(session, turn(held, f"At dawn I go to the well, step {i}."))
     for _event in session.ask("What happened last night?"):
+        pass
+    # A take with a note and a passage changed by instruction, after the
+    # scene: each sends the story's own turn and history again.
+    for _event in session.regenerate(note="Slower."):
+        pass
+    for _event in session.revise_passage(session.path()[-1].id, "It is colder."):
         pass
     for call in (
         lambda: list(session.scan_recent()),
@@ -738,8 +749,8 @@ def test_a_long_story_after_the_scene_never_brings_it_back(tmp_path: Path, keep:
 def test_a_memory_scene_writes_only_content_free_log_kinds(tmp_path: Path):
     """The constraint every later change must keep: in a memory-only scene the
     API log sees the model's name and the usage, nothing else, from the turn,
-    an aside, a regenerate (plain, and with a note) and the exit summary
-    alike."""
+    an aside, a regenerate (plain, and with a note), a passage changed by
+    instruction and the exit summary alike."""
     session, main, held = build(tmp_path)
     play(session, turn(held, "Before the scene."))
     before = len(read_api_log(session.story.id, root=tmp_path))
@@ -750,6 +761,8 @@ def test_a_memory_scene_writes_only_content_free_log_kinds(tmp_path: Path):
     for _ in session.regenerate():
         pass
     for _ in session.regenerate(note=f"Again, with {MARKER}."):
+        pass
+    for _ in session.revise_passage(session.full_path()[-1].id, f"Now with {MARKER}."):
         pass
     session.summarise_private()
     entries = read_api_log(session.story.id, root=tmp_path)[before:]
@@ -1057,7 +1070,9 @@ def test_a_tee_model_refused_when_attested_again_is_sent_nothing_more(tmp_path: 
     assert len(tee.attested) == 2, "not attested again on its own: the window's Try again does"
 
 
-@pytest.mark.parametrize("entry", ["send", "regenerate", "ask", "summary", "image prompt"])
+@pytest.mark.parametrize(
+    "entry", ["send", "regenerate", "revise", "ask", "summary", "image prompt"]
+)
 def test_every_call_that_reaches_a_tee_model_attests_it_again_first(tmp_path: Path, entry):
     from sealedlore.providers.tee import REATTEST_SECONDS
 
@@ -1071,6 +1086,7 @@ def test_every_call_that_reaches_a_tee_model_attests_it_again_first(tmp_path: Pa
     calls = {
         "send": lambda: play(session, turn(held, "Two.")),
         "regenerate": lambda: list(session.regenerate()),
+        "revise": lambda: list(session.revise_passage(session.full_path()[-1].id, "Shorter.")),
         "ask": lambda: list(session.ask("Who is here?")),
         "summary": session.summarise_private,
         "image prompt": lambda: session.write_image_prompt(""),

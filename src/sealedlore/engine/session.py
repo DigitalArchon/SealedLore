@@ -125,6 +125,15 @@ from sealedlore.engine.retrieval import (
     query_text,
     select_lore,
 )
+from sealedlore.engine.revision import (
+    NOT_REVISABLE,
+    NOTHING_ASKED,
+    SECTION_REVISE,
+    SECTION_REVISE_FROM,
+    nothing_came,
+    revisable,
+    revise_request,
+)
 from sealedlore.engine.routing import (
     HostPrice,
     RouteCheck,
@@ -2223,6 +2232,142 @@ class StorySession(
         self.prepare_archival()
         self.start_background_merge()
 
+    def can_revise(self, node_id: str) -> bool:
+        """Whether Change this passage… has a passage to change at `node_id`:
+        one written for a turn (`revisable`), any on the tree and not the
+        latest alone, and from the private scene that is open, or from
+        outside any scene while none is (`revise_passage` refuses the rest)."""
+        try:
+            path = path_to(self.nodes, node_id)
+        except (KeyError, ValueError):
+            return False
+        if not revisable(path):
+            return False
+        if self.in_private and self.private_provider is None:
+            return False
+        open_id = self.open_span.id if self.open_span is not None else None
+        return path[-1].meta.private_span == open_id and path[-2].meta.private_span == open_id
+
+    def revise_passage(
+        self, node_id: str, instruction: str
+    ) -> Iterator[StreamEvent | SessionNotice | PassageDone]:
+        """The passage written again with the change the author asks for, as
+        a new take beside it (engine/revision.py).
+
+        The request is the passage's own turn as Regenerate would send it,
+        then the passage and the request to change it. The reply is a whole
+        passage and joins the story exactly as a take of Regenerate's does:
+        on a passage the story went on from it stands in its place, what
+        followed moves onto it, no reads run and a chapter covering the old
+        take goes stale; on the latest passage the reads run as after any
+        new passage. The passage it was made from is kept (‹ ›), and the new
+        take says what it was made from and what was asked
+        (`NodeMeta.revised_from`, `revise_note`), which no request reads.
+
+        A reply stopped partway is not a passage with a change made, and one
+        that came back empty is nothing: neither is attached, and the
+        passage stands as it was (the API log keeps what came).
+        """
+        self._tee_guard()
+        change = instruction.strip()
+        if not change:
+            raise ValueError(NOTHING_ASKED)
+        path = path_to(self.nodes, node_id)
+        if not revisable(path):
+            raise ValueError(NOT_REVISABLE)
+        original, user_node = path[-1], path[-2]
+        span_id = original.meta.private_span
+        if user_node.meta.private_span != span_id or (
+            span_id is not None and (self.open_span is None or self.open_span.id != span_id)
+        ):
+            # The turn and the passage are sent again: a scene's never go
+            # to any model but that scene's, while it is open.
+            raise ValueError("that private scene has ended; its messages can't be changed")
+        if span_id is None and self.in_private:
+            raise ValueError("leave the private scene before changing a passage from outside it")
+        if span_id is not None and self.private_provider is None:
+            raise ValueError(PRIVATE_NO_MODEL)
+        history = self.model_nodes(path[:-2], include_span=span_id)
+        turn = self._turn_of(user_node)
+        if turn.roll is not None:
+            turn = self._explained(turn)
+        # The scene as the author's turn found it, as the passage was written
+        # against.
+        self._sync_scene([*history, user_node])
+        span = self.open_span if span_id is not None else None
+        carried = bool(original.children)
+        leaf = self.story.active_leaf_id
+        new: Node | None = None
+        try:
+            if span is not None:
+                prompt = self.private_assemble(turn, history, span)
+                provider, model = self.private_provider, span.model
+            else:
+                turn = self._directed(turn, user_node.meta.direction, [*history, user_node])
+                lore = self._retrieve_for_turn(turn, history)
+                recall = self._recall_for_turn(self._recall_query(turn, history), history)
+                prompt = self.assemble(turn, history_nodes=history, lore=lore, recall=recall)
+                provider, model = None, None
+            reminder = prompt.section(SECTION_REMINDER)
+            request = revise_request(
+                self.texts,
+                change=change,
+                reminder=reminder.text if reminder else "",
+                chat=self.story.chat,
+            )
+            prompt = continued(
+                prompt,
+                original.content.rstrip(),
+                request,
+                self.estimator,
+                sections=(SECTION_REVISE_FROM, SECTION_REVISE),
+            )
+            self.last_prompt = prompt
+            yield from self._generate(
+                prompt,
+                turn,
+                parent=user_node,
+                provider=provider,
+                model=model,
+                span=span,
+                revises=original,
+                change=change,
+            )
+        finally:
+            made = index_nodes(self.nodes).get(self.story.active_leaf_id or "")
+            if made is not None and made.id != leaf and made.meta.revised_from == original.id:
+                new = made
+                self.carry_plot_correction(original, new)
+                if carried:
+                    # The story went on from the passage: the new take stands
+                    # in its place, and the story stays where it was.
+                    self.story.active_leaf_id = leaf
+                    self._swap_take(original, new)
+            if new is None:
+                self._sync_scene()
+            self.save()
+        if new is None:
+            # Only reached when the reply ran to its end: a Stop closes this
+            # generator at the stream, and the window says the rest.
+            result = self.last_result
+            yield SessionNotice(nothing_came(result.finish_reason, result.refused))
+            return
+        yield PassageDone()
+        if span is not None:
+            self._check_tee(new)
+            self.save()
+            if not carried and not self.last_result.unread:
+                yield from self.update_looks_after_turn()
+            return
+        if carried or self.last_result is None or self.last_result.unread:
+            return
+        pick = self._start_lore_pick()
+        yield from self.read_after_turn()
+        yield from self._finish_lore_pick(pick)
+        self.prepare_archival()
+        self.start_background_merge()
+        self.start_condensing()
+
     def _retake_in_place(
         self,
         turn: TurnRequest,
@@ -2270,9 +2415,14 @@ class StorySession(
         model: str | None = None,
         span: PrivateSpan | None = None,
         extend: Node | None = None,
+        revises: Node | None = None,
+        change: str = "",
     ) -> Iterator[StreamEvent | SessionNotice]:
         """Stream a passage into a new message under `parent`, or, with
-        `extend`, onto the end of that one (Continue)."""
+        `extend`, onto the end of that one (Continue). With `revises`, the
+        new message is that passage written again with `change` made (Change
+        this passage…): a take of its turn, attached only when the reply
+        came back whole."""
         if span is not None and provider is None:
             # A private scene's passage goes to its own model or nowhere:
             # never the story's provider by default.
@@ -2291,6 +2441,8 @@ class StorySession(
         body: dict[str, Any] = {"node_id": parent.id, "payload": payload}
         if extend is not None:
             body["continues"] = extend.id
+        if revises is not None:
+            body["revises"] = revises.id
         if turn.retake_note:
             # A memory-only scene's log keeps none of this (`_log_turn`).
             body["retake_note"] = turn.retake_note
@@ -2326,6 +2478,8 @@ class StorySession(
                 model=model,
                 span=span,
                 extend=extend,
+                revises=revises,
+                change=change,
             )
         # A TEE reply's record is fetched under these (session_private).
         self._last_response_id = completed.response_id if completed is not None else None
@@ -2338,7 +2492,11 @@ class StorySession(
         # A model caught reasoning though asked for nothing: said at once, and
         # kept under the passage, so the slow start reads as the model's.
         written = self.last_result.node if self.last_result is not None else None
-        if completed is not None and completed.finish_reason == "length":
+        if revises is not None and written is None:
+            # No passage came of the change, so there is none to keep a note
+            # under: `revise_passage` says what happened.
+            pass
+        elif completed is not None and completed.finish_reason == "length":
             # Under the passage too: it looks whole once the notice is gone.
             yield self._kept_notice(
                 cut_off_notice(request.params.max_tokens, completed), node=written
@@ -2366,6 +2524,8 @@ class StorySession(
         model: str | None = None,
         span: PrivateSpan | None = None,
         extend: Node | None = None,
+        revises: Node | None = None,
+        change: str = "",
     ) -> None:
         model = model or prompt.model or self.model
         usage = self.priced(completed.usage if completed else Usage(), model)
@@ -2387,6 +2547,11 @@ class StorySession(
                 node = extend
                 self._carry_on(extend, added, reasoning, usage, model)
             text = added if added.strip() else ""
+        elif revises is not None and (completed is None or not text.strip()):
+            # A passage being changed, and the reply stopped partway or empty:
+            # half a rewrite must never stand where the whole passage stood.
+            # Nothing is attached; the log below keeps what came.
+            pass
         elif text or (reasoning and completed is not None):
             node = Node(
                 kind="assistant",
@@ -2405,6 +2570,11 @@ class StorySession(
                     request_log_ref=log_ref,
                     # Regenerate with a note: what the author asked of this take.
                     retake_note=turn.retake_note or None,
+                    # Change this passage…: the take it was made from (whose
+                    # branch it stays on), and what was asked.
+                    revised_from=revises.id if revises is not None else None,
+                    revise_note=(change or None) if revises is not None else None,
+                    branch_name=revises.meta.branch_name if revises is not None else None,
                     # A TEE model's passage is marked as it is written, and
                     # the mark raised once its reply is checked (`_check_tee`).
                     tee=self._written_mark(model, span),
@@ -2429,6 +2599,7 @@ class StorySession(
                     else {}
                 ),
                 **({"continues": extend.id} if extend is not None else {}),
+                **({"revises": revises.id} if revises is not None else {}),
             },
             span,
         )

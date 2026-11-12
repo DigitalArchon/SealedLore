@@ -484,6 +484,7 @@ class MainWindow(
         self.transcript = TranscriptView()
         self.transcript.regenerate_requested.connect(self._regenerate_node)
         self.transcript.regenerate_note_requested.connect(self._regenerate_with_note)
+        self.transcript.revise_requested.connect(self._change_passage)
         self.transcript.continue_requested.connect(self._continue_node)
         self.transcript.take_back_requested.connect(self._take_back)
         self.transcript.review_mark_requested.connect(self._toggle_review_mark)

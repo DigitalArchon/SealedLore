@@ -925,6 +925,29 @@ _text(
     (("note", "the author's note, as written"),),
 )
 
+# Change this passage… (engine/revision.py): after the passage, in a message
+# of its own, with the turn's REMEMBER line after it, as Continue asks. The
+# reply is a whole passage and becomes another take, so it says to keep what
+# wasn't asked about in the same words: a take that drifts everywhere is what
+# Regenerate with a note is for. The REMEMBER line ends "Continue the scene
+# now", written for a new passage: the last sentence says what it means here.
+# Not measured.
+_text(
+    "turn.revise",
+    TURN,
+    "Change this passage",
+    "Sent after a passage when the author asks for a change to it (⋯ → Change this "
+    "passage…), followed by the turn's REMEMBER line again. The reply becomes a new take.",
+    "The author asks for a change to your passage above:\n\n{change}\n\n"
+    "Write that passage again with the change made. Change only what it asks for, and keep "
+    "everything else in the same words wherever you can: the same events in the same "
+    "order, the same speech, about the same length unless the change says otherwise. "
+    "Reply with the whole passage, from its first word to its last, and nothing else: no "
+    "comment, and no note of what you changed. The line below holds for it as it did; "
+    "where it says to continue the scene, that is this passage, written again.",
+    (("change", "what the author asked to change, as written"),),
+)
+
 _text(
     "turn.speaker.narrator",
     TURN,
@@ -2324,6 +2347,19 @@ _text(
     "[A note from the user about the reply you write now, apart from the conversation: "
     "follow it, and don't mention it or answer it. {note}]",
     (("note", "the user's note, as written"),),
+)
+
+_text(
+    "chat.revise",
+    CHAT,
+    "Change this reply",
+    "Sent after a reply when the user asks for a change to it (⋯ → Change this reply…). "
+    "The answer becomes a new take of the reply.",
+    "Change your reply above as follows:\n\n{change}\n\n"
+    "Write the reply again with that change made. Change only what it asks for, and keep "
+    "everything else in the same words wherever you can. Answer with the whole reply and "
+    "nothing else: no comment, and no note of what you changed.",
+    (("change", "what the user asked to change, as written"),),
 )
 
 _text(

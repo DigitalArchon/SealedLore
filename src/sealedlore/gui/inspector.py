@@ -63,6 +63,8 @@ SECTION_LABELS = {
     "tail.reminder": "Final reminder",
     "continue.so_far": "The passage so far",
     "continue.request": "Continue",
+    "revise.passage": "The passage to change",
+    "revise.request": "The change asked for",
 }
 
 

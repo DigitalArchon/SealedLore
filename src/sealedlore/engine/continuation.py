@@ -144,13 +144,17 @@ def continued(
     passage: str,
     request: str,
     estimator: TokenEstimator | None = None,
+    *,
+    sections: tuple[str, str] = (SECTION_SO_FAR, SECTION_CONTINUE),
 ) -> AssembledPrompt:
     """The turn's request carried on: the passage so far as the storyteller's
     own message after the author's turn, then `request`. Everything before
-    them is the turn's request as it was assembled, breakpoints and all."""
+    them is the turn's request as it was assembled, breakpoints and all.
+    `sections` names the two for the Prompt page (Change this passage… asks
+    the same way, engine/revision.py)."""
     estimator = estimator or TokenEstimator()
-    so_far = PromptSection(SECTION_SO_FAR, passage, estimator.estimate(passage, prompt.model))
-    ask = PromptSection(SECTION_CONTINUE, request, estimator.estimate(request, prompt.model))
+    so_far = PromptSection(sections[0], passage, estimator.estimate(passage, prompt.model))
+    ask = PromptSection(sections[1], request, estimator.estimate(request, prompt.model))
     added = so_far.tokens + ask.tokens
     by_section = dict(prompt.budget.by_section)
     by_section["tail"] = by_section.get("tail", 0) + added

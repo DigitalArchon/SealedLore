@@ -156,6 +156,11 @@ class NodeMeta(BaseModel):
     # gave for that take. For the author to see and the log to tell; no
     # request reads it, so a later take or turn never carries it.
     retake_note: str | None = None
+    # On a take made by Change this passage…: the take it was written from
+    # (its id) and what the author asked to change. As `retake_note`, read
+    # by no request.
+    revised_from: str | None = None
+    revise_note: str | None = None
 
 
 class Node(BaseModel):

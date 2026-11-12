@@ -251,6 +251,10 @@ class TextBody(QLabel):
 REGENERATE_NOTE_LABEL = "Regenerate with a note…"
 # Under a take made that way, before the author's note.
 RETAKE_NOTE_SHOWN = "Your note for this take"
+# ⋯ on a passage, and on a chat's reply (False, True).
+CHANGE_LABELS = {False: "Change this passage…", True: "Change this reply…"}
+# Under the take a change made, before what the author asked for.
+CHANGE_SHOWN = "The change you asked for"
 
 
 def may_retake(turn_scene: str | None, open_scene: str | None) -> bool:
@@ -289,6 +293,8 @@ class MessageWidget(QFrame):
     regenerate_requested = Signal(str)
     # Another take, with the author's words for it (the window asks for them).
     regenerate_note_requested = Signal(str)
+    # This passage written again with a change (the window asks which).
+    revise_requested = Signal(str)
     # More of this passage, written into it (engine/continuation.py).
     continue_requested = Signal(str)
     take_back_requested = Signal(str)
@@ -394,7 +400,14 @@ class MessageWidget(QFrame):
         self.actions_: dict[str, QAction] = {}
         if node_id:
             self._add_more_menu(
-                header_row, kind == "assistant", rerollable, retakeable, continuable
+                header_row,
+                kind == "assistant",
+                rerollable,
+                retakeable,
+                continuable,
+                # A passage with no words (it spent its limit thinking) has
+                # nothing to change: Regenerate writes it.
+                changeable=retakeable and bool(text.strip()),
             )
         layout.addLayout(header_row)
         # Where a branch begins: the one place in the story it shows.
@@ -532,6 +545,7 @@ class MessageWidget(QFrame):
         rerollable: bool,
         retakeable: bool = True,
         continuable: bool = False,
+        changeable: bool = False,
     ) -> None:
         menu = QMenu(self)
         # A chat's are messages and replies, and it is a chat: a story's words
@@ -583,6 +597,20 @@ class MessageWidget(QFrame):
             )
             carry_on.triggered.connect(lambda: self.continue_requested.emit(self.node_id))
             self.actions_["continue"] = carry_on
+        if assistant and changeable:
+            # Edit corrects by hand; this asks the storyteller to, and keeps
+            # the passage as it was beside the result.
+            change = menu.addAction(CHANGE_LABELS[chat])
+            change.setToolTip(
+                "Say what should change, and the model writes this reply again with that "
+                "changed and the rest kept; the result is a new take, and this one is kept (‹ ›)"
+                if chat
+                else "Say what should change, and the storyteller writes this passage again "
+                "with that changed and the rest kept; the result is a new take, and this one "
+                "is kept (‹ ›)"
+            )
+            change.triggered.connect(lambda: self.revise_requested.emit(self.node_id))
+            self.actions_["revise"] = change
         if rerollable:
             # Regenerate keeps the roll; this is the deliberate way to roll again.
             reroll = menu.addAction("Reroll the dice")
@@ -674,6 +702,9 @@ class MessageWidget(QFrame):
         for key, allowed in (
             ("regenerate", retake),
             ("regenerate_note", retake),
+            # The passage is sent with its turn: both are the open scene's,
+            # or the story's own while none is open (`can_revise`).
+            ("revise", retake and self._scene == open_scene),
             ("reroll", retake),
             ("take_back", may_retake(self._scene, open_scene)),
             ("rewrite", may_branch(self._scene, open_scene)),
@@ -1541,6 +1572,7 @@ def sent_mark(message: Node, reply: Node | None) -> str | None:
 class TranscriptView(QScrollArea):
     regenerate_requested = Signal(str)
     regenerate_note_requested = Signal(str)
+    revise_requested = Signal(str)
     continue_requested = Signal(str)
     take_back_requested = Signal(str)
     review_mark_requested = Signal(str)
@@ -1789,6 +1821,7 @@ class TranscriptView(QScrollArea):
         widget.video_requested.connect(self.video_requested)
         widget.regenerate_requested.connect(self.regenerate_requested)
         widget.regenerate_note_requested.connect(self.regenerate_note_requested)
+        widget.revise_requested.connect(self.revise_requested)
         widget.continue_requested.connect(self.continue_requested)
         widget.take_back_requested.connect(self.take_back_requested)
         widget.edit_committed.connect(self.edit_committed)
@@ -2126,6 +2159,8 @@ class TranscriptView(QScrollArea):
             )
         if node.meta.retake_note:
             widget.add_take_note(f"{RETAKE_NOTE_SHOWN} — {node.meta.retake_note}")
+        if node.meta.revise_note:
+            widget.add_take_note(f"{CHANGE_SHOWN} — {node.meta.revise_note}")
         for model in node.meta.reasoning_caught:
             widget.add_note("⚠ " + caught_note(model))
         # A failure or warning from sending or reading this message: the

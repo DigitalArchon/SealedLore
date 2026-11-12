@@ -625,7 +625,8 @@ archiving, rebuilding summaries.
   sees, Ctrl+Shift+V).
 - **Each message** has Edit and a ⋯ menu: Regenerate this passage,
   Regenerate with a note…, Continue
-  this passage (the latest one), Take back this turn (your turns), Reroll the
+  this passage (the latest one), Change this passage…, Take back this turn
+  (your turns), Reroll the
   dice, Use as evidence in a review, Illustrate this passage…, New branch
   from here…, and Delete from here….
 - **Markdown in a message is shown as it reads**, in stories, simple chats,
@@ -1969,6 +1970,22 @@ turn. (An OOC note on the turn itself is different: it stays with the turn
 and is part of the story from then on.) Length and Outcome apply as for
 Regenerate. A simple chat's replies have it too, and in a
 private scene the note goes to the scene's own model and nowhere else.
+
+**⋯ → Change this passage…** is for a passage that is nearly right. Say what
+should change ("it was raining", "she calls him by his first name", "cut the
+last paragraph") and the storyteller writes the passage again with that
+changed, keeping the rest in the same words wherever it can. Where Regenerate
+with a note asks for a fresh take, this one starts from the passage you have.
+The result is a new take in the passage's place, exactly as Regenerate makes
+one: the passage as it was is kept (`‹ ›` goes back to it), on an older
+passage the story after it stays, and on the latest one the scene and the
+plot are read again. Under the new take is the change you asked for, which is
+never sent again. It is offered on any passage written in answer to a turn
+of yours (**Edit** is the way to correct anything else by hand), and in a
+simple chat as **⋯ → Change this reply…**. A change you stop partway, or one
+that comes back empty, keeps nothing: the passage stays as it was and the
+status bar says so. In a private scene only the scene's own passages can be
+changed, by the scene's own model.
 
 **Continue**, beside Regenerate in the bottom bar (and **⋯ → Continue this
 passage** on the latest passage), writes more of the latest passage into it,
