@@ -1,9 +1,10 @@
 """Settings → Models → Test speed…: each model's wait and rate, in a table.
 
-engine/speed_test.py does the measuring. The thread belongs to one app-wide
+engine/speed_test.py does the measuring. A run belongs to one app-wide
 `SpeedTests` (parented to the application), never to the dialog showing the
-table: a dialog closed mid-test would destroy a running QThread and take the
-app down (the image catalog learned this). The window waits for it on close.
+table, and runs on a daemon thread nobody waits for (gui/workers.py): closing
+the dialog or the app stops its requests in flight, and an enclave still
+being attested (which can't be cancelled) is simply left.
 
 Models are tested at the same time (a beta tester's request: one after
 another, a run took as long as all of them together). Each has its own
@@ -28,7 +29,7 @@ from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import as_completed
 from itertools import count
 
-from PySide6.QtCore import QCoreApplication, QObject, Qt, QThread, Signal, Slot
+from PySide6.QtCore import QCoreApplication, QObject, Qt, Signal
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -50,7 +51,7 @@ from sealedlore.engine.speed_test import (
     run_speed_test,
 )
 from sealedlore.gui.sizing import adjustable_columns, size_to_screen
-from sealedlore.gui.workers import WorkerThread
+from sealedlore.gui.workers import post, run_detached
 from sealedlore.models.config import ModelPrice, ProviderConfig
 from sealedlore.providers.base import ChatProvider
 from sealedlore.threads import thread_pool
@@ -63,24 +64,22 @@ NOTES = len(COLUMNS) - 1
 MAX_AT_ONCE = 8
 
 
-class _Run(QObject):
+class _Run:
     """One test run, on its thread: every target at once, each on a thread
-    of its own; results are handed on from this one as they come."""
-
-    began = Signal(int)
-    done = Signal(int, object)
-    finished = Signal()
+    of its own; results are handed on to the GUI thread as they come."""
 
     def __init__(
         self,
         targets: Sequence[SpeedTarget],
         make_provider: MakeProvider,
         prices: Mapping[str, ModelPrice],
+        say: Callable[..., object],
     ) -> None:
-        super().__init__()
         self._targets = list(targets)
         self._make = make_provider
         self._prices = dict(prices)
+        # began(row), done(row, result), each called on the GUI thread.
+        self._say = say
         self._lock = threading.Lock()
         self._providers: list[ChatProvider] = []
         self._stopping = False
@@ -140,28 +139,24 @@ class _Run(QObject):
         if callable(close):
             close()
 
-    @Slot()
     def run(self) -> None:
-        try:
-            if not self._targets:
-                return
-            workers = min(len(self._targets), MAX_AT_ONCE)
-            with thread_pool(workers) as pool:
-                for index in range(len(self._targets)):
-                    self.began.emit(index)
-                # Enclaves are attested first, and only then is anything
-                # timed: the checking is heavy, and made the others late.
-                ready = list(pool.map(self._prepare, self._targets))
-                rows = {}
-                for index, (target, found) in enumerate(zip(self._targets, ready, strict=True)):
-                    if isinstance(found, SpeedResult):
-                        self.done.emit(index, found)
-                    else:
-                        rows[pool.submit(self._test, target, *found)] = index
-                for future in as_completed(rows):
-                    self.done.emit(rows[future], future.result())
-        finally:
-            self.finished.emit()
+        if not self._targets:
+            return
+        workers = min(len(self._targets), MAX_AT_ONCE)
+        with thread_pool(workers) as pool:
+            for index in range(len(self._targets)):
+                self._say("began", index)
+            # Enclaves are attested first, and only then is anything
+            # timed: the checking is heavy, and made the others late.
+            ready = list(pool.map(self._prepare, self._targets))
+            rows = {}
+            for index, (target, found) in enumerate(zip(self._targets, ready, strict=True)):
+                if isinstance(found, SpeedResult):
+                    self._say("done", index, found)
+                else:
+                    rows[pool.submit(self._test, target, *found)] = index
+            for future in as_completed(rows):
+                self._say("done", rows[future], future.result())
 
     def stop(self) -> None:
         """From the GUI thread: end every request in flight and skip the rest."""
@@ -181,7 +176,7 @@ class SpeedTests(QObject):
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._ids = count(1)
-        self._running: dict[int, tuple[QThread, _Run]] = {}
+        self._running: dict[int, _Run] = {}
         # Tests give a factory; the app reaches each model as play would.
         self.make_provider: MakeProvider = provider_for
 
@@ -189,41 +184,44 @@ class SpeedTests(QObject):
         self, targets: Sequence[SpeedTarget], prices: Mapping[str, ModelPrice] | None = None
     ) -> int:
         run_id = next(self._ids)
-        run = _Run(targets, self.make_provider, prices or {})
-        # Holds the collector's pause from start until it has ended, before
-        # any of the run's pool threads exist (see the module's note).
-        thread = WorkerThread(self)
-        run.moveToThread(thread)
-        thread.started.connect(run.run)
-        run.began.connect(lambda row: self.began.emit(run_id, row))
-        run.done.connect(lambda row, result: self.done.emit(run_id, row, result))
-        run.finished.connect(thread.quit)
-        # Cleanup hangs off the thread, never the worker's own signal.
-        thread.finished.connect(lambda: self._ended(run_id))
-        self._running[run_id] = (thread, run)
-        thread.start()
+
+        def say(what: str, row: int, *result: object) -> None:
+            # From the run's threads: on to the GUI thread (gui/workers.post).
+            post(self, self._said, run_id, what, row, *result)
+
+        run = _Run(targets, self.make_provider, prices or {}, say)
+        self._running[run_id] = run
+        # A counted daemon thread nobody waits for (see the module's note):
+        # an enclave's attestation can't be cancelled.
+        run_detached(self, run.run, lambda _result, _error: self._ended(run_id), name="speed")
         return run_id
+
+    def _said(self, run_id: int, what: str, row: int, *result: object) -> None:
+        if what == "began":
+            self.began.emit(run_id, row)
+        else:
+            self.done.emit(run_id, row, result[0])
 
     def stop(self, run_id: int) -> None:
         running = self._running.get(run_id)
         if running is not None:
-            running[1].stop()
+            running.stop()
+
+    def stop_all(self) -> None:
+        """As the app closes: every run's requests in flight end, the rest
+        are skipped. Nothing waits for them."""
+        for run in list(self._running.values()):
+            run.stop()
 
     def is_running(self, run_id: int) -> bool:
         return run_id in self._running
 
     def _ended(self, run_id: int) -> None:
         if self._running.pop(run_id, None) is not None:
-            # The thread has let go of the pause by now (WorkerThread):
-            # collected on the GUI thread, at once.
+            # Collected on the GUI thread, at once, if this was the last
+            # thread holding the collector's pause.
             threads.resume_collector()
         self.finished.emit(run_id)
-
-    def wait(self, msecs: int = 35_000) -> None:
-        """Before the app closes: a QThread destroyed while running takes it down."""
-        for thread, run in list(self._running.values()):
-            run.stop()
-            thread.wait(msecs)
 
 
 _tests: SpeedTests | None = None

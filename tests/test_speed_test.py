@@ -520,7 +520,6 @@ def test_closing_the_dialog_ends_the_run(app, monkeypatch):
     wait_for(app, lambda: not speed_tests().is_running(run_id), timeout=5.0)
     assert all(provider._cancelled for provider in providers)
     dialog.deleteLater()
-    speed_tests().wait()
 
 
 def test_settings_tests_the_fields_as_they_stand(app, tmp_path: Path, story):

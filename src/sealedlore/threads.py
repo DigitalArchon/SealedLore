@@ -34,15 +34,30 @@ _alive = 0
 _wake: Callable[[], None] | None = None
 # Whether it was this module that switched the collector off.
 _paused = False
+# The GUI is quitting (`stop_waking`): the collector is left as it is.
+_quitting = False
 
 
 def pause_collector_while_busy(wake: Callable[[], None] | None) -> None:
     """From the GUI, once: pause the collector while any thread counted
     here is alive, and call `wake` (from the thread that ended last) to
     have the GUI thread call `resume_collector`. None stops pausing."""
-    global _wake
+    global _wake, _quitting
     with _lock:
         _wake = wake
+        _quitting = False
+
+
+def stop_waking() -> None:
+    """As the GUI quits (gui/workers.close_gate): the threads still going,
+    left to the process's end, no longer wake it, and the collector stays as
+    it is, paused if it is: switched on from one of them, it would collect
+    there while Qt's objects are deleted. Python collects once more itself as
+    the process ends. Once this returns, no thread is calling the wake-up."""
+    global _wake, _quitting
+    with _lock:
+        _wake = None
+        _quitting = True
 
 
 def alive() -> int:
@@ -71,14 +86,18 @@ def _ended() -> None:
     global _alive, _paused
     with _lock:
         _alive -= 1
-        wake = _wake if _alive == 0 and _paused else None
-        if _alive == 0 and _paused and wake is None:
-            # The GUI stopped pausing meanwhile: nobody would wake it.
-            _paused = False
-            gc.enable()
-    if wake is not None:
+        if _alive or not _paused:
+            return
+        if _wake is None:
+            if not _quitting:
+                # The GUI stopped pausing meanwhile: nobody would wake it.
+                _paused = False
+                gc.enable()
+            return
+        # Under the lock, so `stop_waking` is a barrier: the wake-up only
+        # posts to the GUI thread, and never comes back here.
         try:
-            wake()
+            _wake()
         except Exception:  # noqa: BLE001 - the GUI is gone (a closing app)
             pass
 

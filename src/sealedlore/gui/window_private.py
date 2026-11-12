@@ -11,14 +11,13 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtCore import Qt, QThread
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QCheckBox, QInputDialog, QMessageBox
 
 from sealedlore.engine.session_plot import SessionNotice
 from sealedlore.gui.private_dialogs import FitDialog, PrivateSummaryDialog, chat_words
 from sealedlore.gui.winprivacy import exclude_from_capture
-from sealedlore.gui.worker import GenerationWorker
-from sealedlore.gui.workers import WorkerThread
+from sealedlore.gui.workers import run_detached
 from sealedlore.models.config import ProviderConfig
 from sealedlore.providers import make_chat_provider
 from sealedlore.providers.base import ChatProvider
@@ -33,6 +32,7 @@ from sealedlore.providers.tee import (
     what_was_attested,
 )
 from sealedlore.storage.repository import save_config
+from sealedlore.threads import BackgroundThread
 
 # On the model button while a TEE/ model runs unchecked (Settings → Private).
 UNCHECKED_TEE = "⚠ not checked (Check TEE models is off)"
@@ -107,10 +107,10 @@ class PrivateWindow:
         self.private_provider_factory = None
         self._pending_private_summary: str | None = None
         self._summarising = False
-        self._tee_thread: QThread | None = None
-        # Every attestation still running, an older story's too: waited for on close.
-        self._attesting: list[QThread] = []
-        self._tee_worker: GenerationWorker | None = None
+        self._tee_thread: BackgroundThread | None = None
+        # Every attestation still running, an older story's too. Nothing
+        # waits for them: they are daemon threads (gui/workers.py).
+        self._attesting: list[BackgroundThread] = []
         self._tee_state = ""
         # The private/ model nano-gpt no longer offers, found when it was
         # attested: sends then say so, not "enclave refused".
@@ -420,36 +420,35 @@ class PrivateWindow:
             # Nothing reaches the model until this comes back and holds.
             self.session.tee_block = f"{settings.model}'s enclave is still being attested"
 
-        def job():
+        def job() -> None:
             try:
                 result.append(attest())
             except ModelRetired as exc:
                 retired.append(exc)
             except Exception as exc:  # shown, never fatal
                 failure.append(str(exc))
-            return
-            yield
 
-        worker = GenerationWorker(job)
-        thread = WorkerThread(self)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.finished.connect(thread.quit)
         # Its own story and thread go with the result: another TEE chat opened
         # meanwhile took A's attestation as its own, and a finishing thread
         # cleared the newer one's references (the mode audit, Oct 29 2026).
-        # The lambda holds the worker, as a running worker must be held.
         session = self.session
-        thread.finished.connect(
-            lambda w=worker, t=thread: self._on_attested(
-                span_id, tee, result, failure, retired, session=session, thread=t
-            )
+        made: list = []
+        # On a daemon thread nobody waits for (gui/workers.py): an
+        # attestation can't be cancelled, and quitting waited up to 35
+        # seconds for each one still running.
+        thread = run_detached(
+            self,
+            job,
+            lambda _result, _error: self._on_attested(
+                span_id, tee, result, failure, retired, session=session, thread=made[0]
+            ),
+            name="tee-attest",
         )
-        self._tee_worker, self._tee_thread = worker, thread
+        made.append(thread)
+        self._tee_thread = thread
         self._attesting.append(thread)
         self._tee_state = "checking…"
         self._refresh_model_button()
-        thread.start()
 
     def _on_attested(
         self,
@@ -460,12 +459,12 @@ class PrivateWindow:
         retired: list | None = None,
         *,
         session=None,
-        thread: QThread | None = None,
+        thread: BackgroundThread | None = None,
     ) -> None:
         if thread in self._attesting:
             self._attesting.remove(thread)
         if thread is None or self._tee_thread is thread:
-            self._tee_worker, self._tee_thread = None, None
+            self._tee_thread = None
         if session is not None and self.session is not session:
             if tee is not None:
                 tee.close()
@@ -1045,7 +1044,3 @@ class PrivateWindow:
         if span is not None and span.keep == "memory" and not session.memory_only:
             session.discard_private()
             self._drop_scene_draft()
-
-    def _wait_for_attestation(self) -> None:
-        for thread in list(self._attesting):
-            thread.wait(35_000)

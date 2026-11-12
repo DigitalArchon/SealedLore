@@ -1,10 +1,10 @@
 """A "Test attestation" button beside wherever a private model is chosen.
 
-engine/attestation_check.py does the checking. The thread belongs to one
-app-wide `AttestationTests` (parented to the application), never to the
-dialog showing the button: a dialog closed mid-fetch would destroy a running
-QThread and take the app down (the image catalog learned this). The window
-waits for it on close.
+engine/attestation_check.py does the checking, on a daemon thread of one
+app-wide `AttestationTests` (parented to the application), never the dialog
+showing the button. An attestation can't be cancelled: nothing waits for it,
+not even quitting, and what it brings back for a button that is gone is
+dropped (gui/workers.run_detached).
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ import weakref
 from collections.abc import Callable
 from itertools import count
 
-from PySide6.QtCore import QCoreApplication, QObject, Qt, QThread, Signal
+from PySide6.QtCore import QCoreApplication, QObject, Qt, Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from sealedlore.engine.attestation_check import (
@@ -22,8 +22,7 @@ from sealedlore.engine.attestation_check import (
     check_attestation,
     testable,
 )
-from sealedlore.gui.worker import GenerationWorker
-from sealedlore.gui.workers import WorkerThread
+from sealedlore.gui.workers import run_detached
 from sealedlore.models.config import ProviderConfig
 
 Settings = Callable[[], ProviderConfig | None]
@@ -37,38 +36,29 @@ class AttestationTests(QObject):
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._ids = count(1)
-        self._running: dict[int, tuple[QThread, GenerationWorker]] = {}
+        self._running: set[int] = set()
 
     def start(self, settings: ProviderConfig) -> int:
         job_id = next(self._ids)
-        result: list[AttestationCheck] = []
 
-        def job():
+        def job() -> AttestationCheck:
             try:
-                result.append(check_attestation(settings))
+                return check_attestation(settings)
             except Exception as exc:  # noqa: BLE001 - shown, never fatal
-                result.append(AttestationCheck("error", f"The check couldn't run: {exc}"))
-            return
-            yield
+                return AttestationCheck("error", f"The check couldn't run: {exc}")
 
-        worker = GenerationWorker(job)
-        thread = WorkerThread(self)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.finished.connect(thread.quit)
-        thread.finished.connect(lambda: self._done(job_id, result))
-        self._running[job_id] = (thread, worker)
-        thread.start()
+        # A daemon thread nobody waits for (gui/workers.py): an attestation
+        # can't be cancelled, and quitting no longer waits for one.
+        run_detached(self, job, lambda result, _error: self._done(job_id, result), name="attest")
+        self._running.add(job_id)
         return job_id
 
-    def _done(self, job_id: int, result: list[AttestationCheck]) -> None:
-        self._running.pop(job_id, None)
-        self.finished.emit(job_id, result[0] if result else AttestationCheck("error", "No result"))
+    def is_running(self, job_id: int) -> bool:
+        return job_id in self._running
 
-    def wait(self, msecs: int = 35_000) -> None:
-        """Before the app closes: a QThread destroyed while running takes it down."""
-        for thread, _worker in list(self._running.values()):
-            thread.wait(msecs)
+    def _done(self, job_id: int, result: AttestationCheck | None) -> None:
+        self._running.discard(job_id)
+        self.finished.emit(job_id, result or AttestationCheck("error", "No result"))
 
 
 _tests: AttestationTests | None = None

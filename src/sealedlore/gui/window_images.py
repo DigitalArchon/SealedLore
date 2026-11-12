@@ -1164,10 +1164,11 @@ class ImagesWindow:
     # --- closing -------------------------------------------------------------
 
     def _images_allow_close(self) -> bool:
-        """Ask before closing with pictures still being drawn."""
+        """Ask before closing with pictures still being drawn. Stopped, they
+        are not waited for, nor is the listing's fetch: they run on daemon
+        threads, and what they bring back now is dropped (gui/workers.py)."""
         pending = self.image_jobs.pending()
         if not pending:
-            self.image_catalog.wait()
             return True
         count = len(pending)
         answer = QMessageBox.question(
@@ -1182,8 +1183,6 @@ class ImagesWindow:
         if answer != QMessageBox.Yes:
             return False
         self.image_jobs.stop_all()
-        self.image_jobs.wait_all()
-        self.image_catalog.wait()
         return True
 
 

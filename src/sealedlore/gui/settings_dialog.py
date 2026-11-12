@@ -51,7 +51,6 @@ from sealedlore.gui.attest_check import AttestationButton
 from sealedlore.gui.fields import FormScroll
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.image_picker import pick_image_model
-from sealedlore.gui.model_hosts import hosts_catalog
 from sealedlore.gui.model_picker import (
     Browse,
     ModelCatalog,
@@ -62,7 +61,7 @@ from sealedlore.gui.model_picker import (
 from sealedlore.gui.phone_dialog import PHONE_KEEPS
 from sealedlore.gui.settings_pages import Fold, SettingsPages
 from sealedlore.gui.sizing import entered, size_to_screen
-from sealedlore.gui.speed_test import SpeedTestDialog, speed_tests
+from sealedlore.gui.speed_test import SpeedTestDialog
 from sealedlore.gui.video_jobs import VideoCatalog
 from sealedlore.models.config import (
     CHAT_API_LABELS,
@@ -1647,11 +1646,10 @@ class SettingsDialog(QDialog):
         self.cast_tokens.setVisible(not share)
 
     def done(self, result: int) -> None:  # noqa: N802 - Qt naming
-        # The private tab's own catalog fetches on a thread parented to this
-        # dialog; closing under it would destroy a running QThread.
-        self._private_catalog.wait()
-        speed_tests().wait()
-        hosts_catalog().wait()
+        # Nothing to wait for: the private tab's own catalog, a speed test and
+        # the hosts fetch run on daemon threads, and what they bring back once
+        # this dialog has gone is dropped (gui/workers.py). Closing waited up
+        # to 35 seconds for each before.
         if self._watching_catalog:
             # The window's catalog outlives the dialog; once only (a second
             # disconnect warns).

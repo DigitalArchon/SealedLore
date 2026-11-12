@@ -19,7 +19,7 @@ import weakref
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
-from PySide6.QtCore import QObject, QSize, Qt, QThread, Signal
+from PySide6.QtCore import QObject, QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
@@ -42,8 +42,7 @@ from sealedlore.engine.routing import describe, routable, route_body
 from sealedlore.gui.fields import line_edit, set_field_text
 from sealedlore.gui.route_dialog import RouteDialog
 from sealedlore.gui.sizing import adjustable_columns, size_to_screen
-from sealedlore.gui.worker import GenerationWorker
-from sealedlore.gui.workers import WorkerThread
+from sealedlore.gui.workers import run_detached
 from sealedlore.models.config import ProviderConfig, RecommendedModel, split_model
 from sealedlore.models.route import ModelRoute
 from sealedlore.providers.base import ChatProvider
@@ -124,18 +123,14 @@ class ModelCatalog(QObject):
         self.notes: dict[str, str] = {}
         self._endpoint: str | None = None
         self._fetched_at: datetime | None = None
-        self._thread: QThread | None = None
-        self._worker: GenerationWorker | None = None
+        # The fetch under way: on a daemon thread nobody waits for
+        # (gui/workers.run_detached), so closing never waits on it; what it
+        # brings back after this catalog is gone is dropped.
+        self._fetching: object | None = None
 
     @property
     def loading(self) -> bool:
-        return self._thread is not None
-
-    def wait(self) -> None:
-        """Before the owner closes: a QThread destroyed while running takes
-        the process down. The fetch gives up by itself within its timeout."""
-        if self._thread is not None:
-            self._thread.wait(35_000)
+        return self._fetching is not None
 
     def ensure(self, source: ProviderSource, *, force: bool = False) -> None:
         """Fetch unless a fresh list for the same endpoint is already here."""
@@ -154,38 +149,34 @@ class ModelCatalog(QObject):
             return
         self._endpoint = endpoint
         self.error = None
-        result: dict[str, dict] = {}
-        notes: dict[str, str] = {}
 
-        def job():
+        def job() -> tuple[dict[str, dict], dict[str, str]]:
             try:
-                result.update(provider.fetch_model_prices())
+                listing = provider.fetch_model_prices()
                 # The routing provider lists what it could and names the
                 # endpoint it couldn't (providers/endpoints.py).
-                notes.update(getattr(provider, "listing_problems", None) or {})
+                return listing, dict(getattr(provider, "listing_problems", None) or {})
             finally:
                 close = getattr(provider, "close", None)
                 if owned and close is not None:
                     close()  # one made from unsaved Settings fields
-            return
-            yield  # a generator, so GenerationWorker can run it
 
-        worker = GenerationWorker(job)
-        thread = WorkerThread(self)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.failed.connect(self._on_failed)
-        worker.finished.connect(thread.quit)
-        thread.finished.connect(lambda: self._on_finished(result, notes))
-        self._worker, self._thread = worker, thread
+        fetching = object()
+        self._fetching = fetching
+
+        def done(found: tuple[dict[str, dict], dict[str, str]] | None, error: str | None) -> None:
+            if self._fetching is not fetching:
+                return
+            self._fetching = None
+            if error is not None:
+                self.error = error
+            listing, notes = found or ({}, {})
+            self._on_finished(listing, notes)
+
+        run_detached(self, job, done, name="model-catalog")
         self.changed.emit()
-        thread.start()
-
-    def _on_failed(self, message: str) -> None:
-        self.error = message
 
     def _on_finished(self, listing: dict[str, dict], notes: dict[str, str] | None = None) -> None:
-        self._worker, self._thread = None, None
         self.notes = dict(notes or {})
         if self.error is None:
             models = chat_models(listing)

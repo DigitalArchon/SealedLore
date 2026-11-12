@@ -457,9 +457,9 @@ class VideosWindow:
     # --- closing -------------------------------------------------------------------
 
     def _videos_allow_close(self) -> bool:
-        """Videos still being sent are waited for or given up; those being
-        made carry on at the service and are fetched next time (not in a
-        memory-only chat, which asks)."""
+        """Videos still being sent are given up, once the author agrees;
+        those being made carry on at the service and are fetched next time
+        (not in a memory-only chat, which asks)."""
         sending = [job for job in self.video_jobs.pending() if job.record is None]
         if sending:
             answer = QMessageBox.question(
@@ -472,9 +472,9 @@ class VideosWindow:
             )
             if answer != QMessageBox.Yes:
                 return False
+        # Stopped and not waited for (daemon threads, gui/workers.py), nor
+        # the listing's fetch or a price being asked.
         self.video_jobs.stop_all()
-        self.video_jobs.wait_all()
-        self.video_catalog.wait()
         stop_playback()
         return True
 

@@ -1,4 +1,5 @@
-"""The threads jobs run on: the garbage collector, and the story they lend out.
+"""The threads jobs run on: the garbage collector, the story they lend out,
+and the fetches nobody waits for.
 
 **The collector.** Python collects on whichever thread crosses its threshold,
 and Qt objects it sweeps up off the GUI thread crash PySide
@@ -18,17 +19,32 @@ taken onto it. `WorkerThread(session=)` lends the session for as long as the
 thread lives; `lent(session)` says whether any thread has it, and
 `lending().returned` is emitted on the GUI thread once the last has given it
 back, after the event that did, so what waited for it can run then.
+
+**Fetches nobody waits for** (a model listing, an attestation, a speed test,
+a picture or video being made, a price) run on a counted daemon thread
+(`run_detached`), never a QThread. Quitting waited up to 35 seconds for each
+of them in turn on the GUI thread, most with no way to cancel, and one still
+running when the application went was destroyed under it, which Qt treats as
+fatal. A daemon thread is simply left: what it brings back is handed to the
+GUI thread by `post`, through one relay that lives as long as the
+application, and dropped if its owner has been deleted meanwhile or the app
+has begun to quit (`close_gate`), so no thread touches a Qt object that may
+be going. Cancel what can be cancelled; never wait for the rest.
 """
 
 from __future__ import annotations
 
+import threading
 import weakref
+from collections.abc import Callable
 from typing import Any
 
 from PySide6.QtCore import QCoreApplication, QObject, Qt, QThread, Signal, Slot
 from shiboken6 import isValid
 
 from sealedlore import threads
+from sealedlore.providers.base import error_detail
+from sealedlore.threads import BackgroundThread
 
 # id(session) → [session, how many threads have it]. GUI thread only: lent in
 # `start()`, given back as the thread is waited for.
@@ -161,3 +177,88 @@ class WorkerThread(QThread):
         self._life = life
         self.finished.connect(_Ender(self, life).ended, Qt.QueuedConnection)
         super().start(priority)
+
+
+# --- fetches nobody waits for ---------------------------------------------------------------
+
+# Held while a thread hands something on, and by `close_gate`: once the gate
+# is closed, nothing is handed on any more.
+_gate = threading.Lock()
+_closed = False
+
+
+class _Relay(QObject):
+    arrived = Signal(object, object, object)  # owner, callback, args
+
+    def __init__(self, parent: QObject | None) -> None:
+        super().__init__(parent)
+        self.arrived.connect(self._call, Qt.QueuedConnection)
+
+    @Slot(object, object, object)
+    def _call(self, owner: QObject, callback: Callable[..., object], args: tuple) -> None:
+        if isValid(owner):
+            callback(*args)
+
+
+_relay: _Relay | None = None
+
+
+def install(app: QCoreApplication) -> None:
+    """Once, as the application is made (`app.build_app`, the tests'
+    conftest): the relay, and the gate closed as the app begins to quit."""
+    global _relay, _closed
+    if _relay is None or not isValid(_relay):
+        _relay = _Relay(app)
+        app.aboutToQuit.connect(close_gate)
+    with _gate:
+        _closed = False
+
+
+def close_gate() -> None:
+    """As the app quits: nothing more is handed to the GUI thread, and the
+    threads still going (daemons, left to the process's end) no longer wake
+    the collector."""
+    global _closed
+    with _gate:
+        _closed = True
+    threads.stop_waking()
+
+
+def post(owner: QObject, callback: Callable[..., object], *args: object) -> bool:
+    """From any thread: `callback(*args)` on the GUI thread, if `owner` (a
+    QObject of the GUI thread's) is still there then. False when dropped
+    already (the app is quitting)."""
+    with _gate:
+        relay = _relay
+        if _closed or relay is None:
+            return False
+        try:
+            relay.arrived.emit(owner, callback, args)
+        except RuntimeError:  # the application is gone
+            return False
+    return True
+
+
+def run_detached(
+    owner: QObject,
+    job: Callable[[], Any],
+    done: Callable[[Any, str | None], object],
+    *,
+    name: str = "detached",
+) -> BackgroundThread:
+    """On the GUI thread: `job()` on a counted daemon thread, then
+    `done(result, error)` on the GUI thread as `post` says, `error` the
+    failure in words or None."""
+    if _relay is None or not isValid(_relay):
+        install(QCoreApplication.instance())
+
+    def run() -> None:
+        try:
+            result, error = job(), None
+        except Exception as exc:  # noqa: BLE001 - said by whoever waits for it
+            result, error = None, error_detail(exc)
+        post(owner, done, result, error)
+
+    thread = BackgroundThread(target=run, name=name)
+    thread.start()
+    return thread

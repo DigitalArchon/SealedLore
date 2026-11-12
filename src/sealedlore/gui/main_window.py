@@ -61,7 +61,6 @@ from sealedlore.engine.session import (
 from sealedlore.engine.tokens import TokenEstimator
 from sealedlore.engine.usage import usage_fields, usage_report
 from sealedlore.gui import crop_dialog, start_page, text_size
-from sealedlore.gui.attest_check import attestation_tests
 from sealedlore.gui.bad_hosts import bad_hosts
 from sealedlore.gui.banners import HeldAwayBanner, OverBudgetBanner, StalenessBanner
 from sealedlore.gui.branch_bar import BranchBar, opening_words
@@ -5774,13 +5773,14 @@ class MainWindow(
             return
         # What the answers agreed to lose, now that nothing else writes the story.
         self._discard_memory_scene()
-        self._wait_for_attestation()
         self.stories.stop_search()
         self.stop_link_fetch()
-        self.catalog.wait()
-        attestation_tests().wait()
-        speed_tests().wait()
-        hosts_catalog().wait()
+        # Nothing else is waited for: the model listings, attestations, the
+        # hosts fetch and a speed test run on daemon threads (gui/workers.py),
+        # and what they bring back now is dropped. Quitting waited up to 35
+        # seconds for each of them in turn, and a QThread still running after
+        # that was destroyed, which aborts. A speed test's requests are ended.
+        speed_tests().stop_all()
         # The phones are told it stopped, nothing listens any more, tor ends.
         self.stop_phone_access()
         # Under a full page the composer and the docks are put away: their

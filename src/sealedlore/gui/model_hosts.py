@@ -1,18 +1,18 @@
 """A model's hosts, fetched for the route dialog (providers/model_hosts.py).
 
-One app-wide catalog owns the threads, as `AttestationTests` does: a dialog
-closed while its hosts were loading must not take a running thread down with
-it. Each model's hosts are kept for an hour.
+One app-wide catalog owns the fetches, as `AttestationTests` does: on daemon
+threads nobody waits for (gui/workers.run_detached), so neither a dialog
+closed while its hosts were loading nor quitting waits on one. Each model's
+hosts are kept for an hour.
 """
 
 from __future__ import annotations
 
 import time
 
-from PySide6.QtCore import QCoreApplication, QObject, QThread, Signal
+from PySide6.QtCore import QCoreApplication, QObject, Signal
 
-from sealedlore.gui.worker import GenerationWorker
-from sealedlore.gui.workers import WorkerThread
+from sealedlore.gui.workers import run_detached
 from sealedlore.providers.base import ProviderError
 from sealedlore.providers.model_hosts import ModelHosts, fetch_model_hosts
 
@@ -28,7 +28,7 @@ class HostsCatalog(QObject):
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._found: dict[tuple[str, str], tuple[float, ModelHosts]] = {}
-        self._running: dict[tuple[str, str], tuple[QThread, GenerationWorker]] = {}
+        self._running: set[tuple[str, str]] = set()
 
     def hosts(self, base_url: str, model: str) -> ModelHosts | None:
         """What was fetched in the last hour, or None."""
@@ -45,41 +45,26 @@ class HostsCatalog(QObject):
         key = (base_url, model)
         if self.hosts(base_url, model) is not None or key in self._running:
             return
-        result: list[ModelHosts | str] = []
 
-        def job():
+        def job() -> ModelHosts | str:
             try:
-                result.append(fetch_model_hosts(base_url, model))
+                return fetch_model_hosts(base_url, model)
             except ProviderError as exc:
-                result.append(str(exc))
+                return str(exc)
             except Exception as exc:  # noqa: BLE001 - shown, never fatal
-                result.append(f"couldn't list the hosts: {exc}")
-            return
-            yield
+                return f"couldn't list the hosts: {exc}"
 
-        worker = GenerationWorker(job)
-        thread = WorkerThread(self)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.finished.connect(thread.quit)
-        # Cleanup on the thread, never the worker's own finished.
-        thread.finished.connect(lambda: self._done(key, result))
-        self._running[key] = (thread, worker)
-        thread.start()
+        self._running.add(key)
+        run_detached(self, job, lambda found, _error: self._done(key, found), name="model-hosts")
 
-    def _done(self, key: tuple[str, str], result: list) -> None:
-        self._running.pop(key, None)
-        found = result[0] if result else "no answer"
+    def _done(self, key: tuple[str, str], found: ModelHosts | str | None) -> None:
+        self._running.discard(key)
+        found = found if found is not None else "no answer"
         if isinstance(found, ModelHosts):
             self._found[key] = (time.monotonic(), found)
             self.loaded.emit(*key)
         else:
             self.failed.emit(key[0], key[1], found)
-
-    def wait(self, msecs: int = 35_000) -> None:
-        """Before the app closes: a QThread destroyed while running takes it down."""
-        for thread, _worker in list(self._running.values()):
-            thread.wait(msecs)
 
 
 _catalog: HostsCatalog | None = None

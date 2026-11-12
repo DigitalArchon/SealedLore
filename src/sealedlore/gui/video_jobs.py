@@ -10,24 +10,25 @@ A pending record can be followed again (`follow`) after Stop waiting, and
 when its story is opened again after the app was closed.
 
 `VideoCatalog` keeps the endpoint's video models, as `ImageCatalog` keeps its
-picture models: in config for a day, fetched on a thread the window owns,
-held in memory only while a memory-only chat is open. WaveSpeed prices a
-request itself; `VideoCatalog.price` asks it on the same kind of thread.
+picture models: in config for a day, fetched by the window's catalog, held in
+memory only while a memory-only chat is open. WaveSpeed prices a request
+itself; `VideoCatalog.price` asks it. Every one of these runs on a daemon
+thread nobody waits for, not even quitting (gui/workers.py).
 """
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QObject, QThread, Signal
+from PySide6.QtCore import QObject, Signal
 
 from sealedlore.engine.videos import VideoRequest, follow_video, submit_video
 from sealedlore.gui.image_jobs import listing_is_stale
-from sealedlore.gui.worker import GenerationWorker
-from sealedlore.gui.workers import WorkerThread
+from sealedlore.gui.workers import post, run_detached
 from sealedlore.ids import new_id, utc_now_iso
 from sealedlore.models.config import Config, without_password
 from sealedlore.models.video import GeneratedVideo
@@ -42,6 +43,9 @@ from sealedlore.providers.videos import (
 )
 from sealedlore.storage.picture_store import PictureStore
 from sealedlore.storage.repository import save_config
+from sealedlore.threads import BackgroundThread
+
+WAVESPEED_QUOTE = "WaveSpeed's own quote for these settings"
 
 
 def model_entry(info: VideoModelInfo) -> dict:
@@ -84,11 +88,11 @@ class VideoCatalog(QObject):
         self.config = config
         self.root = root
         self._in_memory = in_memory
-        self._thread: QThread | None = None
-        self._worker: GenerationWorker | None = None
+        # The listing's fetch and the price's ask under way, each on a daemon
+        # thread nobody waits for (gui/workers.run_detached).
+        self._fetching: object | None = None
         self._held: tuple[list[dict], str] | None = None
-        self._price_thread: QThread | None = None
-        self._price_worker: GenerationWorker | None = None
+        self._pricing: object | None = None
         # The price being asked, and the one asked for meanwhile.
         self._price_asking: tuple[str, dict[str, Any]] | None = None
         self._price_next: tuple[str, dict[str, Any]] | None = None
@@ -113,7 +117,12 @@ class VideoCatalog(QObject):
 
     @property
     def loading(self) -> bool:
-        return self._thread is not None
+        return self._fetching is not None
+
+    @property
+    def pricing(self) -> bool:
+        """Whether a price is being asked now."""
+        return self._pricing is not None
 
     def ensure(self, *, force: bool = False) -> None:
         """Fetch the listing if it's a day old (or `force`, the picker's Refresh)."""
@@ -122,25 +131,22 @@ class VideoCatalog(QObject):
             return
         if not force and not listing_is_stale(self._listing()[1]):
             return
-        found: list[VideoModelInfo] = []
 
-        def job():
-            found.extend(list_video_models(media.base_url, api=media.api, api_key=media.api_key))
-            return
-            yield
+        def job() -> list[VideoModelInfo]:
+            return list(list_video_models(media.base_url, api=media.api, api_key=media.api_key))
 
-        worker = GenerationWorker(job)
-        thread = WorkerThread(self)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.finished.connect(thread.quit)
-        thread.finished.connect(lambda: self._on_finished(found, media.base_url))
-        self._worker, self._thread = worker, thread
-        thread.start()
+        fetching = object()
+        self._fetching = fetching
+
+        def done(found: list[VideoModelInfo] | None, _error: str | None) -> None:
+            if self._fetching is fetching:
+                self._on_finished(found or [], media.base_url)
+
+        run_detached(self, job, done, name="video-models")
         self.changed.emit()
 
     def _on_finished(self, found: list[VideoModelInfo], source: str) -> None:
-        self._worker, self._thread = None, None
+        self._fetching = None
         if not found:
             self.changed.emit()
             return
@@ -170,47 +176,38 @@ class VideoCatalog(QObject):
         if media is None:
             return
         asked = (model_id, dict(inputs))
-        if self._price_thread is not None:
+        if self._pricing is not None:
             self._price_next = None if asked == self._price_asking else asked
             return
         self._price_asking, self._price_next = asked, None
-        answer: list[Any] = [None, ""]
 
-        def job():
+        def job() -> list[Any]:
             http = MediaHttp(media.base_url, media.api_key, timeout_seconds=30.0)
             try:
-                answer[0] = wavespeed.price(http, model_id, inputs)
-                answer[1] = "WaveSpeed's own quote for these settings"
+                return [wavespeed.price(http, model_id, inputs), WAVESPEED_QUOTE]
             except Exception as exc:  # shown in the dialog, never lost
-                answer[1] = f"WaveSpeed wouldn't say ({exc})"
+                return [None, f"WaveSpeed wouldn't say ({exc})"]
             finally:
                 http.close()
-            return
-            yield
 
-        worker = GenerationWorker(job)
-        thread = WorkerThread(self)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.finished.connect(thread.quit)
-        thread.finished.connect(lambda: self._on_priced(model_id, asked[1], answer))
-        self._price_worker, self._price_thread = worker, thread
-        thread.start()
+        pricing = object()
+        self._pricing = pricing
+
+        def done(answer: list[Any] | None, _error: str | None) -> None:
+            if self._pricing is pricing:
+                self._on_priced(model_id, asked[1], answer or [None, "WaveSpeed wouldn't say"])
+
+        run_detached(self, job, done, name="video-price")
 
     def _on_priced(self, model_id: str, inputs: dict[str, Any], answer: list[Any]) -> None:
-        self._price_worker, self._price_thread = None, None
+        self._pricing = None
         self._price_asking = None
         waiting, self._price_next = self._price_next, None
         self.priced.emit(model_id, inputs, answer[0], answer[1])
         # The settings asked about meanwhile, unless the answer just given
         # led to asking again already.
-        if waiting is not None and self._price_thread is None:
+        if waiting is not None and self._pricing is None:
             self.price(*waiting)
-
-    def wait(self) -> None:
-        for thread in (self._thread, self._price_thread):
-            if thread is not None:
-                thread.wait(35_000)
 
 
 @dataclass
@@ -222,8 +219,7 @@ class VideoJob:
     # The approved request, until it is accepted; then the record followed.
     request: VideoRequest | None = None
     record: GeneratedVideo | None = None
-    thread: QThread | None = None
-    worker: GenerationWorker | None = None
+    thread: BackgroundThread | None = None
     error: str | None = None
     stopped: bool = False
     progress: list[str] = field(default_factory=list)
@@ -259,16 +255,17 @@ class VideoJobs(QObject):
         return self._run(job)
 
     def _run(self, job: VideoJob) -> str:
-        def run():
+        def run() -> None:
             try:
                 if job.record is None:
                     job.record = submit_video(job.client, job.request, job.store)
-                    self.accepted.emit(job.story_id, job.record, job.store)
+                    # Handed to the GUI thread in order, before the end.
+                    post(self, self.accepted.emit, job.story_id, job.record, job.store)
                 job.record = follow_video(
                     job.client,
                     job.record,
                     job.store,
-                    progress=lambda text: self.progress.emit(job.record.id, text),
+                    progress=lambda text: post(self, self.progress.emit, job.record.id, text),
                 )
             except StreamCancelled:
                 job.stopped = True
@@ -276,19 +273,14 @@ class VideoJobs(QObject):
                 job.error = str(exc) or type(exc).__name__
             finally:
                 job.client.close()
-            return
-            yield
 
-        worker = GenerationWorker(run)
-        thread = WorkerThread(self)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.finished.connect(thread.quit)
-        # Cleanup on the thread, never the worker's own finished (CONTRIBUTING.md).
-        thread.finished.connect(lambda: self._on_finished(job.id))
-        job.thread, job.worker = thread, worker
         self.jobs[job.id] = job
-        thread.start()
+        # A daemon thread nobody waits for (gui/workers.py): closing stops
+        # waiting for it (a video being made carries on at the service and is
+        # fetched next time) and doesn't wait for it to end.
+        job.thread = run_detached(
+            self, run, lambda _result, _error: self._on_finished(job.id), name="video"
+        )
         self.changed.emit()
         return job.id
 
@@ -316,9 +308,12 @@ class VideoJobs(QObject):
             job.client.cancel()
 
     def wait_all(self, msecs: int = 5000) -> None:
+        """For tests: the jobs' threads ended, within `msecs` in all. The
+        window never waits for them (they are daemons)."""
+        deadline = time.monotonic() + msecs / 1000
         for job in list(self.jobs.values()):
             if job.thread is not None:
-                job.thread.wait(msecs)
+                job.thread.join(max(0.0, deadline - time.monotonic()))
 
     def _on_finished(self, job_id: str) -> None:
         job = self.jobs.pop(job_id, None)
@@ -337,5 +332,5 @@ class VideoJobs(QObject):
             self.failed.emit(job.story_id, "")
         else:
             self.failed.emit(job.story_id, job.error or "the video wasn't accepted")
-        job.thread, job.worker = None, None
+        job.thread = None
         self.changed.emit()

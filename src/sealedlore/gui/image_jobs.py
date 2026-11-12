@@ -10,16 +10,16 @@ thread when the job finishes.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QThread, Signal
+from PySide6.QtCore import QObject, Signal
 
 from sealedlore.engine.images import ImageRequest, run_image_request
-from sealedlore.gui.worker import GenerationWorker
-from sealedlore.gui.workers import WorkerThread
+from sealedlore.gui.workers import run_detached
 from sealedlore.ids import new_id, utc_now_iso
 from sealedlore.models.config import Config, without_password
 from sealedlore.models.image import GeneratedImage
@@ -33,6 +33,7 @@ from sealedlore.providers.images import (
 from sealedlore.providers.media_http import MediaTimedOut
 from sealedlore.storage.picture_store import DiskPictures, PictureStore
 from sealedlore.storage.repository import save_config
+from sealedlore.threads import BackgroundThread
 
 LISTING_MAX_AGE = timedelta(days=1)
 
@@ -49,8 +50,9 @@ def listing_is_stale(fetched_at: str | None) -> bool:
 
 class ImageCatalog(QObject):
     """The endpoint's image models (sizes, reference limits, prices), kept in
-    config for a day and fetched on a thread the window owns: a dialog closed
-    mid-fetch must not take a running thread down with it.
+    config for a day and fetched by the window's catalog, on a daemon thread
+    nobody waits for (gui/workers.py): neither a dialog closed mid-fetch nor
+    quitting waits for it.
 
     While a chat kept in memory only is open (`in_memory`), a listing fetched
     is kept here and not in the config: its fetch time would say when that
@@ -71,8 +73,9 @@ class ImageCatalog(QObject):
         self.config = config
         self.root = root
         self._in_memory = in_memory
-        self._thread: QThread | None = None
-        self._worker: GenerationWorker | None = None
+        # The fetch under way, on a daemon thread nobody waits for
+        # (gui/workers.run_detached): neither a dialog closing nor quitting.
+        self._fetching: object | None = None
         # A listing fetched during a memory-only chat: (entries, fetched at).
         self._held: tuple[list[dict], str] | None = None
 
@@ -94,7 +97,7 @@ class ImageCatalog(QObject):
 
     @property
     def loading(self) -> bool:
-        return self._thread is not None
+        return self._fetching is not None
 
     def ensure(self, *, force: bool = False) -> None:
         """Fetch the listing if it's a day old (or `force`, the picker's Refresh)."""
@@ -103,30 +106,27 @@ class ImageCatalog(QObject):
             return
         if not force and not listing_is_stale(self._listing()[1]):
             return
-        found: list[ImageModelInfo] = []
         wanted = self.config.image_model
 
-        def job():
-            found.extend(
+        def job() -> list[ImageModelInfo]:
+            return list(
                 list_image_models(
                     media.base_url, api=media.api, api_key=media.api_key, wanted=wanted
                 )
             )
-            return
-            yield
 
-        worker = GenerationWorker(job)
-        thread = WorkerThread(self)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.finished.connect(thread.quit)
-        thread.finished.connect(lambda: self._on_finished(found))
-        self._worker, self._thread = worker, thread
-        thread.start()
+        fetching = object()
+        self._fetching = fetching
+
+        def done(found: list[ImageModelInfo] | None, _error: str | None) -> None:
+            if self._fetching is fetching:
+                self._on_finished(found or [])
+
+        run_detached(self, job, done, name="image-models")
         self.changed.emit()  # a picker shows "Loading…"
 
     def _on_finished(self, found: list[ImageModelInfo]) -> None:
-        self._worker, self._thread = None, None
+        self._fetching = None
         if not found:
             self.changed.emit()  # done loading; the listing kept stands
             return
@@ -148,11 +148,6 @@ class ImageCatalog(QObject):
         except OSError:
             pass
         self.changed.emit()
-
-    def wait(self) -> None:
-        """Before the app closes: the fetch gives up by itself within its timeout."""
-        if self._thread is not None:
-            self._thread.wait(35_000)
 
 
 def listing_entry(info: ImageModelInfo) -> dict:
@@ -177,8 +172,7 @@ class ImageJob:
     client: ImageClient
     # Where its story keeps pictures: written by the job, added to by the window.
     store: PictureStore
-    thread: QThread | None = None
-    worker: GenerationWorker | None = None
+    thread: BackgroundThread | None = None
     records: list[GeneratedImage] = field(default_factory=list)
     error: str | None = None
     timed_out: bool = False
@@ -220,7 +214,7 @@ class ImageJobs(QObject):
             store = DiskPictures(request.story_id, self.root)
         job = ImageJob(id=new_id(), request=request, client=client, store=store)
 
-        def run():
+        def run() -> None:
             try:
                 job.records = run_image_request(job.client, job.request, store=job.store)
             except StreamCancelled:
@@ -231,19 +225,13 @@ class ImageJobs(QObject):
                 job.error = str(exc) or type(exc).__name__
             finally:
                 job.client.close()
-            return
-            yield  # a generator, so GenerationWorker can run it
 
-        worker = GenerationWorker(run)
-        thread = WorkerThread(self)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.finished.connect(thread.quit)
-        # Cleanup on the thread, never the worker's own finished (CONTRIBUTING.md).
-        thread.finished.connect(lambda: self._on_finished(job.id))
-        job.thread, job.worker = thread, worker
         self.jobs[job.id] = job
-        thread.start()
+        # A daemon thread nobody waits for (gui/workers.py): closing stops it
+        # (the author is asked first) and doesn't wait for it to end.
+        job.thread = run_detached(
+            self, run, lambda _result, _error: self._on_finished(job.id), name="picture"
+        )
         self.changed.emit()
         return job.id
 
@@ -279,9 +267,12 @@ class ImageJobs(QObject):
             self.stop(job_id)
 
     def wait_all(self, msecs: int = 5000) -> None:
+        """For tests: the jobs' threads ended, within `msecs` in all. The
+        window never waits for them (they are daemons)."""
+        deadline = time.monotonic() + msecs / 1000
         for job in list(self.jobs.values()):
             if job.thread is not None:
-                job.thread.wait(msecs)
+                job.thread.join(max(0.0, deadline - time.monotonic()))
 
     def _on_finished(self, job_id: str) -> None:
         job = self.jobs.pop(job_id, None)
@@ -299,5 +290,5 @@ class ImageJobs(QObject):
                 job.id, job.request, job.store, message, timed_out=job.timed_out
             )
             self.failed.emit(job.id, story_id, message)
-        job.thread, job.worker = None, None
+        job.thread = None
         self.changed.emit()

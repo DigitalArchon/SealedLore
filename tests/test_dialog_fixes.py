@@ -339,7 +339,7 @@ def test_a_quote_is_shown_only_for_the_settings_it_was_asked_for(app, window, mo
         duration = dialog._controls["duration"]
         duration.setCurrentIndex(duration.findData("10"))  # the 5 s quote still out
         gate.set()
-        wait_for(app, lambda: asked == ["5", "10"] and catalog._price_thread is None)
+        wait_for(app, lambda: asked == ["5", "10"] and not catalog.pricing)
         settle(app, 10)
         assert "$0.60" in dialog.price.text() and "$0.30" not in dialog.price.text()
         dialog.accept_cost.setChecked(True)
@@ -355,7 +355,7 @@ def test_a_quote_is_shown_only_for_the_settings_it_was_asked_for(app, window, mo
         assert not dialog.accept_cost.isChecked()
     finally:
         gate.set()
-        catalog.wait()
+        wait_for(app, lambda: not catalog.pricing)
 
 
 # --- a video's number setting at its lowest ----------------------------------------
