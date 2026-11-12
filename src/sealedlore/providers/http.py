@@ -17,6 +17,7 @@ Two things every client here needs and none should have to remember:
 
 from __future__ import annotations
 
+import socket
 from typing import Any
 from urllib.parse import urlparse
 
@@ -24,6 +25,27 @@ import httpx
 
 from sealedlore.models.config import is_local_host
 from sealedlore.providers.base import ProviderError
+
+# The httpcore trace events that complete with the stream a request will be
+# read from, whatever opened it: "connection." for a direct connection,
+# "proxy." for TLS through an HTTP proxy's tunnel, "socks." through SOCKS.
+_SOCKET_STEPS = (".connect_tcp.complete", ".start_tls.complete")
+
+
+def traced_socket(event_name: str, info: dict[str, Any]) -> socket.socket | None:
+    """For httpcore's `trace` extension: the socket the request in flight is
+    read from, once a connect or TLS step has completed, so a Stop can shut
+    it down (a thread blocked reading a socket wakes only then). The latest
+    step's supersedes the one before: TLS wraps the TCP socket and detaches
+    it. Only "connection." steps were caught once, and behind HTTPS_PROXY the
+    TLS socket came from the proxy's own step: Stop shut down the detached
+    TCP socket (a swallowed EBADF) and waited for the next chunk."""
+    if not event_name.endswith(_SOCKET_STEPS):
+        return None
+    stream = info.get("return_value")
+    extra = getattr(stream, "get_extra_info", None)
+    sock = extra("socket") if callable(extra) else None
+    return sock if isinstance(sock, socket.socket) else None
 
 
 def is_local(url: str) -> bool:

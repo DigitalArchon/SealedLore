@@ -27,7 +27,7 @@ import httpx
 
 from sealedlore.models.config import _same_host
 from sealedlore.providers.base import ProviderError, StreamCancelled, checked_key
-from sealedlore.providers.http import make_client
+from sealedlore.providers.http import make_client, traced_socket
 from sealedlore.providers.streaming import (
     RETRY_ATTEMPTS,
     RETRY_MAX_SECONDS,
@@ -106,10 +106,7 @@ class MediaHttp:
         return headers
 
     def _trace(self, event_name: str, info: dict[str, Any]) -> None:
-        if event_name not in ("connection.connect_tcp.complete", "connection.start_tls.complete"):
-            return
-        stream = info.get("return_value")
-        sock = stream.get_extra_info("socket") if stream is not None else None
+        sock = traced_socket(event_name, info)
         if sock is None:
             return
         with self._lock:

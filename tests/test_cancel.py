@@ -187,3 +187,55 @@ def test_stop_ends_every_call_made_side_by_side(server: str):
         assert time.monotonic() - started < 2
         provider.reset_cancel()
         provider.close()
+
+
+class _Stream:
+    """httpcore's network stream as the trace hook sees it."""
+
+    def __init__(self, sock) -> None:
+        self.sock = sock
+
+    def get_extra_info(self, name: str):
+        return self.sock if name == "socket" else None
+
+
+# What httpcore traces as a request opens its connection: direct, through an
+# HTTP proxy's tunnel (HTTPS_PROXY), and through SOCKS. The step after the TCP
+# connect wraps its socket in TLS, which detaches the one it wrapped.
+ROUTES = {
+    "direct": ("connection.connect_tcp.complete", "connection.start_tls.complete"),
+    "http proxy": ("connection.connect_tcp.complete", "proxy.start_tls.complete"),
+    "socks": ("socks.connect_tcp.complete", "socks.start_tls.complete"),
+}
+
+
+@pytest.mark.parametrize("route", ROUTES)
+def test_stop_shuts_down_the_socket_the_reply_is_read_from_however_it_was_opened(route):
+    """Behind a proxy the TLS socket came from the proxy's own step, which the
+    hook didn't know: Stop shut down the TCP socket TLS had detached (a
+    swallowed EBADF) and waited for the next chunk, and a picture's wait ran
+    to its timeout."""
+    import socket
+
+    from sealedlore.providers.media_http import MediaHttp
+
+    connect, tls = ROUTES[route]
+    for make in (
+        lambda: provider_at("https://example.test/v1"),
+        lambda: MediaHttp("https://example.test/v1", "k", timeout_seconds=30),
+    ):
+        tcp, _tcp_peer = socket.socketpair()
+        wrapped, peer = socket.socketpair()
+        client = make()
+        client._trace(connect, {"return_value": _Stream(tcp)})
+        client._trace("http11.send_request_headers.complete", {"return_value": None})
+        tcp.detach()  # as ssl's wrap_socket does
+        client._trace(tls, {"return_value": _Stream(wrapped)})
+        if hasattr(client, "_in_flight"):
+            client._in_flight = True  # the request the trace belongs to
+        client.cancel()
+        peer.settimeout(1)
+        assert peer.recv(1) == b"", "the socket read from was shut down"
+        for sock in (wrapped, peer, _tcp_peer):
+            sock.close()
+        client.close()

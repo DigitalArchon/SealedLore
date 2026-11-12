@@ -27,7 +27,7 @@ from sealedlore.providers.base import (
     StreamCancelled,
     StreamEvent,
 )
-from sealedlore.providers.http import make_client
+from sealedlore.providers.http import make_client, traced_socket
 
 # A rate limit or a momentary outage, before anything has streamed, is waited
 # out rather than failing the turn. Measured on nano-gpt's subscription: a
@@ -159,10 +159,7 @@ class StreamingHttpProvider(ChatProvider):
             self._sibling.reset_cancel()
 
     def _trace(self, event_name: str, info: dict[str, Any]) -> None:
-        if event_name not in ("connection.connect_tcp.complete", "connection.start_tls.complete"):
-            return
-        stream = info.get("return_value")
-        sock = stream.get_extra_info("socket") if stream is not None else None
+        sock = traced_socket(event_name, info)
         if sock is None:
             return
         with self._lock:
