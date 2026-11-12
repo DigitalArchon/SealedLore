@@ -514,7 +514,7 @@ def test_setup_has_the_cast_page_as_its_characters_tab(app, window, monkeypatch)
 
     def drive(dialog) -> int:
         names = [dialog.tabs.tabText(i) for i in range(dialog.tabs.count())]
-        assert names[:3] == ["About", "World", "Characters"]
+        assert names[:4] == ["About", "World", "Storyteller's notes", "Characters"]
         panel = window.cast_panel
         assert _tab(dialog, "Characters").isAncestorOf(panel)
         panel.add_character()

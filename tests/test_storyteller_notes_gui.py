@@ -142,3 +142,179 @@ def test_the_windows_prompt_page_follows_the_spoiler_switch(window):
     assert MARKER not in everything_shown(window.inspector)
     # What is sent was never touched by what is shown.
     assert MARKER in window.session.last_prompt.section(SECTION_NOTES).text
+
+
+# --- Story → Setup → Storyteller's notes ---------------------------------------------
+
+
+def setup_for(story, cast=()):
+    from sealedlore.gui.setup_dialog import SetupDialog
+
+    return SetupDialog(story, list(cast))
+
+
+def tab_names(dialog) -> list[str]:
+    return [dialog.tabs.tabText(index) for index in range(dialog.tabs.count())]
+
+
+def texts_in(dialog) -> str:
+    """Every word the dialog holds where the author could read it."""
+    from PySide6.QtWidgets import QLabel, QLineEdit, QPlainTextEdit
+
+    words = [label.text() for label in dialog.findChildren(QLabel)]
+    words += [box.toPlainText() for box in dialog.findChildren(QPlainTextEdit)]
+    words += [line.text() for line in dialog.findChildren(QLineEdit)]
+    return "\n".join(words)
+
+
+def answers(monkeypatch, answer) -> list[str]:
+    from PySide6.QtWidgets import QMessageBox
+
+    titles: list[str] = []
+    monkeypatch.setattr(
+        QMessageBox, "question", lambda _parent, title, *_a, **_k: titles.append(title) or answer
+    )
+    return titles
+
+
+def test_setup_has_the_tab_after_world_and_a_chat_has_none(app, story):
+    from sealedlore.models.story import Story
+
+    assert tab_names(setup_for(story))[:3] == ["About", "World", "Storyteller's notes"]
+    chat = Story(title="A chat", mode="chat", storyteller_notes=NOTES)
+    dialog = setup_for(chat)
+    assert "Storyteller's notes" not in tab_names(dialog)
+    assert MARKER not in texts_in(dialog)
+
+
+def test_the_authors_own_notes_are_simply_edited(app, story):
+    dialog = setup_for(story)
+    assert not dialog.notes.isHidden() and dialog.notes_unread.isHidden()
+    assert dialog.notes.toPlainText() == ""
+    dialog.notes.setPlainText("  The ferryman is the missing heir.  ")
+    dialog._save()
+    assert story.storyteller_notes == "The ferryman is the missing heir."
+    assert story.storyteller_notes_by == "author"
+
+    again = setup_for(story)
+    assert not again.notes.isHidden()
+    assert again.notes.toPlainText() == "The ferryman is the missing heir."
+    again.notes.setPlainText("")
+    again._save()
+    assert story.storyteller_notes is None and story.storyteller_notes_by == "author"
+
+
+def test_notes_a_model_wrote_stay_unread_until_the_author_asks(app, story):
+    story.storyteller_notes, story.storyteller_notes_by = NOTES, "model"
+    dialog = setup_for(story)
+    assert not dialog.notes_unread.isHidden() and dialog.notes.isHidden()
+    words = len(NOTES.split())
+    assert dialog.notes_unread_label.text() == (
+        f"The storyteller has notes for this story that you have not read ({words} words)."
+    )
+    assert (dialog.show_notes.text(), dialog.clear_notes.text()) == ("Show them", "Clear them")
+    assert MARKER not in texts_in(dialog) and "granary" not in texts_in(dialog)
+    # Saved without a look, they are as they were, and nothing to ask about.
+    dialog.show()
+    for _ in range(3):
+        app.processEvents()
+    assert not dialog.edited()
+    dialog.world.setPlainText("A cold country.")
+    dialog._save()
+    assert (story.storyteller_notes, story.storyteller_notes_by) == (NOTES, "model")
+    assert story.world_bible == "A cold country."
+
+
+def test_shown_and_left_alone_a_models_notes_are_unread_again_next_time(app, story):
+    story.storyteller_notes, story.storyteller_notes_by = NOTES, "model"
+    dialog = setup_for(story)
+    dialog.show()
+    for _ in range(3):
+        app.processEvents()
+    dialog.show_notes.click()
+    assert not dialog.notes.isHidden() and dialog.notes_unread.isHidden()
+    assert dialog.notes.toPlainText() == NOTES
+    assert not dialog.edited(), "reading is no change: Cancel asks nothing"
+    dialog._save()
+    assert (story.storyteller_notes, story.storyteller_notes_by) == (NOTES, "model")
+    assert setup_for(story).notes_unread_label.text().startswith("The storyteller has notes")
+
+
+def test_notes_the_author_changed_are_the_authors(app, story):
+    story.storyteller_notes, story.storyteller_notes_by = NOTES, "model"
+    dialog = setup_for(story)
+    dialog.show()
+    for _ in range(3):
+        app.processEvents()
+    dialog.show_notes.click()
+    dialog.notes.setPlainText(NOTES + "\nElena knows.")
+    assert dialog.edited()
+    dialog._save()
+    assert story.storyteller_notes == NOTES + "\nElena knows."
+    assert story.storyteller_notes_by == "author"
+    again = setup_for(story)
+    assert not again.notes.isHidden() and again.notes.toPlainText().endswith("Elena knows.")
+
+
+def test_clearing_unread_notes_asks_first_and_is_saved_with_setup(app, story, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    story.storyteller_notes, story.storyteller_notes_by = NOTES, "model"
+    dialog = setup_for(story)
+    dialog.show()
+    for _ in range(3):
+        app.processEvents()
+
+    asked: list[tuple] = []
+
+    def question(_parent, title, _text, buttons, default):
+        asked.append((title, buttons, default))
+        return QMessageBox.No
+
+    monkeypatch.setattr(QMessageBox, "question", question)
+    dialog.clear_notes.click()
+    assert asked == [
+        ("Clear the storyteller's notes?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+    ]
+    assert not dialog.notes_unread.isHidden() and not dialog.edited()
+
+    titles = answers(monkeypatch, QMessageBox.Yes)
+    dialog.clear_notes.click()
+    assert titles == ["Clear the storyteller's notes?"]
+    assert not dialog.notes.isHidden() and dialog.notes.toPlainText() == ""
+    assert MARKER not in texts_in(dialog)
+    # Not cleared until Save: Cancel asks about it, and leaves the story's notes.
+    assert dialog.edited()
+    titles = answers(monkeypatch, QMessageBox.Cancel)
+    dialog.reject()
+    assert titles == ["Discard your changes?"] and dialog.isVisible()
+    assert story.storyteller_notes == NOTES
+    dialog._save()
+    assert story.storyteller_notes is None and story.storyteller_notes_by == "author"
+
+
+def test_changed_notes_on_a_story_under_way_need_no_new_playthrough(app, window, monkeypatch):
+    import sealedlore.gui.main_window as mw
+
+    class Dialog(mw.SetupDialog):
+        def exec(self):  # noqa: A003 - Qt naming
+            self.show_notes.click()
+            self.notes.setPlainText("The well is dry because Maela dammed the spring.")
+            self._save()
+            return mw.SetupDialog.Accepted
+
+    monkeypatch.setattr(mw, "SetupDialog", Dialog)
+    offered: list[bool] = []
+    monkeypatch.setattr(window, "_offer_new_playthrough", lambda: offered.append(True))
+    assert window.session.nodes, "the story has begun"
+    assert window.open_setup()
+    assert not offered
+    story = window.session.story
+    assert story.storyteller_notes == "The well is dry because Maela dammed the spring."
+    assert story.storyteller_notes_by == "author"
+    # The next prompt has them, and the story is saved with them.
+    assert "dammed the spring" in window.session.last_prompt.section(SECTION_NOTES).text
+    from sealedlore.storage.repository import load_story_bundle
+
+    saved = load_story_bundle(story.id, root=window.root).story
+    assert saved.storyteller_notes == story.storyteller_notes

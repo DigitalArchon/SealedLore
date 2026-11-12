@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QMessageBox,
     QPlainTextEdit,
@@ -66,6 +67,11 @@ DENSITY_LABELS = {
 
 
 GENERATE_LABEL = "The model writes the opening from these notes"
+NOTES_TAB = "Storyteller's notes"
+# The storyteller's notes a model wrote (a draft, a follow-up), not yet read.
+NOTES_UNREAD = "The storyteller has notes for this story that you have not read ({words})."
+SHOW_NOTES = "Show them"
+CLEAR_NOTES = "Clear them"
 AS_WRITTEN_LABEL = "Use exactly as written — this is the opening passage"
 
 
@@ -86,6 +92,8 @@ CHAT_MODEL_ROLES = ("story", "summarisation", "image_prompt")
 WRITTEN = {
     "title",
     "world_bible",
+    "storyteller_notes",
+    "storyteller_notes_by",
     "setup",
     "defaults",
     "style",
@@ -167,6 +175,7 @@ class SetupDialog(QDialog):
             return
         self.tabs.addTab(self._about_tab(), "About")
         self.tabs.addTab(self._world_tab(), "World")
+        self.tabs.addTab(self._notes_tab(), NOTES_TAB)
         if characters is not None:
             self.tabs.addTab(self._characters_tab(characters), "Characters")
         self.tabs.addTab(self._style_tab(), "Style")
@@ -572,6 +581,112 @@ class SetupDialog(QDialog):
         )
         return widget
 
+    def _notes_tab(self) -> QWidget:
+        """The storyteller's notes (`Story.storyteller_notes`): what only the
+        storyteller knows. Notes a model wrote (a draft's, a follow-up's) are
+        its secrets from the author too, so they stay out of sight, a line
+        saying how long they are in their place, until the author asks here
+        to see them; left unread and unchanged, they are still unread the
+        next time Setup opens."""
+        story = self.story
+        notes = (story.storyteller_notes or "").strip()
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.addWidget(
+            _hint(
+                "The storyteller's secrets: the truth behind what the story has not shown "
+                "yet, and what its people want and hide. The storyteller holds to them, and "
+                "gives them up only as your character finds them out. Write your own, or "
+                "leave what a draft wrote unread."
+            )
+        )
+        # Unread: a line and two buttons where the notes would be.
+        self.notes_unread = QWidget()
+        unread = QVBoxLayout(self.notes_unread)
+        unread.setContentsMargins(0, 0, 0, 0)
+        count = len(notes.split())
+        self.notes_unread_label = QLabel(
+            NOTES_UNREAD.format(words=f"{count:,} word{'' if count == 1 else 's'}")
+        )
+        self.notes_unread_label.setWordWrap(True)
+        unread.addWidget(self.notes_unread_label)
+        self.show_notes = QPushButton(SHOW_NOTES)
+        self.show_notes.setToolTip("Read them here, and change them if you like")
+        self.show_notes.clicked.connect(self._show_notes)
+        self.clear_notes = QPushButton(CLEAR_NOTES)
+        self.clear_notes.setToolTip(
+            "Take them out of the story without reading them. Nothing is saved until you "
+            "press Save."
+        )
+        self.clear_notes.clicked.connect(self._clear_notes)
+        buttons = QHBoxLayout()
+        buttons.addWidget(self.show_notes)
+        buttons.addWidget(self.clear_notes)
+        buttons.addStretch(1)
+        unread.addLayout(buttons)
+        # A wrapped label given the spare room would draw its line mid-page.
+        unread.addStretch(1)
+        layout.addWidget(self.notes_unread, 1)
+
+        self.notes = GrowingText(lines=6, most=24, fill=True)
+        self.notes.setPlaceholderText(
+            "What is really going on, as plain facts: what is under the floor, who took "
+            "the money and why, what each of the central people wants and what they hide. "
+            "Leave it empty for a story with no secrets."
+        )
+        layout.addWidget(self.notes, 1)
+        self._notes_read = not (notes and story.storyteller_notes_by == "model")
+        if self._notes_read:
+            self.notes.setPlainText(notes)
+        self.notes.setVisible(self._notes_read)
+        self.notes_unread.setVisible(not self._notes_read)
+        layout.addWidget(
+            _hint(
+                "Sent to the storyteller with every turn, after the world, and cached: a "
+                "change costs one cache miss and takes hold from the next passage. No other "
+                "model is sent them, and nothing here needs a new playthrough. What your "
+                "character already knows belongs in World or Lore; this is for what they "
+                "would have to find out."
+            )
+        )
+        return widget
+
+    def _show_notes(self) -> None:
+        """Show them: the author asked, here, to read what a model wrote."""
+        self._reveal_notes((self.story.storyteller_notes or "").strip())
+
+    def _clear_notes(self) -> None:
+        """Clear them, unread: asked first, and only saved with Setup."""
+        answer = QMessageBox.question(
+            self,
+            "Clear the storyteller's notes?",
+            "The story's secrets go unread, and the storyteller is left to make up what "
+            "the story leaves open, perhaps differently each time. You can write notes of "
+            "your own in their place. Nothing is cleared until you save Setup.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer == QMessageBox.Yes:
+            self._reveal_notes("")
+
+    def _reveal_notes(self, text: str) -> None:
+        self._notes_read = True
+        self.notes.setPlainText(text)
+        self.notes_unread.hide()
+        self.notes.show()
+        self.notes.setFocus()
+
+    def _write_notes(self, story: Story) -> None:
+        """The notes as the box has them, when they differ from the story's:
+        then they are the author's text. Unread, or read and left as they
+        were, a model's notes stay a model's, and unread the next time."""
+        if not self._notes_read:
+            return
+        text = self.notes.toPlainText().strip()
+        if text != (story.storyteller_notes or "").strip():
+            story.storyteller_notes = text or None
+            story.storyteller_notes_by = "author"
+
     def _opening_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
@@ -793,6 +908,7 @@ class SetupDialog(QDialog):
             self._save_models(story)
             return
         story.world_bible = self.world.toPlainText().strip() or None
+        self._write_notes(story)
         setup = story.setup
         setup.description = self.description.toPlainText().strip() or None
         story.defaults.agency_mode = self.agency.currentData()
