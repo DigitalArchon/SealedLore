@@ -8,6 +8,7 @@ resolve, and the fixes from the Doomsville playtest.
 from __future__ import annotations
 
 import json
+import threading
 import time
 from pathlib import Path
 
@@ -29,6 +30,7 @@ from sealedlore.engine.session import StorySession
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
 from sealedlore.models.character import Character
 from sealedlore.models.config import Config, EmbeddingProviderConfig
+from sealedlore.models.image import ImageRef
 from sealedlore.models.plot import Condition, Plot
 from sealedlore.models.scene import SceneShortcut, SceneState
 from sealedlore.providers.mock import MockChatProvider, MockEmbeddings
@@ -1246,6 +1248,78 @@ def test_a_failed_side_call_is_a_notice_not_a_failed_turn(tmp_path):
     ]
     assert any("Couldn't read the clock and facts" in n for n in notices)
     assert session.path()[-1].content == PASSAGE
+
+
+class Line(MockChatProvider):
+    """A client that, like the real one, tracks one request at a time, and
+    whose sibling is another of its kind, built once."""
+
+    def __init__(self, replies, *more):
+        super().__init__(replies)
+        self._more = more
+        self._next: Line | None = None
+        self._guard = threading.Lock()
+        self._busy = False
+        self.calls_at_once = 0
+
+    def sibling(self):
+        if self._next is None and self._more:
+            self._next = Line(*self._more)
+        return self._next
+
+    def complete(self, request):
+        with self._guard:
+            self.calls_at_once += self._busy
+            self._busy = True
+        try:
+            time.sleep(0.1)
+            return super().complete(request)
+        finally:
+            self._busy = False
+
+
+def with_two_pictures(session: StorySession) -> Character:
+    """The character played, with a look to choose between."""
+    ann = session.cast[0]
+    ann.reference_images = [
+        ImageRef(id="p", file="images/refs/p.png", caption="portrait"),
+        ImageRef(id="a", file="images/refs/a.png", look="combat armour"),
+    ]
+    return ann
+
+
+AT_THE_MILL = json.dumps({"location": "The mill", "arrived": [], "left": [], "shortcuts": []})
+
+
+def test_three_reads_side_by_side_go_out_on_three_clients(tmp_path):
+    """The scene read, the clock read and the look pick: the last two shared
+    the one sibling, so a Stop reached only the call it tracked last and the
+    wait for the other held the worker until it finished by itself."""
+    session = make_session(tmp_path, [], scene_reads="every_turn")
+    ann = with_two_pictures(session)
+    pick = json.dumps({"looks": [{"name": ann.name, "picture": "L2", "missing": ""}]})
+    session.provider = Line(
+        [PASSAGE, AT_THE_MILL],
+        [read(minutes=20, place=("The Mill", "Ann pushed through the mill door."))],
+        [pick],
+    )
+    list(session.send(turn(session, "I go into the mill.")))
+    second = session.provider.sibling()
+    third = second.sibling()
+    assert [line._call_count for line in (session.provider, second, third)] == [2, 1, 1]
+    assert [line.calls_at_once for line in (session.provider, second, third)] == [0, 0, 0]
+    assert session.story.scene.location == "The mill"
+    assert session.chronicle.elapsed == 20
+    assert session.full_path()[-1].meta.looks == {ann.id: "a"}
+
+
+def test_with_fewer_clients_than_reads_the_last_takes_the_rest_in_turn(tmp_path):
+    session = make_session(tmp_path, [], scene_reads="every_turn")
+    with_two_pictures(session)
+    session.provider = Line([PASSAGE, AT_THE_MILL], ["{}"])
+    list(session.send(turn(session, "I go into the mill.")))
+    second = session.provider.sibling()
+    assert second._call_count == 2 and second.calls_at_once == 0
 
 
 def test_speech_that_wraps_over_a_line_is_still_speech():

@@ -101,9 +101,10 @@ class StreamingHttpProvider(ChatProvider):
 
     def sibling(self) -> StreamingHttpProvider:
         """A second client on the same endpoint, for a call made alongside one
-        of this one's (the two reads after a passage). Each provider tracks one
-        request's socket, so a concurrent call needs its own; `cancel` and
-        `close` reach both. Built once."""
+        of this one's (the reads after a passage). Each provider tracks one
+        request's socket, so a concurrent call needs its own; a third call
+        goes on the sibling's own sibling (`base.side_by_side`). `cancel` and
+        `close` reach every one down the line. Built once."""
         if self._sibling is None:
             self._sibling = self._twin()
         self._sibling.route_watch = self.route_watch

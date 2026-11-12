@@ -148,3 +148,42 @@ def test_the_mock_can_be_cancelled_mid_stream():
     provider.cancel()
     with pytest.raises(StreamCancelled):
         list(stream)
+
+
+def test_stop_ends_every_call_made_side_by_side(server: str):
+    """The reads after a passage go out at once, each on a client of its own
+    (`side_by_side`): a client tracks one request, so a third read sharing
+    the second's client was out of a Stop's reach, and the worker waited for
+    it to finish by itself."""
+    from sealedlore.models.config import Config
+    from sealedlore.providers.base import side_by_side
+    from sealedlore.providers.endpoints import EndpointsProvider
+
+    settings = ProviderConfig(name="t", base_url=server + "/stall", api_key="k", timeout_seconds=30)
+    for provider in (
+        OpenAICompatibleProvider(settings),
+        EndpointsProvider(Config(providers=[settings], active_provider_name="t")),
+    ):
+        lines = side_by_side(provider, 3)
+        assert len({id(line) for line in lines}) == 3
+        errors: list[BaseException] = []
+
+        def call(line, errors: list[BaseException] = errors) -> None:
+            try:
+                line.complete(request())
+            except Exception as exc:  # noqa: BLE001 - recorded for the assertion
+                errors.append(exc)
+
+        threads = [threading.Thread(target=call, args=(line,)) for line in lines]
+        for thread in threads:
+            thread.start()
+        time.sleep(0.5)
+        started = time.monotonic()
+        provider.cancel()
+        for thread in threads:
+            thread.join(5)
+        assert not any(thread.is_alive() for thread in threads), "a call was out of reach"
+        assert len(errors) == 3 and all(isinstance(e, StreamCancelled) for e in errors)
+        assert time.monotonic() - started < 2
+        provider.reset_cancel()
+        provider.close()

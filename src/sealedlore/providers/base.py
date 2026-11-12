@@ -193,6 +193,24 @@ class ChatProvider(ABC):
         return text, completed
 
 
+def side_by_side(provider: ChatProvider, count: int) -> list[ChatProvider]:
+    """Up to `count` clients to make calls on at the same time: `provider`,
+    its sibling, the sibling's own sibling, and so on. A client tracks one
+    request (its socket, whether it is in flight), so two calls at once on
+    one client leave the first out of reach of a Stop; each `sibling()` is
+    built once and a cancel or close reaches every one down the line. A
+    provider with no sibling (the scripted mock) gives fewer than asked:
+    the caller makes the rest of its calls one after another on the last."""
+    lines = [provider]
+    while len(lines) < count:
+        make = getattr(lines[-1], "sibling", None)
+        line = make() if callable(make) else None
+        if line is None or any(line is seen for seen in lines):
+            break
+        lines.append(line)
+    return lines
+
+
 def parse_usage(raw: dict[str, Any] | None) -> Usage:
     """Read usage out of whatever shape the endpoint reports it in.
 

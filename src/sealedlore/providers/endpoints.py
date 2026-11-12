@@ -230,7 +230,8 @@ class EndpointsProvider(ChatProvider):
         """A second provider for a call made alongside one of this one's:
         each endpoint's client is that client's own sibling, made when first
         used, so an endpoint never used opens nothing. Built once; a cancel
-        here reaches it."""
+        here reaches it. Its own sibling is a third line, each client the
+        sibling of the second's (`base.side_by_side`)."""
         if self._sibling is None:
             self._sibling = EndpointsProvider(self.config, make=self._make_sibling)
         self._sibling.route_watch = self._route_watch

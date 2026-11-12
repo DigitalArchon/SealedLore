@@ -116,6 +116,7 @@ from sealedlore.models.plot_file import PlotDocument
 from sealedlore.providers.base import (
     ChatRequest,
     ProviderError,
+    side_by_side,
 )
 from sealedlore.threads import BackgroundThread
 
@@ -480,22 +481,27 @@ class PlotRuntime:
             if scene is not None:
                 after_scene.add(len(reads))
             reads.append((looks, self.update_looks_after_turn))
-        make_sibling = getattr(self.provider, "sibling", None)
-        if len(reads) < 2 or not callable(make_sibling):
+        # The first call on the provider itself (this thread only waits), each
+        # of the rest on a client of its own: a client tracks one request, so
+        # two at once on one left the first out of a Stop's reach, and the
+        # wait for it below held the worker until it finished by itself.
+        lines = side_by_side(self.provider, len(reads)) if len(reads) > 1 else [self.provider]
+        if len(lines) < 2:
             for pending, finish in reads:
                 yield from finish(pending)
             return
+        # With fewer clients than reads, the last takes the rest one at a time.
+        turns = {id(line): threading.Lock() for line in lines}
         boxes: list[dict[str, object]] = []
         threads: list[threading.Thread] = []
         for i, (pending, _finish) in enumerate(reads):
-            # The first call on the provider itself (this thread only waits),
-            # the rest on siblings.
-            line = self.provider if i == 0 else make_sibling()
+            line = lines[min(i, len(lines) - 1)]
             box: dict[str, object] = {}
 
             def call(line=line, box: dict[str, object] = box, pending=pending) -> None:
                 try:
-                    box["reply"] = line.complete(pending.request)  # type: ignore[attr-defined]
+                    with turns[id(line)]:
+                        box["reply"] = line.complete(pending.request)  # type: ignore[attr-defined]
                 except BaseException as exc:  # noqa: BLE001 - re-raised on this thread below
                     box["error"] = exc
 
