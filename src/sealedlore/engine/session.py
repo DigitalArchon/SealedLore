@@ -1957,30 +1957,31 @@ class StorySession(
         if carrier is not None:
             yield from self._retake_in_place(turn, user_node, carrier, history, span_id)
             return
-        # The same instruction as the take being replaced: the director is
-        # asked once per author turn, as the dice are rolled once.
-        if span_id is not None:
-            yield from self._private_turn(turn, user_node, history=history)
-            return
-        turn = self._directed(turn, user_node.meta.direction, [*history, user_node])
-        # A rebuild the author asked for goes in before this turn's prompt,
-        # and so do cards condensed since the last.
-        for text in [*self.adopt_rebuild(), *self.adopt_condensed()]:
-            yield SessionNotice(text)
-        yield from self.archive_if_due(turn, history)
-        lore = self._retrieve_for_turn(turn, history)
-        recall = self._recall_for_turn(self._recall_query(turn, history), history)
-        prompt = self.assemble(turn, history_nodes=history, lore=lore, recall=recall)
         standing = previous.id if previous is not None else user_node.id
         try:
+            # The same instruction as the take being replaced: the director is
+            # asked once per author turn, as the dice are rolled once.
+            if span_id is not None:
+                yield from self._private_turn(turn, user_node, history=history)
+                return
+            turn = self._directed(turn, user_node.meta.direction, [*history, user_node])
+            # A rebuild the author asked for goes in before this turn's prompt,
+            # and so do cards condensed since the last.
+            for text in [*self.adopt_rebuild(), *self.adopt_condensed()]:
+                yield SessionNotice(text)
+            yield from self.archive_if_due(turn, history)
+            lore = self._retrieve_for_turn(turn, history)
+            recall = self._recall_for_turn(self._recall_query(turn, history), history)
+            prompt = self.assemble(turn, history_nodes=history, lore=lore, recall=recall)
             yield from self._generate(prompt, turn, parent=user_node)
         finally:
             if self.story.active_leaf_id == standing:
-                # Nothing came (stopped or failed before any text): the
-                # passage being retaken stands, and the live scene goes back
-                # to the one it left. It was left where this turn found it,
-                # one passage behind, and the next prompt listed people the
-                # standing passage had sent away (the review, Oct 20 2026).
+                # Nothing came (stopped or failed before any text, or before
+                # the request went out, during archival): the passage being
+                # retaken stands, and the live scene goes back to the one it
+                # left. It was left where this turn found it, one passage
+                # behind, and the next prompt listed people the standing
+                # passage had sent away (the review, Oct 20 2026).
                 self._sync_scene()
                 self.save()
         taken = index_nodes(self.nodes).get(self.story.active_leaf_id or "")

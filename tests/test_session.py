@@ -203,6 +203,45 @@ def test_regenerate_resends_the_same_author_turn(session: StorySession):
     assert "first take" not in whole
 
 
+def left_in_the_cellar(session: StorySession) -> Node:
+    """The latest passage, its read having moved the scene on."""
+    list(session.send(turn()))
+    passage = session.nodes[-1]
+    passage.meta.scene = session.story.scene.model_copy(
+        update={"location": "The cellar"}, deep=True
+    )
+    session._sync_scene()
+    return passage
+
+
+def test_a_regenerate_stopped_before_its_request_leaves_the_scene_as_the_passage_left_it(
+    session: StorySession,
+):
+    passage = left_in_the_cellar(session)
+    session.adopt_condensed = lambda: ["Two cards condensed."]
+    events = session.regenerate()
+    assert isinstance(next(events), SessionNotice)  # stopped there, nothing sent
+    events.close()
+
+    assert session.story.active_leaf_id == passage.id
+    assert session.story.scene.location == "The cellar"
+
+
+def test_a_regenerate_that_fails_before_its_request_leaves_the_scene_as_the_passage_left_it(
+    session: StorySession,
+):
+    passage = left_in_the_cellar(session)
+
+    def down(*_args, **_kwargs):
+        raise ProviderError("the embeddings endpoint is down")
+
+    session._retrieve_for_turn = down
+    with pytest.raises(ProviderError):
+        list(session.regenerate())
+    assert session.story.active_leaf_id == passage.id
+    assert session.story.scene.location == "The cellar"
+
+
 def test_regenerate_needs_a_turn_to_work_from(session: StorySession):
     with pytest.raises(ValueError, match="needs a turn"):
         list(session.regenerate())
