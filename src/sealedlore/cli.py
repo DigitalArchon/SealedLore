@@ -59,7 +59,7 @@ from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError, 
 from sealedlore.providers.embeddings import OpenAICompatibleEmbeddings
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.providers.tee import is_private_mode, is_tee
-from sealedlore.storage import keychain
+from sealedlore.storage import folder_lock, keychain
 from sealedlore.storage.archive import ArchiveError, import_archive, write_archive
 from sealedlore.storage.images import all_image_files, reference_files
 from sealedlore.storage.paths import (
@@ -1054,6 +1054,37 @@ def cmd_chat(args: argparse.Namespace) -> int:
     return Repl(session).run()
 
 
+# The commands that write to the data folder: each holds its lock while it
+# runs, so none runs beside the app, or another, on the same folder
+# (storage/folder_lock.py). Reading (list, export) goes ahead.
+WRITERS = frozenset(
+    {
+        cmd_configure,
+        cmd_new,
+        cmd_generate,
+        cmd_scenario_import,
+        cmd_import,
+        cmd_duplicate,
+        cmd_delete,
+        cmd_chat,
+    }
+)
+
+
+def run_command(args: argparse.Namespace) -> int:
+    if args.func not in WRITERS:
+        return int(args.func(args))
+    try:
+        lock = folder_lock.hold(args.data_dir)
+    except folder_lock.FolderInUse as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    try:
+        return int(args.func(args))
+    finally:
+        lock.release()
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="sealedlore", description=__doc__)
     parser.add_argument("--version", action="version", version=f"sealedlore {__version__}")
@@ -1167,7 +1198,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "from python.org (the manual's Windows section).",
             file=sys.stderr,
         )
-    return int(args.func(args))
+    return run_command(args)
 
 
 if __name__ == "__main__":

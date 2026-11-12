@@ -14,7 +14,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from PySide6.QtCore import QCoreApplication, Qt
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from sealedlore import __version__
 from sealedlore.gui import theme, x11_check
@@ -22,6 +22,7 @@ from sealedlore.gui.collector import install_collector_pause
 from sealedlore.gui.fields import install_wheel_guard
 from sealedlore.gui.main_window import MainWindow
 from sealedlore.gui.text_size import load_stylesheet
+from sealedlore.storage import folder_lock
 from sealedlore.storage.atomic import open_private
 from sealedlore.storage.paths import ensure_data_home
 
@@ -168,6 +169,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     _log_crashes(options.data_dir)
 
     app = build_app([arguments[0], *qt_arguments])
+    try:
+        # Held for the life of the process (storage/folder_lock.py).
+        folder_lock.hold(options.data_dir)
+    except folder_lock.FolderInUse as exc:
+        QMessageBox.warning(None, "SealedLore is already running", str(exc))
+        return 1
     window = MainWindow(root=options.data_dir, use_mock=options.mock)
     if options.story:
         window.open_story(options.story)

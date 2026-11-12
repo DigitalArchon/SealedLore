@@ -426,6 +426,14 @@ directory, `--story <id>` opens one on start, and `--version` prints the
 version (Help → About SealedLore shows it too, with the data folder). Until an endpoint is set, anything that would call a model says so
 and does nothing.
 
+One SealedLore at a time uses a data folder, since each would save over the
+other's work: a second window on the same folder says SealedLore is already
+running and closes, and so does a `sealedlore` command that writes (all but
+`list` and the exports) while the window is open. A folder named with
+`--data-dir` is a folder of its own. The lock is the file `sealedlore.lock`
+in the data folder; the system lets go of it when SealedLore closes, however
+it closes.
+
 **Settings** (File → Settings…, Ctrl+,) lists its pages down the left in
 groups: **Connection** (Endpoints, Models), **Writing** (Generation, Context,
 Lore), **Pictures** (Images, Video) and **Privacy** (Private, Phone). Each page says
