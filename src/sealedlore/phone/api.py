@@ -34,8 +34,12 @@ from sealedlore.phone.sse import EventHub
 TEXT_LIMIT = 20_000
 TRANSCRIPT_PAGE = 40
 TRANSCRIPT_MOST = 200
-AUTH_FAILURES = 20  # wrong tokens in a minute before every token waits
-LOCKOUT_SECONDS = 60
+# Wrong logins and pairing codes are never answered by refusing anyone: a
+# token is 256 bits and a code 128, so there is nothing to slow down, and a
+# lockout anyone with the address could set off would lock the author's own
+# phones out. The desktop is only told that someone is trying.
+WRONG_TRIES_TO_WARN = 20  # wrong logins or codes in a minute before the desktop is told
+WARN_EVERY_SECONDS = 10 * 60  # and told again no sooner than this
 _ID = re.compile(r"[A-Za-z0-9_.-]{1,96}")
 
 NOT_SHARED = "The story open on the desktop isn't shared with this phone."
@@ -146,7 +150,7 @@ class Api:
         self._static = dict(static or {})
         self._clock = clock
         self._failures: deque[float] = deque()
-        self._locked_until = 0.0
+        self._warned_at: float | None = None
         self.hub = EventHub(self.open_available)
         self._routes = [
             _Route("POST", re.compile(r"/api/pair"), self._pair, auth=False),
@@ -245,9 +249,6 @@ class Api:
         return error_response(404)
 
     def _authenticate(self, request: Request) -> str:
-        now = self._clock()
-        if now < self._locked_until:
-            raise HttpError(429, "Too many wrong logins. Wait a minute.")
         scheme, _, token = request.headers.get("authorization", "").partition(" ")
         device = (
             device_for(token.strip(), self.backend.devices())
@@ -256,16 +257,26 @@ class Api:
         )
         if device:
             return device
+        self._wrong_try()
+        return ""
+
+    def _wrong_try(self) -> None:
+        """A wrong login or pairing code: counted only to tell the desktop,
+        at most every WARN_EVERY_SECONDS, never to refuse anyone."""
+        now = self._clock()
         while self._failures and now - self._failures[0] > 60:
             self._failures.popleft()
         self._failures.append(now)
-        if len(self._failures) >= AUTH_FAILURES:
-            self._failures.clear()
-            self._locked_until = now + LOCKOUT_SECONDS
-            self.backend.warn(
-                "Phone access: many wrong logins in a minute; refusing every phone for a minute."
-            )
-        return ""
+        if len(self._failures) < WRONG_TRIES_TO_WARN:
+            return
+        self._failures.clear()
+        if self._warned_at is not None and now - self._warned_at < WARN_EVERY_SECONDS:
+            return
+        self._warned_at = now
+        self.backend.warn(
+            "Phone access: many wrong logins or pairing codes in a minute. "
+            "Your phones still work; if it goes on, File → Phone devices… → New address…."
+        )
 
     def _story_refusal(self) -> Response | None:
         row = self.backend.open_story()
@@ -282,6 +293,8 @@ class Api:
         try:
             claim = self.pairing.claim(body.get("code"), body.get("name"))
         except PairingRefused as exc:
+            if exc.wrong_code:
+                self._wrong_try()
             return error_response(exc.status, exc.reason)
         self.backend.claimed(claim)
         return json_response(202, {"claim": claim.id, "check": claim.check})

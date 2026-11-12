@@ -17,22 +17,24 @@ import hashlib
 import hmac
 import secrets
 import time
-from collections import deque
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 CODE_SECONDS = 5 * 60  # a pairing sheet's code lives this long
 CLAIM_SECONDS = 5 * 60  # a claim waits this long for the desktop's answer
-CODE_FAILURES = 5  # wrong codes before the code is spent anyway
-CLAIMS_PER_MINUTE = 10  # all claims together, right or wrong
 NAME_LENGTH = 40
+# There is no limit on wrong codes, and none on claims: a code is 128 bits, so
+# guessing gets nowhere, while a limit would let anyone with the onion address
+# spend the author's code or keep the right one out by trying wrong ones
+# first. A wrong code makes nothing; only the right one makes a claim, once.
 
 
 class PairingRefused(Exception):
-    def __init__(self, status: int, reason: str) -> None:
+    def __init__(self, status: int, reason: str, *, wrong_code: bool = False) -> None:
         super().__init__(reason)
         self.status = status
         self.reason = reason
+        self.wrong_code = wrong_code  # someone tried a code that isn't the one shown
 
 
 @dataclass
@@ -87,9 +89,7 @@ class Pairing:
         self._clock = clock
         self._code: str | None = None
         self._code_made = 0.0
-        self._failures = 0
         self._claims: dict[str, Claim] = {}
-        self._recent: deque[float] = deque()
 
     # --- the desktop's side ------------------------------------------------
 
@@ -97,7 +97,6 @@ class Pairing:
         """A new code; any earlier one is spent."""
         self._code = new_code()
         self._code_made = self._clock()
-        self._failures = 0
         return self._code
 
     def close(self) -> None:
@@ -135,24 +134,16 @@ class Pairing:
     def claim(self, code: object, name: object) -> Claim:
         self._expire()
         now = self._clock()
-        while self._recent and now - self._recent[0] > 60:
-            self._recent.popleft()
-        if len(self._recent) >= CLAIMS_PER_MINUTE:
-            raise PairingRefused(429, "Too many tries. Wait a minute and scan the code again.")
-        self._recent.append(now)
         if self._code is None:
             raise PairingRefused(
                 410, "Pairing isn't open on the desktop. Show the code there and scan it again."
             )
         # As bytes: compare_digest refuses a str with anything beyond ASCII in
-        # it (TypeError, a 500, and the try went uncounted).
+        # it (TypeError, a 500).
         if not isinstance(code, str) or not hmac.compare_digest(
             code.strip().lower().encode("utf-8", "surrogatepass"), self._code.encode("ascii")
         ):
-            self._failures += 1
-            if self._failures >= CODE_FAILURES:
-                self._code = None
-            raise PairingRefused(403, "That code isn't the one on the desktop.")
+            raise PairingRefused(403, "That code isn't the one on the desktop.", wrong_code=True)
         self._code = None  # spent, whatever the desktop answers
         claim = Claim(
             id=secrets.token_urlsafe(16),

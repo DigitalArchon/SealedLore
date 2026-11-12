@@ -225,15 +225,36 @@ def test_every_api_route_needs_a_paired_phone(method, path, body):
     assert answer(api, method, path, body)[0] in (200, 202)
 
 
-def test_wrong_logins_lock_every_phone_out_for_a_minute():
+def test_wrong_logins_never_lock_a_paired_phone_out():
+    """Twenty wrong logins a minute used to refuse every phone for a minute:
+    anyone with the onion address could keep the author's own phones out for
+    good, and a 256-bit token has nothing to slow down."""
     clock = Clock()
     api, backend = make(clock=clock)
-    for _ in range(phone_api.AUTH_FAILURES):
+    for _ in range(10 * phone_api.WRONG_TRIES_TO_WARN):
         assert answer(api, "GET", "/api/state", token="wrong")[0] == 401
-    assert answer(api, "GET", "/api/state")[0] == 429
-    assert backend.warnings
-    clock.now += phone_api.LOCKOUT_SECONDS + 1
+        assert answer(api, "GET", "/api/state", token=None)[0] == 401
     assert answer(api, "GET", "/api/state")[0] == 200
+    status, _ = answer(api, "POST", "/api/pair", {"code": api.pairing.open(), "name": "x"})
+    assert status == 202, "pairing still works"
+
+
+def test_the_desktop_is_told_of_wrong_tries_now_and_then():
+    clock = Clock()
+    api, backend = make(clock=clock)
+    api.pairing.open()
+    for _ in range(phone_api.WRONG_TRIES_TO_WARN - 1):
+        answer(api, "GET", "/api/state", token="wrong")
+    assert not backend.warnings
+    assert answer(api, "POST", "/api/pair", {"code": "wrong", "name": "x"})[0] == 403
+    assert len(backend.warnings) == 1, "a wrong pairing code counts as a wrong try"
+    for _ in range(5 * phone_api.WRONG_TRIES_TO_WARN):
+        answer(api, "GET", "/api/state", token="wrong")
+    assert len(backend.warnings) == 1, "not told again at once"
+    clock.now += phone_api.WARN_EVERY_SECONDS + 1
+    for _ in range(phone_api.WRONG_TRIES_TO_WARN):
+        answer(api, "GET", "/api/state", token="wrong")
+    assert len(backend.warnings) == 2
 
 
 def test_the_page_itself_needs_no_login_and_carries_the_headers():

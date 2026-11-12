@@ -47,35 +47,27 @@ def test_a_code_is_spent_by_its_first_claim_whatever_the_answer():
     assert p.poll(claim.id) == ("refused", "")
 
 
-def test_wrong_codes_spend_the_code_after_a_few():
+def test_wrong_codes_never_keep_the_right_one_out():
+    """Five wrong codes used to spend the code, and ten claims a minute, right
+    or wrong, refused the rest: anyone with the onion address could keep the
+    author from pairing. A 128-bit code has nothing to slow down."""
     p = Pairing(Clock())
     code = p.open()
-    for _ in range(pairing.CODE_FAILURES):
-        assert refused(lambda: p.claim("wrong", "x")) == 403
-    assert refused(lambda: p.claim(code, "x")) == 410
+    for _ in range(1000):
+        with pytest.raises(PairingRefused) as caught:
+            p.claim("wrong", "x")
+        assert caught.value.status == 403 and caught.value.wrong_code
+    assert not p.waiting(), "a wrong code makes no claim"
+    assert p.claim(code, "x").state == "waiting"
 
 
 def test_a_code_beyond_ascii_is_a_wrong_try_not_a_crash():
     """compare_digest raises TypeError on a str with a non-ASCII character in
-    it: the claim answered 500, and the try went uncounted, so the five wrong
-    tries could be had again and again."""
+    it: the claim answered 500."""
     p = Pairing(Clock())
     code = p.open()
-    for wrong in ("é" * 26, code[:-1] + "ß", "\udcff", "ｃｏｄｅ"):
+    for wrong in ("é" * 26, code[:-1] + "ß", "\udcff", "ｃｏｄｅ", None, 7):
         assert refused(lambda w=wrong: p.claim(w, "x")) == 403
-    assert refused(lambda: p.claim("wrong", "x")) == 403  # the fifth
-    assert refused(lambda: p.claim(code, "x")) == 410, "spent: every one counted"
-
-
-def test_claims_are_limited_per_minute():
-    clock = Clock()
-    p = Pairing(clock)
-    for _ in range(pairing.CLAIMS_PER_MINUTE):
-        p.open()
-        refused(lambda: p.claim("wrong", "x"))
-    code = p.open()
-    assert refused(lambda: p.claim(code, "x")) == 429
-    clock.now += 61
     assert p.claim(code, "x").state == "waiting"
 
 

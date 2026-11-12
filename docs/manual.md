@@ -2826,6 +2826,8 @@ phone** in the phone's own menu does the same from the phone (delete the
 bookmark too). **New address…** gives your computer a new onion address and
 forgets every phone, so each one has to be paired again: for when you think
 a bookmark has got out. **Details** there shows tor's own latest messages.
+Wrong logins and wrong pairing codes never lock your own phones out or keep
+you from pairing; when there are many, the status bar says so.
 
 **Why the link starts with http://.** An onion address is a key: tor finds
 your computer by it, checks that it is talking to the holder of that key, and
