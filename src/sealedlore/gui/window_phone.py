@@ -453,6 +453,9 @@ class PhoneWindow:
         """Raises Refused when the window can't act for a phone now."""
         if QApplication.activeModalWidget() is not None:
             raise Refused(409, WAITING_ON_DESKTOP)
+        if not self._busy and self._story_in_use():
+            # A dialog's thread on the desktop is writing from the story.
+            raise Refused(409, WAITING_ON_DESKTOP)
         if self._busy:
             if self._queued is not None:
                 raise Refused(409, ALREADY_QUEUED)

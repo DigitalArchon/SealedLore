@@ -438,7 +438,7 @@ class ImagesWindow:
         session: the story's job doesn't hold them."""
         if session is None:
             return True
-        if self._busy and session is self.session:
+        if self._story_in_use(session):
             self.statusBar().showMessage(
                 "Pictures can be drawn once the story's current job is done.", 6000
             )
@@ -658,6 +658,10 @@ class ImagesWindow:
         to be the background goes behind the story."""
         if self.session is None or self._busy:
             return  # the worker owns the story; taken when it is done
+        if self._story_in_use():
+            # A dialog's thread is writing a prompt from it: taken once it is done.
+            self._wait_for_story(self.session, "pictures")
+            return
         if self.session.show_opening_pictures():
             self._load_images()
             self._reload_unless_editing()

@@ -493,7 +493,12 @@ class PrivateWindow:
                 # Checks each reply's signature; a provider that signs none
                 # (Chutes) marks them "signature unavailable".
                 self.session.private_tee = tee
-            if not self._busy:  # otherwise the job in flight saves it
+            if self._busy:
+                pass  # the job in flight saves it
+            elif self._story_in_use():
+                # A dialog's thread is writing a prompt from it: saved after.
+                self._wait_for_story(self.session, "save")
+            else:
                 self.session.save()
         verified = attestation is not None and attestation.verified
         if tee is None:

@@ -590,6 +590,10 @@ class CollectionWindow:
         session = self._collection
         if session is None:
             return
+        if self._story_in_use(session):
+            # A dialog's thread is writing their prompts: taken once it is done.
+            self._wait_for_story(session, "pictures")
+            return
         names = session.take_card_pictures()
         self._start_waiting()
         if names:

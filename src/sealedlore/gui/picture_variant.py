@@ -483,7 +483,7 @@ class PictureVariantDialog(QDialog):
         self.prompt.setPlaceholderText("Writing a prompt from the card…")
         self.busy.show()
         worker = GenerationWorker(job, provider=self.session.provider)
-        thread = WorkerThread(self)
+        thread = WorkerThread(self, session=self.session)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.failed.connect(self._on_write_failed)

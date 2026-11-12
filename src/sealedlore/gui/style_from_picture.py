@@ -86,7 +86,7 @@ def describe_style(
         yield  # a generator, so GenerationWorker can run it
 
     worker = GenerationWorker(job, provider=session.provider)
-    thread = WorkerThread()
+    thread = WorkerThread(session=session)
     worker.moveToThread(thread)
     thread.started.connect(worker.run)
     worker.failed.connect(lambda message: result.__setitem__("error", message))

@@ -754,7 +754,7 @@ class ImageDialog(QDialog):
 
         writer_provider = session.private_provider if session.in_private else session.provider
         worker = GenerationWorker(job, provider=writer_provider)
-        thread = WorkerThread(self)
+        thread = WorkerThread(self, session=session)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.failed.connect(self._on_write_failed)

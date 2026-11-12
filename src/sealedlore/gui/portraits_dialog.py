@@ -343,7 +343,7 @@ class PortraitsDialog(QDialog):
             yield  # a generator, so GenerationWorker can run it
 
         worker = GenerationWorker(job, provider=self.session.provider)
-        thread = WorkerThread(self)
+        thread = WorkerThread(self, session=self.session)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.failed.connect(self._on_failed)

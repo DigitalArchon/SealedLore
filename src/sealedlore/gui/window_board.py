@@ -396,6 +396,12 @@ class CastBoardWindow:
                 # its cards yet: a row waiting there waits on.
                 keep.append((story_id, waiting))
                 continue
+            if self._story_in_use(session):
+                # A dialog's thread is working on the story: looked at again
+                # once it is done (`_story_returned`).
+                self._wait_for_story(session, "waiting")
+                keep.append((story_id, waiting))
+                continue
             gap = sheet_for(card).gap(waiting.look, waiting.expression)
             if gap is None:
                 continue  # filled meanwhile

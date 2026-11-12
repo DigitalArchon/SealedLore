@@ -142,7 +142,7 @@ from sealedlore.gui.window_tavern import TavernWindow
 from sealedlore.gui.window_text import TextSizeWindow
 from sealedlore.gui.window_videos import VideosWindow
 from sealedlore.gui.worker import GenerationWorker
-from sealedlore.gui.workers import WorkerThread
+from sealedlore.gui.workers import WorkerThread, lending, lent
 from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.ids import utc_now_iso
 from sealedlore.models.authoring import SettingsChange, SettingsReview
@@ -445,6 +445,10 @@ class MainWindow(
         self._rebuild_timer = QTimer(self)
         self._rebuild_timer.setInterval(REBUILD_POLL_MS)
         self._rebuild_timer.timeout.connect(self._poll_rebuild)
+        # What found its story lent to a thread (gui/workers.py) and waits for
+        # it back: (story id, what), run by `_story_returned`.
+        self._waiting_on_story: set[tuple[str, str]] = set()
+        lending().returned.connect(self._story_returned)
 
         # The transcript shows the story as written, or as the storyteller is sent it.
         self._storyteller_view = False
@@ -3634,14 +3638,16 @@ class MainWindow(
     def _poll_rebuild(self) -> None:
         """Put a finished rebuild in, once nothing else is writing the story.
 
-        A turn started meanwhile takes it in itself, before its prompt."""
+        A turn started meanwhile takes it in itself, before its prompt; a
+        dialog's thread working on the story holds it back until done (the
+        timer keeps looking, and `_story_returned` looks at once)."""
         session = self.session
         if session is None or not session.rebuilding_ids():
             self._rebuild_timer.stop()
             if session is not None:
                 self.refresh_summaries()
             return
-        if self._busy or not session.rebuild_ready():
+        if self._story_in_use(session) or not session.rebuild_ready():
             return
         notices = session.adopt_rebuild()
         if not session.rebuilding_ids():
@@ -3826,7 +3832,7 @@ class MainWindow(
             private = self.session.private_provider if self.session.in_private else None
             provider = private or self.session.provider
         worker = GenerationWorker(factory, provider=provider)
-        thread = WorkerThread(self)
+        thread = WorkerThread(self, session=self.session)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.text_delta.connect(self.transcript.append_streaming)
@@ -4046,6 +4052,51 @@ class MainWindow(
         if self._thread is thread:
             self._thread = None
         thread.deleteLater()
+
+    def _story_in_use(self, session=None) -> bool:
+        """Whether a thread is working on the story's session (the open
+        story's, or `session`): the window's job, or a dialog's thread
+        writing a prompt from it (gui/workers.py). Nothing may change it
+        meanwhile; what would has to wait (`_wait_for_story`)."""
+        session = session if session is not None else self.session
+        if session is None:
+            return False
+        return (self._busy and session is self.session) or lent(session)
+
+    def _wait_for_story(self, session, what: str) -> None:
+        """`what` runs once the threads working on `session` are done with
+        it (`_story_returned`)."""
+        self._waiting_on_story.add((session.story.id, what))
+
+    def _story_returned(self, session) -> None:
+        """No thread works on `session` any more (gui/workers.py): what
+        waited for it runs now. The window's own job is done here too, or
+        its finish has run what waited already."""
+        if session is not self.session and session is not self._collection:
+            return  # another window's, or a story closed meanwhile
+        if self._story_in_use(session):
+            return  # another took it meanwhile; it comes back again
+        story_id = session.story.id
+        waiting = {what for sid, what in self._waiting_on_story if sid == story_id}
+        self._waiting_on_story -= {(story_id, what) for what in waiting}
+        if session is self.session:
+            if "save" in waiting:
+                session.save()
+            if self._rebuild_timer.isActive():
+                self._poll_rebuild()
+            if self._condense_timer.isActive():
+                self._poll_condensing()
+            if "condense" in waiting:
+                self._condense_if_needed()
+            if "pictures" in waiting:
+                self._take_card_pictures()
+            if "waiting" in waiting:
+                self._start_waiting()
+        elif session is self._collection:
+            if "pictures" in waiting:
+                self._collection_pictures_landed()
+            elif "waiting" in waiting:
+                self._start_waiting()
 
     def _finish_job(self) -> None:
         # The worker mutated the session on its own thread; rebuild the view

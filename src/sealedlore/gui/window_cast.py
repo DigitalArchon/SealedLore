@@ -81,9 +81,14 @@ class CastWindow:
         self._condense_soon.start()
 
     def _condense_if_needed(self) -> None:
-        """Have the cards waiting condensed, while nothing else runs."""
+        """Have the cards waiting condensed, while nothing else runs. While
+        a dialog's thread works on the story, once it is done with it: the
+        edit that asked for this won't come again."""
         session = self.session
         if session is None or self._busy or session.in_private or session.story.chat:
+            return
+        if self._story_in_use(session):
+            self._wait_for_story(session, "condense")
             return
         if session.start_condensing():
             self._condense_timer.start()
@@ -127,14 +132,15 @@ class CastWindow:
 
     def _poll_condensing(self) -> None:
         """Put condensed cards in, once nothing else is writing the story. A
-        turn started meanwhile takes them in itself, before its prompt."""
+        turn started meanwhile takes them in itself, before its prompt; a
+        dialog's thread working on the story holds them back until done."""
         session = self.session
         if session is None or not session.condensing_ids():
             self._condense_timer.stop()
             if session is not None:
                 self._refresh_cast_room()
             return
-        if self._busy or not session.condensing_ready():
+        if self._story_in_use(session) or not session.condensing_ready():
             return
         notices = session.adopt_condensed()
         self._condense_timer.stop()
