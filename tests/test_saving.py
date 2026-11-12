@@ -199,6 +199,67 @@ def test_on_windows_no_folder_is_opened_to_flush(tmp_path, monkeypatch):
     assert opened == [] and events == []
 
 
+# --- whichever file a save stops at, story.json names a message on disk -------
+
+
+class Stopped(Exception):
+    pass
+
+
+def stop_at_swap(monkeypatch, number: int) -> None:
+    """The process killed as it is about to make its `number`th swap."""
+    real_replace = atomic.replace
+    made = [0]
+
+    def replace(source: Path, target: Path) -> None:
+        if made[0] == number:
+            raise Stopped(Path(target).name)
+        made[0] += 1
+        real_replace(source, target)
+
+    monkeypatch.setattr(atomic, "replace", replace)
+
+
+def leaf_on_disk(directory: Path) -> bool:
+    story = json.loads((directory / "story.json").read_text(encoding="utf-8"))
+    nodes = json.loads((directory / "nodes.json").read_text(encoding="utf-8"))
+    return story["active_leaf_id"] in {node["id"] for node in nodes}
+
+
+def test_a_turn_cut_short_anywhere_leaves_the_leaf_on_disk(tmp_path, monkeypatch):
+    for number in range(6):
+        root = tmp_path / str(number)
+        nodes = chain(4)
+        bundle = bundle_of(nodes)
+        bundle.cast = []
+        save_story_bundle(bundle, root=root)
+        link_child(nodes[-1], extra := chain(5)[4])
+        bundle.nodes.append(extra)
+        bundle.story.active_leaf_id = extra.id
+        bundle.story.title = "Doomsville, day two"  # story.json changes too
+        with monkeypatch.context() as patch:
+            stop_at_swap(patch, number)
+            try:
+                save_story_bundle(bundle, root=root)
+            except Stopped:
+                pass
+        directory = story_dir(bundle.story.id, root)
+        assert leaf_on_disk(directory), f"stopped at swap {number}"
+        assert load_story_bundle(bundle.story.id, root=root).notices == []
+
+
+def test_a_first_save_cut_short_still_leaves_a_story(tmp_path, monkeypatch):
+    bundle = bundle_of(chain(2))
+    stop_at_swap(monkeypatch, 1)
+    try:
+        save_story_bundle(bundle, root=tmp_path)
+    except Stopped:
+        pass
+    monkeypatch.undo()
+    loaded = load_story_bundle(bundle.story.id, root=tmp_path)  # a story, if an empty one
+    assert loaded.story.title == "Doomsville"
+
+
 # --- only what changed is written ---------------------------------------------
 
 

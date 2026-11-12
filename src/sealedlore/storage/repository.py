@@ -260,12 +260,32 @@ def load_config_or_recover(root: Path | None = None) -> tuple[Config, str | None
 
 
 def save_story_bundle(bundle: StoryBundle, root: Path | None = None) -> None:
+    """Every file of the story, one after another, in an order that leaves
+    each file naming only what is already saved, whichever file a crash
+    stops at: pictures before the records and cards that name them, the
+    cards before the messages, the messages before what is anchored to
+    them, and story.json, which names the current message, last. A turn
+    adds messages and moves to the newest, so cut short anywhere it opens
+    where it was, the new messages kept. (A deletion the other way round,
+    cut short, leaves story.json naming a message that is gone: loading
+    finds the nearest, `_repair_leaf`.)"""
     story_id = bundle.story.id
     ensure_story_dir(story_id, root)
     directory = story_dir(story_id, root)
 
-    atomic_write_json(directory / "story.json", bundle.story.model_dump())
+    if not (directory / "story.json").exists():
+        # A folder without it is no story at all: a first save cut short
+        # still leaves one, and the second write below is skipped unless
+        # something changed.
+        atomic_write_json(directory / "story.json", bundle.story.model_dump())
+    for relative, data in bundle.pending_files.items():
+        if relative not in RECORD_FILES:
+            write_story_file(story_id, relative, data, root)
+    for relative, data in bundle.pending_files.items():
+        if relative in RECORD_FILES:
+            write_record_file(story_id, relative, data, root)  # a story backup's
     atomic_write_json(directory / "cast.json", [c.model_dump() for c in bundle.cast])
+    atomic_write_json(directory / "supporting.json", bundle.supporting.model_dump())
     atomic_write_json(directory / "lore.json", [entry.model_dump() for entry in bundle.lore])
     atomic_write_json(
         directory / "nodes.json", [node.model_dump() for node in bundle.nodes], keep_backup=True
@@ -273,13 +293,8 @@ def save_story_bundle(bundle: StoryBundle, root: Path | None = None) -> None:
     atomic_write_json(directory / "summaries.json", [s.model_dump() for s in bundle.summaries])
     atomic_write_json(directory / "embeddings.json", [e.model_dump() for e in bundle.embeddings])
     atomic_write_json(directory / "asides.json", [a.model_dump() for a in bundle.asides])
-    atomic_write_json(directory / "supporting.json", bundle.supporting.model_dump())
     atomic_write_json(directory / "reviews.json", [r.model_dump() for r in bundle.reviews])
-    for relative, data in bundle.pending_files.items():
-        if relative in RECORD_FILES:
-            write_record_file(story_id, relative, data, root)  # a story backup's
-        else:
-            write_story_file(story_id, relative, data, root)
+    atomic_write_json(directory / "story.json", bundle.story.model_dump())
     bundle.pending_files = {}
 
 
