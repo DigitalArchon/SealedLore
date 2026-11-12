@@ -76,6 +76,7 @@ from sealedlore.gui.ref_images import (
 )
 from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, size_to_screen
 from sealedlore.gui.worker import GenerationWorker
+from sealedlore.gui.workers import WorkerThread
 from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage, ImageRef, RefUse
 from sealedlore.models.lore import LoreEntry
@@ -753,7 +754,7 @@ class ImageDialog(QDialog):
 
         writer_provider = session.private_provider if session.in_private else session.provider
         worker = GenerationWorker(job, provider=writer_provider)
-        thread = QThread(self)
+        thread = WorkerThread(self)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.failed.connect(self._on_write_failed)

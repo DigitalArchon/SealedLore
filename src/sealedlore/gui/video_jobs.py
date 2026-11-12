@@ -27,6 +27,7 @@ from PySide6.QtCore import QObject, QThread, Signal
 from sealedlore.engine.videos import VideoRequest, follow_video, submit_video
 from sealedlore.gui.image_jobs import listing_is_stale
 from sealedlore.gui.worker import GenerationWorker
+from sealedlore.gui.workers import WorkerThread
 from sealedlore.ids import new_id, utc_now_iso
 from sealedlore.models.config import Config, without_password
 from sealedlore.models.video import GeneratedVideo
@@ -129,7 +130,7 @@ class VideoCatalog(QObject):
             yield
 
         worker = GenerationWorker(job)
-        thread = QThread(self)
+        thread = WorkerThread(self)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.finished.connect(thread.quit)
@@ -188,7 +189,7 @@ class VideoCatalog(QObject):
             yield
 
         worker = GenerationWorker(job)
-        thread = QThread(self)
+        thread = WorkerThread(self)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.finished.connect(thread.quit)
@@ -279,7 +280,7 @@ class VideoJobs(QObject):
             yield
 
         worker = GenerationWorker(run)
-        thread = QThread(self)
+        thread = WorkerThread(self)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.finished.connect(thread.quit)

@@ -18,6 +18,7 @@ from sealedlore.engine.session_plot import SessionNotice
 from sealedlore.gui.private_dialogs import FitDialog, PrivateSummaryDialog, chat_words
 from sealedlore.gui.winprivacy import exclude_from_capture
 from sealedlore.gui.worker import GenerationWorker
+from sealedlore.gui.workers import WorkerThread
 from sealedlore.models.config import ProviderConfig
 from sealedlore.providers import make_chat_provider
 from sealedlore.providers.base import ChatProvider
@@ -430,7 +431,7 @@ class PrivateWindow:
             yield
 
         worker = GenerationWorker(job)
-        thread = QThread(self)
+        thread = WorkerThread(self)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.finished.connect(thread.quit)

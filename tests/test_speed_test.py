@@ -488,11 +488,13 @@ def test_the_collector_is_paused_while_a_runs_threads_are_alive(app, monkeypatch
             yield from super().stream(request)
 
     monkeypatch.setattr(speed_tests(), "make_provider", lambda settings: Watching(["word " * 40]))
-    assert gc.isenabled()
+    # An earlier test's thread lets go of the pause on the GUI thread.
+    wait_for(app, gc.isenabled)
     dialog = SpeedTestDialog(plan_targets([Role("a", "a/model", MAIN), Role("b", "b/model", MAIN)]))
     wait_for(app, lambda: not dialog.stop_button.isEnabled())
     assert seen == [False, False]
-    assert gc.isenabled(), "and back on when the run ends"
+    # And back on when the run's thread has ended and been waited for.
+    wait_for(app, gc.isenabled)
     dialog.close()
     dialog.deleteLater()
 

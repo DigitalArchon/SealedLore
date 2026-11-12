@@ -17,12 +17,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 
-from PySide6.QtCore import QEventLoop, Qt, QThread
+from PySide6.QtCore import QEventLoop, Qt
 from PySide6.QtWidgets import QFileDialog, QMessageBox, QProgressDialog, QWidget
 
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.ref_images import PICTURE_FILTER
 from sealedlore.gui.worker import GenerationWorker
+from sealedlore.gui.workers import WorkerThread
 from sealedlore.storage.image_meta import picture_kind
 
 FROM_PICTURE_LABEL = "From a picture…"
@@ -85,7 +86,7 @@ def describe_style(
         yield  # a generator, so GenerationWorker can run it
 
     worker = GenerationWorker(job, provider=session.provider)
-    thread = QThread()
+    thread = WorkerThread()
     worker.moveToThread(thread)
     thread.started.connect(worker.run)
     worker.failed.connect(lambda message: result.__setitem__("error", message))

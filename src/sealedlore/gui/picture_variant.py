@@ -71,6 +71,7 @@ from sealedlore.gui.portraits_dialog import card_name
 from sealedlore.gui.ref_images import image_of, thumbnail_of
 from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, may_discard, size_to_screen
 from sealedlore.gui.worker import GenerationWorker
+from sealedlore.gui.workers import WorkerThread
 from sealedlore.models.character import Character
 from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS, recommended_model
 from sealedlore.models.image import GeneratedImage, ImageRef, RefUse
@@ -482,7 +483,7 @@ class PictureVariantDialog(QDialog):
         self.prompt.setPlaceholderText("Writing a prompt from the card…")
         self.busy.show()
         worker = GenerationWorker(job, provider=self.session.provider)
-        thread = QThread(self)
+        thread = WorkerThread(self)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.failed.connect(self._on_write_failed)

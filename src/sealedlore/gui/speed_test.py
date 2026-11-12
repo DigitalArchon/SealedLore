@@ -50,6 +50,7 @@ from sealedlore.engine.speed_test import (
     run_speed_test,
 )
 from sealedlore.gui.sizing import adjustable_columns, size_to_screen
+from sealedlore.gui.workers import WorkerThread
 from sealedlore.models.config import ModelPrice, ProviderConfig
 from sealedlore.providers.base import ChatProvider
 from sealedlore.threads import thread_pool
@@ -188,10 +189,10 @@ class SpeedTests(QObject):
         self, targets: Sequence[SpeedTarget], prices: Mapping[str, ModelPrice] | None = None
     ) -> int:
         run_id = next(self._ids)
-        # Before any of the run's threads exist (see the module's note).
-        threads.hold()
         run = _Run(targets, self.make_provider, prices or {})
-        thread = QThread(self)
+        # Holds the collector's pause from start until it has ended, before
+        # any of the run's pool threads exist (see the module's note).
+        thread = WorkerThread(self)
         run.moveToThread(thread)
         thread.started.connect(run.run)
         run.began.connect(lambda row: self.began.emit(run_id, row))
@@ -213,8 +214,9 @@ class SpeedTests(QObject):
 
     def _ended(self, run_id: int) -> None:
         if self._running.pop(run_id, None) is not None:
-            threads.release()
-            threads.resume_collector()  # on the GUI thread, at once
+            # The thread has let go of the pause by now (WorkerThread):
+            # collected on the GUI thread, at once.
+            threads.resume_collector()
         self.finished.emit(run_id)
 
     def wait(self, msecs: int = 35_000) -> None:

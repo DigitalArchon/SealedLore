@@ -23,6 +23,7 @@ from sealedlore.engine.attestation_check import (
     testable,
 )
 from sealedlore.gui.worker import GenerationWorker
+from sealedlore.gui.workers import WorkerThread
 from sealedlore.models.config import ProviderConfig
 
 Settings = Callable[[], ProviderConfig | None]
@@ -51,7 +52,7 @@ class AttestationTests(QObject):
             yield
 
         worker = GenerationWorker(job)
-        thread = QThread(self)
+        thread = WorkerThread(self)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.finished.connect(thread.quit)

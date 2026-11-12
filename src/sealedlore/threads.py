@@ -7,7 +7,10 @@ full test run once several plain threads ran at once (the speed test's,
 gui/speed_test.py). So every plain thread the app starts goes through this module
 (`BackgroundThread`, `thread_pool`, `holding`), which counts them; while
 any is alive the collector is paused, and once the last ends the GUI is
-woken to collect on its own thread and switch it back on.
+woken to collect on its own thread and switch it back on. Every QThread is
+counted too (`gui/workers.WorkerThread` holds it from start until it has
+ended), and while paused the GUI thread collects the young generations
+itself (`collect_young`, on a timer in gui/collector.py).
 
 No Qt here: the engine starts most of these threads. The GUI installs the
 wake-up (`pause_collector_while_busy`, from `gui/collector.py`); with none
@@ -102,6 +105,26 @@ def resume_collector() -> bool:
             return False  # a thread began meanwhile: its end wakes us again
         _paused = False
         gc.enable()
+    return True
+
+
+def collect_young() -> bool:
+    """On the GUI thread, while the collector is paused: the young
+    generations collected, once as many objects have piled up as would have
+    started a collection with it on. Whether it collected.
+
+    Every job's thread pauses it now, and a picture can take twenty minutes:
+    without this the window's own garbage waited all that time. The oldest
+    generation waits for the pause to end, under the collector's own
+    schedule (`resume_collector`)."""
+    with _lock:
+        if not _paused:
+            return False
+    young, older, _ = gc.get_count()
+    first, second, _ = gc.get_threshold()
+    if first <= 0 or young <= first:
+        return False
+    gc.collect(1 if older >= second else 0)
     return True
 
 

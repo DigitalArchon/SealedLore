@@ -63,6 +63,7 @@ from sealedlore.gui.ref_images import PICTURE_FILTER, store_reference, thumbnail
 from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, may_discard, size_to_screen
 from sealedlore.gui.video_jobs import VideoCatalog
 from sealedlore.gui.worker import GenerationWorker
+from sealedlore.gui.workers import WorkerThread
 from sealedlore.models.image import RefUse
 from sealedlore.models.video import GeneratedVideo
 from sealedlore.providers.videos import VideoModelInfo, VideoParam
@@ -607,7 +608,7 @@ class VideoDialog(QDialog):
 
         provider = session.private_provider if session.in_private else session.provider
         worker = GenerationWorker(job, provider=provider)
-        thread = QThread(self)
+        thread = WorkerThread(self)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.failed.connect(self._on_write_failed)

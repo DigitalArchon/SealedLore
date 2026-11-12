@@ -36,6 +36,7 @@ from sealedlore.gui.model_picker import Browse, ModelField
 from sealedlore.gui.plot_wishes import PlotWishesForm
 from sealedlore.gui.sizing import enter_only_on_buttons, may_discard, size_to_screen
 from sealedlore.gui.worker import GenerationWorker
+from sealedlore.gui.workers import WorkerThread
 from sealedlore.models.character import Character
 from sealedlore.models.generation import ReasoningConfig
 from sealedlore.providers.base import ChatProvider
@@ -349,7 +350,7 @@ class GenerateDialog(QDialog):
         self._show_progress(f"Drafting with {self.draft.model}… this takes a minute or two.")
 
         worker = GenerationWorker(self.draft.stream, provider=self.provider)
-        thread = QThread(self)
+        thread = WorkerThread(self)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.text_delta.connect(self._on_delta)

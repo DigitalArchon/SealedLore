@@ -52,6 +52,7 @@ from sealedlore.gui.picture_words import WORDS_ONLY
 from sealedlore.gui.ref_images import thumbnail_of
 from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, may_discard, size_to_screen
 from sealedlore.gui.worker import GenerationWorker
+from sealedlore.gui.workers import WorkerThread
 from sealedlore.models.character import Character
 from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS, recommended_model
 from sealedlore.models.lore import LoreEntry
@@ -342,7 +343,7 @@ class PortraitsDialog(QDialog):
             yield  # a generator, so GenerationWorker can run it
 
         worker = GenerationWorker(job, provider=self.session.provider)
-        thread = QThread(self)
+        thread = WorkerThread(self)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.failed.connect(self._on_failed)

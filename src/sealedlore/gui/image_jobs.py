@@ -19,6 +19,7 @@ from PySide6.QtCore import QObject, QThread, Signal
 
 from sealedlore.engine.images import ImageRequest, run_image_request
 from sealedlore.gui.worker import GenerationWorker
+from sealedlore.gui.workers import WorkerThread
 from sealedlore.ids import new_id, utc_now_iso
 from sealedlore.models.config import Config, without_password
 from sealedlore.models.image import GeneratedImage
@@ -115,7 +116,7 @@ class ImageCatalog(QObject):
             yield
 
         worker = GenerationWorker(job)
-        thread = QThread(self)
+        thread = WorkerThread(self)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.finished.connect(thread.quit)
@@ -234,7 +235,7 @@ class ImageJobs(QObject):
             yield  # a generator, so GenerationWorker can run it
 
         worker = GenerationWorker(run)
-        thread = QThread(self)
+        thread = WorkerThread(self)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.finished.connect(thread.quit)

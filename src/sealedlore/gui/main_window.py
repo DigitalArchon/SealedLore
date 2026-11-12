@@ -142,6 +142,7 @@ from sealedlore.gui.window_tavern import TavernWindow
 from sealedlore.gui.window_text import TextSizeWindow
 from sealedlore.gui.window_videos import VideosWindow
 from sealedlore.gui.worker import GenerationWorker
+from sealedlore.gui.workers import WorkerThread
 from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.ids import utc_now_iso
 from sealedlore.models.authoring import SettingsChange, SettingsReview
@@ -3825,7 +3826,7 @@ class MainWindow(
             private = self.session.private_provider if self.session.in_private else None
             provider = private or self.session.provider
         worker = GenerationWorker(factory, provider=provider)
-        thread = QThread(self)
+        thread = WorkerThread(self)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.text_delta.connect(self.transcript.append_streaming)

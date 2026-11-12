@@ -43,6 +43,7 @@ from sealedlore.gui.fields import line_edit, set_field_text
 from sealedlore.gui.route_dialog import RouteDialog
 from sealedlore.gui.sizing import adjustable_columns, size_to_screen
 from sealedlore.gui.worker import GenerationWorker
+from sealedlore.gui.workers import WorkerThread
 from sealedlore.models.config import ProviderConfig, RecommendedModel, split_model
 from sealedlore.models.route import ModelRoute
 from sealedlore.providers.base import ChatProvider
@@ -170,7 +171,7 @@ class ModelCatalog(QObject):
             yield  # a generator, so GenerationWorker can run it
 
         worker = GenerationWorker(job)
-        thread = QThread(self)
+        thread = WorkerThread(self)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.failed.connect(self._on_failed)

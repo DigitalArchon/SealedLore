@@ -12,6 +12,7 @@ import time
 from PySide6.QtCore import QCoreApplication, QObject, QThread, Signal
 
 from sealedlore.gui.worker import GenerationWorker
+from sealedlore.gui.workers import WorkerThread
 from sealedlore.providers.base import ProviderError
 from sealedlore.providers.model_hosts import ModelHosts, fetch_model_hosts
 
@@ -57,7 +58,7 @@ class HostsCatalog(QObject):
             yield
 
         worker = GenerationWorker(job)
-        thread = QThread(self)
+        thread = WorkerThread(self)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.finished.connect(thread.quit)
