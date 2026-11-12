@@ -146,12 +146,17 @@ def watch_the_disk(monkeypatch) -> list[tuple[str, str]]:
     return events
 
 
+# The folder's own flush after a swap: Windows can't open a folder to flush it
+# (`test_on_windows_no_folder_is_opened_to_flush`), so there the swap is last.
+FOLDER_FLUSH = [] if sys.platform == "win32" else [("flush", "folder")]
+
+
 def test_a_file_is_on_the_disk_before_it_replaces_the_last_and_the_folder_after(
     tmp_path, monkeypatch
 ):
     events = watch_the_disk(monkeypatch)
     atomic.atomic_write_json(tmp_path / "story.json", {"title": "Doomsville"})
-    assert events == [("flush", "file"), ("swap", "story.json"), ("flush", "folder")]
+    assert events == [("flush", "file"), ("swap", "story.json"), *FOLDER_FLUSH]
 
 
 def test_the_backup_is_the_last_files_own_bytes_and_needs_no_flush_of_its_own(
@@ -165,7 +170,7 @@ def test_the_backup_is_the_last_files_own_bytes_and_needs_no_flush_of_its_own(
         ("flush", "file"),
         ("swap", "nodes.json.bak"),
         ("swap", "nodes.json"),
-        ("flush", "folder"),
+        *FOLDER_FLUSH,
     ]
     assert atomic.read_json(tmp_path / "nodes.json.bak") == [{"turn": 1}]
     assert not list(tmp_path.glob("*.tmp"))
