@@ -142,12 +142,14 @@ def sweep_temps(folder: Path, *, recursive: bool = True) -> list[Path]:
     nothing here is: every temp file found was left by a writer gone. Our own
     are told by `TEMP_SUFFIX`; older versions' by the file they stood in
     for, there beside them (`p.png.tmp`, `nodes.json.bak.tmp`,
-    `story.json.k3j4h5g6.tmp`). Any other file is left alone."""
+    `story.json.k3j4h5g6.tmp`), except among a card's own files, which keep
+    the names the card gave them ("notes" and "notes.tmp" may both be the
+    card's). Any other file is left alone."""
     removed: list[Path] = []
     with _LOCK:
         found = folder.rglob("*.tmp") if recursive else folder.glob("*.tmp")
         for path in found:
-            if not _left_by_a_write(path):
+            if not _left_by_a_write(path, among_card_files=_card_file(folder, path)):
                 continue
             try:
                 if path.is_file() and not path.is_symlink():
@@ -158,9 +160,26 @@ def sweep_temps(folder: Path, *, recursive: bool = True) -> list[Path]:
     return removed
 
 
-def _left_by_a_write(path: Path) -> bool:
+# Where a card's own files are kept (storage/images.py ASSETS_DIR, which
+# imports this module), under a story's folder or Your characters'.
+_CARD_FILES = ("images", "assets")
+
+
+def _card_file(folder: Path, path: Path) -> bool:
+    try:
+        parts = path.relative_to(folder).parts
+    except ValueError:
+        return False
+    return parts[: len(_CARD_FILES)] == _CARD_FILES
+
+
+def _left_by_a_write(path: Path, *, among_card_files: bool = False) -> bool:
     if path.name.endswith(TEMP_SUFFIX):
         return True
+    if among_card_files:
+        # A name an older version's temp file could have had may be the
+        # card's own: only our own suffix is certain there.
+        return False
     stem = path.name.removesuffix(".tmp")
     for stood_for in (stem, stem.removesuffix(".bak")):
         if stood_for and (path.parent / stood_for).exists():

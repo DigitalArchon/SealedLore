@@ -411,7 +411,14 @@ def a_story_with_leftovers(root: Path) -> tuple[StoryBundle, list[Path], list[Pa
         directory / "nodes.json.bak.tmp",
         directory / "images" / "p.png.tmp",
     ]
-    own = [assets / "notes.tmp", assets / "photo.version2.tmp", assets / "photo.v2.tmp"]
+    own = [
+        assets / "notes.tmp",
+        assets / "photo.version2.tmp",
+        assets / "photo.v2.tmp",
+        # A card's file named as an older version's temp file was, beside
+        # the file it would have stood in for: still the card's.
+        assets / "photo.tmp",
+    ]
     for path in [*left, *own]:
         path.write_bytes(b"half")
     return bundle, left, own
