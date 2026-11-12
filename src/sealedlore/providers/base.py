@@ -58,6 +58,10 @@ class StreamCompleted:
     receipt_id: str | None = None
     body_hash: str | None = None
     tee_route: str | None = None
+    # When the request went (time.time(), just before it was sent): a TEE
+    # reply's receipt must have been served after it, or it was another
+    # request's (providers/tee.py `check`).
+    sent_at: float | None = None
     # How much the reply reasoned: the reported count, or the streamed
     # reasoning text at ~4 characters a token, whichever is larger. The count
     # alone lies: Sonnet 4.6 streamed its thinking while NanoGPT reported 0.

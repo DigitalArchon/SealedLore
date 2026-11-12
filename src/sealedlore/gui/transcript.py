@@ -1440,8 +1440,8 @@ TEE_MARK_TIPS = {
     "failed": (
         "This reply doesn't match its record: not signed by the attested key, not the "
         "text that was signed, or its receipt doesn't hold (another key, another reply, "
-        "or a model that wasn't verified). The model is attested again before anything "
-        "more is sent to it."
+        "one served before this request was sent, or a model that wasn't verified). The "
+        "model is attested again before anything more is sent to it."
     ),
     "unchecked": (
         "Not verified: no signed record of this reply could be read (this model's "

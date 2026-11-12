@@ -2507,8 +2507,11 @@ Each reply is marked with what its check showed:
 
 - **TEE verified**: the record is for the exact text the app received. Where
   the gateway also keeps a signed receipt (NanoGPT's TEE models served
-  through RedPill), that is checked too: for the same reply, and saying the
+  through RedPill), that is checked too: for the same reply, served after
+  this request was sent (so not an earlier reply handed back), and saying the
   machine it came from was verified. That last part is the gateway's word.
+  The receipt's time is held to this computer's clock, give or take five
+  minutes, so a clock that is far out makes replies fail their check.
 - **TEE signed, text not compared**: the record was signed by the attested
   key, but NanoGPT rebuilds this model's replies, so the text can't be
   compared with it.

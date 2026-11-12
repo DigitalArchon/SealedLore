@@ -13,6 +13,7 @@ import codecs
 import hashlib
 import json
 import re
+import time
 from collections.abc import Iterator
 from typing import Any
 
@@ -158,6 +159,7 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
         saw_data = False
         reasoning_chars = 0
 
+        sent_at = time.time()
         with self._get_client().stream(
             "POST",
             url,
@@ -254,6 +256,7 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
             receipt_id=receipt_id,
             body_hash="sha256:" + body.hexdigest(),
             tee_route=tee_route,
+            sent_at=sent_at,
             sealed=self.sealed_replies,
             reasoning_tokens=max(_reasoning_tokens(usage_raw), reasoning_chars // 4),
             # Neither said: the connection closed partway (a gateway's
