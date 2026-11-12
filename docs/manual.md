@@ -606,7 +606,9 @@ archiving, rebuilding summaries.
   (see "Perspective and supporting characters"). **View → Prompt page (advanced)** adds **Prompt**: exactly what the
   storyteller was sent last turn, for checking the model's work; **Copy
   prompt** copies it as readable text, **Copy request JSON** as the exact
-  request body.
+  request body. The one thing it keeps back is the storyteller's notes, shown
+  as a line saying how long they are (see "The storyteller's notes" under
+  Setting up a story).
 
   ![The Prompt page: each section of the prompt with its token count and cache breakpoints, and the request as sent](screenshots/prompt-tab.png)
 
@@ -935,6 +937,8 @@ Everything else keeps its default and is in Setup and on the cast board;
   (see [Outcomes and dice](#outcomes-and-dice)), how much the world does on
   its own, and the story's picture style;
 - **World**: the setting and its rules, sent with every turn and cached;
+- **Storyteller's notes**: the story's secrets, for the storyteller alone
+  (see "The storyteller's notes" below);
 - **Characters**: the cast board's list and card, with every card's fields,
   portraits and **Fill with lore characters…** (the sheets of pictures stay
   on the cast board). Cards are kept as you make them, as on the cast board,
@@ -967,6 +971,41 @@ The opening and starting scene are where a story *begins*. To change how a
 story already under way began (say, the other character is the one stranded),
 edit them in Setup and save: it offers to start a new playthrough from them,
 and the story so far is kept as it is.
+
+**The storyteller's notes** (Story → Setup… → Storyteller's notes) are the
+truth behind what the story has not shown yet: what is really under the
+floor, who took the money and why, what the people in it want and what they
+hide. Only the storyteller is sent them, with every turn, after the world. It
+holds to them: when your character finds something out, by looking, by asking
+the right person or by being there, what they find is what the notes say, the
+same every time. People act on what they want and hide without the narration
+saying so, and nobody gives a secret away before the story has earned it.
+Without notes the storyteller makes the answer up when it is asked for, and
+may make up another the next time.
+
+Write your own as plain facts, or leave the box empty for a story with no
+secrets. What your character already knows belongs in World or Lore; the
+notes are for what they would have to find out. Notes a model wrote are kept
+from you, so the story can surprise you: the tab says only how long they are,
+with **Show them** to read and change them and **Clear them** to take them
+out unread (it asks first). Read and left as they were, they are out of sight
+again the next time you open Setup; change them and they are yours. A change
+takes hold from the next passage, costs one cache miss, and needs no new
+playthrough.
+
+Nothing that reads the story as you play is sent them: not the scene and plot
+reads, the chapters or the lore pick, and a settings review is told only that
+there are notes. What does have them is whatever writes from the
+storyteller's own prompt: a private scene's model, the writer of a picture's
+or a video's prompt, and a Question, which the storyteller answers from them
+(asking it outright what is under the floor is one way to be told). The
+Prompt page shows a line in their
+place as well ("(the storyteller's notes: 120 words, kept from the author)"),
+in what it shows and in what it copies, unless **Show plot (spoilers)** is
+ticked on the Plot page; a story with no plot has no such switch, and its
+notes are read in Setup. They are part of the story's setup: a scenario file,
+a restart, Duplicate settings and a story backup carry them, still unread
+where a model wrote them. A simple chat has none.
 
 A **scenario** is that setup, plus the cast and supporting characters, lore,
 style, plot, outcome mode, world activity, picture style and reference
@@ -1465,14 +1504,19 @@ The model drafts everything in one go:
 - lore entries;
 - the opening and the starting scene: who is there as it begins, supporting
   characters included (anyone else, the opening places as it is written);
+- the storyteller's notes: the truth behind whatever the draft sets up and
+  leaves open, and what its central people want and hide, so a mystery has
+  one answer however you come at it. They are written for the storyteller
+  and kept from you (see "The storyteller's notes" under Setting up a story);
 - the style, and the picture style when the premise says how the story
   should look;
 - a plot, if you ask for one under **A plot** (see
   [A plot written by the model](#a-plot-written-by-the-model)).
 
 **Asking for changes.** Once it is drafted, a dialog shows what was left
-out of the draft, if anything, and lets you say what you'd like different in
-your own words: "I like the world, but I'd prefer the characters were more
+out of the draft, if anything, says whether it wrote notes for the
+storyteller (never what they say), and lets you say what you'd like different
+in your own words: "I like the world, but I'd prefer the characters were more
 badass", or "I like the characters, but the world isn't hostile enough".
 **Show the story as it is now** puts it beside your request. The model changes
 just what you ask, and whatever must change with it for the story to hold
@@ -1480,7 +1524,10 @@ together (a harsher world can change the lore and the opening too); the rest
 stays as it is, word for word, and the dialog says what it changed. It can
 rewrite, add or take out characters and lore entries, change the world, the
 opening and who is there at the start, the style, the title, how lively the
-world is and the picture style. Ask again as often as you like: each request
+world is and the picture style. It is shown the storyteller's notes, and
+writes them again when a change makes them untrue (someone they name is gone,
+say); the dialog then says "The storyteller's notes were rewritten." and no
+more. Ask again as often as you like: each request
 builds on the last, and **Undo the last change** puts the story back as it
 was before it (if you changed the story some other way meanwhile, it asks
 first, since that goes too). The same dialog is **Story → Change the story with
@@ -1500,7 +1547,8 @@ listed rather than guessed at, and a name any number of people could answer to
 example "too much action, not enough dialogue". The model reviews the story's settings (world,
 style, cast and supporting characters, lore, outcome mode, world activity,
 the models and the budget, with your generation settings) and the instructions the
-storyteller actually receives. On a character it can change anything their
+storyteller actually receives, all but the storyteller's notes: it is told
+only that there are some, and can't change them. On a character it can change anything their
 card holds: a SillyTavern card's personality too, and **Always send the whole
 card** when a condensed card has lost what the story needs of them (see
 [When the cast's cards don't fit](#when-the-casts-cards-dont-fit)). When the
