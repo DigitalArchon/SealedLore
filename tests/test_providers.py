@@ -519,6 +519,57 @@ def test_an_empty_reply_cut_off_by_reasoning_is_asked_for_again():
     assert text == '{"ok": true}' and len(calls) == 2
 
 
+def runaway_then(second_usage: dict):
+    """A reply that reasoned to its limit with nothing to show, then one that answered."""
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        if len(calls) == 1:
+            ran_away = {
+                "prompt_tokens": 1000,
+                "completion_tokens": 4000,
+                "completion_tokens_details": {"reasoning_tokens": 4000},
+                "cost": 0.02,
+            }
+            return httpx.Response(
+                200,
+                content=sse(
+                    {"choices": [{"delta": {}, "finish_reason": "length"}], "usage": ran_away}
+                ),
+            )
+        return httpx.Response(
+            200,
+            content=sse(
+                delta_chunk("{}"),
+                {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": second_usage},
+            ),
+        )
+
+    return handler
+
+
+def test_the_attempt_that_ran_away_is_counted_with_the_one_that_answered():
+    """Asked again, the reply the caller logs and prices was the second
+    alone: the first attempt's 4,000 tokens were paid for and never counted."""
+    second = {"prompt_tokens": 1000, "completion_tokens": 30, "cost": 0.001}
+    text, completed = provider_with(runaway_then(second)).complete(request_for())
+    assert text == "{}" and completed.finish_reason == "stop"
+    assert completed.usage.prompt_tokens == 2000 and completed.usage.completion_tokens == 4030
+    assert completed.usage.cost == pytest.approx(0.021) and completed.usage.cost_reported
+    # The log's copy too, which the story's totals are read from.
+    assert parse_usage(completed.raw_usage) == completed.usage
+    assert completed.raw_usage["completion_tokens_details"] == {"reasoning_tokens": 4000}
+
+
+def test_a_cost_stated_for_one_attempt_only_leaves_both_to_be_priced():
+    second = {"prompt_tokens": 1000, "completion_tokens": 30}
+    _text, completed = provider_with(runaway_then(second)).complete(request_for())
+    assert completed.usage.completion_tokens == 4030
+    assert completed.usage.cost == 0 and not completed.usage.cost_reported
+    assert "cost" not in completed.raw_usage
+
+
 def test_a_reported_zero_cost_is_a_cost():
     from sealedlore.providers.base import parse_usage
 

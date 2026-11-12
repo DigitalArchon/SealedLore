@@ -11,7 +11,7 @@ from __future__ import annotations
 import unicodedata
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from sealedlore.messages import PromptMessage
@@ -178,7 +178,10 @@ class ChatProvider(ABC):
         A reply that is empty because the model reasoned until the limit is
         asked for once more: it is never usable, and the runaway is chance.
         Live (GLM 5.3), 2 scene reads in 120 spent all 4,000 tokens thinking.
+        The first attempt was paid for: its usage is added to the second's, so
+        the one reply the caller logs and prices counts both.
         """
+        spent: StreamCompleted | None = None
         for _attempt in range(2):
             chunks: list[str] = []
             completed = StreamCompleted()
@@ -188,9 +191,61 @@ class ChatProvider(ABC):
                 elif isinstance(event, StreamCompleted):
                     completed = event
             text = "".join(chunks)
+            if spent is not None:
+                completed = both_attempts(spent, completed)
             if text.strip() or completed.finish_reason != "length":
                 break
+            spent = completed
         return text, completed
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+# A reply's cost as the endpoint states it (`parse_usage` reads these).
+_COST_KEYS = ("cost", "total_cost")
+
+
+def _summed(first: dict[str, Any], then: dict[str, Any]) -> dict[str, Any]:
+    """Two replies' raw usage as one, whatever shape the endpoint reports it
+    in: counts added, nested details too, anything else the later one's."""
+    out = dict(first)
+    for key, value in then.items():
+        before = out.get(key)
+        if isinstance(value, dict) and isinstance(before, dict):
+            out[key] = _summed(before, value)
+        elif _is_number(value) and _is_number(before):
+            out[key] = before + value
+        else:
+            out[key] = value
+    return out
+
+
+def both_attempts(first: StreamCompleted, then: StreamCompleted) -> StreamCompleted:
+    """The reply that came on a second attempt, with the first's usage added:
+    both were paid for. A cost stated for only one of them is left out, so
+    the two are priced together from their tokens rather than one dropped."""
+    a, b = first.usage, then.usage
+    stated = a.cost_reported and b.cost_reported
+    raw = _summed(first.raw_usage or {}, then.raw_usage or {})
+    if not stated:
+        for key in _COST_KEYS:
+            raw.pop(key, None)
+    usage = Usage(
+        prompt_tokens=a.prompt_tokens + b.prompt_tokens,
+        completion_tokens=a.completion_tokens + b.completion_tokens,
+        cache_creation_tokens=a.cache_creation_tokens + b.cache_creation_tokens,
+        cache_read_tokens=a.cache_read_tokens + b.cache_read_tokens,
+        cost=a.cost + b.cost if stated else 0.0,
+        cost_reported=stated,
+    )
+    return replace(
+        then,
+        usage=usage,
+        raw_usage=raw,
+        reasoning_tokens=first.reasoning_tokens + then.reasoning_tokens,
+    )
 
 
 def side_by_side(provider: ChatProvider, count: int) -> list[ChatProvider]:
