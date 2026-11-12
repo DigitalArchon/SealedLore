@@ -123,6 +123,21 @@ every turn pay full price.
 - **Never touch a widget off the GUI thread.** Generation runs on a `QThread`
   worker and sends deltas by signal. While it runs, the worker is the only
   writer of session state.
+- **Every QThread is a `gui/workers.WorkerThread`**, and every plain thread
+  starts through `sealedlore.threads`: both pause the garbage collector while
+  they live (it would otherwise run on them and sweep up Qt objects there).
+  A thread that works on a story's session is given it
+  (`WorkerThread(session=)`); anything that changes the story from a timer or
+  a signal asks `MainWindow._story_in_use()` first and waits for the story to
+  come back (`_wait_for_story`).
+- **Nothing waits for a fetch on close.** A job nobody waits for (a listing,
+  an attestation, a picture being drawn) runs through
+  `gui/workers.run_detached` on a daemon thread and hands its result back with
+  `post`; never a QThread, which would be destroyed running when the app quits.
+- **Text from outside is never HTML** (`gui/plain_text.py`). Every label is
+  plain text unless set to `Qt.RichText` on purpose (then escape what it
+  holds), message boxes included, and every tooltip set with `setToolTip` is
+  shown as given; tooltip-role item data goes through `plain_tip`.
 - **Clean up from `thread.finished`, never from the worker's own
   `finished`.** Dropping the last Python reference to a worker while its
   signal is still being delivered frees it under Qt and segfaults.
