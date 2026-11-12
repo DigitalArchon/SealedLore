@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.gui import theme
 from sealedlore.gui.fields import FormScroll, set_field_text
+from sealedlore.gui.plain_text import plain_tip
 from sealedlore.models.character import Character
 from sealedlore.models.tavern import CardAsset, TavernFields
 from sealedlore.storage.card_files import renamed_in
@@ -196,7 +197,7 @@ class FilesForm(QWidget):
         self.type.setEditable(True)
         for kind, tip in TYPES:
             self.type.addItem(kind)
-            self.type.setItemData(self.type.count() - 1, tip, Qt.ToolTipRole)
+            self.type.setItemData(self.type.count() - 1, plain_tip(tip), Qt.ToolTipRole)
         self.type.setToolTip("What kind of file the card says it is; any other may be typed")
         self.type.currentTextChanged.connect(self._retyped)
         self.type_said = QLabel()

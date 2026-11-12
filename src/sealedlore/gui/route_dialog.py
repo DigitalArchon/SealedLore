@@ -13,6 +13,8 @@ thread of this dialog's own.
 
 from __future__ import annotations
 
+import html
+
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -95,10 +97,11 @@ class RouteDialog(QDialog):
         route = route or ModelRoute()
 
         intro = QLabel(
-            f"NanoGPT runs {model} on several hosts and normally chooses one itself. A route "
-            "chooses for you. <b>Any route but the subscription's is billed pay-as-you-go, "
-            "even for a model the subscription includes.</b>"
+            f"NanoGPT runs {html.escape(model)} on several hosts and normally chooses one "
+            "itself. A route chooses for you. <b>Any route but the subscription's is billed "
+            "pay-as-you-go, even for a model the subscription includes.</b>"
         )
+        intro.setTextFormat(Qt.RichText)  # markup on purpose, the model escaped
         intro.setWordWrap(True)
 
         self.choices = QButtonGroup(self)

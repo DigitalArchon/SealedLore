@@ -281,6 +281,7 @@ def _before_after(before: object, after: object) -> QWidget:
     old, new = format_value(before), format_value(after)
     if max(len(old), len(new)) <= LONG_TEXT and "\n" not in old + new:
         label = QLabel(f"<b>Before:</b> {_escape(old)}<br><b>Proposed:</b> {_escape(new)}")
+        label.setTextFormat(Qt.RichText)  # markup on purpose, both values escaped
         label.setWordWrap(True)
         return label
     if before in (None, "", [], {}):
@@ -391,6 +392,7 @@ class ReviewResultDialog(QDialog):
             + "<br>".join("• " + _escape(note) for note in review.cannot_fix)
         )
         cannot_fix.setObjectName("cannotFix")
+        cannot_fix.setTextFormat(Qt.RichText)  # markup on purpose, the notes escaped
         cannot_fix.setWordWrap(True)
         cannot_fix.setVisible(bool(review.cannot_fix))
 
@@ -415,6 +417,7 @@ class ReviewResultDialog(QDialog):
                 for finding in review.app_findings
             )
         )
+        findings_text.setTextFormat(Qt.RichText)  # markup on purpose, the findings escaped
         findings_text.setWordWrap(True)
         findings_layout.addWidget(findings_text)
         findings.setVisible(bool(review.app_findings))

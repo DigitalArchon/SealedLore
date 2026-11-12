@@ -27,6 +27,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.gui.plain_text import plain_label
+
 
 def set_field_text(field: QLineEdit | QComboBox, text: str) -> None:
     """Set a line edit's text, or an editable combo's, showing its start."""
@@ -183,6 +185,10 @@ class _GuardingStyle(QProxyStyle):
     costs nothing anywhere else. `polish` runs once per widget as it is
     created or restyled, which is when a combo or spin box can first take the
     wheel.
+
+    It also makes every label plain text that isn't rich on purpose, Qt's
+    own message boxes' among them (gui/plain_text.py): it is the one place
+    every label passes before it is drawn.
     """
 
     def __init__(self, base: str, guard: WheelGuard) -> None:
@@ -192,6 +198,8 @@ class _GuardingStyle(QProxyStyle):
     def polish(self, target):  # noqa: ANN001 - QStyle.polish takes a widget, palette or app
         if isinstance(target, QComboBox | QAbstractSpinBox):
             target.installEventFilter(self._guard)
+        else:
+            plain_label(target)
         return super().polish(target)
 
 

@@ -8,6 +8,7 @@ and difficulty) live in the composer's second row, per §10.
 
 from __future__ import annotations
 
+import html
 import sys
 from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
@@ -60,7 +61,7 @@ from sealedlore.engine.session import (
 )
 from sealedlore.engine.tokens import TokenEstimator
 from sealedlore.engine.usage import usage_fields, usage_report
-from sealedlore.gui import crop_dialog, start_page, text_size
+from sealedlore.gui import crop_dialog, plain_text, start_page, text_size
 from sealedlore.gui.bad_hosts import bad_hosts
 from sealedlore.gui.banners import HeldAwayBanner, OverBudgetBanner, StalenessBanner
 from sealedlore.gui.branch_bar import BranchBar, opening_words
@@ -375,8 +376,10 @@ class MainWindow(
         super().__init__()
         self.setWindowTitle("SealedLore")
         self.resize(1280, 860)
-        # The wheel scrolls pages, not the combo under the pointer (fields.py).
+        # The wheel scrolls pages, not the combo under the pointer (fields.py);
+        # and labels and tooltips show their text as text (plain_text.py).
         install_wheel_guard(QApplication.instance())
+        plain_text.install()
 
         self.root = root
         self.use_mock = use_mock
@@ -4001,14 +4004,22 @@ class MainWindow(
         """The version and where the data lives: what a bug report needs."""
         folder = self.root if self.root is not None else data_home()
         samples = samples_dir()
-        QMessageBox.about(
-            self,
+        # Rich on purpose (message boxes are plain text otherwise,
+        # gui/plain_text.py); the folders are this computer's, escaped.
+        box = QMessageBox(
+            QMessageBox.Information,
             "About SealedLore",
             f"<b>SealedLore {__version__}</b><br><br>"
-            f"Data folder: {folder}<br>"
-            f"Sample stories and the plot format guide: {samples or 'not found'}<br>"
+            f"Data folder: {html.escape(str(folder))}<br>"
+            "Sample stories and the plot format guide: "
+            f"{html.escape(str(samples)) if samples else 'not found'}<br>"
             f"PySide6 {pyside_version}",
+            QMessageBox.Ok,
+            self,
         )
+        box.setTextFormat(Qt.RichText)
+        box.exec()
+        box.deleteLater()
 
     def _on_generation_finished(self) -> None:
         # The job's thread: what finishing it offers may start the next job.

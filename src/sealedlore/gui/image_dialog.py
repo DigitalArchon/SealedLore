@@ -67,6 +67,7 @@ from sealedlore.gui.picture_style import (
     PictureStyleField,
 )
 from sealedlore.gui.picture_words import WORDS_ONLY
+from sealedlore.gui.plain_text import plain_tip
 from sealedlore.gui.ref_images import (
     PICTURE_FILTER,
     THUMB,
@@ -575,7 +576,9 @@ class ImageDialog(QDialog):
             self.size_choice.addItem(size)
             if price is not None:
                 self.size_choice.setItemData(
-                    self.size_choice.count() - 1, f"${price:.3f} a picture", Qt.ToolTipRole
+                    self.size_choice.count() - 1,
+                    plain_tip(f"${price:.3f} a picture"),
+                    Qt.ToolTipRole,
                 )
         wanted = current or self.session.config.image_size
         if self.background and not current and info is not None:

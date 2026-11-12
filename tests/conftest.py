@@ -24,12 +24,14 @@ def _wheel_guard_style_first():
         yield
         return
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from sealedlore.gui import workers
+    from sealedlore.gui import plain_text, workers
     from sealedlore.gui.collector import install_collector_pause
     from sealedlore.gui.fields import install_wheel_guard
 
     app = QApplication.instance() or QApplication([])
     install_wheel_guard(app)
+    # As the app does: labels plain unless rich on purpose, tooltips as given.
+    plain_text.install()
     # As the app does: the collector waits while background threads run, and
     # fetches nobody waits for hand back through one relay.
     install_collector_pause(app)

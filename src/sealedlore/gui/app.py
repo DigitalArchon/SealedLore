@@ -17,7 +17,7 @@ from PySide6.QtCore import QCoreApplication, Qt
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from sealedlore import __version__
-from sealedlore.gui import theme, x11_check
+from sealedlore.gui import plain_text, theme, x11_check
 from sealedlore.gui.collector import install_collector_pause
 from sealedlore.gui.fields import install_wheel_guard
 from sealedlore.gui.main_window import MainWindow
@@ -81,8 +81,11 @@ def build_app(argv: Sequence[str], env: Mapping[str, str] | None = None) -> QApp
     own_dialogs_in_firejail(os.environ if env is None else env)
 
     app = QApplication(list(argv))
-    # Before any widget and before the stylesheet (fields.install_wheel_guard).
+    # Before any widget and before the stylesheet (fields.install_wheel_guard);
+    # it also makes labels plain text, and tooltips are shown as given
+    # (gui/plain_text.py).
     install_wheel_guard(app)
+    plain_text.install()
     # Before any background thread (sealedlore.threads).
     install_collector_pause(app)
     # What fetches nobody waits for hand back, and when that stops (quitting).

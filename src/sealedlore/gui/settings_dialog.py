@@ -59,6 +59,7 @@ from sealedlore.gui.model_picker import (
     pick_model_and_route,
 )
 from sealedlore.gui.phone_dialog import PHONE_KEEPS
+from sealedlore.gui.plain_text import plain_tip
 from sealedlore.gui.settings_pages import Fold, SettingsPages
 from sealedlore.gui.sizing import entered, size_to_screen
 from sealedlore.gui.speed_test import SpeedTestDialog
@@ -156,6 +157,14 @@ def _note_label() -> QLabel:
     label.setObjectName("hintLabel")
     label.setWordWrap(True)
     label.setTextFormat(Qt.PlainText)
+    return label
+
+
+def _heading(text: str) -> QLabel:
+    """A heading in a page's form, in bold (rich on purpose: labels are
+    plain text otherwise, gui/plain_text.py)."""
+    label = QLabel(f"<b>{text}</b>")
+    label.setTextFormat(Qt.RichText)
     return label
 
 
@@ -1910,7 +1919,7 @@ class SettingsDialog(QDialog):
         self.image_url, self.image_key, self.image_api = self._media_fields(endpoint)
         self.image_url.setPlaceholderText("same as the chat endpoint")
         self.image_key.setPlaceholderText("same as the chat key (same host only)")
-        form.addRow(QLabel("<b>Pictures of the story</b>"))
+        form.addRow(_heading("Pictures of the story"))
         self._image_models = parse_image_models({"data": self.config.image_models})
         # Typed, or chosen with Browse… from a searchable table, as the text
         # models are (gui/image_picker.py).
@@ -1960,7 +1969,7 @@ class SettingsDialog(QDialog):
     def _portrait_rows(self, form: QFormLayout) -> None:
         """Portraits of the characters (Story → Draw portraits…, the Cast
         page, and the offer when a story starts)."""
-        form.addRow(QLabel("<b>Portraits</b>"))
+        form.addRow(_heading("Portraits"))
         self.portrait_model = ModelField(
             family_id(self.config.portrait_model, self._image_models),
             self._browse_image_models if self.image_catalog is not None else None,
@@ -1979,7 +1988,7 @@ class SettingsDialog(QDialog):
         """Pictures of the places the story goes to (the author, Oct 24
         2026): kept on the place's lore entry, and behind the story's text
         while the story is there."""
-        form.addRow(QLabel("<b>Places</b>"))
+        form.addRow(_heading("Places"))
         self.location_backgrounds = QCheckBox("Show the current place's picture behind the story")
         self.location_backgrounds.setChecked(self.config.location_backgrounds)
         self.location_backgrounds.setToolTip(
@@ -2118,7 +2127,9 @@ class SettingsDialog(QDialog):
             self.image_size.addItem(size)
             if price is not None:
                 self.image_size.setItemData(
-                    self.image_size.count() - 1, f"${price:.3f} a picture", Qt.ToolTipRole
+                    self.image_size.count() - 1,
+                    plain_tip(f"${price:.3f} a picture"),
+                    Qt.ToolTipRole,
                 )
         if current:
             self.image_size.setCurrentText(current)

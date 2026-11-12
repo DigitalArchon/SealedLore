@@ -20,6 +20,7 @@ sent, whatever happens after. So the dialog:
 
 from __future__ import annotations
 
+import html
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -259,6 +260,8 @@ class VideoDialog(QDialog):
         self.price = QLabel("")
         self.price.setObjectName("priceLabel")
         self.price.setWordWrap(True)
+        # Markup on purpose; what the endpoint says of the price is escaped.
+        self.price.setTextFormat(Qt.RichText)
         self.accept_cost = QCheckBox()
         self.accept_cost.toggled.connect(self._on_accepted)
         # The price the author ticked for: a change of price clears the tick.
@@ -698,7 +701,9 @@ class VideoDialog(QDialog):
                 "pictures. Video is far more expensive than pictures, and it is charged when "
                 "it is sent, even if you stop waiting or delete it."
             )
-            self.price.setText(f"<b>{cost_words(quote)}</b> — {quote.basis}.")
+            self.price.setText(
+                f"<b>{html.escape(cost_words(quote))}</b> — {html.escape(quote.basis)}."
+            )
             self.accept_cost.setText(f"I accept that this video costs about ${quote.amount:.2f}")
             self.generate_button.setText(f"Generate video (${quote.amount:.2f})")
         else:
@@ -707,7 +712,7 @@ class VideoDialog(QDialog):
                 "even if you stop waiting or delete it. The price of this one couldn't be "
                 "worked out before sending."
             )
-            self.price.setText(f"<b>Price unknown</b> — {quote.basis}.")
+            self.price.setText(f"<b>Price unknown</b> — {html.escape(quote.basis)}.")
             self.accept_cost.setText("I accept sending this without knowing what it will cost")
             self.generate_button.setText("Generate video (price unknown)")
         if self.accept_cost.isChecked() and self._accepted_price != (quote.amount, quote.basis):

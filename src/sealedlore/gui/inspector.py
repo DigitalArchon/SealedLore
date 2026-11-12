@@ -79,6 +79,8 @@ class ContextInspector(QWidget):
         self.summary = QLabel("Nothing assembled yet.")
         self.summary.setObjectName("inspectorSummary")
         self.summary.setWordWrap(True)
+        # Markup on purpose: the model's name is escaped where it goes in.
+        self.summary.setTextFormat(Qt.RichText)
         layout.addWidget(self.summary)
 
         # One click to take the prompt away for analysis: selecting the whole
@@ -152,7 +154,7 @@ class ContextInspector(QWidget):
         budget = prompt.budget
         tilde = "~" if approximate else ""
         lines = [
-            f"<b>{model or 'no model set'}</b> — "
+            f"<b>{escape(model or 'no model set')}</b> — "
             f"{tilde}{budget.total:,} / {budget.budget:,} tokens "
             f"({budget.utilization:.0%})",
             f"cache_control: {'on' if use_cache_control else 'off'} · "

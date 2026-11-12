@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 from sealedlore.engine.picture_styles import BY_ID, DEFAULT_LABEL, OWN_LABEL, STYLES
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.gui.fields import set_field_text
+from sealedlore.gui.plain_text import plain_tip
 
 OWN = "own"  # the combo's data for the author's own words
 KEEP = "keep"  # a picture changed in its own style (`keep=`)
@@ -75,11 +76,13 @@ class PictureStyleField(QWidget):
             self.combo.addItem(KEEP_LABEL, KEEP)
             self.combo.setItemData(0, KEEP_TIP, Qt.ToolTipRole)
         self.combo.addItem(default[0], "")
-        self.combo.setItemData(self.combo.count() - 1, default[1], Qt.ToolTipRole)
+        self.combo.setItemData(self.combo.count() - 1, plain_tip(default[1]), Qt.ToolTipRole)
         for style in STYLES:
             self.combo.addItem(style.label, style.id)
             # What it puts into a prompt, as the editor has it.
-            self.combo.setItemData(self.combo.count() - 1, texts[style.key], Qt.ToolTipRole)
+            self.combo.setItemData(
+                self.combo.count() - 1, plain_tip(texts[style.key]), Qt.ToolTipRole
+            )
         self.combo.addItem(OWN_LABEL, OWN)
         self.combo.setItemData(self.combo.count() - 1, OWN_TIP, Qt.ToolTipRole)
         self.own = QLineEdit()
