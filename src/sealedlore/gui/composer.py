@@ -139,9 +139,26 @@ MORE_LABEL = "More ▸"
 FEWER_LABEL = "Fewer ▾"
 MORE_TIP = (
     "More ways to shape a turn: who the model may voice, how outcomes are decided "
-    "(and dice), a private scene, and an out-of-character note. Stays as you leave it."
+    "(and dice), suggestions when you are stuck, a private scene, and an "
+    "out-of-character note. Stays as you leave it."
 )
 MORE_HELD_TIP = "Kept open while a private scene, a roll or an OOC note is in use."
+
+# For an author who is stuck. In a story's words and a chat's (False, True).
+SUGGEST_LABEL = "Suggest…"
+SUGGEST_TIPS = {
+    False: (
+        "Stuck? Ask the storyteller for a few things your character might do or say next. "
+        "You pick one to edit and send as your own, or none: nothing enters the story "
+        "unless you send it."
+    ),
+    True: (
+        "Stuck? Ask the model for a few things you might write next. You pick one to edit "
+        "and send, or none: nothing joins the chat unless you send it."
+    ),
+}
+SUGGEST_NOBODY_TIP = "Suggestions are for the character you play: choose one under Playing."
+SUGGEST_BUSY_TIP = "Suggestions can be asked for once the current job is done."
 
 PRIVATE_TIP = (
     "Private scene: play the next part on your private model. Nothing from it reaches "
@@ -229,6 +246,8 @@ class Composer(QWidget):
     regenerate_requested = Signal()
     continue_requested = Signal()
     image_requested = Signal()
+    # Suggest…: the author asks what their character might do next.
+    suggest_requested = Signal()
     # The author pressed Private scene: True to begin one, False to end it.
     private_requested = Signal(bool)
     held_character_changed = Signal(str)
@@ -250,6 +269,10 @@ class Composer(QWidget):
         # them to be held (back in the scene, if a branch left them out).
         self.held.activated.connect(self._on_held_activated)
         self._held_just_changed = False
+        # Whether a turn could be sent and no job runs (`set_busy`), for
+        # Suggest…, which also needs someone played (`_sync_suggest`).
+        self._free_to_ask = False
+        self._job_running = False
 
         self.speaker = QComboBox()
         self._compact(self.speaker, 16)
@@ -379,6 +402,14 @@ class Composer(QWidget):
         self.agency_caption = self._caption("Outcome")
         shape.add_group([self.agency_caption, self.agency])
         shape.add_group([self.roll_caption, self.skill, self.difficulty])
+        # For an author who is stuck: a few options for their own next turn,
+        # shown to them and never sent by anything but them. Here, under
+        # More, with the rest of what a turn seldom needs: the first row is
+        # the window's minimum width.
+        self.suggest_button = QPushButton(SUGGEST_LABEL)
+        self.suggest_button.setObjectName("suggestButton")
+        self.suggest_button.clicked.connect(self.suggest_requested)
+        shape.add_group([self.suggest_button], right=True)
         shape.add_group([self.private_toggle, self.private_keep, self.ooc_toggle], right=True)
         # The second row whole, put away under More. Its row in a box layout
         # of its own, as the rows in `controls_host` are: a WrapRow that is a
@@ -583,6 +614,7 @@ class Composer(QWidget):
         self._held_id = held_id
         self._fill_skills()
         self._sync_scope_button()
+        self._sync_suggest()
 
     def _select(self, combo: QComboBox, value: str) -> None:
         index = combo.findData(value)
@@ -805,6 +837,7 @@ class Composer(QWidget):
         self._sync_question_mode()
         self._sync_private_tips()
         self._sync_more()
+        self._sync_suggest()
 
     def _sync_retake_tips(self) -> None:
         """Regenerate's and Continue's tooltips in this mode's words, each
@@ -819,12 +852,11 @@ class Composer(QWidget):
 
     def set_private_offered(self, offered: bool) -> None:
         """Whether a part can be held in private: not in a chat on a TEE
-        model, which is private throughout. The Private button is all of the
-        controls a chat shows, so without it the whole row goes."""
+        model, which is private throughout. Of a story's controls a chat
+        shows this and Suggest…, so its row stays either way."""
         self._private_offered = offered
         self.private_toggle.setVisible(offered)
         self.private_keep.setVisible(offered and self._keep_fixed is None)
-        self.controls_host.setVisible(offered or not self._chat)
 
     def fix_private_keep(self, keep: str | None) -> None:
         """Where a private part is kept, when there is no choice to make: a
@@ -848,7 +880,38 @@ class Composer(QWidget):
             widget.style().unpolish(widget)
             widget.style().polish(widget)
 
+    def _sync_suggest(self) -> None:
+        """Suggest… is on exactly when a turn could be sent and no job is
+        running (it needs the story, which a job has), and in a story only
+        with someone played: the suggestions are for that character."""
+        if not hasattr(self, "suggest_button"):
+            return  # still being built
+        played = self._chat or self.held_character_id() is not None
+        self.suggest_button.setEnabled(self._free_to_ask and played)
+        if self._job_running:
+            tip = SUGGEST_BUSY_TIP
+        elif not played:
+            tip = SUGGEST_NOBODY_TIP
+        else:
+            tip = SUGGEST_TIPS[self._chat]
+        self.suggest_button.setToolTip(tip)
+
+    def take_suggestion(self, text: str) -> None:
+        """A suggested turn in the box, for the author to change and send
+        (or not): spoken as the character they play, since that is whose turn
+        it suggests. Nothing here sends it."""
+        self.input.setPlainText(text.strip())
+        held = self.held_character_id()
+        if not self._chat and held is not None and self.speaker.findData(held) >= 0:
+            self._select(self.speaker, held)
+            self._sync_question_mode()
+        cursor = self.input.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        self.input.setTextCursor(cursor)
+        self.focus_input()
+
     def _on_held_changed(self) -> None:
+        self._sync_suggest()
         # Qt emits `activated` right after this, in the same call, when the
         # author picked a new entry: that one is handled here. Cleared on the
         # next turn of the event loop, so a change made in code never makes a
@@ -1016,6 +1079,8 @@ class Composer(QWidget):
         self.regenerate_button.setEnabled(has_story and not busy and can_regenerate)
         self.continue_button.setEnabled(has_story and not busy and can_continue)
         self.image_button.setEnabled(has_story and not busy)
+        self._free_to_ask, self._job_running = writable and not busy, has_story and busy
+        self._sync_suggest()
         self.private_toggle.setEnabled(has_story and not busy)
         self.private_keep.setEnabled(has_story and not busy and not self.private_toggle.isChecked())
         # Taking up a character moves the scene (StorySession.hold), which is

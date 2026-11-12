@@ -130,6 +130,12 @@ def test_nothing_from_a_private_scene_reaches_another_model(tmp_path: Path, keep
     for _event in session.revise_passage(session.full_path()[-1].id, f"Add {MARKER} twice."):
         pass
     assert session.full_path()[-1].meta.revise_note
+    # Asked what to do next, in the scene: the scene's model is the one asked.
+    asked_privately = len(private.payloads)
+    with pytest.raises(ValueError, match="couldn't be read"):
+        for _notice in session.suggest_turns():
+            pass
+    assert len(private.payloads) == asked_privately + 1
     private.responses = ["They spoke quietly and agreed to meet at dawn by the well."]
     summary = session.summarise_private()
     assert MARKER not in summary
@@ -153,6 +159,8 @@ def test_nothing_from_a_private_scene_reaches_another_model(tmp_path: Path, keep
         lambda: list(session.scan_recent()),
         session.suggest_scene,
         lambda: session.write_image_prompt(""),
+        # Suggest my turn: the story as a Question sends it.
+        lambda: list(session.suggest_turns()),
     ):
         try:
             call()
@@ -750,7 +758,7 @@ def test_a_memory_scene_writes_only_content_free_log_kinds(tmp_path: Path):
     """The constraint every later change must keep: in a memory-only scene the
     API log sees the model's name and the usage, nothing else, from the turn,
     an aside, a regenerate (plain, and with a note), a passage changed by
-    instruction and the exit summary alike."""
+    instruction, suggestions for the next turn and the exit summary alike."""
     session, main, held = build(tmp_path)
     play(session, turn(held, "Before the scene."))
     before = len(read_api_log(session.story.id, root=tmp_path))
@@ -764,6 +772,8 @@ def test_a_memory_scene_writes_only_content_free_log_kinds(tmp_path: Path):
         pass
     for _ in session.revise_passage(session.full_path()[-1].id, f"Now with {MARKER}."):
         pass
+    with pytest.raises(ValueError, match="couldn't be read"):
+        list(session.suggest_turns())  # the mock's reply isn't a list; it was asked
     session.summarise_private()
     entries = read_api_log(session.story.id, root=tmp_path)[before:]
     assert entries, "the scene made calls"
@@ -1071,7 +1081,7 @@ def test_a_tee_model_refused_when_attested_again_is_sent_nothing_more(tmp_path: 
 
 
 @pytest.mark.parametrize(
-    "entry", ["send", "regenerate", "revise", "ask", "summary", "image prompt"]
+    "entry", ["send", "regenerate", "revise", "ask", "suggest", "summary", "image prompt"]
 )
 def test_every_call_that_reaches_a_tee_model_attests_it_again_first(tmp_path: Path, entry):
     from sealedlore.providers.tee import REATTEST_SECONDS
@@ -1088,10 +1098,13 @@ def test_every_call_that_reaches_a_tee_model_attests_it_again_first(tmp_path: Pa
         "regenerate": lambda: list(session.regenerate()),
         "revise": lambda: list(session.revise_passage(session.full_path()[-1].id, "Shorter.")),
         "ask": lambda: list(session.ask("Who is here?")),
+        "suggest": lambda: list(session.suggest_turns()),
         "summary": session.summarise_private,
         "image prompt": lambda: session.write_image_prompt(""),
     }
     private.responses = ['{"references": [], "prompt": "A lamp by the window."}']
+    if entry == "suggest":
+        private.responses = ['["I wait.", "I ask her name."]']
     calls[entry]()
     assert len(tee.attested) == 2 and len(private.payloads) == sent + 1
 

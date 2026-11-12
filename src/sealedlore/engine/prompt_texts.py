@@ -550,6 +550,43 @@ you wrote something, say candidly what led to it, including any instruction
 that constrained you, rather than inventing a justification inside the story.""",
 )
 
+# Suggest my turn (engine/suggest.py): for an author who is stuck. In the
+# question's place, on the story's own prefix. The storyteller never writes
+# the author's character in the story; here it offers the author words they
+# may take, change and send as their own, so the text says it is not a turn,
+# that nothing is decided for anyone else, and that only what the character
+# knows may be used (the presence rule's other half: no acting on what they
+# cannot know). The reply is read as a JSON array. Not measured.
+_text(
+    "suggest.rules",
+    QUESTIONS,
+    "Suggest my turn",
+    "Asks for a few things the author's character might do next (Suggest… in the "
+    "composer), in place of the turn's tail. The program reads the reply as a JSON array "
+    "of strings; the author may take one, change it and send it as their own turn.",
+    """\
+# THE AUTHOR ASKS FOR IDEAS, OUT OF CHARACTER
+
+The author has stepped outside the story: they are not sure what {held} should
+do or say next, and ask you for ideas. This is not a turn: do not continue the
+scene, and write no passage. Nothing you offer enters the story unless the
+author takes it, changes it as they like, and sends it as their own turn.
+
+Give {count} options for {held}'s next turn that differ in kind: for example
+one in which {held} speaks, one in which {held} acts, and one in which {held}
+holds back, waits or changes the subject. Each is one or two sentences,
+written as the author writes their own turns: the same person, tense and voice
+as {held}'s recent turns in the story. Use only what {held} knows, perceives
+and could do from where they are. Decide nothing for any other character, and
+nothing about how the attempt turns out.
+
+Reply with a JSON array of {count} strings and nothing else.""",
+    (
+        ("held", "the name of the character the author plays"),
+        ("count", "how many options are asked for"),
+    ),
+)
+
 
 # Anthropic requires the first non-system message to be a user message, and
 # stories that open with an AI passage would otherwise start with an assistant
@@ -2360,6 +2397,25 @@ _text(
     "everything else in the same words wherever you can. Answer with the whole reply and "
     "nothing else: no comment, and no note of what you changed.",
     (("change", "what the user asked to change, as written"),),
+)
+
+# Suggest… in a chat: possible next messages of the user's. Sent as the last
+# message, without the chat's own tail, and marked as apart from the
+# conversation, since a chat's messages go as written. Not measured.
+_text(
+    "chat.suggest",
+    CHAT,
+    "Suggest my next message",
+    "Sent as the last message when the user asks what they might write next (Suggest…). "
+    "The program reads the reply as a JSON array of strings; nothing of it joins the chat "
+    "unless the user sends it.",
+    "[This is not a message of the conversation, and you are not to answer the "
+    "conversation now. The user is not sure what to write next and asks for ideas. Give "
+    "{count} possible next messages the user might send you, different in kind: for "
+    "example a question, an answer to what you last said, and a change of direction. "
+    "Each is one or two sentences, written as the user writes: their voice, and only "
+    "what they know. Reply with a JSON array of {count} strings and nothing else.]",
+    (("count", "how many options are asked for"),),
 )
 
 _text(

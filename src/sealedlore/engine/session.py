@@ -181,6 +181,7 @@ from sealedlore.engine.session_private import PrivateRuntime, checked_where_mark
 from sealedlore.engine.session_reasoning import ReasoningRuntime
 from sealedlore.engine.session_rebuild import RebuildRuntime
 from sealedlore.engine.session_recall import RecallRuntime
+from sealedlore.engine.session_suggest import SuggestRuntime
 from sealedlore.engine.story_plot import plot_uses, take_out_character
 from sealedlore.engine.tokens import TokenEstimator, updated_correction_factor
 from sealedlore.engine.validators import locate_quote, mentions
@@ -550,6 +551,7 @@ class StorySession(
     ReasoningRuntime,
     LooksRuntime,
     CastRuntime,
+    SuggestRuntime,
 ):
     def __init__(
         self,
@@ -4404,13 +4406,16 @@ class StorySession(
         options: AssemblyOptions | None = None,
         recall: Sequence[RecallItem] = (),
         span: PrivateSpan | None = None,
+        rendered: str | None = None,
     ) -> AssembledPrompt:
         """The prompt for an aside at the current leaf. Like `assemble`, never embeds.
 
         `history` and `options` are a private scene's (its messages, its budget
         and rules) when the aside is asked in one, and `span` that scene: its
         window then stands for the rest, as for its turns (the handoff, the
-        condensed part)."""
+        condensed part). `rendered` is a request of the program's own in the
+        question's place (Suggest my turn, engine/suggest.py): the earlier
+        questions asked here are not sent with it."""
         history = self.path() if history is None else list(history)
         # Earlier asides from a private scene go only to that scene's model.
         span_id = self.open_span.id if self.open_span is not None else None
@@ -4452,6 +4457,7 @@ class StorySession(
             scene_log=log_on_path(self.story.scene_log, history),
             estimator=self.estimator,
             options=options or self.assembly_options(),
+            rendered=rendered,
         )
         self.last_prompt = prompt
         return prompt

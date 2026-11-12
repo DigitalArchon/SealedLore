@@ -842,6 +842,22 @@ QListWidget::item {
   padding: 6px 8px;
 }
 
+/* The options Suggest… offers, in its menu (gui/suggest_menu.py): each row
+   is a label with its own room around the words, so the row has none. */
+#suggestList {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+#suggestList::item {
+  padding: 0;
+}
+
+#suggestOption {
+  background: transparent;
+}
+
 QListWidget::item:selected, QTreeWidget::item:selected {
   background: @selection;
   color: @text_selected;

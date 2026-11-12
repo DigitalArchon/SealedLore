@@ -650,7 +650,8 @@ archiving, rebuilding summaries.
   never writes them); *Speaking as* is who your text lands as (that
   character, Narration, Direction, or a Question to the model); *Length* is
   how long the passages are. **More ▸** opens the rest: *Model voices* (who
-  the storyteller may voice this turn), *Outcome* (and the dice), **Private**
+  the storyteller may voice this turn), *Outcome* (and the dice),
+  **Suggest…** (ideas for your next turn when you are stuck), **Private**
   (a private scene) and **OOC** (an out-of-character note). It stays open or
   closed as you leave it, opens by itself while a private scene, a roll or an
   OOC note is in use, and names an outcome or voices you chose beside it
@@ -2001,6 +2002,22 @@ private scene only the scene's own passages can be continued, and only by
 the scene's own model: one written before it is the story model's, and a
 scene kept on disk, reopened with no private model set up, can't be
 continued until one is (Settings → Private). A paired phone has Continue too.
+
+**Suggest…**, under **More** in the bottom bar, is for when you don't know
+what your character should do next. It asks the storyteller for three things
+they might do or say, different in kind (one that speaks, one that acts, one
+that holds back or changes the subject), each a sentence or two in the voice
+of your own recent turns and using only what your character knows. They come
+up in a menu at the button: pick one and its words go into the box you write
+in, for you to change and send as your own turn; press Esc and none is taken.
+Nothing is ever sent for you, and nothing of what was offered enters the
+story or is shown to the storyteller again. If the box already holds
+something you wrote, you are asked before it is replaced. The storyteller
+still never writes your character inside the story: these are offers made to
+you, outside it. It needs a character under **Playing**, costs one call (the
+story's own model, counted under Story → Usage and cost… as Turn
+suggestions), and Stop ends it. A simple chat has it too, for what you might
+write next. In a private scene the scene's own model is asked.
 
 A **branch** is a line of the story you split off on purpose. **Edit** on a
 message corrects it in place (a typo, a name); on a turn of yours the editor

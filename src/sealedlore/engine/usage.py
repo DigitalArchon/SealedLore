@@ -47,6 +47,8 @@ KIND_LABELS: dict[str, str] = {
     "plot_draft_response": "Plot writing",
     "followup_response": "Changes asked for",
     "review_response": "Settings reviews",
+    # Suggest my turn: options offered to the author, outside the story.
+    "suggest_response": "Turn suggestions",
     "image_prompt_response": "Image prompts",
     "portrait_prompt_response": "Portrait prompts",
     "style_from_picture_response": "Picture styles",

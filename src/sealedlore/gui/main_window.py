@@ -513,6 +513,7 @@ class MainWindow(
         self.composer.stop_requested.connect(self.stop_generation)
         self.composer.regenerate_requested.connect(self.regenerate)
         self.composer.continue_requested.connect(self.continue_passage)
+        self.composer.suggest_requested.connect(self.suggest_turn)
         self.composer.held_character_changed.connect(self._on_held_changed)
         self.composer.set_more(self.config.composer_more)
         self.composer.more_toggled.connect(self._keep_composer_more)
