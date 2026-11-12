@@ -389,3 +389,61 @@ def test_two_writers_of_one_picture_never_share_a_temp_file(tmp_path, monkeypatc
     assert not list(picture.parent.glob("*.tmp"))
     if sys.platform != "win32":
         assert stat.S_IMODE(picture.stat().st_mode) == 0o600
+
+
+# --- what writes cut short left behind ------------------------------------------
+
+
+def a_story_with_leftovers(root: Path) -> tuple[StoryBundle, list[Path], list[Path]]:
+    """A saved story, the temp files killed writes left in it, and files of
+    the story's own that only end in .tmp."""
+    bundle = bundle_of(chain(2))
+    save_story_bundle(bundle, root=root)
+    directory = story_dir(bundle.story.id, root)
+    assets = directory / "images" / "assets" / "card-1"
+    assets.mkdir(parents=True)
+    (directory / "images" / "p.png").write_bytes(b"picture")
+    (assets / "photo").write_bytes(b"a card's file")
+    left = [
+        directory / f"story.json.k3j4h5g6{atomic.TEMP_SUFFIX}",
+        directory / f"nodes.json.bak.1.2{atomic.TEMP_SUFFIX}",
+        directory / "nodes.json.x1y2z3w4.tmp",  # an older version's
+        directory / "nodes.json.bak.tmp",
+        directory / "images" / "p.png.tmp",
+    ]
+    own = [assets / "notes.tmp", assets / "photo.version2.tmp", assets / "photo.v2.tmp"]
+    for path in [*left, *own]:
+        path.write_bytes(b"half")
+    return bundle, left, own
+
+
+def test_a_story_opened_with_the_folder_held_loses_the_temp_files_writes_left(tmp_path):
+    from sealedlore.storage import folder_lock
+
+    bundle, left, own = a_story_with_leftovers(tmp_path)
+    lock = folder_lock.hold(tmp_path)
+    try:
+        load_story_bundle(bundle.story.id, root=tmp_path)
+    finally:
+        lock.release()
+    assert [path for path in left if path.exists()] == []
+    assert all(path.exists() for path in own)
+
+
+def test_without_the_folder_held_nothing_is_swept(tmp_path):
+    # Another process may be writing (a reading command runs beside the app).
+    bundle, left, own = a_story_with_leftovers(tmp_path)
+    load_story_bundle(bundle.story.id, root=tmp_path)
+    assert all(path.exists() for path in [*left, *own])
+
+
+def test_holding_the_folder_sweeps_what_a_config_save_left(tmp_path):
+    from sealedlore.storage import folder_lock
+
+    left = tmp_path / f"config.json.abcd1234{atomic.TEMP_SUFFIX}"
+    tmp_path.mkdir(exist_ok=True)
+    (tmp_path / "config.json").write_text("{}", encoding="utf-8")
+    left.write_bytes(b"{")
+    folder_lock.hold(tmp_path).release()
+    assert not left.exists()
+    assert (tmp_path / "config.json").exists()

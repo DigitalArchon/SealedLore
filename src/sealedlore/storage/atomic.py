@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import stat
 import sys
@@ -124,6 +125,55 @@ def atomic_write_bytes(path: Path, data: bytes) -> None:
 # Only the tests turn it off, for speed; what it does is tested with it on.
 DURABLE = True
 
+# How every temp file here ends, so `sweep_temps` knows its own from any
+# other file ending in .tmp (a card's own file may).
+TEMP_SUFFIX = ".sealedlore.tmp"
+
+
+def sweep_temps(folder: Path, *, recursive: bool = True) -> list[Path]:
+    """The temp files a write cut short left in `folder` (a crash, a kill,
+    a power cut before the swap), removed; which.
+
+    Only for a process holding the data folder's lock (storage/folder_lock.py),
+    so no other process is writing there, and under the writers' lock, so
+    nothing here is: every temp file found was left by a writer gone. Our own
+    are told by `TEMP_SUFFIX`; older versions' by the file they stood in
+    for, there beside them (`p.png.tmp`, `nodes.json.bak.tmp`,
+    `story.json.k3j4h5g6.tmp`). Any other file is left alone."""
+    removed: list[Path] = []
+    with _LOCK:
+        found = folder.rglob("*.tmp") if recursive else folder.glob("*.tmp")
+        for path in found:
+            if not _left_by_a_write(path):
+                continue
+            try:
+                if path.is_file() and not path.is_symlink():
+                    path.unlink()
+                    removed.append(path)
+            except OSError:
+                continue  # in use, or not ours to remove: left for next time
+    return removed
+
+
+def _left_by_a_write(path: Path) -> bool:
+    if path.name.endswith(TEMP_SUFFIX):
+        return True
+    stem = path.name.removesuffix(".tmp")
+    for stood_for in (stem, stem.removesuffix(".bak")):
+        if stood_for and (path.parent / stood_for).exists():
+            return True  # p.png.tmp, nodes.json.bak.tmp
+    # story.json.k3j4h5g6.tmp: the eight letters tempfile makes a name of,
+    # after a JSON file's (only those were written so).
+    head, _dot, made = stem.rpartition(".")
+    return (
+        head.endswith(".json")
+        and _MKSTEMP_NAME.fullmatch(made) is not None
+        and (path.parent / head).exists()
+    )
+
+
+_MKSTEMP_NAME = re.compile(r"[a-z0-9_]{8}")
+
 
 def _write_atomic(
     path: Path, data: bytes, *, keep_backup: bool = False, mode: int | None = None
@@ -144,7 +194,7 @@ def _write_atomic(
         if _unchanged(path, digest, mode):
             return
         path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp_name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
+        fd, tmp_name = tempfile.mkstemp(prefix=path.name + ".", suffix=TEMP_SUFFIX, dir=path.parent)
         tmp_path = Path(tmp_name)
         try:
             with os.fdopen(fd, "wb") as handle:
@@ -178,7 +228,7 @@ def _keep_backup(path: Path) -> None:
     flushed when they were written. A copy where links can't be made (FAT,
     some network shares)."""
     backup_path = path.with_name(path.name + ".bak")
-    backup_tmp = path.with_name(f"{path.name}.bak.{os.getpid()}.{time.time_ns()}.tmp")
+    backup_tmp = path.with_name(f"{path.name}.bak.{os.getpid()}.{time.time_ns()}{TEMP_SUFFIX}")
     try:
         os.link(path, backup_tmp)
     except OSError:

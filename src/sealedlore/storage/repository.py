@@ -30,7 +30,7 @@ from sealedlore.models.prompt_edit import PromptEdit
 from sealedlore.models.story import Story
 from sealedlore.models.summary import Summary
 from sealedlore.models.supporting import SupportingCast
-from sealedlore.storage import keychain
+from sealedlore.storage import folder_lock, keychain
 from sealedlore.storage.atomic import (
     append_jsonl,
     atomic_write_json,
@@ -39,6 +39,7 @@ from sealedlore.storage.atomic import (
     parse_jsonl_lines,
     read_json,
     read_jsonl,
+    sweep_temps,
 )
 from sealedlore.storage.images import (
     RECORD_FILES,
@@ -463,6 +464,9 @@ def load_story_bundle(story_id: str, root: Path | None = None) -> StoryBundle:
         raise FileNotFoundError(f"no story.json found for story {story_id!r}")
     if isinstance(story_data, dict) and story_data.get("mode") == "visual":
         raise ValueError(VISUAL_ELSEWHERE)
+    if folder_lock.held(root):
+        # No other process writes here: what writes cut short left can go.
+        sweep_temps(directory)
 
     notices: list[str] = []
     try:

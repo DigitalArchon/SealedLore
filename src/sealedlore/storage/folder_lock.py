@@ -21,8 +21,8 @@ import sys
 import threading
 from pathlib import Path
 
-from sealedlore.storage.atomic import open_private
-from sealedlore.storage.paths import ensure_data_home
+from sealedlore.storage.atomic import open_private, sweep_temps
+from sealedlore.storage.paths import data_home, ensure_data_home
 
 LOCK_FILE = "sealedlore.lock"
 
@@ -95,7 +95,17 @@ def hold(root: Path | None = None) -> FolderLock:
                 fd = None
         lock = FolderLock(key, fd)
         _held[key] = lock
-        return lock
+    if fd is not None:
+        # Nobody else writes here now: what a write cut short left of
+        # config.json can go (each story's own when it opens).
+        sweep_temps(folder, recursive=False)
+    return lock
+
+
+def held(root: Path | None = None) -> bool:
+    """Whether this process holds the data folder's lock, a real one."""
+    lock = _held.get(os.path.realpath(root or data_home()))
+    return lock is not None and lock.fd is not None
 
 
 def _lock(fd: int) -> None:
