@@ -178,7 +178,7 @@ def render_cast_sheet(character: Character, form: CardForm = "whole") -> str:
     lines = [heading]
     if character.canon:
         lines.append(f"  From: {character.canon.strip()}")
-    if character.summary:
+    if character.summary and not (form == "whole" and summary_repeated(character)):
         lines.append(f"  {character.summary.strip()}")
     if character.voice_notes and form != "condensed":
         lines.append(f"  Voice: {character.voice_notes.strip()}")
@@ -190,6 +190,18 @@ def render_cast_sheet(character: Character, form: CardForm = "whole") -> str:
     elif form == "whole" and (description := full_description_text(character)):
         lines.append(f"  {description}")
     return "\n".join(lines)
+
+
+def summary_repeated(character: Character) -> bool:
+    """Whether the summary only repeats how the description begins: a card
+    made from a plot file or a premise has its description's first sentence
+    for a summary, and sent whole it said that sentence twice."""
+    summary = _plain(character.summary or "")
+    return bool(summary) and _plain(character.full_description or "").startswith(summary)
+
+
+def _plain(text: str) -> str:
+    return " ".join(text.split()).rstrip(".!?…").casefold()
 
 
 def full_description_text(character: Character) -> str:

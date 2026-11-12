@@ -191,3 +191,38 @@ def test_a_supporting_card_carries_its_description_whole_or_condensed():
     assert "Tobin's rival: sly, owes everyone." in block
     assert "scavenger" not in block and "Hello there." not in block
     assert not needs_condensing(long)
+
+
+def test_a_summary_that_only_repeats_the_descriptions_opening_is_said_once():
+    """A plot file's or a premise's card has its description's first sentence
+    for a summary: sent whole, the sheet said that sentence twice."""
+    repeated = Character(
+        id="j",
+        name="John",
+        summary="A survivor, ex-military.",
+        full_description="A survivor, ex-military. Stoic on the outside.",
+    )
+    sheet = render_cast_sheet(repeated)
+    assert sheet.count("A survivor, ex-military.") == 1
+    assert "Stoic on the outside." in sheet
+    # Short, the summary is all there is of them; condensed, it stays as before.
+    assert "A survivor, ex-military." in render_cast_sheet(repeated, "short")
+    own = Character(
+        id="e", name="Elena", summary="The town's medic.", full_description="Tired, kind, blunt."
+    )
+    assert "The town's medic." in render_cast_sheet(own)
+    assert "Tired, kind, blunt." in render_cast_sheet(own)
+
+
+def test_a_supporting_card_says_a_repeated_summary_once_too():
+    from sealedlore.engine.characters import render_supporting_block
+
+    card_ = Character(
+        id="m",
+        name="Marta",
+        summary="A woman of fifty with a hatchet",
+        full_description="A woman of fifty with a hatchet. She has been here eleven days.",
+    )
+    block = render_supporting_block([card_])
+    assert block.count("A woman of fifty with a hatchet") == 1
+    assert "eleven days" in block

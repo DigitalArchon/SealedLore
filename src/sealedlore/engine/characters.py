@@ -17,7 +17,7 @@ from collections.abc import Iterable, Sequence
 from sealedlore.engine.cast_fit import has_condensed
 from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
-from sealedlore.engine.rules import CardForm, full_description_text
+from sealedlore.engine.rules import CardForm, full_description_text, summary_repeated
 from sealedlore.engine.validators import mentions, name_forms
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.character import Character
@@ -159,7 +159,7 @@ def render_supporting_block(
             heading += f" ({character.canon})"
         lines = [heading]
         for text in (
-            character.summary,
+            not (form == "whole" and summary_repeated(character)) and character.summary,
             form != "condensed" and character.voice_notes and f"Voice: {character.voice_notes}",
             form == "whole" and full_description_text(character),
             form == "condensed" and character.condensed,
