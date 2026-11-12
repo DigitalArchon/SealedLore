@@ -17,6 +17,13 @@ makes a hard break a new paragraph, spaced as one).
 
 `shown_text` is the text as the reader sees it, character for character
 with what the label holds, for Find (its offsets select in the label).
+
+What is drawn is kept for the messages shown again and again (a rebuild
+draws every message in the window), but never what is streaming
+(`keep=False`: every prefix of a reply would be kept, pushing the real
+messages out), and `forget()` lets go of all of it as a story or chat closes
+and as a private scene ends: a memory-only chat's or scene's words must not
+stay in the process after them.
 """
 
 from __future__ import annotations
@@ -134,10 +141,22 @@ def _image(match: re.Match[str]) -> str:
     return f"({src.group(1)})" if src and src.group(1) else ""
 
 
-@functools.lru_cache(maxsize=2048)
-def markdown_html(text: str) -> str | None:
+def markdown_html(text: str, *, keep: bool = True) -> str | None:
     """The text as the transcript shows Markdown, as rich text for a label;
-    None when Markdown would change nothing (show it plain)."""
+    None when Markdown would change nothing (show it plain). `keep`: kept
+    for the next time it is shown (not while it streams). Plain text is
+    never kept: there is nothing to draw, and finding so is quick."""
+    if not has_markdown(text):
+        return None
+    return _kept(text) if keep else _drawn(text)
+
+
+@functools.lru_cache(maxsize=2048)
+def _kept(text: str) -> str | None:
+    return _drawn(text)
+
+
+def _drawn(text: str) -> str | None:
     if not has_markdown(text):
         return None
     document = QTextDocument()
@@ -160,3 +179,10 @@ def shown_text(text: str) -> str:
     document = QTextDocument()
     document.setHtml(rich)
     return document.toPlainText()
+
+
+def forget() -> None:
+    """Let go of every message's text kept here (a story or chat closed, a
+    private scene ended)."""
+    _kept.cache_clear()
+    shown_text.cache_clear()

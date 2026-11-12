@@ -73,6 +73,10 @@ COLUMN_MARGIN = 18
 # keeps the text readable, and the message frames go translucent.
 WASH_ALPHA = 150
 
+# A streaming reply is drawn at most this often; what comes between waits
+# (TranscriptView.append_streaming). The phone's is sent every 150 ms.
+STREAM_DRAW_MS = 100
+
 # Under a message's editor while its text is blank, Save off.
 EMPTY_EDIT = "A message can't be empty. To remove it, use Delete from here… in its ⋯ menu."
 
@@ -212,13 +216,19 @@ class TextBody(QLabel):
         self._heights.clear()
         super().setText(text)
 
-    def set_markdown(self, text: str) -> None:
+    def set_markdown(self, text: str, *, keep: bool = True) -> None:
         """Show the text as Markdown reads, never as HTML (gui/markdown_text.py):
-        plain, exactly as written, when Markdown would change nothing."""
+        plain, exactly as written, when Markdown would change nothing.
+        `keep`: its drawing kept for the next time (not while it streams)."""
         self._source = text
-        rich = markdown_html(text)
+        rich = markdown_html(text, keep=keep)
         self.setTextFormat(Qt.PlainText if rich is None else Qt.RichText)
         self.setText(text if rich is None else rich)
+
+    def hold(self, text: str) -> None:
+        """The text as it now is, to be drawn a moment later (a reply
+        streaming in: `TranscriptView.append_streaming`)."""
+        self._source = text
 
     @property
     def source(self) -> str:
@@ -615,8 +625,8 @@ class MessageWidget(QFrame):
         self.more_button.setMenu(menu)
         row.addWidget(self.more_button)
 
-    def set_text(self, text: str) -> None:
-        self.body.set_markdown(text)
+    def set_text(self, text: str, *, keep: bool = True) -> None:
+        self.body.set_markdown(text, keep=keep)
 
     def set_scenes(self, scene: str | None, turn_scene: str | None) -> None:
         """The private scene this message was written in, and the one of the
@@ -960,8 +970,8 @@ class AsideWidget(QFrame):
         self.body.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
         layout.addWidget(self.body)
 
-    def set_text(self, text: str) -> None:
-        self.body.set_markdown(text)
+    def set_text(self, text: str, *, keep: bool = True) -> None:
+        self.body.set_markdown(text, keep=keep)
 
 
 class PictureView(QWidget):
@@ -1545,6 +1555,15 @@ class TranscriptView(QScrollArea):
         self.setWidget(self._container)
 
         self._streaming: MessageWidget | AsideWidget | None = None
+        # A reply is drawn whole as it grows (its Markdown read again each
+        # time): at most once every STREAM_DRAW_MS, what came meanwhile held
+        # (`TextBody.hold`) and drawn when it is up or the reply ends. Drawn
+        # on every piece, a long reply's work grew with its square.
+        self._stream_timer = QTimer(self)
+        self._stream_timer.setSingleShot(True)
+        self._stream_timer.setInterval(STREAM_DRAW_MS)
+        self._stream_timer.timeout.connect(self._draw_stream)
+        self._stream_held = False
         self._placeholder: QWidget | None = None
         # The window (see _show_units): every unit of the view, the built
         # ones `[_lo, _hi)` and the widgets each placed, where the next widget
@@ -1652,6 +1671,8 @@ class TranscriptView(QScrollArea):
             if widget is not None:
                 widget.deleteLater()
         self._streaming = None
+        self._stream_timer.stop()
+        self._stream_held = False
         self._placeholder = None
         self._units = []
         self._unit_of = {}
@@ -2458,6 +2479,7 @@ class TranscriptView(QScrollArea):
     # --- streaming --------------------------------------------------------
 
     def begin_streaming(self) -> None:
+        self._draw_stream()
         self.ensure_at_latest()
         # The label the rebuild gives it afterwards (`speaker_label`): a
         # chat's header read "Story" while the reply streamed, then flipped.
@@ -2467,6 +2489,7 @@ class TranscriptView(QScrollArea):
     def begin_continuing(self, node_id: str) -> None:
         """Continue: the new text streams onto the end of the passage it
         carries on, in its own message."""
+        self._draw_stream()
         self.ensure_at_latest()
         self._streaming = self.message_widget(node_id)
         if self._streaming is None:
@@ -2475,6 +2498,7 @@ class TranscriptView(QScrollArea):
         self.scroll_to_end()
 
     def begin_aside(self, question: str) -> None:
+        self._draw_stream()
         if self._placeholder is not None:
             self._placeholder.hide()
         self.ensure_at_latest()
@@ -2482,13 +2506,35 @@ class TranscriptView(QScrollArea):
         self.scroll_to_end()
 
     def append_streaming(self, text: str) -> None:
+        """A piece of the reply: drawn now if nothing was drawn in the last
+        STREAM_DRAW_MS, else held and drawn when that is up. Its drawing is
+        never kept (gui/markdown_text.py): every prefix of the reply was."""
         if self._streaming is None:
             self.begin_streaming()
         assert self._streaming is not None
-        self._streaming.set_text(self._streaming.body.source + text)
+        body = self._streaming.body
+        if self._stream_timer.isActive():
+            body.hold(body.source + text)
+            self._stream_held = True
+            return
+        self._streaming.set_text(body.source + text, keep=False)
+        self._stream_timer.start()
+        self.scroll_to_end()
+
+    def _draw_stream(self) -> None:
+        """What streamed in since the last drawing, drawn now."""
+        widget = self._streaming
+        if widget is None or not self._stream_held:
+            return
+        self._stream_held = False
+        widget.set_text(widget.body.source, keep=False)
+        self._stream_timer.start()
         self.scroll_to_end()
 
     def end_streaming(self) -> None:
+        # The last pieces, held, are drawn: nothing that came is left out.
+        self._draw_stream()
+        self._stream_timer.stop()
         self._streaming = None
 
     def message_widget(self, node_id: str) -> MessageWidget | None:

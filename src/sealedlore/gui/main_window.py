@@ -73,6 +73,7 @@ from sealedlore.gui.generate_dialog import GenerateDialog
 from sealedlore.gui.guides import WRITING_LABEL, WRITING_TIP, open_guide
 from sealedlore.gui.inspector import ContextInspector
 from sealedlore.gui.lore_panel import LorePanel
+from sealedlore.gui.markdown_text import forget as forget_drawn_text
 from sealedlore.gui.model_hosts import hosts_catalog
 from sealedlore.gui.model_picker import (
     ModelCatalog,
@@ -1826,6 +1827,9 @@ class MainWindow(
             self.session.close(wait_seconds=0)
             self.session.save()
         self.session = None
+        # Its messages' drawings go with it (a memory-only chat's words
+        # mustn't stay in the process after it).
+        forget_drawn_text()
         self._keep_draft()
         self._restore_draft(None)
         self._sync_stories_list()
@@ -2122,6 +2126,8 @@ class MainWindow(
     def _after_open(self) -> None:
         """Everything that follows a story being opened, from disk or (a
         memory-only chat) from memory."""
+        # The story left's messages' drawings go with it (`_close_story`).
+        forget_drawn_text()
         # A route to one host is checked against that host's price.
         self.session.host_price = self._host_price
         self._fetch_host_prices()

@@ -15,6 +15,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QCheckBox, QInputDialog, QMessageBox
 
 from sealedlore.engine.session_plot import SessionNotice
+from sealedlore.gui.markdown_text import forget as forget_drawn_text
 from sealedlore.gui.private_dialogs import FitDialog, PrivateSummaryDialog, chat_words
 from sealedlore.gui.winprivacy import exclude_from_capture
 from sealedlore.gui.workers import run_detached
@@ -107,6 +108,8 @@ class PrivateWindow:
         self.private_provider_factory = None
         self._pending_private_summary: str | None = None
         self._summarising = False
+        # A private scene was open when the private look was last synced.
+        self._scene_shown = False
         self._tee_thread: BackgroundThread | None = None
         # Every attestation still running, an older story's too. Nothing
         # waits for them: they are daemon threads (gui/workers.py).
@@ -182,7 +185,12 @@ class PrivateWindow:
         )
         self._refresh_model_button()
         self._sync_capture()
+        was_open, self._scene_shown = self._scene_shown, span is not None
         if span is None:
+            if was_open:
+                # The scene's messages' drawings go with it: a memory-only
+                # scene's words mustn't stay in the process after it.
+                forget_drawn_text()
             # Pictures for the cards approved while a scene was open waited
             # for it to end (window_board): now they can be drawn.
             self._start_waiting()
