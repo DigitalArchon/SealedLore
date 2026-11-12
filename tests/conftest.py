@@ -246,6 +246,18 @@ def _unanswered_boxes_fail(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _writes_left_to_the_cache(monkeypatch):
+    """Every save flushes to the disk before it is swapped in
+    (`storage.atomic.DURABLE`), several milliseconds a file: across the
+    suite's thousands of saves that is many minutes. The tests of it turn it
+    back on (tests/test_saving.py)."""
+    from sealedlore.storage import atomic
+
+    monkeypatch.setattr(atomic, "DURABLE", False, raising=False)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def memory_keychain():
     from sealedlore.storage import keychain
 

@@ -4,10 +4,14 @@ next one was never written, and what loading makes of it."""
 from __future__ import annotations
 
 import json
+import os
+import stat
+import sys
 from pathlib import Path
 
 from sealedlore.models.node import Node
 from sealedlore.models.story import Story
+from sealedlore.storage import atomic
 from sealedlore.storage.paths import story_dir
 from sealedlore.storage.repository import StoryBundle, load_story_bundle, save_story_bundle
 from sealedlore.tree import link_child, standing_leaf
@@ -116,3 +120,80 @@ def test_the_nearest_message_needs_a_whole_line_back_to_the_start():
     assert standing_leaf([*nodes, orphan], orphan.id) == nodes[-1].id
     assert standing_leaf([orphan], "missing") is None
     assert standing_leaf(nodes, None) is None
+
+
+# --- each file reaches the disk before it is swapped in -----------------------
+
+
+def watch_the_disk(monkeypatch) -> list[tuple[str, str]]:
+    """Every flush (of a file or a folder) and every swap, in order."""
+    events: list[tuple[str, str]] = []
+    real_fsync, real_replace = os.fsync, atomic.replace
+
+    def fsync(fd: int) -> None:
+        kind = "folder" if stat.S_ISDIR(os.fstat(fd).st_mode) else "file"
+        events.append(("flush", kind))
+        real_fsync(fd)
+
+    def replace(source: Path, target: Path) -> None:
+        events.append(("swap", Path(target).name))
+        real_replace(source, target)
+
+    monkeypatch.setattr(atomic, "DURABLE", True, raising=False)
+    monkeypatch.setattr(os, "fsync", fsync)
+    monkeypatch.setattr(atomic, "replace", replace)
+    return events
+
+
+def test_a_file_is_on_the_disk_before_it_replaces_the_last_and_the_folder_after(
+    tmp_path, monkeypatch
+):
+    events = watch_the_disk(monkeypatch)
+    atomic.atomic_write_json(tmp_path / "story.json", {"title": "Doomsville"})
+    assert events == [("flush", "file"), ("swap", "story.json"), ("flush", "folder")]
+
+
+def test_the_backup_is_the_last_files_own_bytes_and_needs_no_flush_of_its_own(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "nodes.json"
+    atomic.atomic_write_json(target, [{"turn": 1}], keep_backup=True)
+    events = watch_the_disk(monkeypatch)
+    atomic.atomic_write_json(target, [{"turn": 2}], keep_backup=True)
+    assert events == [
+        ("flush", "file"),
+        ("swap", "nodes.json.bak"),
+        ("swap", "nodes.json"),
+        ("flush", "folder"),
+    ]
+    assert atomic.read_json(tmp_path / "nodes.json.bak") == [{"turn": 1}]
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_where_links_cant_be_made_the_backup_is_a_copy_flushed_too(tmp_path, monkeypatch):
+    target = tmp_path / "nodes.json"
+    atomic.atomic_write_json(target, [{"turn": 1}], keep_backup=True)
+    events = watch_the_disk(monkeypatch)
+
+    def no_links(source, link) -> None:
+        raise OSError("this file system has no links")
+
+    monkeypatch.setattr(os, "link", no_links)
+    atomic.atomic_write_json(target, [{"turn": 2}], keep_backup=True)
+    assert events[:3] == [("flush", "file"), ("flush", "file"), ("swap", "nodes.json.bak")]
+    assert atomic.read_json(tmp_path / "nodes.json.bak") == [{"turn": 1}]
+
+
+def test_on_windows_no_folder_is_opened_to_flush(tmp_path, monkeypatch):
+    events = watch_the_disk(monkeypatch)
+    opened: list[str] = []
+    real_open = os.open
+
+    def watched_open(path, flags, *args):
+        opened.append(str(path))
+        return real_open(path, flags, *args)
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(os, "open", watched_open)
+    atomic.sync_folder(tmp_path)
+    assert opened == [] and events == []

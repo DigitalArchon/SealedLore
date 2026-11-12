@@ -68,26 +68,86 @@ def atomic_write_json(
     key, is written 0600); otherwise the process's umask decides.
     """
     text = json.dumps(data, indent=2, ensure_ascii=False)
+    _write_atomic(path, text.encode("utf-8"), keep_backup=keep_backup, mode=mode)
+
+
+# Whether a write reaches the disk before it is swapped in (`_write_atomic`).
+# Only the tests turn it off, for speed; what it does is tested with it on.
+DURABLE = True
+
+
+def _write_atomic(
+    path: Path, data: bytes, *, keep_backup: bool = False, mode: int | None = None
+) -> None:
+    """`data` swapped in at `path` whole, through a temp file of its own.
+
+    A rename alone isn't enough: on a file system that allocates late (ext4,
+    XFS, F2FS, NTFS) a power cut soon after can leave the renamed file empty,
+    its bytes never written. So the temp file is flushed to the disk before
+    it replaces anything, and the folder after, so that the rename itself is
+    kept and comes before any later file's."""
     with _LOCK:
         path.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp_name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
         tmp_path = Path(tmp_name)
         try:
-            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
-                handle.write(text)
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(data)
+                if DURABLE:
+                    handle.flush()
+                    os.fsync(handle.fileno())
             if mode is not None:
                 os.chmod(tmp_path, mode)
             if keep_backup and path.exists():
-                # Copy rather than move: moving would leave no live file until the
-                # replace below, and a crash in between would read as an empty story.
-                backup_path = path.with_name(path.name + ".bak")
-                backup_tmp = path.with_name(path.name + ".bak.tmp")
-                shutil.copy2(path, backup_tmp)
-                replace(backup_tmp, backup_path)
+                _keep_backup(path)
             replace(tmp_path, path)
         except BaseException:
             tmp_path.unlink(missing_ok=True)
             raise
+        if DURABLE:
+            sync_folder(path.parent)
+
+
+def _keep_backup(path: Path) -> None:
+    """The file as it stands, kept as `<name>.bak` before it is replaced.
+
+    Linked, not moved: moving would leave no live file until the replace,
+    and a crash in between would read as an empty story. A second name for
+    the same bytes also costs no copy, and nothing more to flush: they were
+    flushed when they were written. A copy where links can't be made (FAT,
+    some network shares)."""
+    backup_path = path.with_name(path.name + ".bak")
+    backup_tmp = path.with_name(f"{path.name}.bak.{os.getpid()}.{time.time_ns()}.tmp")
+    try:
+        os.link(path, backup_tmp)
+    except OSError:
+        shutil.copy2(path, backup_tmp)
+        if DURABLE:
+            with open(backup_tmp, "r+b") as handle:
+                os.fsync(handle.fileno())
+    try:
+        replace(backup_tmp, backup_path)
+    except BaseException:
+        backup_tmp.unlink(missing_ok=True)
+        raise
+
+
+def sync_folder(folder: Path) -> None:
+    """A folder's entries (a rename into it) flushed to the disk. POSIX
+    only: Windows can't open a folder for this, and NTFS journals the rename
+    itself."""
+    if sys.platform == "win32":
+        return
+    try:
+        fd = os.open(folder, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass  # a file system that can't (some network ones): nothing more to do
+    finally:
+        os.close(fd)
 
 
 # Windows: a virus scanner or the search indexer holds a file just written
