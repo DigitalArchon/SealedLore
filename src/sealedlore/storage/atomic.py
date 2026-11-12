@@ -301,12 +301,22 @@ def open_private(path: Path, flags: int) -> int:
 
 
 def append_jsonl(path: Path, record: Any) -> None:
-    line = json.dumps(record, ensure_ascii=False) + "\n"
+    """One record on a line of its own. A file whose last line a crash cut
+    short (no newline after it) gets one first: written straight on, the
+    record would join that half line and be lost with it to every reader."""
+    line = (json.dumps(record, ensure_ascii=False) + "\n").encode("utf-8")
     with _LOCK:
         path.parent.mkdir(parents=True, exist_ok=True)
-        fd = open_private(path, os.O_WRONLY | os.O_APPEND)
-        with os.fdopen(fd, "a", encoding="utf-8", newline="\n") as f:
-            f.write(line)
+        fd = open_private(path, os.O_RDWR | os.O_APPEND)
+        with os.fdopen(fd, "r+b", buffering=0) as handle:
+            end = handle.seek(0, os.SEEK_END)
+            if end > 0:
+                handle.seek(end - 1)
+                if handle.read(1) != b"\n":
+                    line = b"\n" + line
+            view = memoryview(line)
+            while view:
+                view = view[handle.write(view) :]
 
 
 def read_jsonl(path: Path) -> list[Any]:

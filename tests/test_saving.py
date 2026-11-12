@@ -447,3 +447,30 @@ def test_holding_the_folder_sweeps_what_a_config_save_left(tmp_path):
     folder_lock.hold(tmp_path).release()
     assert not left.exists()
     assert (tmp_path / "config.json").exists()
+
+
+# --- the API log ----------------------------------------------------------------
+
+
+def test_a_record_after_a_torn_last_line_starts_a_line_of_its_own(tmp_path):
+    from sealedlore.storage.repository import append_api_log, read_api_log, read_api_log_since
+
+    bundle = bundle_of(chain(1))
+    save_story_bundle(bundle, root=tmp_path)
+    log = story_dir(bundle.story.id, tmp_path) / "api_log.jsonl"
+    append_api_log(bundle.story.id, {"id": "one"}, root=tmp_path)
+    with log.open("ab") as handle:
+        handle.write(b'{"id": "torn", "usage": {"pro')  # the crash, mid-record
+    _entries, _start, offset = read_api_log_since(bundle.story.id, 0, root=tmp_path)
+
+    append_api_log(bundle.story.id, {"id": "two"}, root=tmp_path)
+    append_api_log(bundle.story.id, {"id": "three"}, root=tmp_path)
+
+    assert [entry["id"] for entry in read_api_log(bundle.story.id, root=tmp_path)] == [
+        "one",
+        "two",
+        "three",
+    ]
+    since, _start, _end = read_api_log_since(bundle.story.id, offset, root=tmp_path)
+    assert [entry["id"] for entry in since] == ["two", "three"]
+    assert log.read_bytes().count(b"\n\n") == 0  # no blank line where nothing was torn
