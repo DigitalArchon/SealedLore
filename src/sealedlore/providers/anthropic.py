@@ -45,7 +45,7 @@ from sealedlore.providers.base import (
     checked_key,
     parse_usage,
 )
-from sealedlore.providers.streaming import StreamingHttpProvider
+from sealedlore.providers.streaming import StreamingHttpProvider, read_lines
 from sealedlore.providers.wire import cache_marker
 
 API_VERSION = "2023-06-01"
@@ -246,7 +246,7 @@ class AnthropicProvider(StreamingHttpProvider):
                 # Not followed, and never read as an empty reply.
                 raise self._redirected(url, response)
 
-            for line in response.iter_lines():
+            for line in read_lines(response):
                 # "event:" lines name what the data line says itself.
                 if not line.startswith(SSE_DATA_PREFIX):
                     continue
@@ -256,7 +256,7 @@ class AnthropicProvider(StreamingHttpProvider):
                     continue
                 try:
                     event = json.loads(data)
-                except json.JSONDecodeError as exc:
+                except (json.JSONDecodeError, RecursionError) as exc:
                     raise ProviderError(f"malformed stream event: {data[:200]!r}") from exc
                 if not isinstance(event, dict):
                     raise ProviderError(f"malformed stream event: {data[:200]!r}")

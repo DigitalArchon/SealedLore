@@ -34,7 +34,18 @@ from sealedlore.providers.streaming import (
     _retry_delay,
     _seconds,
     _shut_down,
+    read_body,
+    read_start,
 )
+
+# A reply past this is refused, with nothing more read: no picture or video
+# comes near it (a picture is a few megabytes, several sent inline as base64
+# a few tens; a generated video clip tens of megabytes), and a download is
+# held in memory whole before it is stored.
+MEDIA_MAX_BYTES = 256 * 1024 * 1024
+# Headers about the bytes as they came, which no longer describe them once
+# read and decoded.
+_REREAD_HEADERS = frozenset({"content-encoding", "content-length", "transfer-encoding"})
 
 
 class SpendingCapReached(ProviderError):
@@ -180,9 +191,29 @@ class MediaHttp:
                 f"{_where(url)} isn't this endpoint's own address, so the key wasn't sent there"
             )
         try:
-            response = self._get_client().request(
+            with self._get_client().stream(
                 method, url, headers=headers, extensions={"trace": self._trace}, **kwargs
-            )
+            ) as streamed:
+                # Read a piece at a time, and only so far: read whole, a reply
+                # (or a refusal) could be as large as the other end liked.
+                failed = streamed.status_code >= 400
+                try:
+                    content = (
+                        read_start(streamed) if failed else read_body(streamed, MEDIA_MAX_BYTES)
+                    )
+                except ProviderError as exc:
+                    raise ProviderError(f"{_where(url)}: {exc}") from None
+                response = httpx.Response(
+                    streamed.status_code,
+                    # Already decoded: the rebuilt reply mustn't decode it again.
+                    headers=[
+                        (name, value)
+                        for name, value in streamed.headers.multi_items()
+                        if name.lower() not in _REREAD_HEADERS
+                    ],
+                    content=content,
+                    request=streamed.request,
+                )
         except (httpx.HTTPError, OSError) as exc:
             if self._cancelled:
                 raise StreamCancelled() from exc

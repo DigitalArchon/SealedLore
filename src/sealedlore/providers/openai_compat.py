@@ -9,10 +9,8 @@ The HTTP machinery (one client, cancel, retries, siblings) is
 
 from __future__ import annotations
 
-import codecs
 import hashlib
 import json
-import re
 import time
 from collections.abc import Iterator
 from typing import Any
@@ -37,7 +35,7 @@ from sealedlore.providers.private_catalog import (
     private_entries,
 )
 from sealedlore.providers.reasoning_defaults import fetch_reasoning_defaults
-from sealedlore.providers.streaming import StreamingHttpProvider
+from sealedlore.providers.streaming import StreamingHttpProvider, read_lines
 from sealedlore.providers.tee import is_private_mode
 from sealedlore.providers.wire import build_chat_payload, cache_headers
 
@@ -45,19 +43,8 @@ SSE_DATA_PREFIX = "data:"
 SSE_DONE = "[DONE]"
 
 
-def _lines(response: httpx.Response, body: Any) -> Iterator[str]:
-    """The stream's lines, as `iter_lines` gives them, each byte also fed to
-    `body` (a hash) as it arrives, decoded of any transfer encoding."""
-    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
-    pending = ""
-    for chunk in response.iter_bytes():
-        body.update(chunk)
-        pending += decoder.decode(chunk)
-        *complete, pending = re.split(r"\r\n|\r|\n", pending)
-        yield from complete
-    pending += decoder.decode(b"", final=True)
-    if pending:
-        yield pending
+def _malformed(data: str) -> ProviderError:
+    return ProviderError(f"malformed stream chunk: {data[:200]!r}")
 
 
 def with_reported_cost(usage: dict[str, Any], pricing: dict[str, Any]) -> dict[str, Any]:
@@ -183,7 +170,7 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
             )
             tee_route = response.headers.get("x-tee-verification-route")
 
-            for line in _lines(response, body):
+            for line in read_lines(response, body):
                 if saw_done or not line or not line.startswith(SSE_DATA_PREFIX):
                     continue
                 saw_data = True
@@ -196,10 +183,10 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
 
                 try:
                     chunk = json.loads(data)
-                except json.JSONDecodeError as exc:
-                    raise ProviderError(f"malformed stream chunk: {data[:200]!r}") from exc
+                except (json.JSONDecodeError, RecursionError) as exc:
+                    raise _malformed(data) from exc
                 if not isinstance(chunk, dict):
-                    raise ProviderError(f"malformed stream chunk: {data[:200]!r}")
+                    raise _malformed(data)
 
                 error = chunk.get("error")
                 if error:
@@ -215,10 +202,18 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
                 if isinstance(chunk.get("x_nanogpt_pricing"), dict):
                     pricing = chunk["x_nanogpt_pricing"]
 
-                for choice in chunk.get("choices") or []:
+                # Each part is held to the shape it must have: anything else is
+                # the endpoint's malformed chunk, said as one, never a TypeError
+                # from somewhere down the line.
+                choices = chunk.get("choices") or []
+                if not isinstance(choices, list):
+                    raise _malformed(data)
+                for choice in choices:
                     if not isinstance(choice, dict):
                         continue
                     if choice.get("finish_reason"):
+                        if not isinstance(choice["finish_reason"], str):
+                            raise _malformed(data)
                         finish_reason = choice["finish_reason"]
                     delta = choice.get("delta")
                     if not isinstance(delta, dict):
@@ -226,6 +221,8 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
 
                     reasoning = delta.get("reasoning") or delta.get("reasoning_content")
                     if reasoning:
+                        if not isinstance(reasoning, str):
+                            raise _malformed(data)
                         reasoning_chars += len(reasoning)
                         yield ReasoningDelta(text=reasoning)
 
@@ -237,6 +234,8 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
                         for block in content:
                             text = block.get("text") if isinstance(block, dict) else None
                             if text:
+                                if not isinstance(text, str):
+                                    raise _malformed(data)
                                 yield TextDelta(text=text)
 
         if self._cancelled:

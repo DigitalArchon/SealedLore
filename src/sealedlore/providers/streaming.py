@@ -10,6 +10,8 @@ the wait before a retry on a rate limit or a momentary outage.
 
 from __future__ import annotations
 
+import codecs
+import re
 import socket
 import sys
 import threading
@@ -39,6 +41,86 @@ RETRY_ATTEMPTS = 3
 RETRY_STATUS = frozenset({429, 502, 503, 529})
 RETRY_DEFAULT_SECONDS = 5.0
 RETRY_MAX_SECONDS = 20.0
+# Read from an endpoint no further than this. A stream's line (one event) is
+# a few kilobytes, a picture sent inline a few megabytes: a longer one is no
+# reply, and reading on would hold memory for as long as the endpoint sent.
+MAX_LINE_CHARS = 32 * 1024 * 1024
+# A refusal's body, as far as it is read: any endpoint's own words fit.
+ERROR_BODY_BYTES = 64 * 1024
+_NEWLINE = re.compile(r"\r\n|\r|\n")
+
+
+def read_lines(response: httpx.Response, body: Any = None) -> Iterator[str]:
+    """The stream's lines as `iter_lines` gives them (split at CRLF, CR or
+    LF), each byte also fed to `body` (a hash) as it arrives, decoded of any
+    transfer encoding. Each piece is split once, so a long line costs its
+    length and no more, and a line past MAX_LINE_CHARS is a ProviderError."""
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    line: list[str] = []  # the line not yet ended, in the pieces it came in
+    length = 0
+    held_cr = False  # a CR at a piece's end may be the first half of a CRLF
+
+    def ended(text: str, final: bool) -> Iterator[str]:
+        nonlocal length, held_cr
+        if held_cr:
+            text = "\r" + text
+        held_cr = not final and text.endswith("\r")
+        if held_cr:
+            text = text[:-1]
+        parts = _NEWLINE.split(text)
+        for index, part in enumerate(parts):
+            length += len(part)
+            if length > MAX_LINE_CHARS:
+                raise ProviderError(
+                    f"the endpoint sent a line of more than {MAX_LINE_CHARS // (1024 * 1024)} MB "
+                    "with no end; not read"
+                )
+            line.append(part)
+            if index < len(parts) - 1:
+                yield "".join(line)
+                line.clear()
+                length = 0
+
+    for chunk in response.iter_bytes():
+        if body is not None:
+            body.update(chunk)
+        yield from ended(decoder.decode(chunk), final=False)
+    yield from ended(decoder.decode(b"", final=True), final=True)
+    if line and length:
+        yield "".join(line)
+
+
+def read_body(response: httpx.Response, most: int) -> bytes:
+    """A response's body (decoded of any transfer encoding) to `most` bytes,
+    a piece at a time; past that, a ProviderError, with nothing more read."""
+    declared = response.headers.get("content-length", "")
+    if declared.isascii() and declared.isdigit() and len(declared) < 19 and int(declared) > most:
+        raise ProviderError(_too_large(most))
+    kept = bytearray()
+    for piece in response.iter_bytes():
+        kept += piece
+        if len(kept) > most:
+            raise ProviderError(_too_large(most))
+    return bytes(kept)
+
+
+def read_start(response: httpx.Response, most: int = ERROR_BODY_BYTES) -> bytes:
+    """The start of a response's body, `most` bytes at most: all of a
+    refusal that is ever read. Read whole, a refusal could be as large as
+    the endpoint liked."""
+    kept = bytearray()
+    try:
+        for piece in response.iter_bytes():
+            kept += piece[: most - len(kept)]
+            if len(kept) >= most:
+                break
+    except httpx.HTTPError:
+        pass  # the words as far as they came
+    return bytes(kept)
+
+
+def _too_large(most: int) -> str:
+    return f"the endpoint sent more than {most // (1024 * 1024)} MB; not read"
 
 
 def _shut_down(sock: socket.socket | None) -> None:
@@ -183,9 +265,9 @@ class StreamingHttpProvider(ChatProvider):
 
     def _http_error(self, url: str, response: httpx.Response) -> ProviderError:
         """A response that refused the request, as the error to raise: its
-        status, its body (the endpoint's own words) and how long it asked
-        us to wait."""
-        body = response.read().decode("utf-8", errors="replace")
+        status, its body (the endpoint's own words, as far as ERROR_BODY_BYTES)
+        and how long it asked us to wait."""
+        body = read_start(response).decode("utf-8", errors="replace")
         error = ProviderError(
             f"{url} returned HTTP {response.status_code}",
             status_code=response.status_code,
