@@ -191,16 +191,37 @@ def test_a_connection_a_paired_phone_used_is_never_dropped_for_room(server, monk
     assert not phone.closed() and not stream.closed()
 
 
-def test_a_paired_phone_slow_to_take_a_big_answer_keeps_its_connection(server, short_deadlines):
-    big = b"\xff\xd8" + b"x" * (8 * 1024 * 1024)
-    server.api.backend.picture = lambda image_id, thumb: (big, "image/jpeg")
+BIG = b"\xff\xd8" + b"x" * (8 * 1024 * 1024)
+
+
+def asks_for_a_big_picture(server) -> Client:
+    server.api.backend.picture = lambda image_id, thumb: (BIG, "image/jpeg")
     client = Client(server)
     client.socket.setReadBufferSize(64 * 1024)  # a slow reader: the rest waits on the server
     client.send(
         f"GET /api/pictures/img1 HTTP/1.1\r\nHost: {ONION}\r\n"
         f"Authorization: Bearer {TOKEN}\r\n\r\n".encode()
     )
-    wait_for(lambda: False, timeout=1.0)  # past the deadlines, nothing read
+    return client
+
+
+def test_a_paired_phone_slow_to_take_a_big_answer_keeps_its_connection(server, short_deadlines):
+    client = asks_for_a_big_picture(server)
+    until = time.monotonic() + 1.5  # several deadlines, a little read now and then
+    while time.monotonic() < until:
+        client.received.extend(bytes(client.socket.read(4 * 1024).data()))
+        wait_for(lambda: False, timeout=0.1)
     assert client.socket.state() == CONNECTED
-    assert wait_for(lambda: len(client.read()) > len(big), timeout=10)
-    assert client.read().endswith(big)
+    assert wait_for(lambda: len(client.read()) > len(BIG), timeout=10)
+    assert client.read().endswith(BIG)
+
+
+def test_a_strangers_answer_left_unread_doesnt_keep_its_connection(server, short_deadlines):
+    """A closing connection waited for its answer to be read, however long
+    that took: one never read held its slot."""
+    server.api._static["/big.js"] = (BIG, "application/javascript")
+    client = Client(server)
+    client.socket.setReadBufferSize(64 * 1024)
+    client.send(f"GET /big.js HTTP/1.1\r\nHost: {ONION}\r\nConnection: close\r\n\r\n".encode())
+    assert wait_for(lambda: server.connection_count() == 1)
+    assert wait_for(lambda: server.connection_count() == 0, timeout=3), "held by an unread answer"

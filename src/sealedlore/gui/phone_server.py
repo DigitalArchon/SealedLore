@@ -152,8 +152,12 @@ class _Connection(QObject):
         except RuntimeError:  # Qt deleted the socket with its server
             unsent = 0
         if self.trusted and unsent:
-            # A paired phone still taking a picture over a slow circuit is
-            # given longer while some of its answer is still to go.
+            # A paired phone still taking a picture over a slow circuit keeps
+            # its connection while some of its answer is still to go, until
+            # tor closes the stream. It isn't held to showing progress by each
+            # deadline: the socket takes more only once the other end has
+            # drained most of what it holds, which on a slow circuit can take
+            # longer than one.
             self._deadline.start(IDLE_MS)
             return
         self.drop()
