@@ -59,7 +59,7 @@ from sealedlore.models.config import split_model
 from sealedlore.models.node import NARRATOR_SPEAKER_ID, Node, NodeMeta, Usage
 from sealedlore.models.private import PrivateKeep, PrivateSpan, TeeUpstream
 from sealedlore.models.summary import Summary
-from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError
+from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError, why_not_whole
 from sealedlore.providers.tee import is_private_mode
 
 # Fewer than this many recent messages left in a private prompt, and the
@@ -638,13 +638,14 @@ class PrivateRuntime:
         text = text.strip()
         from sealedlore.engine.session import SessionNotice
 
-        if not text or completed.finish_reason == "length":
+        unfit = why_not_whole(completed)
+        if not text or unfit is not None:
             # Kept under the scene's own latest message (`_kept_notice`): a
             # memory scene's never reaches the disk.
             yield self._kept_notice(
                 "The private scene outgrew the private model's context, but its summary of "
                 "the oldest messages came back "
-                + ("cut off by its token limit" if text else "empty")
+                + (f"not whole ({unfit})" if text else "empty")
                 + ", so it wasn't kept: those messages fall out of this turn's window."
             )
             return False
@@ -907,11 +908,12 @@ class PrivateRuntime:
         text = text.strip()
         if not text:
             raise ProviderError("the private model returned an empty summary")
-        if completed.finish_reason == "length":
+        unfit = why_not_whole(completed)
+        if unfit is not None:
             # As on every summary path: half a summary never passes as whole.
             raise ProviderError(
-                "the private model's summary was cut off by its token limit; end the "
-                "scene again to ask for another"
+                f"the private model's summary wasn't whole: {unfit}; end the scene again to "
+                "ask for another"
             )
         if completed.sealed:
             span.summary_tee = "encrypted"

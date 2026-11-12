@@ -37,7 +37,7 @@ from sealedlore.engine.cast_fit import CastFit, fit_cast
 from sealedlore.engine.characters import needs_condensing
 from sealedlore.engine.session_merge import _close
 from sealedlore.models.character import Character
-from sealedlore.providers.base import ChatRequest
+from sealedlore.providers.base import ChatRequest, why_not_whole
 from sealedlore.threads import BackgroundThread
 
 
@@ -225,12 +225,13 @@ class CastRuntime:
             text, completed = item.reply
             character = by_id.get(item.character_id)
             dropped = None
+            unfit = why_not_whole(completed)
             if character is None:
                 dropped = "not adopted: the character is gone"
             elif fingerprint(character) != item.fingerprint:
                 dropped = "not adopted: the card changed while it was written"
-            elif completed.finish_reason == "length":
-                dropped = "not adopted: cut off"
+            elif unfit is not None:
+                dropped = f"not adopted: {unfit}"
             self._log(
                 "condense_response",
                 {
@@ -241,10 +242,12 @@ class CastRuntime:
                 },
             )
             self.unreported_usage.append(self.priced(completed.usage, item.request.model))
-            if dropped == "not adopted: cut off":
+            if unfit is not None and dropped == f"not adopted: {unfit}":
                 failed[item.character_id] = (
                     item.fingerprint,
-                    "the model ran out of room before it finished the card",
+                    "the model ran out of room before it finished the card"
+                    if completed.finish_reason == "length"
+                    else f"the condensed card wasn't whole: {unfit}",
                 )
                 problems.append(item.name)
                 continue
@@ -297,6 +300,9 @@ class CastRuntime:
         self.unreported_usage.append(self.priced(completed.usage, request.model))
         if completed.finish_reason == "length":
             raise ValueError("the model ran out of room before it finished the card")
+        unfit = why_not_whole(completed)
+        if unfit is not None:
+            raise ValueError(f"the condensed card wasn't whole: {unfit}")
         condensed = parse_condensed(text, character)
         character.condensed = condensed
         character.condensed_from = fingerprint(character)

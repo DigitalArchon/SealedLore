@@ -29,11 +29,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from sealedlore.engine.archival import (
-    SUMMARY_CUT_OFF,
     build_summary_messages,
     characters_in,
     plan_chunk,
     render_chunk,
+    summary_unfit,
     turns_in,
 )
 from sealedlore.engine.characters import build_extraction_messages, known_names, parse_suggestions
@@ -43,7 +43,7 @@ from sealedlore.engine.session_merge import _close
 from sealedlore.engine.session_plot import SessionNotice
 from sealedlore.models.node import NARRATOR_SPEAKER_ID, Node
 from sealedlore.models.summary import Summary
-from sealedlore.providers.base import ChatRequest, ProviderError, StreamCancelled
+from sealedlore.providers.base import ChatRequest, ProviderError, StreamCancelled, why_not_whole
 from sealedlore.threads import BackgroundThread
 
 # Start preparing once the next prompt would be this share of the budget: a
@@ -291,8 +291,9 @@ class ArchivalRuntime:
                     if chapter.summary.reply is None or not chapter.summary.reply[0].strip():
                         job.error = chapter.summary.error or "the summariser returned no text"
                         break
-                    if chapter.summary.reply[1].finish_reason == "length":
-                        job.error = SUMMARY_CUT_OFF
+                    unfit = summary_unfit(chapter.summary.reply[1])
+                    if unfit is not None:
+                        job.error = unfit
                         break
                     summary_text = chapter.summary.reply[0].strip()
                     if chapter.ledger is not None:
@@ -573,5 +574,7 @@ def _accepted(call: _Call, previous: str | None) -> tuple[str | None, str | None
     if call.reply is None:
         return previous, call.error or "no reply"
     text, completed = call.reply
-    problem = check_ledger(text, previous, finish_reason=completed.finish_reason)
+    problem = check_ledger(
+        text, previous, finish_reason=completed.finish_reason, unfit=why_not_whole(completed)
+    )
     return (previous, problem) if problem else (normalised(text), None)

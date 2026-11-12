@@ -73,15 +73,21 @@ def _lines(text: str) -> list[str]:
     return [line for line in text.splitlines() if line.strip().startswith("- ")]
 
 
-def check_ledger(text: str, previous: str | None, *, finish_reason: str | None) -> str | None:
+def check_ledger(
+    text: str, previous: str | None, *, finish_reason: str | None, unfit: str | None = None
+) -> str | None:
     """Why `text` can't be the new ledger, or None if it can.
 
     Only the shape is judged here — every heading, bullet lines, a sane
     length, and not most of the previous ledger gone at once. What the lines
-    say is the model's to judge.
+    say is the model's to judge. `unfit` is why the reply itself wasn't
+    whole (providers/base.py `why_not_whole`): a stream a gateway closed
+    partway could otherwise pass every check with half its lines.
     """
     if finish_reason == "length":
         return "the reply was cut off"
+    if unfit:
+        return f"the reply wasn't whole ({unfit})"
     headings = [m.group(1).strip() for m in re.finditer(r"(?m)^##\s+(.+)$", text)]
     missing = [h for h in HEADINGS if not any(h.lower() == found.lower() for found in headings)]
     if missing:

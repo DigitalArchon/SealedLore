@@ -119,6 +119,23 @@ def test_chapters_are_written_after_the_passage_and_adopted_when_due(session: St
     assert "ledger_response" in [e["kind"] for e in log]
 
 
+def test_a_chapter_whose_stream_ended_unfinished_is_not_kept(session: StorySession):
+    """A gateway closing the connection partway read as a clean end, and the
+    half a chapter that came was kept as the chapter."""
+    from dataclasses import replace
+
+    class Unfinished(Background):
+        def complete(self, request):
+            text, completed = super().complete(request)
+            return text, replace(completed, finish_reason=None, unterminated=True)
+
+    session.provider.background = Unfinished()
+    list(session.send(turn()))
+    job = session._archive_job
+    assert job is not None and job.done.wait(5)
+    assert "wasn't whole" in (job.error or "") and not job.ready
+
+
 def test_an_edited_node_voids_the_chapter_written_from_it(session: StorySession):
     list(session.send(turn()))
     assert session._archive_job.done.wait(5)

@@ -25,9 +25,9 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from sealedlore.engine.archival import (
-    SUMMARY_CUT_OFF,
     build_merge_messages,
     build_summary_messages,
+    summary_unfit,
 )
 from sealedlore.engine.session_archival import _fingerprint
 from sealedlore.engine.session_merge import _close
@@ -219,7 +219,7 @@ class RebuildRuntime:
                         item.error = str(exc) or type(exc).__name__
                         continue
                     text, completed = item.reply
-                    if text.strip() and completed.finish_reason != "length":
+                    if text.strip() and summary_unfit(completed) is None:
                         written[item.summary_id] = text.strip()
             finally:
                 job.done.set()
@@ -268,9 +268,10 @@ class RebuildRuntime:
             )
             text = text.strip()
             summary = by_id.get(item.summary_id)
-            if not text or completed.finish_reason == "length":
+            unfit = summary_unfit(completed)
+            if not text or unfit is not None:
                 self.unreported_usage.append(usage)
-                failed.append(SUMMARY_CUT_OFF if text else "the summariser returned no text")
+                failed.append(unfit if text and unfit else "the summariser returned no text")
                 continue
             if summary is not None and not any(s is summary for s in self.bundle.summaries):
                 # A part dropped by the rebuild of one of its own chapters.

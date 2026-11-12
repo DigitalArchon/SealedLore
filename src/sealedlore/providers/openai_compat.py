@@ -256,6 +256,9 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
             tee_route=tee_route,
             sealed=self.sealed_replies,
             reasoning_tokens=max(_reasoning_tokens(usage_raw), reasoning_chars // 4),
+            # Neither said: the connection closed partway (a gateway's
+            # timeout reads as a clean end). Either is enough for a whole one.
+            unterminated=not (finish_reason or saw_done),
         )
         self._report_route(request, completed)
         self._report_reasoning(request, completed)

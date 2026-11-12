@@ -230,6 +230,7 @@ class AnthropicProvider(StreamingHttpProvider):
         response_id: str | None = None
         reasoning_chars = 0
         saw_data = False
+        saw_stop = False
 
         with self._get_client().stream(
             "POST",
@@ -295,6 +296,7 @@ class AnthropicProvider(StreamingHttpProvider):
                     if isinstance(event.get("usage"), dict):
                         usage_raw.update(event["usage"])
                 elif kind == "message_stop":
+                    saw_stop = True
                     break
 
         if self._cancelled:
@@ -309,6 +311,9 @@ class AnthropicProvider(StreamingHttpProvider):
             raw_usage=usage_raw,
             response_id=response_id,
             reasoning_tokens=reasoning_chars // 4,
+            # Neither a stop reason nor message_stop: the connection closed
+            # partway, and what came may be only the start of the reply.
+            unterminated=not (stop_reason or saw_stop),
         )
         self._report_route(request, completed)
         self._report_reasoning(request, completed)

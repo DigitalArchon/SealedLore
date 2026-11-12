@@ -32,6 +32,7 @@ from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.character import Character
 from sealedlore.models.node import Node
 from sealedlore.models.summary import Summary
+from sealedlore.providers.base import StreamCompleted, why_not_whole
 
 # §5.2: the oldest ten *exchanges* — an author turn and the passage answering
 # it — go into one chapter summary.
@@ -341,6 +342,20 @@ SUMMARY_CUT_OFF = (
     "the summariser's reply was cut off by its token limit, so the chapter was not kept; "
     "the prose stays as written"
 )
+
+
+def summary_unfit(completed: StreamCompleted) -> str | None:
+    """Why a summariser's reply can't stand as a whole chapter (or part, or
+    a private scene's summary), or None. Its limit was the only case once; a
+    stream a gateway closed partway read as whole, and was saved as one."""
+    if completed.finish_reason == "length":
+        return SUMMARY_CUT_OFF
+    reason = why_not_whole(completed)
+    if reason is None:
+        return None
+    return f"the summariser's reply wasn't whole ({reason}), so it was not kept; " + (
+        "the prose stays as written"
+    )
 
 
 def chapter_numbers(path_summaries: Sequence[Summary]) -> dict[str, int]:

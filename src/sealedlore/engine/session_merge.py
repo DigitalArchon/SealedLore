@@ -20,11 +20,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from sealedlore.engine.archival import (
-    SUMMARY_CUT_OFF,
     build_merge_messages,
     plan_merge,
     source_chapters,
     summaries_tokens,
+    summary_unfit,
 )
 from sealedlore.models.summary import Summary
 from sealedlore.providers.base import ChatRequest, ProviderError
@@ -162,13 +162,16 @@ class MergeRuntime:
         text = text.strip()
         by_id = {summary.id: summary for summary in self.bundle.summaries}
         run = [by_id.get(summary_id) for summary_id in job.run_ids]
+        unfit = summary_unfit(completed)
         if not text:
             self.merge_problem = "the summariser returned no text"
         elif completed.finish_reason == "length":
             self.merge_problem = "the summariser's reply was cut off by its token limit"
+        elif unfit is not None:
+            self.merge_problem = unfit
         if (
             not text
-            or completed.finish_reason == "length"
+            or unfit is not None
             or any(summary is None for summary in run)
             or [summary.content for summary in run if summary] != job.contents
             or any(summary.stale or summary.keep_as_written for summary in run if summary)
@@ -236,8 +239,9 @@ class MergeRuntime:
         )
         if not text.strip():
             raise ProviderError("the summariser returned no text")
-        if completed.finish_reason == "length":
-            raise ProviderError(SUMMARY_CUT_OFF)
+        unfit = summary_unfit(completed)
+        if unfit is not None:
+            raise ProviderError(unfit)
         part.content = text.strip()
         part.model = job.model
         part.usage = self.priced(completed.usage, job.model)

@@ -19,7 +19,6 @@ from pathlib import Path
 from typing import Any
 
 from sealedlore.engine.archival import (
-    SUMMARY_CUT_OFF,
     PathSplit,
     build_summary_messages,
     chapter_number,
@@ -29,6 +28,7 @@ from sealedlore.engine.archival import (
     plan_chunk,
     render_chunk,
     split_path,
+    summary_unfit,
     swap_covered,
     turns_in,
 )
@@ -210,6 +210,7 @@ from sealedlore.providers.base import (
     StreamEvent,
     TextDelta,
     parse_usage,
+    why_not_whole,
 )
 from sealedlore.providers.decisions import DecisionsClient, build_decisions_payload
 from sealedlore.providers.embeddings import EmbeddingBackend
@@ -381,6 +382,15 @@ def _as(suggestion: CharacterSuggestion) -> Character:
 
 
 CUT_OFF = "The passage was cut off at the length limit"
+# A stream that ended with neither a finish reason nor its end marker: a
+# gateway closing the connection partway reads as a clean end of stream.
+UNFINISHED = "The passage may be cut off"
+UNFINISHED_NOTICE = (
+    f"{UNFINISHED}: the connection ended before the model said it was done. Continue "
+    "carries it on from there; Regenerate writes it again."
+)
+# The notes about how a passage ended, which a continuation takes away.
+ENDING_NOTES = (CUT_OFF, UNFINISHED)
 
 
 def cut_off_notice(max_tokens: int | None, completed: StreamCompleted) -> str:
@@ -2280,6 +2290,10 @@ class StorySession(
             yield self._kept_notice(
                 cut_off_notice(request.params.max_tokens, completed), node=written
             )
+        elif completed is not None and completed.unterminated and written is not None:
+            # Kept, as a passage stopped partway is, but never passed off
+            # as whole: the text is all that came, and may be only a start.
+            yield self._kept_notice(UNFINISHED_NOTICE, node=written)
         for note in self.reasoning_notices(written):
             yield SessionNotice(note)
 
@@ -2350,6 +2364,7 @@ class StorySession(
                 "finish_reason": completed.finish_reason if completed else None,
                 "usage": completed.raw_usage if completed else {},
                 "stopped_early": completed is None,
+                **({"unterminated": True} if completed and completed.unterminated else {}),
                 **({"continues": extend.id} if extend is not None else {}),
             },
             span,
@@ -2390,7 +2405,7 @@ class StorySession(
             )
         node.meta.usage = added_usage(node.meta.usage, usage)
         node.meta.model = model
-        node.meta.notes = [note for note in node.meta.notes if not note.startswith(CUT_OFF)]
+        node.meta.notes = [note for note in node.meta.notes if not note.startswith(ENDING_NOTES)]
         node.edited_at = utc_now_iso()
         # What was found in the old text may no longer stand as it was.
         self.prune_shortcuts(node)
@@ -2639,8 +2654,9 @@ class StorySession(
         )
         if not text:
             raise ProviderError("the summariser returned no text")
-        if completed.finish_reason == "length":
-            raise ProviderError(SUMMARY_CUT_OFF)
+        unfit = summary_unfit(completed)
+        if unfit is not None:
+            raise ProviderError(unfit)
 
         summary = Summary(
             covered_node_ids=[node.id for node in chunk],
@@ -2714,7 +2730,12 @@ class StorySession(
             {"request_log_ref": log_ref, "text": text, "usage": completed.raw_usage},
         )
         self.unreported_usage.append(self.priced(completed.usage, job.request.model))
-        problem = check_ledger(text, job.previous, finish_reason=completed.finish_reason)
+        problem = check_ledger(
+            text,
+            job.previous,
+            finish_reason=completed.finish_reason,
+            unfit=why_not_whole(completed),
+        )
         if problem is not None:
             self._log("ledger_refused", {"request_log_ref": log_ref, "reason": problem})
             self.ledger_problem = problem
@@ -2773,8 +2794,9 @@ class StorySession(
         )
         if not text:
             raise ProviderError("the summariser returned no text")
-        if completed.finish_reason == "length":
-            raise ProviderError(SUMMARY_CUT_OFF)
+        unfit = summary_unfit(completed)
+        if unfit is not None:
+            raise ProviderError(unfit)
 
         summary.content = text
         summary.model = self.summarization_model

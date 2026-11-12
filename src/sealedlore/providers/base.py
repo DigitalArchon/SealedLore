@@ -62,9 +62,26 @@ class StreamCompleted:
     # reasoning text at ~4 characters a token, whichever is larger. The count
     # alone lies: Sonnet 4.6 streamed its thinking while NanoGPT reported 0.
     reasoning_tokens: int = 0
+    # The stream ended with neither a finish reason nor its end marker
+    # ([DONE], message_stop): a gateway closing the connection partway reads
+    # as a clean end, so whatever came may be only the start of the reply.
+    # Either marker counts, so a local server that sends one is whole.
+    unterminated: bool = False
 
 
 StreamEvent = TextDelta | ReasoningDelta | StreamCompleted
+
+
+def why_not_whole(completed: StreamCompleted) -> str | None:
+    """Why a reply that came back can't be taken for a whole one, or None.
+    A summary, a ledger or a condensed card is refused for any of these, as
+    it always was for running into its limit: half a chapter must never
+    stand in for the prose."""
+    if completed.finish_reason == "length":
+        return "it was cut off at its token limit"
+    if completed.unterminated:
+        return "the stream ended before the model said it was done"
+    return None
 
 
 class ProviderError(RuntimeError):
