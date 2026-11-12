@@ -197,3 +197,86 @@ def test_on_windows_no_folder_is_opened_to_flush(tmp_path, monkeypatch):
     monkeypatch.setattr(os, "open", watched_open)
     atomic.sync_folder(tmp_path)
     assert opened == [] and events == []
+
+
+# --- only what changed is written ---------------------------------------------
+
+
+def watch_swaps(monkeypatch) -> list[str]:
+    swapped: list[str] = []
+    real_replace = atomic.replace
+
+    def replace(source: Path, target: Path) -> None:
+        swapped.append(Path(target).name)
+        real_replace(source, target)
+
+    monkeypatch.setattr(atomic, "replace", replace)
+    return swapped
+
+
+def test_a_turns_save_writes_only_the_files_it_changed(tmp_path, monkeypatch):
+    nodes = chain(4)
+    bundle = bundle_of(nodes)
+    save_story_bundle(bundle, root=tmp_path)
+    swapped = watch_swaps(monkeypatch)
+    link_child(nodes[-1], extra := chain(5)[4])
+    bundle.nodes.append(extra)
+    bundle.story.active_leaf_id = extra.id
+
+    save_story_bundle(bundle, root=tmp_path)
+
+    assert sorted(swapped) == ["nodes.json", "nodes.json.bak", "story.json"]
+
+
+def test_saving_what_is_on_disk_writes_nothing_and_the_backup_stays_a_version_behind(
+    tmp_path, monkeypatch
+):
+    nodes = chain(4)
+    bundle = bundle_of(nodes)
+    save_story_bundle(bundle, root=tmp_path)
+    link_child(nodes[-1], extra := chain(5)[4])
+    bundle.nodes.append(extra)
+    save_story_bundle(bundle, root=tmp_path)
+    swapped = watch_swaps(monkeypatch)
+
+    save_story_bundle(bundle, root=tmp_path)
+    save_story_bundle(load_story_bundle(bundle.story.id, root=tmp_path), root=tmp_path)
+
+    assert swapped == []
+    directory = story_dir(bundle.story.id, tmp_path)
+    assert len(atomic.read_json(directory / "nodes.json.bak")) == 4
+    assert len(atomic.read_json(directory / "nodes.json")) == 5
+
+
+def test_a_file_changed_since_it_was_written_is_written_again(tmp_path, monkeypatch):
+    target = tmp_path / "story.json"
+    atomic.atomic_write_json(target, {"title": "Doomsville"})
+    swapped = watch_swaps(monkeypatch)
+
+    target.write_text('{"title": "Hellsville, by hand"}', encoding="utf-8")
+    atomic.atomic_write_json(target, {"title": "Doomsville"})
+    other = tmp_path / "other.json"
+    other.write_text('{\n  "title": "Doomsvilla"\n}', encoding="utf-8")  # the same size
+    os.replace(other, target)
+    atomic.atomic_write_json(target, {"title": "Doomsville"})
+    target.unlink()
+    atomic.atomic_write_json(target, {"title": "Doomsville"})
+
+    assert swapped == ["story.json"] * 3
+    assert atomic.read_json(target) == {"title": "Doomsville"}
+
+
+def test_a_config_saved_again_unchanged_is_left_alone_and_keeps_its_mode(tmp_path, monkeypatch):
+    from sealedlore.models.config import Config
+    from sealedlore.storage.repository import CONFIG_FILE_MODE, config_file, save_config
+
+    config = Config()
+    save_config(config, root=tmp_path)
+    swapped = watch_swaps(monkeypatch)
+    save_config(config, root=tmp_path)
+    assert swapped == []
+    if sys.platform != "win32":
+        os.chmod(config_file(tmp_path), 0o644)  # its mode is part of the save
+        save_config(config, root=tmp_path)
+        assert swapped == ["config.json"]
+        assert stat.S_IMODE(os.stat(config_file(tmp_path)).st_mode) == CONFIG_FILE_MODE

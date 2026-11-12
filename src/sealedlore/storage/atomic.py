@@ -14,9 +14,11 @@ on one line.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
+import stat
 import sys
 import tempfile
 import threading
@@ -54,9 +56,50 @@ def nests_deeper(data: Any, limit: int = MAX_NESTING) -> bool:
 
 
 def read_json(path: Path, default: Any = None) -> Any:
-    if not path.exists():
+    try:
+        with open(path, "rb") as handle:
+            data = handle.read()
+            _remember(path, data, os.fstat(handle.fileno()))
+    except (FileNotFoundError, NotADirectoryError):
         return default
-    return json.loads(path.read_text(encoding="utf-8"))
+    return json.loads(data.decode("utf-8"))
+
+
+# What this process last wrote to each file, or read from it: a hash of its
+# bytes, and the file as it stood then (`_standing`). A save of the same bytes
+# to a file still standing as it was is skipped (`_write_atomic`): a story's
+# save rewrites every file it has, and a turn changes one or two, and the
+# config is saved after nearly everything the window does. Anything that has
+# touched the file since (another program, a hand edit, a copy over it)
+# changes how it stands, and the bytes are written again.
+_KNOWN: dict[str, tuple[bytes, tuple[int, ...]]] = {}
+
+
+def _standing(info: os.stat_result) -> tuple[int, ...]:
+    """A file as it stands: which file it is, its size and when it last
+    changed. (Windows' st_ctime is when it was made, so it is left out there.)"""
+    standing = (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
+    return standing if sys.platform == "win32" else (*standing, info.st_ctime_ns)
+
+
+def _remember(path: Path, data: bytes, info: os.stat_result) -> None:
+    # Unlocked: a reader's own handle says how the file it read stood, so a
+    # write swapping another file in meanwhile leaves this entry naming a
+    # file no longer there, which only costs that save a write.
+    _KNOWN[os.path.abspath(path)] = (hashlib.sha256(data).digest(), _standing(info))
+
+
+def _unchanged(path: Path, digest: bytes, mode: int | None) -> bool:
+    known = _KNOWN.get(os.path.abspath(path))
+    if known is None or known[0] != digest:
+        return False
+    try:
+        info = os.stat(path)
+    except OSError:
+        return False
+    if mode is not None and sys.platform != "win32" and stat.S_IMODE(info.st_mode) != mode:
+        return False  # the file's mode is part of what is asked for
+    return known[1] == _standing(info)
 
 
 def atomic_write_json(
@@ -85,8 +128,15 @@ def _write_atomic(
     XFS, F2FS, NTFS) a power cut soon after can leave the renamed file empty,
     its bytes never written. So the temp file is flushed to the disk before
     it replaces anything, and the folder after, so that the rename itself is
-    kept and comes before any later file's."""
+    kept and comes before any later file's.
+
+    The same bytes as the file already holds are not written again
+    (`_unchanged`), nor its backup moved on: the backup stays the version
+    before the last change."""
+    digest = hashlib.sha256(data).digest()
     with _LOCK:
+        if _unchanged(path, digest, mode):
+            return
         path.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp_name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
         tmp_path = Path(tmp_name)
@@ -103,9 +153,14 @@ def _write_atomic(
             replace(tmp_path, path)
         except BaseException:
             tmp_path.unlink(missing_ok=True)
+            _KNOWN.pop(os.path.abspath(path), None)
             raise
         if DURABLE:
             sync_folder(path.parent)
+        try:
+            _KNOWN[os.path.abspath(path)] = (digest, _standing(os.stat(path)))
+        except OSError:
+            _KNOWN.pop(os.path.abspath(path), None)
 
 
 def _keep_backup(path: Path) -> None:
