@@ -391,3 +391,28 @@ def test_a_chat_and_a_private_scene_refuse_a_plot(plain: StoryBundle, tmp_path: 
     session.story.mode = "chat"
     with pytest.raises(ValueError, match="simple chat"):
         session.set_plot_document(document)
+
+
+def test_a_plot_written_for_a_story_starts_at_the_hour_its_scene_names(
+    plain: StoryBundle, tmp_path: Path
+):
+    """A story with no plot has no clock, and a plot given to it began at
+    00:00: live, the director took a mid-morning opening for the small hours
+    and began a night's event in it four turns running."""
+    plain.story.setup.starting_scene.time_of_day = "Mid-morning"
+    document = document_from_story(plain)
+    assert (document.start_day, document.start_time) == (1, "10:00")
+    document.facts.append(FactDoc(name="door", initial="closed", values=["closed", "open"]))
+    document.events.append(EventDoc(title="A knock", kind="optional", trigger="Someone knocks."))
+    session = _session(plain, tmp_path)
+    session.set_plot_document(document)
+    assert session.story.plot.start_minutes == 10 * 60
+
+    # Words that name no hour leave the clock where it was, and a story under
+    # way is not given one from where it began.
+    plain.story.plot = None
+    plain.story.setup.starting_scene.time_of_day = "Stardate 4512"
+    assert document_from_story(plain).start_time == "00:00"
+    plain.story.setup.starting_scene.time_of_day = "Dusk"
+    plain.nodes.extend(make_exchange(1))
+    assert document_from_story(plain).start_time == "00:00"

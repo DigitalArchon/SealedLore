@@ -357,3 +357,37 @@ def test_prose_wrapped_in_the_file_reads_as_markdown_does():
     )
     elowen = next(c for c in parsed.scenario.cast if c.name == "Elowen Thistledown")
     assert "\n" not in elowen.full_description
+
+
+def test_a_file_that_names_no_start_begins_at_its_scene_s_time_of_day():
+    text = """---
+title: A knock
+---
+# World
+A house.
+# Opening
+- time: just after dusk
+- location: The hall
+It begins in the hall.
+# Characters
+## Ann
+- role: player
+A person.
+# Facts
+- door: closed (closed, open)
+# Events
+## Knock
+- trigger: Someone knocks.
+A knock at the door.
+"""
+    parsed = parse_plot_markdown(text)
+    assert not [p for p in parsed.problems if p.error]
+    assert parsed.scenario.plot.start_minutes == 18 * 60 + 30
+    # A start the file names stands, whatever the scene says.
+    named = parse_plot_markdown(
+        text.replace("title: A knock", "title: A knock\nstart: day 2, 07:00")
+    )
+    assert named.scenario.plot.start_minutes == 1440 + 7 * 60
+    # A time that names no hour leaves the clock at 00:00, for the first read to set.
+    vague = parse_plot_markdown(text.replace("just after dusk", "the third week of the siege"))
+    assert vague.scenario.plot.start_minutes == 0

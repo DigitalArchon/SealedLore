@@ -14,6 +14,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Literal, get_args
 
+from sealedlore.engine.chronicle import time_of_day_minutes
 from sealedlore.engine.picture_styles import read_style
 from sealedlore.engine.validators import name_forms
 from sealedlore.models.character import Character
@@ -1181,7 +1182,14 @@ class _Parser:
             *self.events(sections.get("events"), "optional", facts, ids),
         ]
         self.requirement_loops(events)
-        start = self.clock(*front["start"]) if "start" in front else None
+        # A file that names no start begins at the hour its starting scene
+        # names ("time: mid-morning"), when that reads as one: at 00:00 the
+        # director took a morning's first scene for the small hours.
+        start = (
+            self.clock(*front["start"])
+            if "start" in front
+            else time_of_day_minutes(scene.time_of_day)
+        )
         plot = (
             Plot(
                 start_minutes=start or 0,

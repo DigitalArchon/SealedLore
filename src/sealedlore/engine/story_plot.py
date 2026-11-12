@@ -29,6 +29,7 @@ import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 
+from sealedlore.engine.chronicle import time_of_day_minutes
 from sealedlore.engine.picture_styles import write_style
 from sealedlore.engine.plot_file import UNNAMED, render_plot_markdown
 from sealedlore.engine.plot_md import _ALL_FIELDS, _key, _norm, parse_plot_markdown
@@ -361,6 +362,13 @@ def document_from_story(
         seen.add(_norm(entry.title))
         document.lore.append(entry_doc(entry, pictures=whole))
 
+    if plot is None and not bundle.nodes:
+        # A story with no plot yet has no clock: one written for it now (by
+        # the model, or in the editor) starts at the hour its starting scene
+        # names, where that reads as one, not at midnight.
+        minutes = time_of_day_minutes(scene.time_of_day)
+        if minutes is not None:
+            document.start_time = f"{minutes // 60:02d}:{minutes % 60:02d}"
     if plot is not None:
         names = {c.id: c.name for c in (*bundle.cast, *bundle.supporting.characters)}
         titles = {entry.id: entry.title for entry in bundle.lore}

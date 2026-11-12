@@ -569,3 +569,17 @@ def test_what_was_not_taken_is_said_not_kept_and_names_the_plot_only_with_spoile
     else:
         assert "town" not in plot_notice.text
         assert "1 claim about the plot itself" in plot_notice.text
+
+
+def test_a_time_of_day_in_words_is_read_and_nothing_is_guessed():
+    from sealedlore.engine.chronicle import time_of_day_minutes
+
+    assert time_of_day_minutes("Mid-morning") == 10 * 60
+    assert time_of_day_minutes("Early morning, before the watch changes") == 7 * 60
+    assert time_of_day_minutes("an hour after sunset") == 18 * 60 + 30
+    assert time_of_day_minutes("15:30") == 15 * 60 + 30
+    assert time_of_day_minutes("7.45pm") == 19 * 60 + 45
+    assert time_of_day_minutes("12 am") == 0
+    assert time_of_day_minutes("The middle watch") == 2 * 60
+    for nothing in ("", None, "later", "Stardate 4512", "Day 3", "the third week"):
+        assert time_of_day_minutes(nothing) is None

@@ -8,6 +8,7 @@ story with a plot and no snapshot yet is at the plot's start.
 from __future__ import annotations
 
 import random
+import re
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass, field
 
@@ -91,6 +92,52 @@ def format_clock(minutes: int) -> str:
     """ "Day 35 · 22:10"."""
     within = minutes % MINUTES_PER_DAY
     return f"Day {day_of(minutes)} · {within // 60:02d}:{within % 60:02d}"
+
+
+# A time of day in words, as a starting scene has it ("Mid-morning", "just
+# after dusk"), most particular first: "early morning" before "morning".
+_TIMES_OF_DAY: tuple[tuple[str, int], ...] = (
+    (r"midnight", 0),
+    (r"small hours|dead of night|middle of the night|middle watch", 2 * 60),
+    (r"before dawn|pre-?dawn", 5 * 60),
+    (r"dawn|daybreak|sunrise|first light", 6 * 60),
+    (r"early morning", 7 * 60),
+    (r"mid-?morning|late morning", 10 * 60),
+    (r"morning", 9 * 60),
+    (r"noon|midday", 12 * 60),
+    (r"early afternoon", 13 * 60),
+    (r"late afternoon", 17 * 60),
+    (r"mid-?afternoon|afternoon", 15 * 60),
+    (r"dusk|sunset|sundown|twilight|nightfall", 18 * 60 + 30),
+    (r"early evening", 18 * 60),
+    (r"late evening", 21 * 60),
+    (r"evening", 19 * 60),
+    (r"late (?:at )?night", 23 * 60),
+    (r"night", 22 * 60),
+)
+
+
+def time_of_day_minutes(words: str | None) -> int | None:
+    """The minutes past midnight a time of day in words stands for: "15:30",
+    "3 pm", "Mid-morning", "an hour after dusk" (dusk). None when it names
+    none: nothing is guessed from "Stardate 4512" or "later"."""
+    text = " ".join((words or "").lower().replace("’", "'").split())
+    if not text:
+        return None
+    if exact := re.search(r"\b([01]?\d|2[0-3])[:.]([0-5]\d)\s*(a\.?m|p\.?m)?", text):
+        hour, minute, half = int(exact.group(1)), int(exact.group(2)), exact.group(3) or ""
+    elif exact := re.search(r"\b(1[0-2]|0?[1-9])\s*(a\.?m|p\.?m)\b", text):
+        hour, minute, half = int(exact.group(1)), 0, exact.group(2)
+    else:
+        for pattern, minutes in _TIMES_OF_DAY:
+            if re.search(rf"\b(?:{pattern})\b", text):
+                return minutes
+        return None
+    if half.startswith("p") and hour < 12:
+        hour += 12
+    elif half.startswith("a") and hour == 12:
+        hour = 0
+    return hour * 60 + minute
 
 
 def clock_minutes(day: int, hour: int, minute: int) -> int:
