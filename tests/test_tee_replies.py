@@ -294,3 +294,52 @@ def test_a_question_shows_who_ran_its_model_beside_its_mark():
     assert "run by" not in failed.header.text()
     widget.deleteLater()
     failed.deleteLater()
+
+
+# --- a mark from the moment a passage is written -----------------------------------------
+
+
+def stopped_at_its_end(events) -> None:
+    """Stop pressed as the last chunk came: the turn closes before its reply's check."""
+    for event in events:
+        if isinstance(event, StreamCompleted):
+            break
+    events.close()
+
+
+def test_a_tee_chats_reply_stopped_on_its_last_chunk_is_marked_not_verified(tmp_path):
+    from sealedlore.engine.prompt import TurnRequest
+    from sealedlore.models.node import CHAT_USER_ID
+
+    session, _provider, tee = tee_chat(tmp_path, ["A reply."], ["verified"])
+    stopped_at_its_end(session.send(TurnRequest(speaker_id=CHAT_USER_ID, user_text="Hi.")))
+    reply = session.path()[-1]
+    assert reply.content == "A reply." and reply.meta.tee == "unchecked"
+    assert tee.checked == [], "never checked, so never shown as checked"
+    say(session, "Again.")
+    assert session.path()[-1].meta.tee == "verified", "a checked reply is raised"
+
+
+def test_a_tee_scenes_passage_stopped_at_its_end_is_marked_not_verified(tmp_path):
+    from sealedlore.engine.session import PassageDone
+
+    session, _main, held = build(tmp_path)
+    enter(session)
+    session.private_tee = RecordingTee("local/model", ["verified"])
+    events = session.send(turn(held, "A private turn."))
+    for event in events:
+        if isinstance(event, PassageDone):
+            break
+    events.close()
+    passage = session.span_nodes(session.open_span)[-1]
+    assert passage.kind == "assistant" and passage.content
+    assert passage.meta.tee == "unchecked"
+
+
+def test_a_passage_with_tee_checks_off_or_off_a_tee_is_unmarked_as_before(tmp_path):
+    session, _main, held = build(tmp_path)
+    play(session, turn(held, "In the open."))
+    assert session.path()[-1].meta.tee is None
+    enter(session)
+    play(session, turn(held, "A private turn."))  # no TEE client: nothing to check it with
+    assert session.span_nodes(session.open_span)[-1].meta.tee is None

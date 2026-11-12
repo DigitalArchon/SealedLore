@@ -60,6 +60,7 @@ from sealedlore.models.node import NARRATOR_SPEAKER_ID, Node, NodeMeta, Usage
 from sealedlore.models.private import PrivateKeep, PrivateSpan, TeeUpstream
 from sealedlore.models.summary import Summary
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError
+from sealedlore.providers.tee import is_private_mode
 
 # Fewer than this many recent messages left in a private prompt, and the
 # story is too big for the private model: offer the handoff. Live, a 16k
@@ -777,6 +778,24 @@ class PrivateRuntime:
         from sealedlore.engine.session import PassageDone
 
         return PassageDone()
+
+    def _written_mark(self, model: str, span: PrivateSpan | None) -> str | None:
+        """The TEE mark a private scene's or a chat's passage carries from the
+        moment it is written, before its reply is checked (`_check_tee`). The
+        check runs once the passage is in, and a Stop on its last chunk, or a
+        reply cut off partway, closed the turn first: a TEE model's passage was
+        left with no mark, drawn as any other model's. An end-to-end encrypted
+        model's is "encrypted": every request for one goes sealed, and its
+        reply is read only once the attested enclave's seal has opened it
+        (providers/private_mode.py `_accept`), so what came is proved however
+        much of it came. A TEE/ model whose replies are checked is "unchecked"
+        until its check says otherwise. A TEE/ model with "Check TEE models"
+        off is just a model, and its passages unmarked, as before."""
+        if span is None and not self.story.chat:
+            return None
+        if is_private_mode(model):
+            return "encrypted"
+        return "unchecked" if self.private_tee is not None else None
 
     def _check_tee(self, node: Node | None) -> None:
         """A TEE model's reply: was it signed by the enclave that was attested?

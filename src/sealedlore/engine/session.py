@@ -212,7 +212,7 @@ from sealedlore.providers.base import (
 )
 from sealedlore.providers.decisions import DecisionsClient, build_decisions_payload
 from sealedlore.providers.embeddings import EmbeddingBackend
-from sealedlore.providers.tee import is_tee, move_refusal
+from sealedlore.providers.tee import is_private_mode, is_tee, move_refusal
 from sealedlore.providers.wire import should_use_cache_control
 from sealedlore.storage.picture_store import DiskPictures, MemoryPictures, PictureStore
 from sealedlore.storage.repository import (
@@ -2316,6 +2316,9 @@ class StorySession(
                     npc_scope_ids=list(turn.npc_scope_ids),
                     controlled_character_id=turn.controlled_character_id,
                     request_log_ref=log_ref,
+                    # A TEE model's passage is marked as it is written, and
+                    # the mark raised once its reply is checked (`_check_tee`).
+                    tee=self._written_mark(model, span),
                 ),
             )
             self._attach(node, parent=parent)
@@ -2354,12 +2357,15 @@ class StorySession(
         added. The note that it was cut off goes: it has been carried on."""
         # A TEE mark proves the text it was given for: the passage is unchecked
         # until the continuation's own reply is checked, and then keeps the
-        # less proven of the two marks (`_check_tee`).
+        # less proven of the two marks (`_check_tee`). An end-to-end encrypted
+        # model's continuation is proved by its seal as it comes, as its
+        # passage was (`_written_mark`).
         self._carried_mark = (node.id, node.meta.tee)
         self._carried_upstream = (node.id, node.meta.tee_upstream)
         node.meta.tee_upstream = None
         if node.meta.tee is not None:
-            node.meta.tee = "unchecked"
+            sealed = node.meta.tee == "encrypted" and is_private_mode(model)
+            node.meta.tee = "encrypted" if sealed else "unchecked"
         node.content = node.content.rstrip() + text
         if reasoning:
             node.meta.reasoning = "\n\n".join(

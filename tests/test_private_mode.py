@@ -509,6 +509,34 @@ def test_a_private_scene_on_an_encrypted_model_is_sealed_end_to_end(fake, tmp_pa
     assert MARKER not in json.dumps(main.payloads)
 
 
+def test_an_encrypted_passage_stopped_at_its_end_still_says_it_was_encrypted(fake, tmp_path):
+    """Its mark was set after the passage was in, and a Stop then closed the
+    turn first: the passage showed no mark at all. What came was opened with
+    the attested enclave's key however much of it came."""
+    from sealedlore.engine.session import PassageDone
+    from tests.test_private import build, play, turn
+
+    session, _main, held = build(tmp_path)
+    play(session, turn(held, "Before the scene."))
+    session.enter_private(keep="memory", provider=sealed_provider(fake), model="private/glm-5-3")
+    fake.reply = sse("A quiet reply.")
+    events = session.send(turn(held, "Whispered."))
+    for event in events:
+        if isinstance(event, PassageDone):
+            break
+    events.close()
+    reply = session.full_path()[-1]
+    assert reply.content == "A quiet reply." and reply.meta.tee == "encrypted"
+    # Carried on and stopped as its continuation came: still all sealed.
+    fake.reply = sse("And then nothing.")
+    events = session.continue_passage()
+    for event in events:
+        if isinstance(event, StreamCompleted):
+            break
+    events.close()
+    assert reply.content.endswith("And then nothing.") and reply.meta.tee == "encrypted"
+
+
 def test_a_memory_only_encrypted_chat_leaves_no_trace_and_marks_each_reply(fake, tmp_path):
     from sealedlore.engine.prompt import TurnRequest
     from sealedlore.engine.session import StorySession
