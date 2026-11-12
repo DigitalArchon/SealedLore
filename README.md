@@ -37,6 +37,13 @@ fun to play. This app will remain focused on text based roleplay.
 
 ### New in version 3
 
+- **Updates, and a second review** (3.1.0b11). AppImageUpdate, Gear Lever and
+  AppImageLauncher can now update the AppImage, downloading only what changed.
+  A review of the whole app fixed about thirty bugs, among them a way anyone
+  who knew your phone's onion address could keep your phones locked out,
+  saves that a crash could leave unopenable, two copies of the app
+  overwriting each other's changes, and Stop not reaching every call. Names
+  from imported cards are always shown as text.
 - **TEE models say what was attested** (3.1.0b9). The model button says
   whether the attested machine is the model's own or RedPill's TEE gateway,
   which passes requests on to the provider that runs the model, and what that
