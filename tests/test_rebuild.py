@@ -270,6 +270,58 @@ def test_rebuilding_a_chapter_drops_the_part_merged_from_it(session: StorySessio
     assert session.split().summaries[1].content == "Rebuilt in the background 1."
 
 
+def test_a_hand_edited_part_rebuilt_with_its_chapter_is_merged_from_its_new_text(
+    session: StorySession,
+):
+    """The part was merged from the chapter's new text, then checked at adoption
+    against the chapter's text before the rebuild: always "changed while being
+    rebuilt", dropped and paid for."""
+    one = by_content(session, "Main chapter one.")
+    two = by_content(session, "Main chapter two.")
+    part = Summary(
+        covered_node_ids=[*one.covered_node_ids, *two.covered_node_ids],
+        content="My own account of both.",
+        merged_from=[one.id, two.id],
+        hand_edited=True,
+    )
+    session.summaries.append(part)
+    session.edit_node("a2", "Maela opened the gate.")
+    assert two.stale and part.stale and part in session.summaries, "the author's part stays"
+    assert session.start_rebuild([part.id, two.id])
+    assert session._rebuild_job.done.wait(5)
+    (notice,) = session.adopt_rebuild()
+    assert notice.startswith("Rebuilt Chapter 2, Chapters 1–2")
+    assert two.content == "Rebuilt in the background 1."
+    assert part.content == "Rebuilt in the background 2."
+    assert not part.stale and not part.hand_edited
+    merged = session.provider.background.requests[1]
+    assert "Rebuilt in the background 1." in "\n".join(m.text for m in merged.messages)
+
+
+def test_a_part_merged_from_a_chapter_rebuild_that_wasnt_used_isnt_used_either(
+    session: StorySession,
+):
+    one = by_content(session, "Main chapter one.")
+    two = by_content(session, "Main chapter two.")
+    part = Summary(
+        covered_node_ids=[*one.covered_node_ids, *two.covered_node_ids],
+        content="My own account of both.",
+        merged_from=[one.id, two.id],
+        hand_edited=True,
+    )
+    session.summaries.append(part)
+    session.edit_node("a2", "Maela opened the gate.")
+    background = session.provider.background
+    background.gate.clear()
+    session.start_rebuild([part.id, two.id])
+    session.edit_node("u3", "And then she shut it again.")  # the chapter's messages change
+    background.gate.set()
+    assert session._rebuild_job.done.wait(5)
+    session.adopt_rebuild()
+    assert two.content == "Main chapter two." and two.stale
+    assert part.content == "My own account of both." and part.stale
+
+
 # --- the scene card's time (the author's rule, Oct 2026) ------------------
 
 

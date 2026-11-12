@@ -50,7 +50,8 @@ class _Rebuild:
     # The summary's text when asked: the author's own edit meanwhile wins.
     content: str
     covered: list[str]
-    # A chapter's messages, or a part's chapters' texts, as they were.
+    # A chapter's messages as they were, or the chapters' texts a part is
+    # merged from (set again on the thread, where it is merged).
     fingerprint: list[str]
     model: str
     request: ChatRequest
@@ -180,6 +181,14 @@ class RebuildRuntime:
                             Summary(content=written.get(i, chapter_texts[i]))
                             for i in merged_from[item.summary_id]
                         ]
+                        # What it is merged from: a chapter rebuilt in this
+                        # job gives its new text, and the part holds only if
+                        # that is the text the chapter has once adopted.
+                        # Printed from the old texts, a part rebuilt with its
+                        # chapter never matched and was dropped, paid for; and
+                        # one whose chapter's rebuild wasn't used was put in,
+                        # merged from words the chapter never had.
+                        item.fingerprint = _texts_print([s.content for s in run_texts])
                         words = sum(len(s.content.split()) for s in run_texts)
                         messages = build_merge_messages(
                             run_texts,
