@@ -193,11 +193,15 @@ def build_plot_messages(
     *,
     plays: str = "",
     so_far: str = "",
+    notes: str = "",
     texts: PromptTexts = DEFAULT_TEXTS,
 ) -> list[PromptMessage]:
     """The plot call. `story`: `story_text`; `plays`: who the author plays,
-    in words; `so_far`: where a story under way stands."""
+    in words; `so_far`: where a story under way stands; `notes`: the
+    storyteller's notes, which a plot must be true to."""
     parts = [texts.fill("authoring.plot.story", story=story)]
+    if notes.strip():
+        parts.append(texts.fill("authoring.plot.notes", notes=notes.strip()))
     if plays:
         parts.append(plays)
     if so_far:
@@ -255,12 +259,15 @@ def build_plot_revision_messages(
     *,
     plays: str = "",
     so_far: str = "",
+    notes: str = "",
     texts: PromptTexts = DEFAULT_TEXTS,
 ) -> list[PromptMessage]:
     """A plot's follow-up: the story, the plot as it is now as the model's
     own last reply (`plot_reply_text`), and the author's request after it
-    (`followup.plot_request_text`)."""
+    (`followup.plot_request_text`). `notes`: the storyteller's notes."""
     parts = [texts.fill("authoring.plot.story", story=story)]
+    if notes.strip():
+        parts.append(texts.fill("authoring.plot.notes", notes=notes.strip()))
     if plays:
         parts.append(plays)
     if so_far:

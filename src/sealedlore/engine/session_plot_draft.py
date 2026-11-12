@@ -59,6 +59,7 @@ class PlotDraftRuntime:
             wishes,
             plays=self._plot_plays(),
             so_far=self._plot_so_far(),
+            notes=self.story.storyteller_notes or "",
             texts=self.texts,
         )
         return (

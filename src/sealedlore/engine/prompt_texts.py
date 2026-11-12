@@ -4785,6 +4785,23 @@ _text(
     "The author plays nobody: they direct the story.",
 )
 
+# The plot's writer is the one other model given the storyteller's notes: a
+# plot written blind to them made a second truth of its own (the story's notes
+# said a packet of papers lay under the floor; the plot's hidden lore, written
+# without them, would have said whatever it invented). Its reply is kept from
+# the author as the notes are. Not measured beyond that it holds to them.
+_text(
+    "authoring.plot.notes",
+    AUTHORING,
+    "Writing a plot: the storyteller's notes",
+    "When the story has storyteller's notes: the plot is told them, and is true to them.",
+    "What the storyteller alone knows of this story (the author has not been told):\n\n"
+    "{notes}\n\n"
+    "The plot is true to this. Build on it, never contradict it, and don't write any of it "
+    "again as lore of your own: what is hidden there is already kept.",
+    (("notes", "the storyteller's notes"),),
+)
+
 _text(
     "authoring.plot.so_far",
     AUTHORING,

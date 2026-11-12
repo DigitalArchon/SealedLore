@@ -159,6 +159,7 @@ class FollowUpRuntime:
             plot_request_text(request, self.follow_up_history(PLOT), self.texts),
             plays=self._plot_plays(),
             so_far=self._plot_so_far(),
+            notes=self.story.storyteller_notes or "",
             texts=self.texts,
         )
         turn = FollowUpTurn(target=PLOT, request=request.strip())

@@ -220,6 +220,17 @@ def test_the_notes_reach_only_requests_that_carry_the_storytellers_system_block(
     with_marker = [p for p in main.payloads if MARKER in json.dumps(p)]
     without = [p for p in main.payloads if MARKER not in json.dumps(p)]
     assert with_marker and without
+    plot_writer = DEFAULT_TEXTS["authoring.plot"][:40]
+    told = DEFAULT_TEXTS["authoring.plot.notes"].split("{notes}")[0].strip()
+    plots = [p for p in with_marker if system_of(p).startswith(plot_writer)]
+    assert plots, "the plot's writer is told the notes, so its plot is true to them"
+    for payload in plots:
+        # The one other model that is: once, under its own heading, and its
+        # reply is kept from the author as the notes are.
+        assert json.dumps(payload).count(MARKER) == 1
+        assert told in json.dumps(payload, ensure_ascii=False)
+        assert payload["model"] == "side/authoring"
+    with_marker = [p for p in with_marker if p not in plots]
     for payload in with_marker:
         system = system_of(payload)
         # The storyteller's own system block, the notes in their place in it,
@@ -276,13 +287,14 @@ def test_the_review_is_sent_a_line_in_the_notes_place(tmp_path: Path):
     assert session.last_prompt is sent
 
 
-def test_the_plot_follow_up_of_a_story_under_way_never_sees_the_notes(tmp_path: Path):
+def test_a_plot_written_again_is_told_the_notes_too(tmp_path: Path):
+    """A plot written blind to the notes made a second truth of its own."""
     session, main, held = build(tmp_path)
     play(session, turn(held, "I walk the road into town."))
     before = len(main.payloads)
     quietly(lambda: session.follow_up_plot("More danger in the first week."))
-    assert len(main.payloads) > before
-    assert MARKER not in json.dumps(main.payloads[before:])
+    sent = main.payloads[before:]
+    assert sent and all(json.dumps(p).count(MARKER) == 1 for p in sent)
     assert session.follow_up_history(PLOT) == []
 
 
