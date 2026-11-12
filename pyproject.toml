@@ -62,7 +62,9 @@ Issues = "https://github.com/DigitalArchon/SealedLore/issues"
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
-    "ruff>=0.6",
+    # Exact: a newer ruff formats differently, and CI's format check would
+    # fail on code nobody changed.
+    "ruff==0.16.9",
 ]
 
 [project.scripts]
@@ -105,6 +107,9 @@ exclude = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# A test still running after this long prints every thread's stack (it isn't
+# stopped): a modal dialog nobody answers otherwise hangs the run in silence.
+faulthandler_timeout = 300
 markers = [
     "real_crop: the crop dialog is driven by the test, not answered for it",
     "real_follow_up: the follow-up dialog is driven by the test, not gone past for it",

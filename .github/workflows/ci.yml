@@ -4,14 +4,21 @@ on:
   push:
     branches: [master]
   pull_request:
+  # release.yml runs these too, and releases nothing unless they pass.
+  workflow_call:
 
 # Actions are pinned by commit, as in release.yml and windows.yml, and the
 # job may only read the repository: a pull request's tests run here.
 permissions: {}
 
 jobs:
+  # With whatever versions pip resolves today: an upstream release that
+  # breaks something shows here first.
   test:
     runs-on: ubuntu-24.04
+    # A test stuck on a modal dialog would otherwise hold the runner for six
+    # hours; the suite takes under ten minutes.
+    timeout-minutes: 30
     permissions:
       contents: read
     strategy:
@@ -74,6 +81,64 @@ jobs:
         run: |
           ruff check .
           ruff format --check .
+
+      - name: Tests
+        run: pytest -q
+
+  # With exactly the packages the AppImage ships (its hash-checked lock, on
+  # the AppImage's Python), so what is tested is what is released.
+  as-shipped:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Ubuntu's own archive, not the runner's mirror
+        run: |
+          . /etc/os-release
+          sudo rm -f /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list
+          printf '%s\n' \
+            "Types: deb" \
+            "URIs: https://archive.ubuntu.com/ubuntu/" \
+            "Suites: $VERSION_CODENAME $VERSION_CODENAME-updates $VERSION_CODENAME-backports" \
+            "Components: main restricted universe multiverse" \
+            "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg" \
+            "" \
+            "Types: deb" \
+            "URIs: https://security.ubuntu.com/ubuntu/" \
+            "Suites: $VERSION_CODENAME-security" \
+            "Components: main restricted universe multiverse" \
+            "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg" \
+            | sudo tee /etc/apt/sources.list.d/ubuntu.sources
+          echo 'Acquire::Retries "5";' | sudo tee /etc/apt/apt.conf.d/80-retries
+
+      - name: Qt system libraries
+        run: |
+          for attempt in 1 2 3; do
+            sudo apt-get update || true
+            sudo apt-get install -y --no-install-recommends \
+              libegl1 libgl1 libxkbcommon0 libdbus-1-3 libfontconfig1 libglib2.0-0 && break
+            [ "$attempt" = 3 ] && exit 1
+            sleep 30
+          done
+
+      - name: Install the locked packages
+        run: |
+          python -m pip install --upgrade pip
+          pip install --require-hashes --no-deps --only-binary=:all: \
+            -r packaging/appimage/requirements.lock
+          pip install --no-deps -e .
+          pip install "pytest==9.1.1"
 
       - name: Tests
         run: pytest -q
