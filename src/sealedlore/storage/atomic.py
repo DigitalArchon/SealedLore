@@ -1,15 +1,18 @@
 """Atomic JSON file writes and append-only JSONL.
 
 Every story file except api_log.jsonl is fully rewritten on save; the write
-goes to a temp file first and is swapped in with os.replace so a crash never
-leaves a half-written file. `keep_backup` additionally retains one `.bak` of
-the previous version (used for nodes.json, rewritten on every turn).
+goes to a temp file first, flushed to the disk, and is swapped in with
+os.replace so a crash or a power cut never leaves a half-written file. Bytes
+the file already holds are not written again. `keep_backup` additionally
+retains one `.bak` of the previous version (used for nodes.json, rewritten
+on every turn).
 
 Two threads write here: the worker after each turn, and the GUI thread for
 config and pictures. Every write takes one lock and uses its own temp file,
 so two saves of the same file can't race each other through one `.tmp`; a
 JSONL append is one write of record-plus-newline, so two records can't land
-on one line.
+on one line. Other processes are kept out by the data folder's lock
+(storage/folder_lock.py).
 """
 
 from __future__ import annotations
