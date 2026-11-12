@@ -120,6 +120,10 @@ class StoryDefaults(BaseModel):
 
 
 OpeningMode = Literal["generate", "as_written"]
+# Who wrote the storyteller's notes as they stand: the author, who has then
+# read them, or a model (a draft, a follow-up), whose text Setup keeps out of
+# sight until the author asks to see it.
+NotesBy = Literal["author", "model"]
 StoryMode = Literal["story", "chat"]
 ChatKeep = Literal["disk", "memory"]
 
@@ -179,6 +183,14 @@ class Story(BaseModel):
     # Stable setting/world material for the system block (§6.1); never
     # turn-specific, or it would invalidate the cache prefix every turn.
     world_bible: str | None = None
+    # The storyteller's notes: the truth behind what the story hasn't shown
+    # yet, and what its people want and hide. Sent to the storyteller alone,
+    # in the system block after the setting (`rules.render_storyteller_notes`)
+    # and so as stable as the setting; never to a read, a summariser, the
+    # review or any other model, and kept from the author's eyes while
+    # `storyteller_notes_by` says a model wrote them (the Prompt page, Setup).
+    storyteller_notes: str | None = None
+    storyteller_notes_by: NotesBy = "author"
     setup: StorySetup = Field(default_factory=StorySetup)
     defaults: StoryDefaults = Field(default_factory=StoryDefaults)
     style: StyleDirectives = Field(default_factory=StyleDirectives)

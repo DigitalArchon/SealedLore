@@ -22,6 +22,7 @@ from sealedlore.models.prompt_edit import PromptEdit
 from sealedlore.models.scene import SceneState
 from sealedlore.models.story import (
     DEFAULT_WORLD_ACTIVITY,
+    NotesBy,
     OpeningMode,
     OpeningPicture,
     StoryMode,
@@ -43,6 +44,11 @@ class Scenario(BaseModel):
     template: str = ""
     description: str | None = None
     world_bible: str | None = None
+    # The storyteller's notes and who wrote them (`Story.storyteller_notes`):
+    # part of the story as it is set up, so a restart or a shared scenario
+    # keeps its secrets, still unread where a model wrote them.
+    storyteller_notes: str | None = None
+    storyteller_notes_by: NotesBy = "author"
     opening_text: str = ""
     opening_mode: OpeningMode = "generate"
     opening_pictures: list[OpeningPicture] = Field(default_factory=list)

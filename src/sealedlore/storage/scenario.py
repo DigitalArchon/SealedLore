@@ -62,6 +62,8 @@ def scenario_from_bundle(
         template=setup.template,
         description=setup.description,
         world_bible=story.world_bible,
+        storyteller_notes=story.storyteller_notes,
+        storyteller_notes_by=story.storyteller_notes_by,
         opening_text=setup.opening_text,
         opening_mode=setup.opening_mode,
         opening_pictures=[p.model_copy() for p in setup.opening_pictures],
@@ -132,6 +134,8 @@ def bundle_from_scenario(
     story = Story(
         title=title or scenario.title,
         world_bible=scenario.world_bible,
+        storyteller_notes=scenario.storyteller_notes,
+        storyteller_notes_by=scenario.storyteller_notes_by,
         setup=StorySetup(
             description=scenario.description,
             opening_text=scenario.opening_text,

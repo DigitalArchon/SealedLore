@@ -374,6 +374,45 @@ from what is already true, not from nowhere — and show them happening rather
 than announcing them.""",
 )
 
+# The storyteller's notes (`Story.storyteller_notes`): the truth behind what a
+# story sets up and leaves open. A story drafted from a premise sets up
+# mysteries ("the first mate is hiding something", "something under the false
+# floor") and used to write the answer nowhere, so the storyteller invented
+# it afresh each time: measured live, six different answers in one story, and
+# the discovery interrupted in 2 of 3 tries. With the truth given to the
+# storyteller alone, in this wording, a live A/B on Sonnet 4.6: 3 of 3 forced
+# discoveries and 12 of 12 out-of-character answers agreed with the notes,
+# and a blind audit of 36 passages found 0 secrets volunteered unearned and 0
+# contradictions. The three rules are what was measured: hold to it (never
+# another answer in its place), let it show in what people do and never in
+# the narration, and give it up as the story earns it (neither volunteered
+# nor kept back once fairly got to). In the system block right after the
+# setting, cached, the same every turn; no other model is sent it.
+_text(
+    "storyteller.notes",
+    STORYTELLER,
+    "The storyteller's notes",
+    "Heads the storyteller's notes (Story → Setup → Storyteller's notes) in the system "
+    "block, after the setting: what only the storyteller knows, and how to hold to it and "
+    "give it up. Left out when the story has no notes.",
+    """\
+# WHAT ONLY YOU KNOW
+
+The truth behind what the story has not yet shown, and what the people in it want and hide. \
+The author has not been told any of it, and neither has their character.
+
+- Hold to it. When the author's character finds something out, by looking, by asking the \
+right person or by being there, what they find is what is written here. Never put something \
+else in its place.
+- People act on what they want and what they hide. Let it show in what they do and what \
+they avoid; the narration never states it.
+- Give it up as the story earns it. Nobody volunteers a secret unprompted, and nothing here \
+is kept back once the author's character has fairly got to it.
+
+{notes}""",
+    (("notes", "the story's notes, as written in Setup"),),
+)
+
 # The cast block is the main cast only; supporting cards ride the tail when
 # they are around (never here: which ones ride changes turn to turn, and a new
 # card must not cost a cache miss). Said, so the two read as one list of people.

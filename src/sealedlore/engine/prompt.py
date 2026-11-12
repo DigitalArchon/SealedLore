@@ -4,7 +4,8 @@ A pure function of story state: no network, no GUI, no clock. Sections are
 ordered strictly from most stable to most volatile, so that everything a cache
 prefix depends on is settled before anything that changes every turn:
 
-    1  SYSTEM BLOCK      engine rules, style, world, cast   <- breakpoint 1
+    1  SYSTEM BLOCK      engine rules, style, world, the
+                         storyteller's notes, cast          <- breakpoint 1
     2  ARCHIVED SUMMARY  chapter summaries                  <- breakpoint 2
     3  VERBATIM HISTORY  recent turns of the active path    <- breakpoint 3
     4  VOLATILE TAIL     lore, scene, directives, the turn
@@ -45,6 +46,7 @@ from sealedlore.engine.rules import (
     render_scene_block,
     render_scene_log_block,
     render_standing_lore,
+    render_storyteller_notes,
     render_style_block,
     render_summaries_block,
     render_turn_directives,
@@ -78,6 +80,7 @@ SECTION_STYLE = "system.style"
 SECTION_PERSPECTIVE = "system.perspective"
 SECTION_WORLD_ACTIVITY = "system.world_activity"
 SECTION_WORLD = "system.world_bible"
+SECTION_NOTES = "system.storyteller_notes"
 SECTION_STANDING_LORE = "system.lore"
 SECTION_CAST = "system.cast"
 SECTION_SUMMARIES = "summaries"
@@ -191,6 +194,10 @@ class PromptSection:
     name: str
     text: str
     tokens: int
+    # For a section whose words are kept from the author (the storyteller's
+    # notes): what stands in its place wherever the prompt is shown rather
+    # than sent (`as_shown`). Empty for every other section.
+    kept_as: str = ""
 
 
 @dataclass(frozen=True)
@@ -234,6 +241,36 @@ class AssembledPrompt:
 
     def section(self, name: str) -> PromptSection | None:
         return next((section for section in self.sections if section.name == name), None)
+
+
+def as_shown(prompt: AssembledPrompt) -> AssembledPrompt:
+    """The prompt as it may be shown where its secrets are kept: the
+    storyteller's notes stand as a line saying there are some (`kept_as`),
+    in the section list and in the system message alike. For the settings
+    review, whose words reach the author, and for the Prompt page unless the
+    author asked to see what the story hides. What is sent is never this:
+    the token counts stay those of the real prompt."""
+    kept = {section.text: section.kept_as for section in prompt.sections if section.kept_as}
+    if not kept:
+        return prompt
+    return replace(
+        prompt,
+        sections=tuple(
+            replace(section, text=section.kept_as) if section.kept_as else section
+            for section in prompt.sections
+        ),
+        messages=tuple(
+            replace(
+                message,
+                parts=tuple(
+                    replace(part, text=kept.get(part.text, part.text)) for part in message.parts
+                ),
+            )
+            if message.role == "system"
+            else message
+            for message in prompt.messages
+        ),
+    )
 
 
 @dataclass
@@ -622,20 +659,20 @@ def _assemble(
 
     sections: list[PromptSection] = []
 
-    def add_section(name: str, text: str) -> int:
+    def add_section(name: str, text: str, kept_as: str = "") -> int:
         tokens = count(text)
-        sections.append(PromptSection(name=name, text=text, tokens=tokens))
+        sections.append(PromptSection(name=name, text=text, tokens=tokens, kept_as=kept_as))
         return tokens
 
     # --- 1. system block: stable for the whole story ------------------------
     system = _DraftMessage(role="system")
     system_section_names: list[str] = []
 
-    def add_system_part(name: str, text: str) -> None:
+    def add_system_part(name: str, text: str, kept_as: str = "") -> None:
         if not text:
             return
         system.texts.append(text)
-        system.tokens.append(add_section(name, text))
+        system.tokens.append(add_section(name, text, kept_as))
         system_section_names.append(name)
 
     cast_fit: CastFit | None = None
@@ -651,6 +688,14 @@ def _assemble(
         for name, text in rules:
             add_system_part(name, text)
         add_system_part(SECTION_WORLD, render_world_bible(story.world_bible))
+        # The storyteller's own: the truth behind what the story hasn't shown.
+        # Right after the setting it is the truth of, and as stable: a
+        # function of the story's notes alone, so the cache prefix holds.
+        add_system_part(
+            SECTION_NOTES,
+            render_storyteller_notes(story.storyteller_notes, options.texts),
+            render_storyteller_notes(story.storyteller_notes, options.texts, kept=True),
+        )
         add_system_part(SECTION_STANDING_LORE, render_standing_lore(standing_lore, options.texts))
 
         # Which cards go whole, condensed or short depends on the cast and its

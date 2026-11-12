@@ -44,6 +44,7 @@ SECTION_LABELS = {
     "system.perspective": "Perspective",
     "system.world_activity": "World activity",
     "system.world_bible": "World",
+    "system.storyteller_notes": "Storyteller's notes",
     "system.lore": "Lore, every turn",
     "system.cast": "Cast",
     "summaries": "Chapters",

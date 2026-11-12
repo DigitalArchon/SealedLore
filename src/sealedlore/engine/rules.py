@@ -152,6 +152,29 @@ def render_world_bible(world_bible: str | None) -> str:
     return f"# SETTING\n\n{world_bible.strip()}"
 
 
+def notes_kept_line(notes: str | None) -> str:
+    """What stands in for the storyteller's notes wherever the author, or a
+    model whose words reach the author, would otherwise read them: that there
+    are some, and how many words, never what they say."""
+    count = len((notes or "").split())
+    return (
+        f"(the storyteller's notes: {count} word{'' if count == 1 else 's'}, kept from the author)"
+    )
+
+
+def render_storyteller_notes(
+    notes: str | None, texts: PromptTexts = DEFAULT_TEXTS, *, kept: bool = False
+) -> str:
+    """The storyteller's notes (`Story.storyteller_notes`) under their rules,
+    for the system block after the setting; nothing when there are none. As
+    stable as the setting: a function of the notes alone. `kept`: the same
+    section with `notes_kept_line` in the notes' place, for the settings
+    review and the Prompt page (`prompt.as_shown`)."""
+    if not notes or not notes.strip():
+        return ""
+    return texts.fill("storyteller.notes", notes=notes_kept_line(notes) if kept else notes.strip())
+
+
 def render_competence_line(character: Character) -> str:
     parts: list[str] = []
     if character.competence.tiers:
