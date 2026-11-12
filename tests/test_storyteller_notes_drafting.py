@@ -169,8 +169,8 @@ def test_the_follow_up_is_shown_the_notes_and_may_write_them_again():
     assert setup_view(harbour())["storyteller_notes"] is None
     system = followup_system()
     assert '- kind "storyteller_notes": the value is the complete new text' in system
-    assert 'The author has not read "storyteller_notes"' in system
-    assert 'nothing of them in "summary", a "reason" or "cannot_fix"' in system
+    assert 'The author may not have read "storyteller_notes"' in system
+    assert 'nothing of them in\n  "summary", a "reason" or "cannot_fix"' in system
     assert "storyteller_notes" in FOLLOW_UP_KINDS and "storyteller_notes" not in REVIEW_KINDS
 
 

@@ -4289,11 +4289,12 @@ How to answer:
   theirs.
 - The opening's notes are written in the story's person and tense, and end
   where the author's character can act.
-- The author has not read "storyteller_notes", and must not learn from you
-  what they hold: nothing of them in "summary", a "reason" or "cannot_fix".
-  When what you change makes them untrue (someone they name is gone, the
-  world they rest on is different), write them again so the secrets stay
-  true to the setup, keeping every sentence that still holds word for word.
+- The author may not have read "storyteller_notes" (a draft's are kept from
+  them), and must not learn from you what they hold: nothing of them in
+  "summary", a "reason" or "cannot_fix". When what you change makes them
+  untrue (someone they name is gone, the world they rest on is different)
+  or leaves something new open, write them again so they stay the truth
+  behind the setup, keeping every sentence that still holds word for word.
   Otherwise leave them alone. A secret's answer goes nowhere else: never
   into "world", "lore" or the opening.
 

@@ -306,3 +306,16 @@ def test_the_command_lines_inspect_keeps_the_notes_unless_spoilers_are_shown(tmp
     session.config.show_plot_spoilers = True
     repl.command_inspect()
     assert MARKER in "\n".join(message.text for message in built[-1].messages)
+
+
+def test_the_stories_search_never_finds_a_storys_notes(tmp_path: Path):
+    """The search shows the words around what it finds: the notes are not
+    among what it reads, with spoilers shown or not."""
+    from sealedlore.storage.story_search import search_stories
+
+    session, _main, _held = build(tmp_path)
+    session.story.world_bible = "A town with a granary."
+    session.save()
+    assert [hit.story_id for hit in search_stories("granary", tmp_path)] == [session.story.id]
+    for spoilers in (False, True):
+        assert list(search_stories(MARKER, tmp_path, spoilers=spoilers)) == []
