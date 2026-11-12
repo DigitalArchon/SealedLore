@@ -30,6 +30,7 @@ from sealedlore.models.generation import GenerationParams, ReasoningConfig
 from sealedlore.models.node import Node
 from sealedlore.providers.base import ChatRequest, ProviderError, StreamCompleted
 from sealedlore.providers.private_catalog import tee_counterpart
+from sealedlore.storage.repository import CONFIG_LOCK
 
 # How long a model's listed reasoning levels are kept before they're fetched again.
 LISTING_DAYS = 7
@@ -82,7 +83,8 @@ class ReasoningRuntime:
         found = found.model_copy()
         found.fetched_at = utc_now_iso()
         found.unasked_at = known.unasked_at if known is not None else None
-        with self._reasoning_lock:
+        # On whichever thread asked: the store is the config's (CONFIG_LOCK).
+        with CONFIG_LOCK, self._reasoning_lock:
             self._reasoning_store()[model] = found
         self._save_config()
         return found
@@ -162,7 +164,7 @@ class ReasoningRuntime:
         if completed.reasoning_tokens < EXCESSIVE_REASONING:
             return
         model = request.model
-        with self._reasoning_lock:
+        with CONFIG_LOCK, self._reasoning_lock:  # the store is the config's (CONFIG_LOCK)
             store = self._reasoning_store()
             known = store.get(model) or self.config.model_reasoning.get(model)
             if reasons_unasked(known):

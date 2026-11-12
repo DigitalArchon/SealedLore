@@ -11,6 +11,7 @@ import copy
 import json
 import os
 import shutil
+import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -80,12 +81,45 @@ class StoryBundle(BaseModel):
 CONFIG_FILE_MODE = 0o600
 
 
+# The config is one object shared by every thread: the window changes and
+# saves it on the GUI thread, and what the engine learns (each model's token
+# correction factor, its listed prices, its reasoning facts) is put in it and
+# saved on the worker's thread or whichever thread a reply came back on. A
+# save reads the whole config and writes the whole file, so two at once could
+# land an older reading last, and a value put in meanwhile broke the copy
+# ("dictionary changed size during iteration"). So a save holds this lock from
+# its first look at the config to the file being in place, and whatever the
+# engine puts in the config off the GUI thread is put in under it.
+# Re-entrant, so a change under it may save.
+CONFIG_LOCK = threading.RLock()
+
+
 def save_config(config: Config, root: Path | None = None) -> None:
     """Written with each key the keychain holds left blank. A key the
     keychain refuses stays in the file this time, never lost; the next save
     tries again (`keychain.last_problem` says why)."""
-    ensure_data_home(root)
-    atomic_write_json(config_file(root), _as_written(config, root), mode=CONFIG_FILE_MODE)
+    with CONFIG_LOCK:
+        ensure_data_home(root)
+        atomic_write_json(config_file(root), _as_written(config, root), mode=CONFIG_FILE_MODE)
+
+
+# How often a copy is taken again when the GUI thread changed the config
+# under it (`_copy_of`); each change is a single step, over in an instant.
+_COPY_TRIES = 5
+
+
+def _copy_of(config: Config) -> Config:
+    """A deep copy of the config, taken again should the GUI thread change
+    one of its dicts in the middle of it. The window makes its changes
+    without the lock, on its own thread, and saves after each, so a copy
+    taken a moment early is only ever followed by the window's own save."""
+    for _ in range(_COPY_TRIES - 1):
+        try:
+            return config.model_copy(deep=True)
+        except RuntimeError as exc:
+            if "changed size during iteration" not in str(exc):
+                raise
+    return config.model_copy(deep=True)
 
 
 def _as_written(config: Config, root: Path | None) -> dict[str, Any]:
@@ -143,7 +177,7 @@ def _as_written(config: Config, root: Path | None) -> dict[str, Any]:
         for slot in listed - present:
             keychain.remove(slot, root)  # a provider renamed or gone
     config.keychain_slots = kept
-    written = config.model_copy(deep=True)
+    written = _copy_of(config)
     for slot, holder in keychain.slots(written):
         if slot in kept:
             holder.api_key = ""

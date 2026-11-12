@@ -219,6 +219,7 @@ from sealedlore.providers.tee import is_private_mode, is_tee, move_refusal
 from sealedlore.providers.wire import should_use_cache_control
 from sealedlore.storage.picture_store import DiskPictures, MemoryPictures, PictureStore
 from sealedlore.storage.repository import (
+    CONFIG_LOCK,
     StoryBundle,
     append_api_log,
     load_story_bundle,
@@ -3031,8 +3032,9 @@ class StorySession(
             # would otherwise reach config.json with the window's next save.
             self._session_prices[model] = price
             return price
-        self.config.model_prices[model] = price
-        self._save_config()
+        with CONFIG_LOCK:  # on whichever thread priced it: see CONFIG_LOCK
+            self.config.model_prices[model] = price
+            self._save_config()
         return price
 
     def priced(self, usage: Usage, model: str) -> Usage:
@@ -4395,9 +4397,10 @@ class StorySession(
             self.estimator.process_factors[model] = rolled
             return
         self.estimator.process_factors.pop(model, None)
-        self.estimator.factors[model] = rolled
-        self.config.token_correction_factors[model] = rolled
-        self._save_config()
+        with CONFIG_LOCK:  # on the worker's thread, the factors the config's: see CONFIG_LOCK
+            self.estimator.factors[model] = rolled
+            self.config.token_correction_factors[model] = rolled
+            self._save_config()
 
     @property
     def pictures(self) -> PictureStore:
