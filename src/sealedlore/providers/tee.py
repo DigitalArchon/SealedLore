@@ -924,7 +924,7 @@ class TeeClient:
 
     def _take_keyset(self, keyset: dict[str, Any] | None, tie: str, check: _Checks) -> None:
         """The gateway's receipt-signing keys (RedPill's aci/1 `workload_keyset`),
-        kept for the receipts (`verify_reply`) only when tied to the quote: it
+        kept for the receipts (`check`) only when tied to the quote: it
         commits to them (RedPill's statement, or the gateway's report=aci), or
         they are published with the signing key it binds (nano-gpt's other
         report). The second is the weaker tie: the quote binds that key, not
@@ -1107,27 +1107,6 @@ class TeeClient:
             return response.json()
         except ValueError:
             return None
-
-    def verify_reply(
-        self,
-        response_id: str | None,
-        *,
-        receipt_id: str | None = None,
-        body_hash: str | None = None,
-        route: str | None = None,
-        sent_at: float | None = None,
-    ) -> bool:
-        """`check_reply` as a yes or no: anything but "failed" is a yes."""
-        return (
-            self.check_reply(
-                response_id,
-                receipt_id=receipt_id,
-                body_hash=body_hash,
-                route=route,
-                sent_at=sent_at,
-            )
-            != "failed"
-        )
 
     def check_reply(
         self,

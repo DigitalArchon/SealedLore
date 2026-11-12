@@ -187,7 +187,7 @@ def test_a_bound_quote_intel_and_nvidia_vouch_for_is_attested_its_receipt_keys_n
     # No gateway report: the machine whose key signs, not known to be a gateway.
     assert result.attested == "enclave"
     assert "Whether that machine runs the model itself" in what_was_attested(result)
-    assert client.verify_reply("req_1") is True
+    assert client.check_reply("req_1") == "signed", "no bytes to compare"
 
 
 def test_a_nonce_merely_echoed_back_is_refused():
@@ -235,7 +235,7 @@ def test_no_attestation_is_refused():
 def test_a_reply_signed_by_another_key_fails():
     client = client_for(signer=1)
     client.attest()
-    assert client.verify_reply("req_1") is False
+    assert client.check_reply("req_1") == "failed"
 
 
 def test_an_attestation_is_due_again_fifteen_minutes_after_it_began():
@@ -701,7 +701,7 @@ def test_every_instance_bound_and_signed_is_fully_attested(instances):
     # NVIDIA's verdict is sought for the nonce each quote binds, as measured live.
     assert seen["nras_nonces"] == seen["verified_nonces"] == [instances.gpu_nonce] * 2
     with pytest.raises(ProviderError, match="signs no replies"):
-        client.verify_reply("chatcmpl-1")
+        client.check_reply("chatcmpl-1")
 
 
 @pytest.mark.parametrize(
@@ -1016,27 +1016,28 @@ def test_a_streamed_reply_is_checked_to_its_exact_bytes_and_its_receipt():
     client = receipt_client()
     assert client.keyset is not None, "the keyset holds the attested key"
     assert (
-        client.verify_reply("req_9", sent_at=SENT, receipt_id="rcpt-1", body_hash=streamed())
-        is True
+        client.check_reply("req_9", sent_at=SENT, receipt_id="rcpt-1", body_hash=streamed())
+        == "verified"
     )
 
 
 def test_bytes_other_than_those_signed_fail():
     client = receipt_client()
     assert (
-        client.verify_reply("req_9", sent_at=SENT, body_hash=streamed(b"data: [DONE]\n\n")) is False
+        client.check_reply("req_9", sent_at=SENT, body_hash=streamed(b"data: [DONE]\n\n"))
+        == "failed"
     )
 
 
 def test_a_model_whose_streams_nano_gpt_rebuilds_is_checked_by_signature_alone():
     client = receipt_client(model="TEE/gemma-4-31b-it")
-    assert client.verify_reply("req_9", sent_at=SENT, body_hash=streamed(b"rebuilt")) is True
+    assert client.check_reply("req_9", sent_at=SENT, body_hash=streamed(b"rebuilt")) == "signed"
 
 
 def test_a_receipt_whose_upstream_wasnt_verified_fails():
     assert (
-        receipt_client(upstream="failed").verify_reply("req_9", sent_at=SENT, body_hash=streamed())
-        is False
+        receipt_client(upstream="failed").check_reply("req_9", sent_at=SENT, body_hash=streamed())
+        == "failed"
     )
 
 
@@ -1044,13 +1045,13 @@ def test_a_receipt_signed_by_another_key_fails():
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
     client = receipt_client(receipt_key=Ed25519PrivateKey.generate())
-    assert client.verify_reply("req_9", sent_at=SENT, body_hash=streamed()) is False
+    assert client.check_reply("req_9", sent_at=SENT, body_hash=streamed()) == "failed"
 
 
 def test_a_receipt_under_keys_renewed_since_is_unchecked_not_failed():
     client = receipt_client(digest="sha256:" + "0" * 64)
     with pytest.raises(ProviderError, match="keys changed"):
-        client.verify_reply("req_9", sent_at=SENT, body_hash=streamed())
+        client.check_reply("req_9", sent_at=SENT, body_hash=streamed())
 
 
 def test_a_keyset_the_quote_binds_itself_is_taken_and_one_tied_neither_way_is_not():
@@ -1062,7 +1063,7 @@ def test_a_keyset_the_quote_binds_itself_is_taken_and_one_tied_neither_way_is_no
     loose = receipt_client(tied="none")
     assert loose.keyset is None
     # Still signed by the attested key, for these bytes: the receipt goes unread.
-    assert loose.verify_reply("req_9", sent_at=SENT, body_hash=streamed()) is True
+    assert loose.check_reply("req_9", sent_at=SENT, body_hash=streamed()) == "verified"
 
 
 def test_a_stream_just_ended_waits_for_its_receipt(monkeypatch):
@@ -1071,8 +1072,11 @@ def test_a_stream_just_ended_waits_for_its_receipt(monkeypatch):
     monkeypatch.setattr(tee, "RECEIPT_RETRY_SECONDS", 0)
     seen: list = []
     client = receipt_client(not_ready=2, seen=seen)
-    assert client.verify_reply(
-        "req_9", sent_at=SENT, receipt_id="rcpt-1", body_hash=streamed(), route="r1"
+    assert (
+        client.check_reply(
+            "req_9", sent_at=SENT, receipt_id="rcpt-1", body_hash=streamed(), route="r1"
+        )
+        == "verified"
     )
     lookups = [r for r in seen if "/tee/signature/" in str(r.url)]
     assert len(lookups) == 3 and "rcpt-1" in str(lookups[-1].url)

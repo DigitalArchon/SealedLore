@@ -228,7 +228,7 @@ def error_response(status: int, detail: str = "") -> Response:
     return json_response(status, {"error": detail or HTTPStatus(status).phrase})
 
 
-def render(response: Response, *, keep_alive: bool, head_only: bool = False) -> bytes:
+def render(response: Response, *, keep_alive: bool) -> bytes:
     """The response as bytes: status line, headers, body."""
     phrase = HTTPStatus(response.status).phrase
     lines = [f"HTTP/1.1 {response.status} {phrase}"]
@@ -248,6 +248,6 @@ def render(response: Response, *, keep_alive: bool, head_only: bool = False) -> 
         headers["Connection"] = "keep-alive" if keep_alive else "close"
     lines.extend(f"{name}: {value}" for name, value in headers.items())
     head = ("\r\n".join(lines) + "\r\n\r\n").encode("ascii")
-    if response.stream or head_only:
+    if response.stream:
         return head
     return head + response.body
