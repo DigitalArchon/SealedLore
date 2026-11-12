@@ -9,10 +9,16 @@ the API can read the story as the window does and nothing needs a lock.
 A connection is kept alive between requests (a new stream over Tor costs a
 round trip to the onion) and closed when idle. An event stream holds its
 connection until the phone goes or falls too far behind.
+
+Anyone with the onion address can open connections, so none may be held by
+sending slowly: a request has REQUEST_MS from its first byte to its last,
+however the bytes come, and with every slot taken a new connection takes the
+place of the oldest no paired phone has used.
 """
 
 from __future__ import annotations
 
+import itertools
 import os
 import traceback
 from pathlib import Path
@@ -24,7 +30,8 @@ from sealedlore.phone.api import Api
 from sealedlore.phone.http import HttpError, RequestParser, error_response, render
 
 MAX_CONNECTIONS = 32
-IDLE_MS = 20_000
+IDLE_MS = 20_000  # a kept-alive connection waits this long for its next request
+REQUEST_MS = 20_000  # a request, head and body, arrives whole within this
 HEARTBEAT_MS = 20_000
 # An event stream this far behind is dropped: the phone reconnects and
 # reloads what it missed.
@@ -44,6 +51,7 @@ class PhoneServer(QObject):
         self._server.setSocketOptions(QLocalServer.SocketOption.UserAccessOption)
         self._server.newConnection.connect(self._on_new_connection)
         self._connections: set[_Connection] = set()
+        self._order = itertools.count()
         self._path: Path | None = None
         self._heartbeat = QTimer(self)
         self._heartbeat.setInterval(HEARTBEAT_MS)
@@ -81,37 +89,55 @@ class PhoneServer(QObject):
     def _on_new_connection(self) -> None:
         while self._server.hasPendingConnections():
             socket = self._server.nextPendingConnection()
-            if len(self._connections) >= MAX_CONNECTIONS:
+            if len(self._connections) >= MAX_CONNECTIONS and not self._make_room():
                 socket.abort()
                 socket.deleteLater()
                 continue
-            self._connections.add(_Connection(socket, self))
+            self._connections.add(_Connection(socket, self, next(self._order)))
+
+    def _make_room(self) -> bool:
+        """Drop the oldest connection no paired phone has used. Refusing the
+        newcomer instead let whoever opened the slots first keep them; this
+        way a stranger's connections are the ones that go, and a phone's
+        request (a second or so over Tor) is through long before its turn."""
+        strangers = [c for c in self._connections if not c.trusted]
+        if not strangers:
+            return False
+        min(strangers, key=lambda c: c.order).drop()
+        return True
 
     def _forget(self, connection: _Connection) -> None:
         self._connections.discard(connection)
 
 
 class _Connection(QObject):
-    def __init__(self, socket: QLocalSocket, server: PhoneServer) -> None:
+    def __init__(self, socket: QLocalSocket, server: PhoneServer, order: int) -> None:
         super().__init__(server)
         self._socket = socket
         self._server = server
+        self.order = order  # oldest first, when room has to be made
+        self.trusted = False  # a paired phone has used it: never dropped for room
         self._parser = RequestParser()
         self._handle: int | None = None  # the hub's, once this is an event stream
         self._closing = False
         self._done = False
-        self._idle = QTimer(self)
-        self._idle.setSingleShot(True)
-        self._idle.setInterval(IDLE_MS)
-        self._idle.timeout.connect(self.close)
+        self._between_requests = False  # waiting for the next on a kept-alive connection
+        # One deadline at a time, never put off by bytes arriving: a request
+        # trickled a byte at a time would otherwise hold its slot for ever.
+        self._deadline = QTimer(self)
+        self._deadline.setSingleShot(True)
+        self._deadline.timeout.connect(self._out_of_time)
         socket.readyRead.connect(self._read)
         socket.disconnected.connect(self._gone)
-        self._idle.start()
+        self._deadline.start(REQUEST_MS)  # opened to send a request: it has this long
 
     def close(self) -> None:
         if self._closing:
             return
         self._closing = True
+        # What is left to write has this long to go: a peer that never reads
+        # its answer doesn't keep the connection.
+        self._deadline.start(REQUEST_MS)
         try:
             self._socket.disconnectFromServer()
             gone = self._socket.state() == QLocalSocket.LocalSocketState.UnconnectedState
@@ -119,6 +145,26 @@ class _Connection(QObject):
             gone = True
         if gone:
             self._gone()
+
+    def _out_of_time(self) -> None:
+        try:
+            unsent = self._socket.bytesToWrite()
+        except RuntimeError:  # Qt deleted the socket with its server
+            unsent = 0
+        if self.trusted and unsent:
+            # A paired phone still taking a picture over a slow circuit is
+            # given longer while some of its answer is still to go.
+            self._deadline.start(IDLE_MS)
+            return
+        self.drop()
+
+    def drop(self) -> None:
+        """At once, with nothing more written: out of time, or room needed."""
+        try:
+            self._socket.abort()
+        except RuntimeError:  # Qt deleted the socket with its server
+            pass
+        self._gone()
 
     def _write(self, data: bytes) -> None:
         self._socket.write(QByteArray(data))
@@ -128,7 +174,9 @@ class _Connection(QObject):
         data = bytes(self._socket.readAll().data())
         if self._handle is not None or self._closing:
             return  # an event stream reads nothing more
-        self._idle.start()
+        if data and self._between_requests:
+            self._between_requests = False
+            self._deadline.start(REQUEST_MS)  # a request begins: this long for all of it
         try:
             requests = self._parser.feed(data)
         except HttpError as exc:
@@ -149,11 +197,13 @@ class _Connection(QObject):
             except Exception:  # noqa: BLE001 - a bug must not take the window down
                 traceback.print_exc()
                 response = error_response(500)
+            if response.device:
+                self.trusted = True
             if response.stream:
                 self._write(render(response, keep_alive=False))
                 hub = self._server.api.hub
                 self._handle = hub.subscribe(response.device, self._send_event, self.close)
-                self._idle.stop()
+                self._deadline.stop()  # a paired phone's stream is held as long as it lasts
                 hub.send_to(self._handle, "hello", self._server.api.state_payload())
                 self._server.stream_opened.emit(response.device)
                 self._server.streams_changed.emit()
@@ -162,6 +212,13 @@ class _Connection(QObject):
             if not request.keep_alive:
                 self.close()
                 return
+        if not requests:
+            return  # the request so far keeps the deadline it had
+        if self._parser.pending:
+            self._deadline.start(REQUEST_MS)  # the next one has begun
+        else:
+            self._between_requests = True
+            self._deadline.start(IDLE_MS)
 
     def _send_event(self, data: bytes) -> bool:
         if self._closing or self._socket.state() != QLocalSocket.LocalSocketState.ConnectedState:
@@ -181,7 +238,7 @@ class _Connection(QObject):
             self._server.api.hub.unsubscribe(self._handle)
             self._handle = None
             self._server.streams_changed.emit()
-        self._idle.stop()
+        self._deadline.stop()
         self._server._forget(self)
         try:
             self._socket.deleteLater()

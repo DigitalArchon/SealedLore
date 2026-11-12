@@ -239,11 +239,18 @@ class Api:
                         401, "This phone isn't paired. Pair it again from the desktop."
                     )
                 self.backend.seen(device)
-            if route.story:
-                refusal = self._story_refusal()
-                if refusal is not None:
-                    return refusal
-            return route.handler(request, *match.groups(), device=device)
+            try:
+                response = self._story_refusal() if route.story else None
+                if response is None:
+                    response = route.handler(request, *match.groups(), device=device)
+            except HttpError as exc:
+                response = error_response(exc.status, exc.detail)
+            except Refused as exc:
+                response = error_response(exc.status, exc.reason)
+            # Who asked, refused or not: the server never drops a connection
+            # a paired phone is using to make room for a stranger's.
+            response.device = response.device or device
+            return response
         if allowed:
             return _with(error_response(405), Allow=", ".join(sorted(allowed)))
         return error_response(404)

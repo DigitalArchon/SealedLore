@@ -464,6 +464,22 @@ def test_an_event_stream_is_for_its_phone_and_limited_per_phone():
     assert api.handle(request("GET", "/api/events")).status == 429
 
 
+def test_every_answer_to_a_paired_phone_names_it_refused_or_not():
+    """The server never drops a connection a paired phone used to make room,
+    and knows one by this."""
+    api, backend = make()
+    assert api.handle(request("GET", "/api/state")).device == "phone-1"
+    backend.refuse = Refused(409, "busy")
+    refused = api.handle(request("POST", "/api/stop", {}))
+    assert (refused.status, refused.device) == (409, "phone-1")
+    assert api.handle(request("POST", "/api/turn", b"[", content_type="x")).device == "phone-1"
+    backend.open_id = "private"
+    assert api.handle(request("GET", "/api/transcript")).device == "phone-1"  # 423
+    assert api.handle(request("GET", "/api/state", token="wrong")).device == ""
+    assert api.handle(request("GET", "/", token=None)).device == ""
+    assert api.handle(request("POST", "/api/pair", {"code": "x"}, token=None)).device == ""
+
+
 def test_forgetting_a_phone_closes_its_streams():
     api, backend = make()
     written: list[bytes] = []

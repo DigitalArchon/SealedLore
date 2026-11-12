@@ -212,8 +212,10 @@ class Response:
     content_type: str = "application/json"
     headers: dict[str, str] = field(default_factory=dict)
     # An event stream: written with its headers, then held open for events,
-    # its end the connection's end; `device` is the paired phone it is for.
+    # its end the connection's end.
     stream: bool = False
+    # The paired phone that asked (a stream's is the phone it is for); blank
+    # for whoever didn't log in.
     device: str = ""
 
 
