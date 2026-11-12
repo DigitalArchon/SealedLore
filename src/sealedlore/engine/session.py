@@ -2284,9 +2284,13 @@ class StorySession(
         raw_text = text
 
         # A request that failed or was stopped before any text arrived has
-        # nothing to record. Attaching an empty node would leave a dead turn in
-        # the tree and in the transcript; leaving the author's turn as the leaf
-        # instead means regenerate() can simply retry it.
+        # nothing to record, however much it had reasoned (the API log keeps
+        # that). Attaching an empty node would leave a dead turn in the tree
+        # and in the transcript; leaving the author's turn as the leaf instead
+        # means regenerate() can simply retry it, and the window gives the
+        # turn back to the composer. A reply that came back whole with nothing
+        # but reasoning (it spent the limit thinking) is kept: its passage
+        # carries the note that says why it is empty and how to carry it on.
         node: Node | None = None
         self.repeat_dropped = False
         if extend is not None:
@@ -2295,7 +2299,7 @@ class StorySession(
                 node = extend
                 self._carry_on(extend, added, reasoning, usage, model)
             text = added if added.strip() else ""
-        elif text or reasoning:
+        elif text or (reasoning and completed is not None):
             node = Node(
                 kind="assistant",
                 speaker_id="__narrator__",

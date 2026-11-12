@@ -10,6 +10,7 @@ import pytest
 
 from sealedlore.engine.prompt import TurnRequest
 from sealedlore.engine.session import (
+    CUT_OFF,
     MAX_AUTO_ARCHIVE_ROUNDS,
     SessionNotice,
     StorySession,
@@ -21,7 +22,7 @@ from sealedlore.models.config import Config, EmbeddingProviderConfig, ProviderCo
 from sealedlore.models.generation import GenerationParams
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.node import DIRECTOR_SPEAKER_ID, Node, Usage
-from sealedlore.providers.base import ProviderError, TextDelta
+from sealedlore.providers.base import ProviderError, ReasoningDelta, StreamCompleted, TextDelta
 from sealedlore.providers.mock import MockChatProvider, MockEmbeddings
 from sealedlore.storage.repository import (
     StoryBundle,
@@ -134,6 +135,47 @@ def test_stopping_early_keeps_the_partial_text(session: StorySession):
     assert session.last_result.stopped_early is True
     assert session.last_result.text == "one "
     assert session.nodes[-1].content == "one "
+
+
+def test_a_stop_while_the_model_is_still_reasoning_leaves_no_empty_passage(
+    session: StorySession, tmp_path: Path
+):
+    session.provider = MockChatProvider(["never reached"], reasoning="Let me think first.")
+    events = session.send(turn())
+    first = next(events)
+    assert isinstance(first, ReasoningDelta)
+    events.close()
+
+    # The author's turn is the leaf, so the window gives it back to the
+    # composer and Regenerate retries it.
+    assert [node.kind for node in session.nodes] == ["user"]
+    assert session.story.active_leaf_id == session.nodes[0].id
+    assert session.last_result is not None
+    assert session.last_result.node is None
+    assert session.last_result.stopped_early is True
+    # The reasoning it had streamed is still in the API log.
+    log = read_api_log(session.story.id, root=tmp_path)
+    assert log[-1]["reasoning"] == "Let me think first."
+
+
+class _ThoughtToTheLimit(MockChatProvider):
+    """A reply that spent its whole limit reasoning and came back whole."""
+
+    def stream(self, request):
+        self.requests.append(request)
+        yield ReasoningDelta(text="On and on.")
+        yield StreamCompleted(usage=self.usage, finish_reason="length")
+
+
+def test_a_whole_reply_that_only_reasoned_is_kept_with_its_cut_off_note(session: StorySession):
+    session.provider = _ThoughtToTheLimit()
+    list(session.send(turn()))
+
+    assert [node.kind for node in session.nodes] == ["user", "assistant"]
+    passage = session.nodes[-1]
+    assert passage.content == ""
+    assert passage.meta.reasoning == "On and on."
+    assert any(note.startswith(CUT_OFF) for note in passage.meta.notes)
 
 
 def test_regenerate_creates_a_sibling_take(session: StorySession):
