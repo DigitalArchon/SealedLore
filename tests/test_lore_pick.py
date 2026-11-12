@@ -126,6 +126,41 @@ def test_the_picker_picks_after_the_passage_for_the_next_turn(session: StorySess
     assert "lore_pick_response" in kinds
 
 
+def test_the_pick_s_thread_reads_nothing_of_the_session(session: StorySession, monkeypatch):  # noqa: F811
+    """Its parameters can read the model's facts from the endpoint and save
+    the config: read before the thread starts, as every background job's are."""
+    import threading
+
+    class Detaching(MockChatProvider):
+        def __init__(self) -> None:
+            super().__init__(["They talk of the treaty."])
+            self.side = MockChatProvider(['{"pick": [1]}'])
+
+        def detached(self) -> MockChatProvider:
+            return self.side
+
+    large(session, "picker")
+    session.provider = Detaching()
+    read_on: set[int] = set()
+    side_params = session.side_params
+    texts = StorySession.texts
+
+    def params(*args, **kwargs):
+        read_on.add(threading.get_ident())
+        return side_params(*args, **kwargs)
+
+    def texts_read(self):
+        read_on.add(threading.get_ident())
+        return texts.fget(self)
+
+    session.side_params = params
+    monkeypatch.setattr(StorySession, "texts", property(texts_read))
+    list(session.send(turn("I ask about the accord.")))
+    assert session.path()[-1].meta.lore_picks == [ACCORD]
+    assert session.provider.side.requests, "picked on the detached client"
+    assert read_on == {threading.get_ident()}
+
+
 def test_no_candidates_means_no_call_and_nothing_needed(session: StorySession):  # noqa: F811
     large(session, "picker")
     session.provider = MockChatProvider(["Nothing of note happens."])

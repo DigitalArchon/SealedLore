@@ -181,6 +181,7 @@ from sealedlore.models.authoring import ReviewRecord, SettingsChange, SettingsRe
 from sealedlore.models.character import Character, CompetenceTier
 from sealedlore.models.config import Config, ModelPrice
 from sealedlore.models.embedding import EmbeddingCacheEntry
+from sealedlore.models.generation import GenerationParams
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.node import (
     DIRECTOR_SPEAKER_ID,
@@ -433,7 +434,15 @@ class _LorePick:
     scene: str
     vectors: dict[str, tuple[float, ...]]
     model: str
-    # Its route (`route_for`), read before the thread starts.
+    # Everything the thread needs from the session, read before it starts:
+    # the passage as it stood, the route (`route_for`), the parameters
+    # (`side_params`, which can read the model's facts from the endpoint and
+    # save the config), the prompt texts and the embeddings client. The thread
+    # itself never touches the session.
+    passage: str
+    params: GenerationParams
+    texts: PromptTexts
+    embeddings: EmbeddingBackend | None = None
     route: dict[str, Any] = field(default_factory=dict)
     candidates: list[LoreEntry] = field(default_factory=list)
     request: ChatRequest | None = None
@@ -1114,14 +1123,19 @@ class StorySession(
                 vectors = self.ensure_lore_vectors()
             except ProviderError:
                 vectors = {}
+        model = self.story.defaults.lore_model or self.config.lore_model or self.scene_model
         pick = _LorePick(
             node=node,
             entries=layout.selectable,
             prose="\n\n".join(n.content for n in path[-3:]),
             scene=scene_line(self.story.scene.location, self._present_names()),
             vectors=vectors,
-            model=self.story.defaults.lore_model or self.config.lore_model or self.scene_model,
+            model=model,
+            passage=node.content,
             route=self.route_for("lore"),
+            params=self.side_params(model, max_tokens=PICK_MAX_TOKENS),
+            texts=self.texts,
+            embeddings=self.embeddings,
         )
         detached = getattr(self.provider, "detached", None)
         if callable(detached):
@@ -1132,11 +1146,14 @@ class StorySession(
             pick.thread.start()
         return pick
 
-    def _run_lore_pick(self, pick: _LorePick, client: ChatProvider, close: bool) -> None:
+    @staticmethod
+    def _run_lore_pick(pick: _LorePick, client: ChatProvider, close: bool) -> None:
+        """The pick's calls, from what `_start_lore_pick` read: on a thread of
+        its own beside the reads, so never the session (a static method)."""
         try:
             scores: dict[str, float] | None = None
-            if pick.vectors and self.embeddings is not None:
-                query = self.embeddings.embed([pick.node.content], as_query=True).vectors
+            if pick.vectors and pick.embeddings is not None:
+                query = pick.embeddings.embed([pick.passage], as_query=True).vectors
                 ids = [e.id for e in pick.entries if e.id in pick.vectors]
                 if query and ids:
                     found = cosine_scores(query[0], [pick.vectors[i] for i in ids])
@@ -1147,9 +1164,9 @@ class StorySession(
                     model=pick.model,
                     extra_body=pick.route,
                     messages=build_pick_messages(
-                        pick.node.content, pick.scene, pick.candidates, texts=self.texts
+                        pick.passage, pick.scene, pick.candidates, texts=pick.texts
                     ),
-                    params=self.side_params(pick.model, max_tokens=PICK_MAX_TOKENS),
+                    params=pick.params,
                 )
                 pick.reply = client.complete(pick.request)
         except BaseException as exc:  # noqa: BLE001 - reported on the worker thread
