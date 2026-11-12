@@ -114,6 +114,12 @@ def atomic_write_json(
     _write_atomic(path, text.encode("utf-8"), keep_backup=keep_backup, mode=mode)
 
 
+def atomic_write_bytes(path: Path, data: bytes) -> None:
+    """Write `data` to `path`, all or nothing (a picture, a record from a
+    backup), readable by its owner alone."""
+    _write_atomic(path, data)
+
+
 # Whether a write reaches the disk before it is swapped in (`_write_atomic`).
 # Only the tests turn it off, for speed; what it does is tested with it on.
 DURABLE = True

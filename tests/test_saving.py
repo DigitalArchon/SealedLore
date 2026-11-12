@@ -7,6 +7,7 @@ import json
 import os
 import stat
 import sys
+import threading
 from pathlib import Path
 
 from sealedlore.models.node import Node
@@ -341,3 +342,50 @@ def test_a_config_saved_again_unchanged_is_left_alone_and_keeps_its_mode(tmp_pat
         save_config(config, root=tmp_path)
         assert swapped == ["config.json"]
         assert stat.S_IMODE(os.stat(config_file(tmp_path)).st_mode) == CONFIG_FILE_MODE
+
+
+# --- pictures -----------------------------------------------------------------
+
+
+def test_two_writers_of_one_picture_never_share_a_temp_file(tmp_path, monkeypatch):
+    """A second thread writes the same picture while the first is about to
+    swap its own in: neither write fails, and the picture is one of them,
+    whole."""
+    from sealedlore.storage import images
+
+    picture = tmp_path / "images" / "p.png"
+    real_replace = atomic.replace
+    first = threading.Event()
+    second_done = threading.Event()
+    failures: list[BaseException] = []
+
+    def replace(source: Path, target: Path) -> None:
+        if not first.is_set():
+            first.set()
+            second_done.wait(timeout=0.5)  # the second writer goes ahead, if it can
+        real_replace(source, target)
+
+    def write(data: bytes, done: threading.Event | None = None) -> None:
+        try:
+            images.write_bytes_atomic(picture, data)
+        except BaseException as exc:  # noqa: BLE001 - reported below
+            failures.append(exc)
+        finally:
+            if done is not None:
+                done.set()
+
+    monkeypatch.setattr(atomic, "replace", replace)
+    monkeypatch.setattr(images, "replace", replace, raising=False)
+    one = threading.Thread(target=write, args=(b"the first picture",))
+    one.start()
+    assert first.wait(timeout=5)
+    two = threading.Thread(target=write, args=(b"the second picture", second_done))
+    two.start()
+    one.join(timeout=5)
+    two.join(timeout=5)
+
+    assert failures == []
+    assert picture.read_bytes() in (b"the first picture", b"the second picture")
+    assert not list(picture.parent.glob("*.tmp"))
+    if sys.platform != "win32":
+        assert stat.S_IMODE(picture.stat().st_mode) == 0o600

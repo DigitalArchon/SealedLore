@@ -15,7 +15,6 @@ Pictures are kept with their hidden data removed (`storage.image_meta`);
 
 from __future__ import annotations
 
-import os
 import shutil
 import sys
 from collections.abc import Iterable
@@ -24,7 +23,7 @@ from pathlib import Path, PurePosixPath
 from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage, ImageRef
 from sealedlore.models.video import GeneratedVideo
-from sealedlore.storage.atomic import atomic_write_json, open_private, read_json, replace
+from sealedlore.storage.atomic import atomic_write_bytes, atomic_write_json, read_json
 from sealedlore.storage.image_meta import MetadataError, strip_metadata
 from sealedlore.storage.paths import story_dir
 
@@ -98,12 +97,11 @@ def write_record_file(story_id: str, name: str, data: bytes, root: Path | None =
 
 
 def write_bytes_atomic(path: Path, data: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_name(path.name + ".tmp")
-    fd = open_private(tmp_path, os.O_WRONLY | os.O_TRUNC)
-    with os.fdopen(fd, "wb") as handle:
-        handle.write(data)
-    replace(tmp_path, path)
+    """`data` at `path`, all or nothing, as a JSON file is written
+    (`atomic.atomic_write_bytes`): through a temp file of its own. All
+    writers of one picture shared `<name>.tmp`, so one could swap in the
+    other's half-written bytes, and the other's swap then found nothing."""
+    atomic_write_bytes(path, data)
 
 
 def write_story_file(story_id: str, relative: str, data: bytes, root: Path | None = None) -> None:
