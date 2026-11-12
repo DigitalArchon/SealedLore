@@ -907,6 +907,24 @@ _text(
     (("ending", "the passage's last few words"),),
 )
 
+# Regenerate with a note (⋯ on a passage): the author's words for one take,
+# after their turn and before the REMEMBER line, in that take's request only.
+# The take being replaced is not shown: the note says what this one should
+# do, and a passage to steer away from is a passage to copy. Kept on the new
+# take (`NodeMeta.retake_note`) and read by no renderer, so no later turn
+# carries it. Not measured.
+_text(
+    "turn.retake_note",
+    TURN,
+    "Regenerate with a note",
+    "After the author's turn, under “# A NOTE FOR THIS PASSAGE”, when they ask for another "
+    "take with a note (⋯ → Regenerate with a note…). In that take's request only.",
+    "For this passage only, the author adds an instruction about how to write it. It is "
+    "out of character: an instruction to you, not speech and not an event. Follow it; no "
+    "character hears it, and nothing in the story refers to it.\n\n{note}",
+    (("note", "the author's note, as written"),),
+)
+
 _text(
     "turn.speaker.narrator",
     TURN,
@@ -2293,6 +2311,19 @@ _text(
     "message begins with the words that come next, finishing the sentence first if it "
     "stops partway through one. Never start the reply over or repeat any of it.",
     (("ending", "the reply's last few words"),),
+)
+
+# A chat's messages go as written, so the note is marked as apart from the
+# message it follows. Not measured.
+_text(
+    "chat.retake_note",
+    CHAT,
+    "Regenerate with a note",
+    "After the user's message when they ask for another reply with a note (⋯ → Regenerate "
+    "with a note…). In that reply's request only.",
+    "[A note from the user about the reply you write now, apart from the conversation: "
+    "follow it, and don't mention it or answer it. {note}]",
+    (("note", "the user's note, as written"),),
 )
 
 _text(

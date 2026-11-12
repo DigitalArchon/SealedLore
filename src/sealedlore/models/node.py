@@ -152,6 +152,10 @@ class NodeMeta(BaseModel):
     # bar too, where the next notice replaced it; kept here, the transcript
     # shows it under the message.
     notes: list[str] = Field(default_factory=list)
+    # On a passage written by Regenerate with a note: the note the author
+    # gave for that take. For the author to see and the log to tell; no
+    # request reads it, so a later take or turn never carries it.
+    retake_note: str | None = None
 
 
 class Node(BaseModel):

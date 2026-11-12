@@ -580,6 +580,15 @@ def render_author_turn(
     return _joined(lines)
 
 
+def render_retake_note(note: str, texts: PromptTexts = DEFAULT_TEXTS) -> str:
+    """Regenerate with a note: the author's instruction for one take, in that
+    take's tail after their turn. Empty for no note."""
+    note = note.strip()
+    if not note:
+        return ""
+    return f"# A NOTE FOR THIS PASSAGE\n\n{texts.fill('turn.retake_note', note=note)}"
+
+
 def render_speaker_tag(
     speaker_id: str, speaker: Character | None, texts: PromptTexts = DEFAULT_TEXTS
 ) -> str:

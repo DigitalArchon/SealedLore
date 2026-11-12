@@ -121,6 +121,10 @@ def test_nothing_from_a_private_scene_reaches_another_model(tmp_path: Path, keep
     private = enter(session, keep)
     play(session, turn(held, f"I whisper {MARKER} to her."))
     play(session, turn(held, f"We share {MARKER} again."))
+    # A take steered by a note: the note is the scene's too.
+    for _event in session.regenerate(note=f"Closer, and name {MARKER}."):
+        pass
+    assert session.full_path()[-1].meta.retake_note
     private.responses = ["They spoke quietly and agreed to meet at dawn by the well."]
     summary = session.summarise_private()
     assert MARKER not in summary
@@ -734,7 +738,8 @@ def test_a_long_story_after_the_scene_never_brings_it_back(tmp_path: Path, keep:
 def test_a_memory_scene_writes_only_content_free_log_kinds(tmp_path: Path):
     """The constraint every later change must keep: in a memory-only scene the
     API log sees the model's name and the usage, nothing else, from the turn,
-    an aside, a regenerate and the exit summary alike."""
+    an aside, a regenerate (plain, and with a note) and the exit summary
+    alike."""
     session, main, held = build(tmp_path)
     play(session, turn(held, "Before the scene."))
     before = len(read_api_log(session.story.id, root=tmp_path))
@@ -743,6 +748,8 @@ def test_a_memory_scene_writes_only_content_free_log_kinds(tmp_path: Path):
     for _ in session.ask(f"Who is here? {MARKER}"):
         pass
     for _ in session.regenerate():
+        pass
+    for _ in session.regenerate(note=f"Again, with {MARKER}."):
         pass
     session.summarise_private()
     entries = read_api_log(session.story.id, root=tmp_path)[before:]

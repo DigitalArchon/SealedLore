@@ -41,6 +41,7 @@ from sealedlore.engine.rules import (
     render_perspective_block,
     render_question,
     render_reminder,
+    render_retake_note,
     render_scene_block,
     render_scene_log_block,
     render_standing_lore,
@@ -91,6 +92,8 @@ SECTION_MAP = "tail.map"
 SECTION_DIRECTION = "tail.direction"
 SECTION_DIRECTIVES = "tail.directives"
 SECTION_AUTHOR_TURN = "tail.author_turn"
+# Regenerate with a note: the author's words for this take only.
+SECTION_RETAKE_NOTE = "tail.retake_note"
 SECTION_QUESTION = "tail.question"
 SECTION_REMINDER = "tail.reminder"
 
@@ -114,6 +117,10 @@ class TurnRequest:
     # is (a retake's leaf is the previous take).
     turn_node_id: str | None = None
     ooc: str | None = None
+    # Regenerate with a note: the author's instruction for this take alone,
+    # after their turn in its tail. Kept on the take it made, never on the
+    # author's turn, so no later take or turn carries it.
+    retake_note: str = ""
     npc_scope: NpcScope = "all"
     npc_scope_ids: tuple[str, ...] = ()
     agency_mode: AgencyMode = "contested"
@@ -387,6 +394,7 @@ def assemble_prompt(
                 texts=texts,
             ),
         ),
+        (SECTION_RETAKE_NOTE, render_retake_note(turn.retake_note, texts)),
         (
             SECTION_REMINDER,
             render_reminder(
@@ -544,13 +552,16 @@ def assemble_chat(
     options: AssemblyOptions | None = None,
     with_chat_tail: bool = True,
     the_map: str = "",
+    retake_note: str = "",
 ) -> AssembledPrompt:
     """A simple chat's request (engine/chat.py): the author's system prompt,
     the summaries with the kept messages, the conversation as written, and
     `tail` (the user's message, or the picture writer's request) last, then
     the chat's own tail text if it has one (not for the picture writer).
     `the_map`: the chat's map (engine/world.py), when it keeps one, right
-    before the message, where a story's stands in its tail."""
+    before the message, where a story's stands in its tail. `retake_note`:
+    the user's note for this reply alone (Regenerate with a note), after
+    their message."""
     from sealedlore.engine.chat import (
         SECTION_CHAT_PROMPT,
         SECTION_CHAT_TAIL,
@@ -560,6 +571,9 @@ def assemble_chat(
 
     texts = (options or AssemblyOptions()).texts
     tail_specs = [(SECTION_MAP, the_map), (SECTION_AUTHOR_TURN, tail.strip())]
+    if retake_note.strip():
+        note = texts.fill("chat.retake_note", note=retake_note.strip())
+        tail_specs.append((SECTION_RETAKE_NOTE, note))
     if with_chat_tail:
         tail_specs.append((SECTION_CHAT_TAIL, story.chat_tail.strip()))
 

@@ -527,6 +527,7 @@ class PrivateRuntime:
             nodes_by_id={node.id: node for node in self.nodes},
             estimator=self.estimator,
             options=options,
+            retake_note=turn.retake_note,
         )
         self.last_prompt = prompt
         return prompt

@@ -623,7 +623,8 @@ archiving, rebuilding summaries.
   storyteller sees* shows the chapter summaries standing in for archived
   prose and marks anything left out for budget (View → What the storyteller
   sees, Ctrl+Shift+V).
-- **Each message** has Edit and a ⋯ menu: Regenerate this passage, Continue
+- **Each message** has Edit and a ⋯ menu: Regenerate this passage,
+  Regenerate with a note…, Continue
   this passage (the latest one), Take back this turn (your turns), Reroll the
   dice, Use as evidence in a review, Illustrate this passage…, New branch
   from here…, and Delete from here….
@@ -1956,6 +1957,18 @@ between takes, in place. A take is another version of that one passage, so the
 story after it stays where it is, whichever take is showing (if a chapter
 summary covers it, the summary is marked out of date). The **⋯** menu on a
 message offers **Regenerate this passage** (any passage, not just the latest).
+
+**⋯ → Regenerate with a note…** is Regenerate with a few words from you on
+what the new take should do differently: "she should refuse this time", "less
+description, more of what he says". It opens a small box to write them in.
+The note goes to the storyteller with that one take, as an instruction no
+character hears, after your turn as you sent it; the take being replaced is
+not shown to it. The note is kept with the take it made, shown under it, and
+is never sent again: a plain Regenerate afterwards goes without it, and so does every later
+turn. (An OOC note on the turn itself is different: it stays with the turn
+and is part of the story from then on.) Length and Outcome apply as for
+Regenerate. A simple chat's replies have it too, and in a
+private scene the note goes to the scene's own model and nowhere else.
 
 **Continue**, beside Regenerate in the bottom bar (and **⋯ → Continue this
 passage** on the latest passage), writes more of the latest passage into it,

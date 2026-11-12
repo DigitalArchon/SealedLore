@@ -247,6 +247,12 @@ class TextBody(QLabel):
         super().changeEvent(event)
 
 
+# ⋯ on a passage, as the manual names it.
+REGENERATE_NOTE_LABEL = "Regenerate with a note…"
+# Under a take made that way, before the author's note.
+RETAKE_NOTE_SHOWN = "Your note for this take"
+
+
 def may_retake(turn_scene: str | None, open_scene: str | None) -> bool:
     """The session's rule for a private scene's messages, on the window's
     side (StorySession.regenerate): a passage may be taken again, and a turn
@@ -281,6 +287,8 @@ def _retakeable_ids(nodes: Sequence[Node]) -> set[str]:
 
 class MessageWidget(QFrame):
     regenerate_requested = Signal(str)
+    # Another take, with the author's words for it (the window asks for them).
+    regenerate_note_requested = Signal(str)
     # More of this passage, written into it (engine/continuation.py).
     continue_requested = Signal(str)
     take_back_requested = Signal(str)
@@ -416,6 +424,8 @@ class MessageWidget(QFrame):
         self._scene: str | None = None
         self._turn_scene: str | None = None
         self.ooc: QLabel | None = None
+        # What the author asked of this take (`add_take_note`).
+        self.take_note: QLabel | None = None
         if ooc:
             self.ooc = TextBody(f"OOC — {ooc}")
             self.ooc.setTextFormat(Qt.PlainText)
@@ -484,6 +494,17 @@ class MessageWidget(QFrame):
         else:
             self.layout_.insertWidget(index, note)
 
+    def add_take_note(self, text: str) -> None:
+        """Under a take the author steered with a few words: what they asked
+        of it, in the look of a turn's OOC note. Shown to the author only: no
+        request carries it again."""
+        note = TextBody(text)
+        note.setTextFormat(Qt.PlainText)
+        note.setObjectName("messageOoc")
+        note.setWordWrap(True)
+        self.layout_.insertWidget(self.layout_.indexOf(self.body) + 1, note)
+        self.take_note = note
+
     def _add_variant_cycler(self, row: QHBoxLayout, position: int, count: int) -> None:
         """‹ 2 / 4 › — swiping between takes is moving along the tree (§2.2, §10)."""
         previous = QToolButton()
@@ -540,6 +561,18 @@ class MessageWidget(QFrame):
             )
             regenerate.triggered.connect(lambda: self.regenerate_requested.emit(self.node_id))
             self.actions_["regenerate"] = regenerate
+            # To steer a take the author otherwise took the turn back, added
+            # an OOC note and sent it again.
+            with_note = menu.addAction(REGENERATE_NOTE_LABEL)
+            with_note.setToolTip(
+                "Another take of this reply, with a note from you on what it should do "
+                "differently; the note is for that take only"
+                if chat
+                else "Another take of this passage, with a note from you on what it should "
+                "do differently; the note is for that take only, and no character hears it"
+            )
+            with_note.triggered.connect(lambda: self.regenerate_note_requested.emit(self.node_id))
+            self.actions_["regenerate_note"] = with_note
         if assistant and continuable:
             carry_on = menu.addAction("Continue this reply" if chat else "Continue this passage")
             carry_on.setToolTip(
@@ -640,6 +673,7 @@ class MessageWidget(QFrame):
         retake = may_retake(self._turn_scene, open_scene)
         for key, allowed in (
             ("regenerate", retake),
+            ("regenerate_note", retake),
             ("reroll", retake),
             ("take_back", may_retake(self._scene, open_scene)),
             ("rewrite", may_branch(self._scene, open_scene)),
@@ -1506,6 +1540,7 @@ def sent_mark(message: Node, reply: Node | None) -> str | None:
 
 class TranscriptView(QScrollArea):
     regenerate_requested = Signal(str)
+    regenerate_note_requested = Signal(str)
     continue_requested = Signal(str)
     take_back_requested = Signal(str)
     review_mark_requested = Signal(str)
@@ -1753,6 +1788,7 @@ class TranscriptView(QScrollArea):
         widget.illustrate_requested.connect(self.illustrate_requested)
         widget.video_requested.connect(self.video_requested)
         widget.regenerate_requested.connect(self.regenerate_requested)
+        widget.regenerate_note_requested.connect(self.regenerate_note_requested)
         widget.continue_requested.connect(self.continue_requested)
         widget.take_back_requested.connect(self.take_back_requested)
         widget.edit_committed.connect(self.edit_committed)
@@ -2088,6 +2124,8 @@ class TranscriptView(QScrollArea):
             widget.setToolTip(
                 f"The approved summary of a private {part}: all any other model knows of it."
             )
+        if node.meta.retake_note:
+            widget.add_take_note(f"{RETAKE_NOTE_SHOWN} — {node.meta.retake_note}")
         for model in node.meta.reasoning_caught:
             widget.add_note("⚠ " + caught_note(model))
         # A failure or warning from sending or reading this message: the

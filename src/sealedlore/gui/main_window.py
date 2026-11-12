@@ -139,6 +139,7 @@ from sealedlore.gui.window_looks import LooksWindow
 from sealedlore.gui.window_phone import PhoneWindow
 from sealedlore.gui.window_plot import PlotWindow
 from sealedlore.gui.window_private import PrivateWindow
+from sealedlore.gui.window_retakes import RetakesWindow
 from sealedlore.gui.window_tavern import TavernWindow
 from sealedlore.gui.window_text import TextSizeWindow
 from sealedlore.gui.window_videos import VideosWindow
@@ -361,6 +362,7 @@ class MainWindow(
     VideosWindow,
     PhoneWindow,
     PrivateWindow,
+    RetakesWindow,
     TextSizeWindow,
     LayoutWindow,
     QMainWindow,
@@ -481,6 +483,7 @@ class MainWindow(
     def _build_ui(self) -> None:
         self.transcript = TranscriptView()
         self.transcript.regenerate_requested.connect(self._regenerate_node)
+        self.transcript.regenerate_note_requested.connect(self._regenerate_with_note)
         self.transcript.continue_requested.connect(self._continue_node)
         self.transcript.take_back_requested.connect(self._take_back)
         self.transcript.review_mark_requested.connect(self._toggle_review_mark)
@@ -3281,9 +3284,10 @@ class MainWindow(
         self._queued_text = None
         self._queued_origin = "desktop"
 
-    def regenerate(self, shape: TurnShape | None = None) -> None:
+    def regenerate(self, shape: TurnShape | None = None, *, note: str | None = None) -> None:
         """Another take of the latest passage. `shape` is the phone's; the
-        desktop's is the composer's, read here."""
+        desktop's is the composer's, read here. `note`: the author's words
+        for this take alone (⋯ → Regenerate with a note…)."""
         if self.session is None or self._busy:
             return
         path = self.session.full_path()
@@ -3299,7 +3303,7 @@ class MainWindow(
         if shape is None:
             shape = self._current_shape()
             self.statusBar().showMessage(self._shape_summary(), 6000)
-        self._start(lambda: self.session.regenerate(shape=shape))
+        self._start(lambda: self.session.regenerate(shape=shape, note=note))
 
     def reroll(self, node_id: str = "", shape: TurnShape | None = None) -> None:
         """Roll again for the latest dice turn: a new sibling take, new outcome."""
@@ -3405,13 +3409,16 @@ class MainWindow(
             self.show_map(False)
         act()
 
-    def _regenerate_node(self, node_id: str, shape: TurnShape | None = None) -> None:
-        """Another take of any passage; the old one stays as a sibling (§2.2)."""
+    def _regenerate_node(
+        self, node_id: str, shape: TurnShape | None = None, *, note: str | None = None
+    ) -> None:
+        """Another take of any passage; the old one stays as a sibling (§2.2).
+        `note`: the author's words for this take alone."""
         if self.session is None or self._busy:
             return
         path = self.session.full_path()
         if path and path[-1].id == node_id:
-            self.regenerate(shape)
+            self.regenerate(shape, note=note)
             return
         if (refusal := self._retake_refusal(path_to(self.session.nodes, node_id))) is not None:
             self.statusBar().showMessage(refusal, 8000)
@@ -3428,7 +3435,7 @@ class MainWindow(
             shape = self._current_shape()
             self.statusBar().showMessage(self._shape_summary(), 6000)
         self._focus_after_job = before[-1].id if before else None
-        self._start(lambda: self.session.regenerate(node_id, shape=shape))
+        self._start(lambda: self.session.regenerate(node_id, shape=shape, note=note))
 
     def _take_back(self, node_id: str) -> None:
         """Return an author turn to the composer, and remove it and what followed.

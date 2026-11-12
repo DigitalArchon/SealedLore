@@ -1003,6 +1003,7 @@ class StorySession(
                 nodes_by_id=index_nodes(self.nodes),
                 estimator=self.estimator,
                 options=self.assembly_options(),
+                retake_note=turn.retake_note,
             )
             self.last_prompt = prompt
             return prompt
@@ -1964,6 +1965,7 @@ class StorySession(
         *,
         reroll: bool = False,
         shape: TurnShape | None = None,
+        note: str | None = None,
     ) -> Iterator[StreamEvent | SessionNotice]:
         """Another take on the latest author turn, leaving any existing one intact.
 
@@ -1986,6 +1988,13 @@ class StorySession(
         A dice roll is kept: another take rewrites the same outcome, so
         Regenerate can't be used to fish for a success. `reroll=True` is the
         deliberate exception, rolling again against the same odds.
+
+        `note` (Regenerate with a note) is the author's instruction for this
+        take alone: it rides the take's tail after their turn
+        (`turn.retake_note`), out of character, and is kept on the take it
+        made, never on the author's turn, so the next plain Regenerate goes
+        without it. The take being replaced is not shown to the storyteller.
+        A blank note is a plain Regenerate.
         """
         self._tee_guard()
         # Any message on the tree can be retaken, not only the newest: the
@@ -2016,6 +2025,8 @@ class StorySession(
             user_node.meta.roll = turn.roll
         elif turn.roll is not None:
             turn = self._explained(turn)
+        if note and note.strip():
+            turn = replace(turn, retake_note=note.strip())
         # The scene as this turn found it, not as the take being replaced left
         # it: that take's read moved the roster on past the author's turn.
         self._sync_scene([*history, user_node])
@@ -2280,6 +2291,9 @@ class StorySession(
         body: dict[str, Any] = {"node_id": parent.id, "payload": payload}
         if extend is not None:
             body["continues"] = extend.id
+        if turn.retake_note:
+            # A memory-only scene's log keeps none of this (`_log_turn`).
+            body["retake_note"] = turn.retake_note
         log_ref = self._log_turn("request", body, span)
 
         text: list[str] = []
@@ -2389,6 +2403,8 @@ class StorySession(
                     npc_scope_ids=list(turn.npc_scope_ids),
                     controlled_character_id=turn.controlled_character_id,
                     request_log_ref=log_ref,
+                    # Regenerate with a note: what the author asked of this take.
+                    retake_note=turn.retake_note or None,
                     # A TEE model's passage is marked as it is written, and
                     # the mark raised once its reply is checked (`_check_tee`).
                     tee=self._written_mark(model, span),
