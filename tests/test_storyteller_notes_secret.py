@@ -7,6 +7,10 @@ storyteller's own system block. The settings review reads that block too, and
 its words reach the author: it is sent a line saying there are notes in their
 place. So is the Prompt page, unless the author asked to see what the story
 hides.
+
+One other model does read them, because it writes them: the authoring model
+asked to change a story not yet begun, which keeps the notes true to the
+setup it changes (tests/test_storyteller_notes_drafting.py).
 """
 
 from __future__ import annotations

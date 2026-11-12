@@ -34,6 +34,10 @@ ChangeKind = Literal[
     "character_remove",
     "lore_remove",
     "scene",
+    # A follow-up's alone too: the storyteller's notes, whole (value: the new
+    # text, or None), so a changed setup's secrets stay true to it. Its text
+    # is never listed to the author, and never kept as a change's `before`.
+    "storyteller_notes",
 ]
 
 

@@ -3987,6 +3987,14 @@ _text(
 # premises that named no look; saying tone is the prose's left the harbour at
 # the default 2/2, while "Gritty and tense" still gave it 2 of 3. Supporting
 # characters placed in the opening scene in 4 drafts of 20.
+#
+# "storyteller_notes" (Nov 12 2026): a draft sets up mysteries, and its lore
+# guidance used to say a secret still to come out "goes nowhere as fact: leave
+# it out", so the answer was written nowhere and the storyteller made one up
+# each time it was asked (the measurement is beside `storyteller.notes`).
+# The truth now goes in the storyteller's notes, which only the storyteller
+# is sent; lore still never states it. What the storyteller does with notes
+# was measured; what a draft writes into them has not been yet.
 _text(
     "authoring.draft",
     AUTHORING,
@@ -4016,10 +4024,11 @@ SealedLore's settings, and what each is for:
   keywords the story would use when it matters. 3 to 10 entries. Nothing that
   must always hold: that belongs in "world". The storyteller takes every
   entry it is given as already true, so what hasn't happened when the story
-  opens (an arrival planned for later, a secret still to come out, an event
-  to come) goes nowhere as fact: leave it out, or write it as the plan it is
-  and set "until_mentioned" true, which keeps the entry from the storyteller
-  until the author's own turn names it.
+  opens (an arrival planned for later, an event to come) goes nowhere as
+  fact: leave it out, or write it as the plan it is and set "until_mentioned"
+  true, which keeps the entry from the storyteller until the author's own
+  turn names it. A secret still to come out is never stated in lore either:
+  its truth goes in "storyteller_notes".
 - "cast": the characters the author may play and the few central characters
   the story turns on. Every cast sheet is sent on every turn, so 2 to 6 of
   them. "playable" is true for anyone the author might want to play.
@@ -4051,6 +4060,12 @@ SealedLore's settings, and what each is for:
   characters as well as the cast. "nearby" names cast members close at hand
   but not in it, each with a short note. A cast member in neither is placed by
   the first passage, as the opening has them.
+- "storyteller_notes": what only the storyteller is told. The author does not
+  read it; the storyteller holds to it and gives it up as the author's
+  character finds it out. The truth behind anything the setup leaves open
+  (what is really there, who did it, what someone is hiding and why) and, for
+  the few central people, what each wants and what each hides. Plain facts,
+  60 to 250 words. null when the story has no secrets.
 - "style": how passages should read. Set only what the premise implies and
   leave the rest null.
 {style_guide}
@@ -4087,6 +4102,7 @@ Reply with one JSON object in exactly this shape, and nothing else:
     "location": "...", "time_of_day": "...", "situation": "...",
     "present": ["cast names"], "nearby": [ {"name": "...", "note": "..."} ]
   },
+  "storyteller_notes": "...",
   "style": {"response_style": "adaptive", "perspective": "whole_story", ...},
   "agency_mode": "contested",
   "world_activity": "normal",
@@ -4225,6 +4241,11 @@ for _key, _title, _words in (
 # 3-4 lore entries with the cards untouched 3/3; a swap took one card out, put
 # a stranger in and mended the lore that named the one gone; "start at night"
 # the opening and scene alone. 14-55 seconds; every undo exact.
+#
+# The storyteller's notes (Nov 12 2026) are in the setup it is shown, and it
+# may write them again (kind "storyteller_notes"), so a changed setup's
+# secrets stay true to it. The author has not read them: the reply's words to
+# the author are told never to say what they hold. Not measured.
 _text(
     "authoring.followup",
     AUTHORING,
@@ -4245,9 +4266,11 @@ given when it matters; "cast", the characters the author may play and the few
 the story turns on, every one sent on every turn; "supporting", everyone else
 with a card; "opening", the notes the first passage is written from, and
 "starting_scene"; "style", how the prose reads; "agency_mode";
-"world_activity", how much happens that the author didn't start; and
-"picture_style", how its pictures look. Then what the author asked before,
-if anything, and what they ask now.
+"world_activity", how much happens that the author didn't start;
+"picture_style", how its pictures look; and "storyteller_notes", what only
+the storyteller is told: the truth behind what the setup leaves open, and
+what its central people want and hide (null when it has none). Then what the
+author asked before, if anything, and what they ask now.
 
 How to answer:
 - Do all of what they ask, wherever it applies: "the characters more
@@ -4266,6 +4289,13 @@ How to answer:
   theirs.
 - The opening's notes are written in the story's person and tense, and end
   where the author's character can act.
+- The author has not read "storyteller_notes", and must not learn from you
+  what they hold: nothing of them in "summary", a "reason" or "cannot_fix".
+  When what you change makes them untrue (someone they name is gone, the
+  world they rest on is different), write them again so the secrets stay
+  true to the setup, keeping every sentence that still holds word for word.
+  Otherwise leave them alone. A secret's answer goes nowhere else: never
+  into "world", "lore" or the opening.
 
 What you can change. Each change is one setting:
 - kind "story": field "title", "description", "agency_mode" ({agency_modes}),
@@ -4294,6 +4324,8 @@ What you can change. Each change is one setting:
   [...], "until_mentioned": false}.
 - kind "lore_edit": "target" is the entry's title; field one of {lore_fields}.
 - kind "lore_remove": "target" is the entry's title: out of the story.
+- kind "storyteller_notes": the value is the complete new text of the
+  storyteller's notes, or null for a story left with no secrets.
 For text fields the value is the complete new text; for lists, the complete
 new list; null clears a setting.
 

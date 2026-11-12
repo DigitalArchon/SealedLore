@@ -643,10 +643,10 @@ class SetupDialog(QDialog):
         layout.addWidget(
             _hint(
                 "Sent to the storyteller with every turn, after the world, and cached: a "
-                "change costs one cache miss and takes hold from the next passage. No other "
-                "model is sent them, and nothing here needs a new playthrough. What your "
-                "character already knows belongs in World or Lore; this is for what they "
-                "would have to find out."
+                "change costs one cache miss, takes hold from the next passage and needs no "
+                "new playthrough. In play no other model is sent them. What your character "
+                "already knows belongs in World or Lore; this is for what they would have to "
+                "find out."
             )
         )
         return widget

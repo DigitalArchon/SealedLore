@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from sealedlore.engine.authoring import parse_generated
+from sealedlore.engine.authoring import parse_generated, reply_without_notes
 from sealedlore.engine.draft_detail import STANDARD, DraftDetail
 from sealedlore.engine.drafting import StoryDraft
 from sealedlore.engine.plot_draft import DEPTHS, NO_NEWCOMERS, PlotWishes
@@ -418,7 +418,9 @@ class GenerateDialog(QDialog):
                 f"The draft couldn't be used: {reason}. Its reply is below; drafting "
                 "again usually works."
             )
-            self.reply_view.setPlainText(self.draft.text)
+            # All of it but the storyteller's notes: the story's secrets, which
+            # a draft that could be used would have kept from the author too.
+            self.reply_view.setPlainText(reply_without_notes(self.draft.text))
             self.reply_view.show()
             return
         self.accept()

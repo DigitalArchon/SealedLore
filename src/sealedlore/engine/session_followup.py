@@ -25,6 +25,7 @@ from sealedlore.engine.authoring import (
     parse_review,
 )
 from sealedlore.engine.followup import (
+    NOTES_REWRITTEN,
     PLOT,
     STORY,
     FollowUpTurn,
@@ -118,13 +119,18 @@ class FollowUpRuntime:
         review = parse_review(text, self.bundle, kinds=FOLLOW_UP_KINDS)
         turn = FollowUpTurn(target=STORY, request=request.strip(), summary=review.summary)
         undo = self._kept_for_undo(turn)
+        notes_before = self.story.storyteller_notes
         for change in ordered_for_apply(review.changes):
             try:
                 apply_change(self.bundle, change)
             except ValueError as exc:
                 turn.refused.append(f"{describe(change)}: {exc}")
                 continue
-            turn.changed.append(describe(change))
+            if change.kind != "storyteller_notes":
+                turn.changed.append(describe(change))
+        if self.story.storyteller_notes != notes_before:
+            # Said last, as one line: that they changed, never what they say.
+            turn.changed.append(NOTES_REWRITTEN)
         turn.refused[:0] = review.cannot_fix
         self.follow_up_history(STORY).append(turn)
         if turn.changed:
@@ -194,6 +200,8 @@ class FollowUpRuntime:
         if target == STORY:
             live.title = kept.title
             live.world_bible = kept.world_bible
+            live.storyteller_notes = kept.storyteller_notes
+            live.storyteller_notes_by = kept.storyteller_notes_by
             live.setup = kept.setup
             live.defaults = kept.defaults
             live.style = kept.style

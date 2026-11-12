@@ -31,7 +31,8 @@ CHANGING = {
 def story_preview(bundle: StoryBundle) -> str:
     """The story as it is now, to read beside a request: its world, opening,
     characters and lore. Whoever and whatever the plot keeps hidden is left
-    out: that is the plot's, and a spoiler."""
+    out: that is the plot's, and a spoiler. So are the storyteller's notes,
+    the story's own secrets (Setup shows them when asked)."""
     story, setup = bundle.story, bundle.story.setup
     parts = [f"# {story.title}"]
     if (setup.description or "").strip():
@@ -124,16 +125,20 @@ class FollowUpWindow:
         notes: Sequence[str] = (),
     ) -> None:
         session = self.session
+        story = session.story
+        # A draft's notes for the storyteller: said to be there, never shown.
+        unread = drafted and target == STORY and story.storyteller_notes_by == "model"
         dialog = FollowUpDialog(
             self._dialog_parent(),
             target=target,
-            title=session.story.title,
+            title=story.title,
             go_on=go_on,
             history=session.follow_up_history(target),
             notes=notes,
             can_undo=session.follow_up_to_undo(target) is not None,
             preview=lambda: self._follow_up_preview(target),
             drafted=drafted,
+            secret_words=len((story.storyteller_notes or "").split()) if unread else 0,
         )
         dialog.send_requested.connect(lambda text: self._send_follow_up(dialog, target, text))
         dialog.undo_requested.connect(lambda: self._undo_follow_up(dialog, target))

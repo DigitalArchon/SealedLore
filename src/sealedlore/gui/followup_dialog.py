@@ -40,6 +40,13 @@ STORY_EXAMPLE = (
 )
 PLOT_EXAMPLE = "e.g. More danger in the first week, and no betrayal."
 SEND_LABEL = "Ask for these changes"
+# After a draft that wrote notes for the storyteller: that it did, and where
+# they are. Never what they say.
+SECRETS_WRITTEN = (
+    "The draft also wrote notes for the storyteller ({words}): the truth behind what the "
+    "story leaves open. They are kept from you so the story can surprise you; Story → "
+    "Setup → Storyteller's notes shows or clears them."
+)
 UNDO_LABEL = "Undo the last change"
 
 
@@ -54,7 +61,8 @@ class FollowUpDialog(QDialog):
     """`target`: STORY (its setup) or PLOT. `go_on`: the button that ends
     it, and what the window does next (Setup, Start, or nothing). `notes`:
     what a draft left out, shown first. `preview`: the story or the plot as
-    it is now, as Markdown."""
+    it is now, as Markdown. `secret_words`: how long the storyteller's notes
+    a draft wrote are, to say that there are some."""
 
     send_requested = Signal(str)
     undo_requested = Signal()
@@ -71,6 +79,7 @@ class FollowUpDialog(QDialog):
         can_undo: bool = False,
         preview: Callable[[], str] | None = None,
         drafted: bool = False,
+        secret_words: int = 0,
     ) -> None:
         super().__init__(parent)
         self.target = target
@@ -117,6 +126,9 @@ class FollowUpDialog(QDialog):
         self.log.setOpenLinks(False)
         self.log.setObjectName("followUpLog")
         layout.addWidget(self.log, 1)
+        if secret_words:
+            count = f"{secret_words:,} word{'' if secret_words == 1 else 's'}"
+            self._add(f"<i>{html.escape(SECRETS_WRITTEN.format(words=count))}</i>")
         if notes:
             self._add(
                 "<i>Left out of the draft:</i><br>"

@@ -187,8 +187,10 @@ class Story(BaseModel):
     # yet, and what its people want and hide. Sent to the storyteller alone,
     # in the system block after the setting (`rules.render_storyteller_notes`)
     # and so as stable as the setting; never to a read, a summariser, the
-    # review or any other model, and kept from the author's eyes while
-    # `storyteller_notes_by` says a model wrote them (the Prompt page, Setup).
+    # review or any other model in play. The one other reader writes them: a
+    # follow-up on a story not yet begun (engine/followup.py), as the draft
+    # did. Kept from the author's eyes on the Prompt page, and in Setup while
+    # `storyteller_notes_by` says a model wrote them.
     storyteller_notes: str | None = None
     storyteller_notes_by: NotesBy = "author"
     setup: StorySetup = Field(default_factory=StorySetup)

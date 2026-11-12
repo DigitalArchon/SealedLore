@@ -318,3 +318,119 @@ def test_changed_notes_on_a_story_under_way_need_no_new_playthrough(app, window,
 
     saved = load_story_bundle(story.id, root=window.root).story
     assert saved.storyteller_notes == story.storyteller_notes
+
+
+# --- a draft from a premise, and asking for changes to it -------------------------------
+
+SECRET = f"The first mate sold the Guild's charts; his ledger is marked {MARKER}."
+DRAFT = {
+    "title": "Salt and Tide",
+    "world": "A harbour town on a cold coast, where half the town smuggles.",
+    "cast": [{"name": "Mara Quill", "summary": "A boatwright with debts.", "playable": True}],
+    "play_as": "Mara Quill",
+    "opening": "Fog on the quays at dawn.",
+    "starting_scene": {"location": "The quays", "present": ["Mara Quill"]},
+    "storyteller_notes": SECRET,
+}
+
+
+def wait_until(app, condition, timeout: float = 20.0) -> None:
+    import time
+
+    deadline = time.monotonic() + timeout
+    while not condition():
+        assert time.monotonic() < deadline, "timed out"
+        app.processEvents()
+        time.sleep(0.005)
+
+
+def test_a_draft_that_cannot_be_used_is_shown_without_its_notes(app):
+    import json
+
+    from sealedlore.gui.generate_dialog import GenerateDialog
+    from sealedlore.providers.mock import MockChatProvider
+
+    unusable = json.dumps({**DRAFT, "cast": []})
+    dialog = GenerateDialog(MockChatProvider([unusable]), model="m", default_model="m")
+    dialog.premise.setPlainText("A harbour town.")
+    dialog._generate()
+    wait_until(app, lambda: dialog._thread is None)
+    assert not dialog.reply_view.isHidden(), "the reply is shown: the draft had no cast"
+    shown = dialog.reply_view.toPlainText()
+    assert "A harbour town on a cold coast" in shown
+    assert MARKER not in shown and "sold the Guild's charts" not in shown
+    assert MARKER not in texts_in(dialog)
+    # Nothing typed to ask about on the way out.
+    dialog._typed = dialog._as_typed()
+    dialog.close()
+
+
+@pytest.mark.real_follow_up
+def test_after_a_draft_the_author_is_told_there_are_notes_and_none_of_them(
+    app, tmp_path, monkeypatch
+):
+    import json
+
+    from PySide6.QtWidgets import QDialog
+
+    from sealedlore.gui.followup_dialog import FollowUpDialog
+    from sealedlore.gui.generate_dialog import GenerateDialog
+    from sealedlore.gui.main_window import MainWindow
+    from sealedlore.providers.mock import MockChatProvider
+
+    window = MainWindow(root=tmp_path, use_mock=True)
+    rewritten = f"The harbour master sold them; her ledger is marked {MARKER}-TWO."
+    follow_up = json.dumps(
+        {
+            "summary": "A stranger tide.",
+            "changes": [
+                {"kind": "world", "value": "A harbour where the tide keeps its own books."},
+                {"kind": "storyteller_notes", "value": rewritten},
+            ],
+            "cannot_fix": [],
+        }
+    )
+    provider = MockChatProvider([json.dumps(DRAFT), follow_up])
+    monkeypatch.setattr(window, "_current_provider", lambda: provider)
+    monkeypatch.setattr(window, "_needs_provider", lambda: False)
+    monkeypatch.setattr(window, "open_setup", lambda: False)
+
+    def draft(dialog) -> int:
+        dialog.premise.setPlainText("A harbour town.")
+        dialog._generate()
+        wait_until(app, lambda: dialog._thread is None)
+        return dialog.result()
+
+    monkeypatch.setattr(GenerateDialog, "exec", draft)
+    seen: list[str] = []
+
+    def look(dialog: FollowUpDialog) -> int:
+        seen.append(dialog.log.toPlainText())
+        dialog.reveal()
+        seen.append(dialog.view.toPlainText())
+        dialog.request.setPlainText("Stranger, please.")
+        dialog.send_button.click()
+        wait_until(app, lambda: not window._busy and dialog.send_button.isEnabled())
+        seen.append(dialog.log.toPlainText())
+        seen.append(dialog.view.toPlainText())
+        return QDialog.Accepted
+
+    monkeypatch.setattr(FollowUpDialog, "exec", look)
+    try:
+        window.new_story_from_premise()
+        assert len(seen) == 4
+        words = len(SECRET.split())
+        assert f"The draft also wrote notes for the storyteller ({words} words)" in seen[0]
+        assert "Story → Setup → Storyteller's notes" in seen[0]
+        assert "A harbour town on a cold coast" in seen[1], "the story, to read"
+        assert "The storyteller's notes were rewritten." in seen[2]
+        assert "tide keeps its own books" in seen[3]
+        assert all(MARKER not in text for text in seen)
+        story = window.session.story
+        assert (story.storyteller_notes, story.storyteller_notes_by) == (rewritten, "model")
+        # The Prompt page keeps them too, and the storyteller will have them.
+        window._reassemble_inspector()
+        assert MARKER not in everything_shown(window.inspector)
+        assert MARKER in window.session.last_prompt.section(SECTION_NOTES).text
+    finally:
+        window.close()

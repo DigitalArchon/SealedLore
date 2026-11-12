@@ -221,6 +221,7 @@ FOLLOW_UP_KINDS = frozenset(
         "lore_edit",
         "lore_disable",
         "lore_remove",
+        "storyteller_notes",
     }
 )
 REMOVALS = ("character_remove", "lore_remove")
@@ -482,6 +483,66 @@ def _name_index(characters: Sequence[Character]) -> dict[str, Character]:
     return index
 
 
+# The key of the storyteller's notes in a reply's JSON, up to its value.
+_NOTES_KEY = re.compile(r'"storyteller_notes"\s*:\s*')
+NOTES_NOT_SHOWN = "(the storyteller's notes, not shown)"
+
+
+def _value_end(text: str, start: int) -> int:
+    """Where the JSON value that begins at `start` ends: a string, a list or
+    an object (by its brackets, strings passed over), or a bare word; the end
+    of the text for one cut off."""
+    depth, in_string, at = 0, False, start
+    while at < len(text):
+        char = text[at]
+        if in_string:
+            if char == "\\":
+                at += 2
+                continue
+            if char == '"':
+                in_string = False
+                if depth == 0:
+                    return at + 1
+        elif char == '"':
+            in_string = True
+        elif char in "[{":
+            depth += 1
+        elif char in "]}":
+            if depth == 0:
+                return at  # the end of what holds it: a bare word ended
+            depth -= 1
+            if depth == 0:
+                return at + 1
+        elif char == "," and depth == 0:
+            return at
+        at += 1
+    return len(text)
+
+
+def reply_without_notes(text: str) -> str:
+    """A draft's raw reply with the words of its storyteller's notes taken
+    out, for showing the author a reply that couldn't be used: the notes are
+    the story's secrets, whatever shape the reply gave them, and a reply is
+    shown whole otherwise."""
+    kept: list[str] = []
+    at = 0
+    for match in _NOTES_KEY.finditer(text):
+        if match.start() < at or text.startswith("null", match.end()):
+            continue
+        kept += [text[at : match.end()], json.dumps(NOTES_NOT_SHOWN)]
+        at = _value_end(text, match.end())
+    return "".join(kept) + text[at:]
+
+
+def _drafted_notes(value: object, warnings: list[str]) -> str | None:
+    """The storyteller's notes from a draft: text, or nothing. Anything
+    else is dropped and said, never what it held."""
+    if value is None or isinstance(value, str):
+        return _text(value)
+    warnings.append("the storyteller's notes weren't text, so the story has none")
+    return None
+
+
 def parse_generated(text: str) -> tuple[Scenario, list[str]]:
     """The setup from the model's reply, and what had to be dropped from it.
 
@@ -579,10 +640,15 @@ def parse_generated(text: str) -> tuple[Scenario, list[str]]:
     # How its pictures look: a ready-made style by its name, else the
     # model's own words for one (engine/picture_styles.py).
     picture_style, image_style = read_style(_text(data.get("picture_style")) or "")
+    # The truth behind what the setup leaves open, for the storyteller alone:
+    # a model's text, which the author hasn't read (Setup keeps it unread).
+    notes = _drafted_notes(data.get("storyteller_notes"), warnings)
     scenario = Scenario(
         title=_text(data.get("title")) or "Untitled story",
         description=_text(data.get("description")),
         world_bible=_text(data.get("world")),
+        storyteller_notes=notes,
+        storyteller_notes_by="model" if notes else "author",
         opening_text=opening,
         opening_mode="generate",
         starting_scene=SceneState(
@@ -1419,6 +1485,15 @@ def apply_change(
         setattr(story.defaults, field, text)  # type: ignore[arg-type]
     elif kind == "world":
         story.world_bible = _text(value)
+    elif kind == "storyteller_notes":
+        _not_begun(bundle, "writing the storyteller's notes again")
+        if value is not None and not isinstance(value, str):
+            raise ValueError("the notes must be text")
+        notes = _text(value)
+        if notes != _text(story.storyteller_notes):
+            # A model's text now, which the author hasn't read.
+            story.storyteller_notes = notes
+            story.storyteller_notes_by = "model" if notes else "author"
     elif kind == "opening":
         if field == "text":
             story.setup.opening_text = _text(value) or ""
@@ -1641,6 +1716,7 @@ def describe(change: SettingsChange) -> str:
         "lore_remove": f"Lore › {change.target} › out of the story",
         "character_remove": f"{change.target} › out of the story",
         "scene": f"Starting scene › {field}",
+        "storyteller_notes": "The storyteller's notes",
         "generation": f"Generation › {field}",
         "model": f"Model › {field}",
         "prompt": "Prompt › "

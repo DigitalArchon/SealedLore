@@ -41,6 +41,9 @@ from sealedlore.models.scene import SceneState
 from sealedlore.storage.repository import StoryBundle
 
 STORY, PLOT = "story", "plot"
+# A story's follow-up that wrote the storyteller's notes again, as the author
+# is told of it: that it did, never what they say.
+NOTES_REWRITTEN = "The storyteller's notes were rewritten."
 
 
 @dataclass
@@ -61,7 +64,9 @@ class FollowUpTurn:
 def setup_view(bundle: StoryBundle, hidden_ids: Collection[str] = frozenset()) -> dict:
     """The setup as the model is shown it: everything a follow-up can change,
     by name. Cards and entries the plot keeps hidden are the plot's, left
-    out as a review leaves them out."""
+    out as a review leaves them out. The storyteller's notes are in it: the
+    one model besides the storyteller that reads them, since it keeps them
+    true to the setup it changes; nothing here is shown to the author."""
     story = bundle.story
     setup = story.setup
     scene = setup.starting_scene if setup.starting_scene != SceneState() else story.scene
@@ -73,6 +78,7 @@ def setup_view(bundle: StoryBundle, hidden_ids: Collection[str] = frozenset()) -
         "title": story.title,
         "description": setup.description,
         "world": story.world_bible,
+        "storyteller_notes": (story.storyteller_notes or "").strip() or None,
         "world_activity": story.defaults.world_activity,
         "agency_mode": story.defaults.agency_mode,
         "picture_style": write_style(story.picture_style, story.image_style) or None,
@@ -177,6 +183,8 @@ def setup_fingerprint(bundle: StoryBundle) -> str:
             include={
                 "title",
                 "world_bible",
+                "storyteller_notes",
+                "storyteller_notes_by",
                 "setup",
                 "defaults",
                 "style",
