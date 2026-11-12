@@ -134,6 +134,11 @@ class Plot(BaseModel):
     facts: list[FactDef] = Field(default_factory=list)
     events: list[EventDef] = Field(default_factory=list)
     places: list[PlaceDef] = Field(default_factory=list)
+    # The place (by name) the story opens at, when its starting scene's
+    # location names one of `places` (`plot_md.starting_place`); None when it
+    # names none, and whoever the author plays is then nowhere the plot knows
+    # until a passage puts them somewhere.
+    start_place: str | None = None
 
     def fact(self, name: str) -> FactDef | None:
         return next((fact for fact in self.facts if fact.name == name), None)

@@ -313,7 +313,7 @@ class PlotRuntime:
             path[-1].meta.chronicle = (
                 fitted(carried(chronicle_at(path, previous)), plot)
                 if previous is not None
-                else initial_chronicle(plot)
+                else initial_chronicle(plot, under_way=True)
             )
         self.save()
         return problems

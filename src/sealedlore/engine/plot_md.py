@@ -114,6 +114,66 @@ _MEANING_SEPARATOR = re.compile(r"\s+(?:—|–|--|-)\s+|—|–")
 _WATCH = re.compile(r"\s*\[watch(?:ed)?\]\s*", re.IGNORECASE)
 
 
+# Words after which a place is where the scene is measured from, not where
+# it is: "on the road to the keep", "a hill above the town".
+_NOT_AT = frozenset(
+    "from near by outside beyond toward towards to above below off past between north south "
+    "east west behind across over under beside around before after".split()
+)
+# "of" after one of these is a distance or a direction ("five miles south of
+# Hellsville"); after anything else it is a part ("the east gate of Hellsville").
+_AWAY_OF = frozenset(
+    "north south east west northeast northwest southeast southwest mile miles league leagues "
+    "day days hour hours short sight outside edge".split()
+)
+_ARTICLES = frozenset(("the", "a", "an"))
+
+
+def _plain_words(text: str) -> list[str]:
+    return re.findall(r"[\w']+", text.lower().replace("’", "'"))
+
+
+def starting_place(location: str | None, places: Sequence[tuple[str, Sequence[str]]]) -> str | None:
+    """The place (by name) a starting scene's location puts the story at.
+
+    `places`: each place's name and its other names (its keywords). The
+    location's first clause is read, and any later clause that is a place's
+    name and nothing else ("The barracks, Hollowmouth"). A name that follows
+    a word of direction or distance doesn't count: "A seemingly abandoned
+    farmhouse, five miles south of Hellsville" is at the farmhouse, "The road
+    north of Hellsville" is at no place the plot has, and "The east gate of
+    Hellsville" is at Hellsville. Nothing is guessed: with no match the story
+    opens nowhere the plot knows, as every story did before. Live, events
+    `at:` the place a story opens at never began: no passage named the place
+    in so many words, so the plot never knew anyone was there.
+    """
+    clauses = [c for c in re.split(r"[,;:(]|\s[—–-]\s", location or "") if c.strip()]
+    forms = [
+        (name, [w for w in _plain_words(form) if w not in _ARTICLES])
+        for name, others in places
+        for form in (name, *others)
+    ]
+    best: tuple[int, int, str] | None = None
+    for words in [_plain_words(clauses[0])] if clauses else []:
+        for name, own in forms:
+            for at in range(len(words) - len(own) + 1) if own else ():
+                if words[at : at + len(own)] != own:
+                    continue
+                before = [w for w in words[:at] if w not in _ARTICLES]
+                last = before[-1] if before else ""
+                if last in _NOT_AT or (last == "of" and before[-2:-1] and before[-2] in _AWAY_OF):
+                    continue
+                found = (at, -len(own), name)
+                best = found if best is None or found < best else best
+    if best is None:
+        for clause in clauses[1:]:
+            words = [w for w in _plain_words(clause) if w not in _ARTICLES]
+            for name, own in forms:
+                if own and words == own:
+                    return name
+    return best[2] if best else None
+
+
 @dataclass(frozen=True)
 class PlotProblem:
     line: int
@@ -1196,6 +1256,9 @@ class _Parser:
                 facts=facts,
                 events=events,
                 places=[PlaceDef(name=entry.title, lore_id=entry.id) for entry in places],
+                start_place=starting_place(
+                    scene.location, [(entry.title, entry.keywords) for entry in places]
+                ),
             )
             if facts or events
             else None

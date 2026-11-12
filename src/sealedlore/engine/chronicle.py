@@ -26,11 +26,17 @@ from sealedlore.models.plot import (
 )
 
 
-def initial_chronicle(plot: Plot) -> Chronicle:
+def initial_chronicle(plot: Plot, *, under_way: bool = False) -> Chronicle:
+    """The plot's state as the story opens: at the place its starting scene
+    names. `under_way`: the plot is being given to a story already played,
+    whose character may be anywhere by now, so nowhere is assumed."""
+    place = None if under_way else plot.start_place
     return Chronicle(
         minutes=plot.start_minutes,
         facts={fact.name: fact.initial for fact in plot.facts},
         events={event.id: EventStatus() for event in plot.events},
+        place=place,
+        visited=[place] if place else [],
     )
 
 
