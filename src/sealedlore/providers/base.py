@@ -67,9 +67,29 @@ class StreamCompleted:
     # as a clean end, so whatever came may be only the start of the reply.
     # Either marker counts, so a local server that sends one is whole.
     unterminated: bool = False
+    # What a refusal names as its reason (Anthropic's `stop_details.category`:
+    # "cyber", "bio"...), when the stream carries one; informational only.
+    refusal_category: str | None = None
 
 
 StreamEvent = TextDelta | ReasoningDelta | StreamCompleted
+
+# A reply the model, or its endpoint's filter, declined to write: Anthropic's
+# stop reason (kept by its own name, providers/anthropic.py), and the finish
+# reason OpenAI-compatible endpoints give.
+REFUSALS = frozenset({"refusal", "content_filter"})
+
+
+def declined(completed: StreamCompleted) -> bool:
+    return completed.finish_reason in REFUSALS
+
+
+def declined_words(completed: StreamCompleted) -> str:
+    """Who declined, and why when the reply said, in a few words."""
+    if completed.finish_reason == "content_filter":
+        return "the endpoint's content filter stopped it"
+    why = f" ({completed.refusal_category})" if completed.refusal_category else ""
+    return f"the model declined to write it{why}"
 
 
 def why_not_whole(completed: StreamCompleted) -> str | None:
@@ -79,6 +99,8 @@ def why_not_whole(completed: StreamCompleted) -> str | None:
     stand in for the prose."""
     if completed.finish_reason == "length":
         return "it was cut off at its token limit"
+    if declined(completed):
+        return declined_words(completed)
     if completed.unterminated:
         return "the stream ended before the model said it was done"
     return None

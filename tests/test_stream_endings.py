@@ -1,6 +1,7 @@
 """How a reply ended, and what is done with it: a stream that ended before
 the model said it was done (a gateway closing the connection partway reads as
-a clean end) is kept under a passage with a note, never as a whole summary."""
+a clean end), or a reply the model declined to write, is kept under a passage
+with a note, and never taken for a whole summary."""
 
 from __future__ import annotations
 
@@ -13,11 +14,18 @@ import pytest
 
 from sealedlore.engine.archival import summary_unfit
 from sealedlore.engine.ledger import check_ledger
-from sealedlore.engine.session import UNFINISHED, StorySession
+from sealedlore.engine.session import DECLINED, UNFINISHED, SessionNotice, StorySession
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
+from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.config import ProviderConfig
 from sealedlore.providers.anthropic import AnthropicProvider
-from sealedlore.providers.base import ChatRequest, ProviderError, StreamCompleted
+from sealedlore.providers.base import (
+    ChatRequest,
+    ProviderError,
+    StreamCompleted,
+    declined,
+    why_not_whole,
+)
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
 from sealedlore.storage.repository import StoryBundle, save_story_bundle
@@ -95,6 +103,11 @@ DELTA = {
     ],
 )
 def test_an_anthropic_stream_with_neither_marker_is_said_to_be_unfinished(events, unterminated):
+    text, completed = anthropic_reply(*events)
+    assert text == "Half a" and completed.unterminated is unterminated
+
+
+def anthropic_reply(*events: dict) -> tuple[str, StreamCompleted]:
     body = anthropic_body(*events)
     provider = AnthropicProvider(
         ProviderConfig(
@@ -104,11 +117,8 @@ def test_an_anthropic_stream_with_neither_marker_is_said_to_be_unfinished(events
             transport=httpx.MockTransport(lambda r: httpx.Response(200, content=body))
         ),
     )
-    from sealedlore.messages import ContentPart, PromptMessage
-
     hello = [PromptMessage(role="user", parts=(ContentPart(text="Hi."),))]
-    text, completed = provider.complete(ChatRequest(model="claude-sonnet-4-6", messages=hello))
-    assert text == "Half a" and completed.unterminated is unterminated
+    return provider.complete(ChatRequest(model="claude-sonnet-4-6", messages=hello))
 
 
 # --- a passage keeps what came, and says so -------------------------------------------
@@ -203,3 +213,72 @@ def test_an_unfinished_condensed_card_is_refused(session: StorySession):  # noqa
     with pytest.raises(ValueError, match="wasn't whole"):
         session.condense_card(card)
     assert card.condensed is None
+
+
+# --- a refusal ---------------------------------------------------------------------------
+
+REFUSED = {"finish_reason": "refusal", "refusal_category": "cyber"}
+
+
+def test_anthropic_s_refusal_is_kept_by_its_name_with_its_category():
+    refusal = {
+        "type": "message_delta",
+        "delta": {
+            "stop_reason": "refusal",
+            "stop_details": {"type": "refusal", "category": "cyber", "explanation": "..."},
+        },
+    }
+    _text, completed = anthropic_reply(START, DELTA, refusal, {"type": "message_stop"})
+    assert completed.finish_reason == "refusal" and completed.refusal_category == "cyber"
+    assert declined(completed)
+    # The category may be null even on a refusal: the stop reason is what counts.
+    unsaid = {"type": "message_delta", "delta": {"stop_reason": "refusal", "stop_details": None}}
+    _text, completed = anthropic_reply(START, unsaid)
+    assert declined(completed) and completed.refusal_category is None
+
+
+def test_a_content_filter_is_a_refusal_too():
+    assert declined(StreamCompleted(finish_reason="content_filter"))
+    assert "content filter" in why_not_whole(StreamCompleted(finish_reason="content_filter"))
+    assert not declined(StreamCompleted(finish_reason="stop"))
+
+
+def test_a_refused_passage_says_so_and_is_not_read(session: StorySession):  # noqa: F811
+    session.config.scene_reads = "every_turn"
+    session.provider = Ending(["The door gives, and then"], REFUSED)
+    list(session.send(turn()))
+    passage = session.path()[-1]
+    assert passage.content == "The door gives, and then", "what came is kept as it was"
+    (note,) = passage.meta.notes
+    assert note.startswith(DECLINED) and "cyber" in note
+    assert len(session.provider.requests) == 1, "no scene read on a refusal"
+    assert session.last_result.refused and session.last_result.unread
+
+
+def test_a_chat_s_refused_reply_speaks_of_a_chat(tmp_path: Path):
+    from tests.test_chat import chat_session, say
+
+    chat, _provider = chat_session(tmp_path, [])
+    chat.provider = Ending(["Well, I"], REFUSED)
+    say(chat, "Tell me something.")
+    (note,) = chat.path()[-1].meta.notes
+    assert note.startswith(DECLINED + " reply") and "scene" not in note
+
+
+def test_a_refusal_before_any_text_says_so_under_the_turn(session: StorySession):  # noqa: F811
+    session.provider = Ending([""], REFUSED)
+    said = [e.text for e in session.send(turn()) if isinstance(e, SessionNotice)]
+    assert [node.kind for node in session.nodes] == ["user"]
+    assert any(text.startswith(DECLINED) for text in said)
+
+
+def test_a_refused_summary_is_not_a_chapter(session: StorySession):  # noqa: F811
+    for _ in range(2):
+        list(session.send(turn()))
+    session.provider = Ending(["I won't summarise this."], REFUSED)
+    with pytest.raises(ProviderError, match="declined"):
+        session.archive(session.path()[:2])
+    assert session.summaries == []
+    ledger = "\n".join(f"## {h}\n- a line" for h in ("Bonds", "Who knows what"))
+    refused = why_not_whole(StreamCompleted(**REFUSED))
+    assert "declined" in check_ledger(ledger, None, finish_reason="refusal", unfit=refused)

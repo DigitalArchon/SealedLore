@@ -209,6 +209,7 @@ from sealedlore.providers.base import (
     StreamCompleted,
     StreamEvent,
     TextDelta,
+    declined,
     parse_usage,
     why_not_whole,
 )
@@ -374,6 +375,17 @@ class GenerationResult:
     usage: Usage
     finish_reason: str | None
     stopped_early: bool
+    # The model, or its endpoint's filter, declined to write it (`declined`).
+    refused: bool = False
+
+    @property
+    def unread(self) -> bool:
+        """Not read after it is written: stopped partway, or refused. A
+        refusal's text is what came before the model stopped, or its words
+        about declining, not a passage the story goes on from: the author
+        retakes it or rewrites the turn, and a read would have moved the
+        roster, the clock and the looks on from it."""
+        return self.stopped_early or self.refused
 
 
 def _as(suggestion: CharacterSuggestion) -> Character:
@@ -389,8 +401,32 @@ UNFINISHED_NOTICE = (
     f"{UNFINISHED}: the connection ended before the model said it was done. Continue "
     "carries it on from there; Regenerate writes it again."
 )
+# A reply the model, or its endpoint's content filter, declined to write.
+DECLINED = "The model declined to write this"
 # The notes about how a passage ended, which a continuation takes away.
-ENDING_NOTES = (CUT_OFF, UNFINISHED)
+ENDING_NOTES = (CUT_OFF, UNFINISHED, DECLINED)
+
+
+def declined_notice(completed: StreamCompleted, *, chat: bool = False) -> str:
+    """What to tell the author of a passage (or a chat's reply) the model
+    declined to write."""
+    if completed.finish_reason == "content_filter":
+        who = " (the endpoint's content filter stopped it)"
+    elif completed.refusal_category:
+        who = f" (its reason: {completed.refusal_category})"
+    else:
+        who = ""
+    if chat:
+        return (
+            f"{DECLINED} reply{who}. What came before it stopped is kept as it was. "
+            "Regenerate asks again; a change to the message, or another model, may be what "
+            "it takes."
+        )
+    return (
+        f"{DECLINED} passage{who}. What came before it stopped is kept as it was, and the "
+        "scene, the plot and the looks weren't read from it. Regenerate asks again; a change "
+        "to the turn, or another story model, may be what it takes."
+    )
 
 
 def cut_off_notice(max_tokens: int | None, completed: StreamCompleted) -> str:
@@ -1120,7 +1156,7 @@ class StorySession(
         if self.config.lore_selector != "picker" or self.story.chat:
             return None
         result = self.last_result
-        if result is None or result.node is None or result.stopped_early:
+        if result is None or result.node is None or result.unread:
             return None
         node = result.node
         layout = self.lore_layout()
@@ -2161,11 +2197,11 @@ class StorySession(
             if self.last_result is not None and self.last_result.node is passage:
                 self._check_tee(passage)
             self.save()
-            if not self.last_result or not self.last_result.stopped_early:
+            if not self.last_result or not self.last_result.unread:
                 yield from self.update_looks_after_turn(self._prepare_look_read(passage))
             return
         result = self.last_result
-        if result is None or result.node is None or result.stopped_early:
+        if result is None or result.node is None or result.unread:
             return
         pick = self._start_lore_pick()
         yield from self.read_after_turn()
@@ -2290,6 +2326,9 @@ class StorySession(
             yield self._kept_notice(
                 cut_off_notice(request.params.max_tokens, completed), node=written
             )
+        elif completed is not None and declined(completed):
+            # Under the passage, or the author's turn when nothing came.
+            yield self._kept_notice(declined_notice(completed, chat=self.story.chat), node=written)
         elif completed is not None and completed.unterminated and written is not None:
             # Kept, as a passage stopped partway is, but never passed off
             # as whole: the text is all that came, and may be only a start.
@@ -2365,6 +2404,11 @@ class StorySession(
                 "usage": completed.raw_usage if completed else {},
                 "stopped_early": completed is None,
                 **({"unterminated": True} if completed and completed.unterminated else {}),
+                **(
+                    {"refusal_category": completed.refusal_category}
+                    if completed and completed.refusal_category
+                    else {}
+                ),
                 **({"continues": extend.id} if extend is not None else {}),
             },
             span,
@@ -2378,6 +2422,7 @@ class StorySession(
             usage=usage,
             finish_reason=completed.finish_reason if completed else None,
             stopped_early=completed is None,
+            refused=completed is not None and declined(completed),
         )
         self.save()
 
@@ -3227,7 +3272,7 @@ class StorySession(
         if self.config.scene_reads != "every_turn":
             return None
         result = self.last_result
-        if result is None or result.node is None or result.stopped_early:
+        if result is None or result.node is None or result.unread:
             return None
         node = result.node
         if not node.content.strip():

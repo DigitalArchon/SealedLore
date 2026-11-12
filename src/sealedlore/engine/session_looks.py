@@ -159,7 +159,7 @@ class LooksRuntime:
             return None
         result = self.last_result
         if node is None:
-            if result is None or result.node is None or result.stopped_early:
+            if result is None or result.node is None or result.unread:
                 return None
             node = result.node
         if not node.content.strip():

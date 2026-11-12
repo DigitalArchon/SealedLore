@@ -353,8 +353,8 @@ def summary_unfit(completed: StreamCompleted) -> str | None:
     reason = why_not_whole(completed)
     if reason is None:
         return None
-    return f"the summariser's reply wasn't whole ({reason}), so it was not kept; " + (
-        "the prose stays as written"
+    return f"the summariser's reply wasn't whole: {reason}; it was not kept, and the prose " + (
+        "stays as written"
     )
 
 

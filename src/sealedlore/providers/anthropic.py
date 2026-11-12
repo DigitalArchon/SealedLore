@@ -227,6 +227,7 @@ class AnthropicProvider(StreamingHttpProvider):
         url, payload, headers = self._prepare(request)
         usage_raw: dict[str, Any] = {}
         stop_reason: str | None = None
+        refusal_category: str | None = None
         response_id: str | None = None
         reasoning_chars = 0
         saw_data = False
@@ -291,8 +292,13 @@ class AnthropicProvider(StreamingHttpProvider):
                     # which the app never sends back; nothing to keep.
                 elif kind == "message_delta":
                     delta = event.get("delta")
-                    if isinstance(delta, dict) and isinstance(delta.get("stop_reason"), str):
+                    delta = delta if isinstance(delta, dict) else {}
+                    if isinstance(delta.get("stop_reason"), str):
                         stop_reason = delta["stop_reason"]
+                    # A refusal may say why (informational: it can be null).
+                    details = delta.get("stop_details")
+                    if isinstance(details, dict) and isinstance(details.get("category"), str):
+                        refusal_category = details["category"]
                     if isinstance(event.get("usage"), dict):
                         usage_raw.update(event["usage"])
                 elif kind == "message_stop":
@@ -314,6 +320,7 @@ class AnthropicProvider(StreamingHttpProvider):
             # Neither a stop reason nor message_stop: the connection closed
             # partway, and what came may be only the start of the reply.
             unterminated=not (stop_reason or saw_stop),
+            refusal_category=refusal_category if stop_reason == "refusal" else None,
         )
         self._report_route(request, completed)
         self._report_reasoning(request, completed)

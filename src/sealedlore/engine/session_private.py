@@ -645,7 +645,7 @@ class PrivateRuntime:
             yield self._kept_notice(
                 "The private scene outgrew the private model's context, but its summary of "
                 "the oldest messages came back "
-                + (f"not whole ({unfit})" if text else "empty")
+                + (f"not whole: {unfit}" if text else "empty")
                 + ", so it wasn't kept: those messages fall out of this turn's window."
             )
             return False

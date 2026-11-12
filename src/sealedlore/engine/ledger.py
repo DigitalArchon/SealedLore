@@ -87,7 +87,7 @@ def check_ledger(
     if finish_reason == "length":
         return "the reply was cut off"
     if unfit:
-        return f"the reply wasn't whole ({unfit})"
+        return f"the reply wasn't whole: {unfit}"
     headings = [m.group(1).strip() for m in re.finditer(r"(?m)^##\s+(.+)$", text)]
     missing = [h for h in HEADINGS if not any(h.lower() == found.lower() for found in headings)]
     if missing:

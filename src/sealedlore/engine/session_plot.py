@@ -543,7 +543,7 @@ class PlotRuntime:
         if plot is None or not self.config.plot_reads:
             return None
         result = self.last_result
-        if result is None or result.node is None or result.stopped_early:
+        if result is None or result.node is None or result.unread:
             return None
         node = result.node
         if not node.content.strip() or self._carried_correction(node) is not None:
@@ -782,7 +782,7 @@ class PlotRuntime:
         """
         plot = self.story.plot
         result = self.last_result
-        if plot is None or result is None or result.node is None or result.stopped_early:
+        if plot is None or result is None or result.node is None or result.unread:
             return
         node = result.node
         corrected = self._carried_correction(node)
