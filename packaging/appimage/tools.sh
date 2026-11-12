@@ -37,14 +37,14 @@ RUNTIME_SHA256="2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d
 # Developers key, EF6E 286D DA85 EA2A 4BA7 DE68 4E2C 6E87 9329 8290. Bump it
 # for each release, to carry tor's fixes (docs/building.md says when one calls
 # for a release of its own).
-TOR_BUNDLE_VERSION="16.0"
-TOR_VERSION="0.4.9.15"
+TOR_BUNDLE_VERSION="16.0.1"
+TOR_VERSION="0.4.9.16"
 TOR_URL="https://archive.torproject.org/tor-package-archive/torbrowser/$TOR_BUNDLE_VERSION/tor-expert-bundle-linux-x86_64-$TOR_BUNDLE_VERSION.tar.gz"
-TOR_SHA256="cc950ebe9acb80188325c3a2cd8817def7dd7237d6fdcd861bb87b234a0cb2fd"
+TOR_SHA256="7039cb16060ab22e669852e55774d894b55f25ea8bd0ab7194d3478429a58725"
 # The bundle's tor is built with --enable-gpl (the onion service's
 # proof-of-work defence), which makes that program GPL-3: THIRD-PARTY-NOTICES.md
 # names its exact source on the Tor Project's archive, and the tag of Tor
-# Browser's build system that built it (tor-browser-build tbb-16.0-build1).
+# Browser's build system that built it (tor-browser-build tbb-16.0.1-build1).
 
 fetch() {  # fetch <url> <file> <sha256>
     local url="$1" file="$2" sum="$3"
