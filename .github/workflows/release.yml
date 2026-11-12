@@ -3,8 +3,10 @@ name: Release
 # Pushing a tag vX.Y.Z builds the AppImage from that commit, runs the test
 # suite (ci.yml's jobs, the locked packages among them), and only if they
 # pass attests the AppImage (a signed record that this workflow built these
-# bytes from this commit) and opens a draft release with it and its .sha256
-# attached. Publish the draft by hand once its notes are written.
+# bytes from this commit) and opens a draft release with it, its .sha256 and
+# its .zsync attached. Publish the draft by hand once its notes are written:
+# AppImage updaters find the .zsync on the latest published release, as the
+# update information inside every AppImage says.
 #
 # Run by hand (Actions → Release → Run workflow) it only builds, and the
 # checksum is on the run's summary page: a way to check that GitHub's build
@@ -157,4 +159,4 @@ jobs:
           } > notes.md
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
             --title "SealedLore ${GITHUB_REF_NAME#v}" --notes-file notes.md \
-            "dist/$APPIMAGE" "dist/$APPIMAGE.sha256"
+            "dist/$APPIMAGE" "dist/$APPIMAGE.sha256" "dist/$APPIMAGE.zsync"

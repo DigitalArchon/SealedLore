@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Build SealedLore as a single-file AppImage: dist/SealedLore-<version>-x86_64.AppImage
-# and its checksum beside it (….AppImage.sha256).
+# Build SealedLore as a single-file AppImage: dist/SealedLore-<version>-x86_64.AppImage,
+# its checksum beside it (….AppImage.sha256) and its zsync file (….AppImage.zsync,
+# from which an AppImage updater fetches only the blocks that changed).
 #
 #   packaging/appimage/build.sh         build HEAD
 #   packaging/appimage/build.sh check   build HEAD twice from scratch, each in a folder of
@@ -91,7 +92,7 @@ case "${1:-build}" in
         a="$(cut -d' ' -f1 "$WORK"/a/dist/*.sha256)"
         b="$(cut -d' ' -f1 "$WORK"/b/dist/*.sha256)"
         mkdir -p "$DIST"
-        if [ "$a" = "$b" ]; then
+        if [ "$a" = "$b" ] && cmp -s "$WORK"/a/dist/*.zsync "$WORK"/b/dist/*.zsync; then
             cp "$WORK"/a/dist/* "$DIST/"
             echo "Reproducible: both builds are $a"
             exit 0
@@ -511,11 +512,35 @@ chmod +x "$TOOL"
 # refuses its own time options beside it), owned by root, without extended
 # attributes.
 find "$APPDIR" -exec touch -h -d "@$SOURCE_DATE_EPOCH" {} +
-rm -f "$OUTPUT" "$OUTPUT.sha256"
-ARCH=x86_64 VERSION="$VERSION" APPIMAGE_EXTRACT_AND_RUN=1 "$TOOL" --no-appstream \
-    --runtime-file "$RUNTIME" --mksquashfs-opt -all-root --mksquashfs-opt -no-xattrs \
-    "$APPDIR" "$OUTPUT" >/dev/null
-(cd "$DIST" && sha256sum "$(basename "$OUTPUT")" >"$(basename "$OUTPUT").sha256")
+rm -f "$OUTPUT" "$OUTPUT.sha256" "$OUTPUT.zsync"
+# Update information, in the runtime's .upd_info section, where AppImageUpdate,
+# Gear Lever and AppImageLauncher look for it: the latest GitHub release's
+# .zsync, from which they fetch only the blocks that changed. Reading it is
+# theirs to do, when the user asks; SealedLore itself never looks for updates.
+UPDATE_INFO="gh-releases-zsync|DigitalArchon|SealedLore|latest|SealedLore-*-x86_64.AppImage.zsync"
+NAME="$(basename "$OUTPUT")"
+# appimagetool writes its .zsync into the folder it runs in, so it runs in the
+# AppImage's, with every path made absolute first.
+OUT_DIR="$(cd "$(dirname "$OUTPUT")" && pwd)"
+APPDIR_PATH="$(cd "$APPDIR" && pwd)"
+TOOL_PATH="$(cd "$(dirname "$TOOL")" && pwd)/$(basename "$TOOL")"
+RUNTIME_PATH="$(cd "$(dirname "$RUNTIME")" && pwd)/$(basename "$RUNTIME")"
+(cd "$OUT_DIR" && ARCH=x86_64 VERSION="$VERSION" APPIMAGE_EXTRACT_AND_RUN=1 "$TOOL_PATH" \
+    --no-appstream --runtime-file "$RUNTIME_PATH" -u "$UPDATE_INFO" \
+    --mksquashfs-opt -all-root --mksquashfs-opt -no-xattrs \
+    "$APPDIR_PATH" "$NAME" >/dev/null)
+# That .zsync is dated with the moment appimagetool wrote the AppImage
+# (zsyncmake reads the file's time), so it is made again from the AppImage
+# dated to the commit, with appimagetool's own zsyncmake (static, so the same
+# on any machine; it writes the time in UTC): the same bytes on every build.
+ZSYNC_TOOL="$BUILD/appimagetool"
+rm -rf "$ZSYNC_TOOL"
+mkdir -p "$ZSYNC_TOOL"
+(cd "$ZSYNC_TOOL" && "$TOOL_PATH" --appimage-extract usr/bin/zsyncmake >/dev/null)
+touch -d "@$SOURCE_DATE_EPOCH" "$OUTPUT"
+(cd "$OUT_DIR" && rm -f "$NAME.zsync" &&
+    "$ZSYNC_TOOL/squashfs-root/usr/bin/zsyncmake" -u "$NAME" -o "$NAME.zsync" "$NAME" >/dev/null)
+(cd "$OUT_DIR" && sha256sum "$NAME" >"$NAME.sha256")
 echo
 echo "Built $OUTPUT ($(du -h "$OUTPUT" | cut -f1)) from $COMMIT"
 cat "$OUTPUT.sha256"

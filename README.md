@@ -440,6 +440,11 @@ gh attestation verify SealedLore-<version>-x86_64.AppImage --repo DigitalArchon/
 The build is reproducible, so you can also rebuild a release yourself and
 compare checksums: see [Building and checking the AppImage](docs/building.md).
 
+To update, use an AppImage updater: AppImageUpdate, Gear Lever or
+AppImageLauncher read the update information inside the AppImage and fetch
+from the latest release only the parts that changed. SealedLore itself never
+looks for updates.
+
 The AppImage holds every Python file both as source and compiled, and Python
 runs the compiled one. So reading the source inside it tells you what runs
 only if the compiled files are what that source compiles to, which

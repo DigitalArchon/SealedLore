@@ -150,6 +150,21 @@ and so is the tor that phone access runs (see
 If the machine has no FUSE (common in containers, occasionally on minimal
 installs), run it with `--appimage-extract-and-run`.
 
+#### Updating the AppImage
+
+Each release carries update information pointing at the latest release on
+GitHub, and a `.zsync` file beside the AppImage. An AppImage updater reads
+them and downloads only the parts of the new version that changed:
+
+- **AppImageUpdate**: `appimageupdatetool SealedLore-<version>-x86_64.AppImage`
+  (or open the AppImage in its window).
+- **Gear Lever** and **AppImageLauncher**: they offer the update for an AppImage
+  they manage.
+
+Or download the new AppImage from the releases page as you did the first. Your
+stories stay in the data folder either way. SealedLore itself never checks for
+updates or contacts GitHub.
+
 To check a download is what it claims to be, or to build one yourself, see
 [Building and checking the AppImage](building.md).
 

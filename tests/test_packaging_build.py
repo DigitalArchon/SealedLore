@@ -221,9 +221,9 @@ def test_the_tokenizer_is_fetched_as_every_other_download_is():
 # --- build.sh check -----------------------------------------------------------------------
 
 
-def _check(tmp_path: Path, same: bool) -> subprocess.CompletedProcess:
-    """build.sh's check, its two builds stand-ins that write an AppImage and its sum:
-    the same bytes each time, or not."""
+def _check(tmp_path: Path, same: bool, zsync_same: bool = True) -> subprocess.CompletedProcess:
+    """build.sh's check, its two builds stand-ins that write an AppImage, its sum and
+    its .zsync: the same bytes each time, or not."""
     check = block(BUILD, "    check)\n", "        exit 1\n")
     here = tmp_path / "here"
     here.mkdir(parents=True)
@@ -236,6 +236,11 @@ def _check(tmp_path: Path, same: bool) -> subprocess.CompletedProcess:
             'printf same > "$DIST/SealedLore-1-x86_64.AppImage"\n'
             if same
             else 'printf "%s" "$BUILD_DIR" > "$DIST/SealedLore-1-x86_64.AppImage"\n'
+        )
+        + (
+            'printf z > "$DIST/SealedLore-1-x86_64.AppImage.zsync"\n'
+            if zsync_same
+            else 'printf "%s" "$BUILD_DIR" > "$DIST/SealedLore-1-x86_64.AppImage.zsync"\n'
         )
         + 'cd "$DIST" && name=SealedLore-1-x86_64.AppImage && sha256sum "$name" > "$name.sha256"\n'
     )
@@ -270,3 +275,37 @@ def test_check_builds_twice_apart_and_compares(tmp_path: Path):
     a = (tmp_path / "two/dist/check-a/SealedLore-1-x86_64.AppImage").read_text(encoding="utf-8")
     b = (tmp_path / "two/dist/check-b/SealedLore-1-x86_64.AppImage").read_text(encoding="utf-8")
     assert a.endswith("/a") and b.endswith("/b"), "each in a folder of its own"
+    # The same AppImage with a .zsync that differs is not a reproducible build either:
+    # an updater reads the .zsync.
+    zsync = _check(tmp_path / "three", same=True, zsync_same=False)
+    assert zsync.returncode == 1 and "NOT reproducible" in zsync.stderr
+
+
+# --- updates ------------------------------------------------------------------------------
+
+
+def test_the_appimage_names_where_its_updates_are_and_a_release_carries_them():
+    """The update information appimagetool writes into the runtime names this
+    repository's latest release and a .zsync whose name matches the AppImage's; the
+    .zsync is made again from the AppImage dated to the commit (appimagetool's own is
+    dated with the moment it ran); and the release attaches it."""
+    info = re.search(r'^UPDATE_INFO="([^"]+)"', BUILD, re.M).group(1)
+    kind, owner, repo, tag, pattern = info.split("|")
+    assert (kind, owner, repo, tag) == (
+        "gh-releases-zsync",
+        "DigitalArchon",
+        "SealedLore",
+        "latest",
+    )
+    name = re.search(r'^OUTPUT="\$DIST/(.+)"$', BUILD, re.M).group(1)
+    assert re.fullmatch(
+        pattern.replace(".", r"\.").replace("*", ".+"),
+        name.replace("$VERSION", "3.1.0b10") + ".zsync",
+    )
+    pack = block(BUILD, 'log "Packing"', 'cat "$OUTPUT.sha256"')
+    assert '-u "$UPDATE_INFO"' in pack
+    stamp = pack.index('touch -d "@$SOURCE_DATE_EPOCH" "$OUTPUT"')
+    remake = pack.index('zsyncmake" -u "$NAME" -o "$NAME.zsync" "$NAME"')
+    assert stamp < remake < pack.index('sha256sum "$NAME"')
+    release = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert '"dist/$APPIMAGE.zsync"' in release

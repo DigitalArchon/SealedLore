@@ -5,9 +5,15 @@ install (see [the manual](manual.md#linux-the-appimage) for running it). To buil
 one from a checkout:
 
 ```bash
-packaging/appimage/build.sh         # -> dist/SealedLore-<version>-x86_64.AppImage (+ .sha256)
+packaging/appimage/build.sh         # -> dist/SealedLore-<version>-x86_64.AppImage (+ .sha256, .zsync)
 packaging/appimage/build.sh check   # build it twice and compare (below)
 ```
+
+The AppImage carries update information
+(`gh-releases-zsync|DigitalArchon|SealedLore|latest|SealedLore-*-x86_64.AppImage.zsync`),
+and a release attaches the `.zsync` beside it, so AppImage updaters fetch only
+the blocks that changed. The `.zsync` is made by appimagetool's own
+`zsyncmake` from the AppImage dated to the commit, so it is reproducible too.
 
 It builds the current commit, not uncommitted changes (it stops if there are
 any): each file as committed, read from git's own store, so no setting of
