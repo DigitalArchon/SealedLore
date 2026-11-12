@@ -970,6 +970,16 @@ class Config(BaseModel):
     # it is shown with (engine/look_pick.py), on the scene model. Only for
     # someone with more than one picture: a story without looks pays nothing.
     look_picks: SceneLedger = "every_turn"
+    # Prose reminders on every turn's last line (the author's for every
+    # story, Settings → Generation): what a passage is made of, and the habits
+    # of phrasing the recent passages share, counted in code and named so the
+    # next passage does without them (engine/habits.py).
+    prose_reminders: bool = True
+    # A turn that waits, says next to nothing or lets time pass hands the next
+    # move to the storyteller, which then makes something happen instead of
+    # reacting to nothing (engine/initiative.py). Never in a story whose world
+    # is set to quiet.
+    storyteller_moves: bool = True
     # View → Characters above the box you type in (the stage) and Characters
     # on each passage (gui/window_looks.py): off unless chosen.
     looks_stage: bool = False

@@ -743,6 +743,30 @@ possible**, which is also the fastest:
 nearest level the model offers; the note under each setting says what the
 story model will be sent.
 
+**Keeping the prose fresh.** A storyteller copies its own recent passages,
+so a turn of phrase it has used twice becomes the way it writes: by the
+middle of a long story nearly every passage may liken someone to "a man
+who…" or reach for "the particular…". With **Keep the prose fresh** ticked
+in Settings → Generation (it is by default), every turn reminds the
+storyteller to write plainly and to let people speak and act, and SealedLore
+counts the habits of the last eight passages on your computer (no model is
+asked) and, when half of them share one, names it so the next passage does
+without. A story with no such habits is told nothing extra. The wording is
+yours to change under File → Prompts (advanced)….
+
+**When you wait.** A turn that only waits, watches or says next to nothing
+("I nod", "I keep to my berth"), or a Direction that lets time pass ("Three
+days pass"), leaves the next move to the storyteller. With **Let the
+storyteller make the next move when I wait** ticked in Settings → Generation
+(it is by default), such a turn asks the storyteller to have something
+happen, or to land a time skip on the next moment that matters, and to end
+where your character can answer it; in a story whose passages match your
+turn it also gets a little more room than a one-line turn would. Any other
+turn is answered as before. It is never done in a story whose world is set
+to quiet, nor on a turn where a plot begins an event. The storyteller still
+may not decide anything for your character; if a passage does, Regenerate,
+or untick the setting.
+
 **Recommended models.** Left blank, the scene and plot models fall back, by way
 of the summarisation model, to the story model, the most expensive place to run a small call on every turn. On
 NanoGPT a new setup starts with the ones that measured best, and Settings →

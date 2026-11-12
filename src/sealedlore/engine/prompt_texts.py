@@ -935,17 +935,187 @@ _text(
     "reads last weighs most: every live fix that held ended up here.",
     "REMEMBER: {narration}{held} belongs to the author. Do not write their speech, "
     "thoughts, decisions, or unstated actions — not even in reported speech. Write "
-    "everyone and everything else.{others} Show how those present react to what they "
-    "just did. {presence}{dice}{direction}{length} Continue the scene now, in prose only.",
+    "everyone and everything else.{others} {react} {presence}{dice}{direction}{length}{voice}"
+    "{habits} Continue the scene now, in prose only.",
     (
         ("narration", "the person and tense clause and a space, or nothing"),
         ("held", "the held character's name"),
         ("others", "a space and the 'author only' clause, or nothing"),
+        (
+            "react",
+            "what the passage owes the author's turn: the reaction to it (REMEMBER: react), or "
+            "the next move when the turn leaves it to the storyteller (REMEMBER: your move / "
+            "time passed)",
+        ),
         ("presence", "the presence clause (REMEMBER: presence / stay with)"),
         ("dice", "a space and the dice clause, or nothing"),
         ("direction", "a space and the plot-event clause, or nothing"),
         ("length", "a space and the length's short form, or nothing"),
+        ("voice", "a space and the prose clause (REMEMBER: prose), or nothing"),
+        ("habits", "a space and the habits clause (REMEMBER: habits), or nothing"),
     ),
+)
+
+_text(
+    "turn.remember.react",
+    TURN,
+    "REMEMBER: react",
+    "On the REMEMBER line on an ordinary turn: the passage answers what the author's "
+    "character just did.",
+    "Show how those present react to what they just did.",
+)
+
+# A turn that waits, says next to nothing or lets time pass leaves the next
+# move to the storyteller (engine/initiative.py), and "show how those present
+# react" to it got a scene that idled and a time skip told as a summary that
+# stopped. Played live on Sonnet 4.6 (Nov 2026): twelve turns that give the
+# storyteller little, two stories, two chains each, blind judges: turns where
+# nothing happened 22-24 of 48 with the line above, 4 with these and the
+# lengths below; a time skip ending in a moment the author can act in 5 of 14,
+# then 14 of 14; today's wording ranked last in every group.
+# The wording is the third tried. "Have something happen … and end where
+# {held} can act" had the storyteller decide for the author's character 6
+# times in 48 turns against once (walking them to the captain's cabin; a time
+# skip settling in its summary what had been waiting on them), and adding
+# "where they are: decide nothing for them" changed nothing (6 again). Saying
+# what they do not do, and that what was waiting still waits, brought it back
+# to once.
+_text(
+    "turn.remember.your_move",
+    TURN,
+    "REMEMBER: your move",
+    "On the REMEMBER line, in place of the reaction clause, when the author's turn waits, "
+    "watches or says next to nothing: the storyteller makes the next move.",
+    "The author has left the next move to you: have something happen, or someone act on "
+    "what they want. {held} does nothing more than the author wrote: they don't speak, go "
+    "anywhere or decide anything in this passage. End where they can answer what happened.",
+    (("held", "the held character's name"),),
+)
+
+_text(
+    "turn.remember.time_passed",
+    TURN,
+    "REMEMBER: time passed",
+    "On the REMEMBER line, in place of the reaction clause, when a Direction or Narration "
+    "turn lets time pass: the passage lands on the next moment that matters.",
+    "The author has let time pass: tell it in a line or two of routine, in which {held} "
+    "decides nothing and settles nothing: whatever was waiting on them is still waiting, or "
+    "comes back now. Then land on the next moment that matters: something happening in "
+    "front of {held}, where they are, for them to answer.",
+    (("held", "the held character's name"),),
+)
+
+# What a passage is made of, said last. Positive only: naming the habits to
+# avoid ("never liken someone to 'a man who…'") scored the same with a judge
+# and risks planting them. Sonnet 4.6, blind pairs against the line without
+# it (Nov 2026): preferred 16-10 and 12-4 on two short stories and 10-6 on
+# the long test story, errors the same.
+_text(
+    "turn.remember.voice",
+    TURN,
+    "REMEMBER: prose",
+    "On the REMEMBER line when prose reminders are on (Settings → Generation): what a "
+    "passage is made of.",
+    "Prose: plain, concrete and direct. People answer promptly, in words and in what they "
+    "do; each reaction is one specific thing this person says or does. Begin in the middle "
+    "of the response, and bring something new to the scene each time rather than restating "
+    "what was just said.",
+)
+
+# The storyteller's own recent passages are its strongest model, so a turn of
+# phrase used twice becomes its voice: in the long test story 83-96% of
+# mid-story passages likened someone to "a man who…" or "someone who…".
+# Code counts the habits of the last eight passages (engine/habits.py) and
+# this names the ones half of them share. With the prose clause above, on the
+# long test story (Sonnet 4.6, 16 turns twice, Nov 2026): habits a passage
+# 3.25 → 1.0 and 3.4 → 1.8 on a second sample, dialogue up a third, and two
+# blind judges preferred it 14-2 and 10-6. Alone it tied (7-9, 9-7) with more
+# contradictions; a smaller window of prose (30k) changed nothing.
+_text(
+    "turn.remember.habits",
+    TURN,
+    "REMEMBER: habits",
+    "On the REMEMBER line when the recent passages share habits of phrasing: names them "
+    "for this passage.",
+    "Your recent passages have fallen into habits. Write this one without: {habits}. Say "
+    "the thing itself another way each time, and don't swap one stock phrase for another.",
+    (("habits", "the habits found, each as its own text (Habits: …), separated by semicolons"),),
+)
+
+_text(
+    "habits.who",
+    TURN,
+    "Habits: a kind of person",
+    "Named when the recent passages keep likening someone to a kind of person.",
+    "likening a person to a kind of person (“the look of a man who…”, “the stillness of "
+    "someone who…”)",
+)
+
+_text(
+    "habits.particular",
+    TURN,
+    "Habits: the particular",
+    "Named when the recent passages keep reaching for “the particular …”.",
+    "“the particular …” as a way to make a detail sound exact",
+)
+
+_text(
+    "habits.something",
+    TURN,
+    "Habits: something",
+    "Named when the recent passages keep using “something” for a feeling they don't name.",
+    "“something” standing in for a feeling (“something shifted in her face”, “something "
+    "that was not quite…”)",
+)
+
+_text(
+    "habits.notbut",
+    TURN,
+    "Habits: not this, but that",
+    "Named when the recent passages keep turning on a denial.",
+    "the “not X, but Y” turn (“not anger, exactly — something colder”, “It should have been "
+    "an accusation. It wasn't.”)",
+)
+
+_text(
+    "habits.beat",
+    TURN,
+    "Habits: pauses",
+    "Named when the recent passages keep telling a pause as a pause.",
+    "pauses told as pauses (“a beat”, “for a long moment”, “let the silence…”)",
+)
+
+_text(
+    "habits.opener",
+    TURN,
+    "Habits: opening on a pause",
+    "Named when the recent passages keep opening on a pause or a look.",
+    "opening the passage on a pause or a look before anyone speaks or acts",
+)
+
+_text(
+    "habits.echo",
+    TURN,
+    "Habits: the author's words handed back",
+    "Named when people in the recent passages keep repeating the author's own words.",
+    "having someone repeat the author's own words back before answering",
+)
+
+_text(
+    "habits.button",
+    TURN,
+    "Habits: the closing line",
+    "Named when the recent passages keep closing on a short line of their own.",
+    "closing on a short knowing one-line paragraph",
+)
+
+_text(
+    "habits.phrases",
+    TURN,
+    "Habits: repeated phrases",
+    "Named when the same few words stand in several of the recent passages.",
+    "the phrases {phrases}",
+    (("phrases", "the phrases, each in quotation marks"),),
 )
 
 _text(
@@ -953,13 +1123,15 @@ _text(
     TURN,
     "REMEMBER line: nobody held",
     "The last line of every turn, when the author holds no character.",
-    "REMEMBER: {narration}the author holds no character this turn.{others}{direction}{length} "
-    "Continue the scene now, in prose only.",
+    "REMEMBER: {narration}the author holds no character this turn.{others}{direction}{length}"
+    "{voice}{habits} Continue the scene now, in prose only.",
     (
         ("narration", "the person and tense clause and a space, or nothing"),
         ("others", "a space and the 'author only' clause, or nothing"),
         ("direction", "a space and the plot-event clause, or nothing"),
         ("length", "a space and the length's short form, or nothing"),
+        ("voice", "a space and the prose clause (REMEMBER: prose), or nothing"),
+        ("habits", "a space and the habits clause (REMEMBER: habits), or nothing"),
     ),
 )
 
@@ -5024,6 +5196,29 @@ _text(
     "Length: several full paragraphs, about 300 to 600 words.",
 )
 
+
+# The room for the storyteller's move in a story whose passages match the
+# author's turn (see REMEMBER: your move): at "under about 60 words" for a
+# turn like "I nod" the move had a line to happen in. With these, a waiting
+# turn got about 100 words and a time skip about 140, and other turns stayed
+# where they were (63 and 59 words against 62 and 61).
+_text(
+    "length.your_move",
+    TURN,
+    "Length: the storyteller's move",
+    "The length for a turn that waits or says next to nothing, in a story whose passages "
+    "match the author's turn. Sent as that turn's own length.",
+    "up to about 120 words, enough for one thing to happen",
+)
+
+_text(
+    "length.time_passed",
+    TURN,
+    "Length: time passed",
+    "The length for a Direction or Narration turn that lets time pass, in a story whose "
+    "passages match the author's turn. Sent as that turn's own length.",
+    "up to about 150 words",
+)
 
 _text(
     "length.custom.short",

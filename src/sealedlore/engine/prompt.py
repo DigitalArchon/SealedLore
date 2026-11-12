@@ -27,9 +27,11 @@ from dataclasses import dataclass, field, replace
 from sealedlore.engine.budget import BudgetReport, HistoryItem, select_history_items
 from sealedlore.engine.cast_fit import CastFit, fit_cast
 from sealedlore.engine.characters import render_supporting_block
+from sealedlore.engine.habits import feedback as habits_feedback
+from sealedlore.engine.initiative import Move, move_left
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.recall import RecallItem, render_recall_block
-from sealedlore.engine.response_style import for_turn
+from sealedlore.engine.response_style import LengthInstruction, for_turn
 from sealedlore.engine.rules import (
     CardForm,
     render_author_turn,
@@ -53,10 +55,22 @@ from sealedlore.engine.tokens import TokenEstimator
 from sealedlore.messages import ContentPart, PromptMessage, Role
 from sealedlore.models.character import Character
 from sealedlore.models.lore import LoreEntry
-from sealedlore.models.node import AgencyMode, Difficulty, Node, NpcScope, ResponseStyle, Roll
+from sealedlore.models.node import (
+    DIRECTOR_SPEAKER_ID,
+    NARRATOR_SPEAKER_ID,
+    AgencyMode,
+    Difficulty,
+    Node,
+    NpcScope,
+    ResponseStyle,
+    Roll,
+)
 from sealedlore.models.scene import SceneLogEntry, SceneState
 from sealedlore.models.story import Story
 from sealedlore.models.summary import Summary
+
+# Whose turn is the author speaking from outside the story.
+_OUT_OF_CHARACTER = (DIRECTOR_SPEAKER_ID, NARRATOR_SPEAKER_ID)
 
 SECTION_ENGINE_RULES = "system.engine_rules"
 SECTION_STYLE = "system.style"
@@ -155,6 +169,14 @@ class AssemblyOptions:
     # The model the prompt goes to, for its token estimate: a story following
     # Settings names none of its own.
     model: str | None = None
+    # Prose reminders on the REMEMBER line (`Config.prose_reminders`): what a
+    # passage is made of, and the recent passages' habits of phrasing when
+    # they have any (engine/habits.py).
+    prose_reminders: bool = False
+    # Whether a turn that waits, says next to nothing or lets time pass hands
+    # the next move to the storyteller (`Config.storyteller_moves`,
+    # engine/initiative.py).
+    storyteller_moves: bool = False
 
 
 @dataclass(frozen=True)
@@ -306,6 +328,13 @@ def assemble_prompt(
         else None
     )
     length = for_turn(story.style, turn.response_style, turn.length_hint, texts)
+    opts = options or AssemblyOptions()
+    move = _move_left(story, turn, controlled is not None) if opts.storyteller_moves else ""
+    if move:
+        length = _length_for_move(story, turn, move, length, texts)
+    habits = (
+        habits_feedback(_recent_exchanges(history_nodes), texts) if opts.prose_reminders else ""
+    )
 
     tail_specs = [
         # The story's own past, fuller than its chapters (engine/recall.py).
@@ -376,6 +405,9 @@ def assemble_prompt(
                 person=story.style.person,
                 tense=story.style.tense,
                 texts=texts,
+                move=move,
+                voice=opts.prose_reminders,
+                habits=habits,
             ),
         ),
     ]
@@ -389,6 +421,43 @@ def assemble_prompt(
         estimator=estimator,
         options=options,
     )
+
+
+def _move_left(story: Story, turn: TurnRequest, held: bool) -> Move:
+    """Whether this turn leaves the next move to the storyteller. Never in a
+    story whose world is set to quiet (it follows the author by choice), nor
+    on a turn that begins a plot's event (that is the move), nor with nobody
+    held (there is no one for it to come to)."""
+    if not held or turn.direction_begins or story.defaults.world_activity == "quiet":
+        return ""
+    return move_left(turn.user_text, in_character=turn.speaker_id not in _OUT_OF_CHARACTER)
+
+
+def _length_for_move(
+    story: Story, turn: TurnRequest, move: Move, length: LengthInstruction, texts: PromptTexts
+) -> LengthInstruction:
+    """Room for the move in a story whose passages match the author's turn:
+    matched to "I nod", the storyteller's move had a line to happen in. A
+    length the author chose for this turn, or a story with a length of its
+    own, stands."""
+    if turn.response_style is not None or (turn.length_hint or "").strip():
+        return length
+    if story.style.response_style != "adaptive":
+        return length
+    key = "length.your_move" if move == "idle" else "length.time_passed"
+    return for_turn(story.style, None, texts[key], texts)
+
+
+def _recent_exchanges(history_nodes: Sequence[Node]) -> list[tuple[str, str]]:
+    """(the author's turn, the passage that answered it) down the history,
+    oldest first, for the habits of the recent passages."""
+    pairs = []
+    for index, node in enumerate(history_nodes):
+        if node.kind != "assistant":
+            continue
+        before = history_nodes[index - 1] if index else None
+        pairs.append((before.content if before and before.kind == "user" else "", node.content))
+    return pairs
 
 
 def assemble_question(

@@ -898,6 +898,8 @@ class StorySession(
             texts=self.texts,
             chapter_days=self.chapter_days(),
             model=self.model,
+            prose_reminders=self.config.prose_reminders,
+            storyteller_moves=self.config.storyteller_moves,
         )
 
     def chapter_days(self) -> tuple[tuple[str, tuple[int, int]], ...]:

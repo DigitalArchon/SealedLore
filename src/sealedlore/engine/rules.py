@@ -21,6 +21,7 @@ from __future__ import annotations
 from collections.abc import Collection, Mapping, Sequence
 from typing import Literal
 
+from sealedlore.engine.initiative import Move
 from sealedlore.engine.ledger import render_ledger_block
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.response_style import LengthInstruction, story_default
@@ -647,9 +648,16 @@ def render_reminder(
     tense: NarrativeTense | None = None,
     texts: PromptTexts = DEFAULT_TEXTS,
     fixed: str = "",
+    move: Move = "",
+    voice: bool = False,
+    habits: str = "",
 ) -> str:
     """The last line before generation — recency is the point (§3.3).
-    `fixed`: the clause naming what the turn names that can't be moved."""
+    `fixed`: the clause naming what the turn names that can't be moved.
+    `move`: whether the author's turn leaves the next move to the storyteller
+    (engine/initiative.py), which then replaces the reaction clause. `voice`:
+    with the prose clause. `habits`: the clause naming the recent passages'
+    habits of phrasing (engine/habits.py), or ""."""
     narration = narration_reminder(
         person, tense, controlled_character.name if controlled_character else None, texts
     )
@@ -658,6 +666,8 @@ def render_reminder(
         "direction": (f" {texts['turn.remember.direction']}" if direction_begins else "")
         + (f" {fixed}" if fixed else ""),
         "length": f" {length.reminder}" if length is not None and length.reminder else "",
+        "voice": f" {texts['turn.remember.voice']}" if voice else "",
+        "habits": f" {habits}" if habits else "",
         "others": (
             " "
             + texts.fill(
@@ -677,9 +687,18 @@ def render_reminder(
         presence = f"{stay} {presence}"
     if private:
         presence += " " + texts["turn.remember.private"]
+    react = {
+        "idle": "turn.remember.your_move",
+        "skip": "turn.remember.time_passed",
+    }.get(move)
     return texts.fill(
         "turn.remember.held",
         held=controlled_character.name,
+        react=(
+            texts.fill(react, held=controlled_character.name)
+            if react
+            else texts["turn.remember.react"]
+        ),
         presence=presence,
         dice=roll_reminder(roll, texts),
         **slots,

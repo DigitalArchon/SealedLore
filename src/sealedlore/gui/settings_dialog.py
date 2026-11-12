@@ -1413,6 +1413,27 @@ class SettingsDialog(QDialog):
         )
         form.addRow("Max tokens", self.max_tokens)
 
+        # How the storyteller is reminded to write, on every turn of every
+        # story: both measured to help, both the author's to turn off.
+        self.prose_reminders = QCheckBox("Keep the prose fresh")
+        self.prose_reminders.setChecked(self.config.prose_reminders)
+        self.prose_reminders.setToolTip(
+            "Reminds the storyteller each turn to write plainly and let people speak and "
+            "act, and when its recent passages keep leaning on the same turns of phrase "
+            "(counted on this computer, no model asked), names them so the next passage "
+            "does without."
+        )
+        form.addRow(self.prose_reminders)
+        self.storyteller_moves = QCheckBox("Let the storyteller make the next move when I wait")
+        self.storyteller_moves.setChecked(self.config.storyteller_moves)
+        self.storyteller_moves.setToolTip(
+            "When your turn only waits, watches or says next to nothing, or a Direction "
+            "lets time pass, the storyteller is asked to have something happen and to end "
+            "where your character can answer it, with a little more room in a story whose "
+            "passages match your turn. Never in a story whose world is set to quiet."
+        )
+        form.addRow(self.storyteller_moves)
+
         sampling = Fold(form, "Sampling (advanced)")
         intro = QLabel("For the story model's passages and questions, in every story:")
         intro.setObjectName("hintLabel")
@@ -2544,6 +2565,8 @@ class SettingsDialog(QDialog):
         levels = self._reasoning_levels()
         self.config.reasoning_story = levels["story"]
         self.config.reasoning_side = levels["side"]
+        self.config.prose_reminders = self.prose_reminders.isChecked()
+        self.config.storyteller_moves = self.storyteller_moves.isChecked()
 
         if self.story is not None:
             defaults = self.story.defaults
