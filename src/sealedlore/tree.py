@@ -57,6 +57,80 @@ def active_path(nodes: Sequence[Node], active_leaf_id: str | None) -> list[Node]
         ) from exc
 
 
+def _reaches_a_root(index: Mapping[str, Node], node_id: str) -> bool:
+    seen: set[str] = set()
+    current: str | None = node_id
+    while current is not None:
+        node = index.get(current)
+        if node is None or current in seen:
+            return False
+        seen.add(current)
+        current = node.parent_id
+    return True
+
+
+def _whole(index: Mapping[str, Node]) -> set[str]:
+    """Every id whose path back to a root is whole: no missing parent, no
+    cycle. One walk per line, each message settled once."""
+    settled: dict[str, bool] = {}
+    for start in index:
+        line: list[str] = []
+        on_line: set[str] = set()
+        current: str | None = start
+        verdict = True
+        while current is not None:
+            if current in settled:
+                verdict = settled[current]
+                break
+            node = index.get(current)
+            if node is None or current in on_line:
+                verdict = False
+                break
+            line.append(current)
+            on_line.add(current)
+            current = node.parent_id
+        for node_id in line:
+            settled[node_id] = verdict
+    return {node_id for node_id, whole in settled.items() if whole}
+
+
+def standing_leaf(
+    nodes: Sequence[Node], leaf_id: str | None, *, earlier: Sequence[Node] = ()
+) -> str | None:
+    """`leaf_id` when its path is whole; else the message nearest it whose
+    path is.
+
+    A story's files are saved one after another, so a crash between two can
+    leave story.json naming a message nodes.json never got (or one a
+    deletion took out of it). Nearest is first the leaf's own line, as
+    `earlier` (the previous nodes.json) recorded it, walked up to the first
+    message still here; else the newest message here whose path is whole;
+    else none."""
+    if leaf_id is None:
+        return None
+    index = index_nodes(nodes)
+    if _reaches_a_root(index, leaf_id):
+        return leaf_id
+    whole = _whole(index)
+    before = index_nodes(earlier)
+    seen: set[str] = set()
+    current = before[leaf_id].parent_id if leaf_id in before else None
+    while current is not None and current not in seen:
+        seen.add(current)
+        if current in whole:
+            return current
+        node = before.get(current)
+        current = node.parent_id if node is not None else None
+    # Nodes are appended as they are made, so among equal times the later
+    # in the list is the newer.
+    newest = [
+        (node.created_at, position, node.id)
+        for position, node in enumerate(nodes)
+        if node.id in whole
+    ]
+    return max(newest)[2] if newest else None
+
+
 def roots(nodes: Sequence[Node]) -> list[Node]:
     return [node for node in nodes if node.parent_id is None]
 

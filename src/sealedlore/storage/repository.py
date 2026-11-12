@@ -48,6 +48,7 @@ from sealedlore.storage.paths import (
     stories_dir,
     story_dir,
 )
+from sealedlore.tree import standing_leaf
 
 
 class StoryBundle(BaseModel):
@@ -324,6 +325,7 @@ def load_story_bundle(story_id: str, root: Path | None = None) -> StoryBundle:
                 "came from is left as it was."
             )
         story.id = story_id
+    _repair_leaf(story, nodes, directory, notices)
 
     return StoryBundle(
         story=story,
@@ -339,6 +341,31 @@ def load_story_bundle(story_id: str, root: Path | None = None) -> StoryBundle:
         asides=[Aside.model_validate(a) for a in read_json(directory / "asides.json", [])],
         supporting=SupportingCast.model_validate(read_json(directory / "supporting.json", {})),
         reviews=[ReviewRecord.model_validate(r) for r in read_json(directory / "reviews.json", [])],
+    )
+
+
+def _repair_leaf(story: Story, nodes: list[Node], directory: Path, notices: list[str]) -> None:
+    """A story whose current message isn't among its messages opens at the
+    nearest one that is (`tree.standing_leaf`), and says so: never refused.
+    It comes of a save cut short between story.json and nodes.json, or of
+    nodes.json read from its backup, a save behind."""
+    leaf = story.active_leaf_id
+    if standing_leaf(nodes, leaf) == leaf:
+        return
+    earlier: list[Node] = []
+    backup = directory / "nodes.json.bak"
+    try:
+        earlier = [Node.model_validate(n) for n in read_json(backup, [])]
+    except (OSError, ValueError):
+        pass  # the newest message stands in instead
+    story.active_leaf_id = standing_leaf(nodes, leaf, earlier=earlier)
+    notices.append(
+        "The message this story was last at wasn't saved (SealedLore may have been closed, "
+        "or the computer stopped, in the middle of a save): it opens at the nearest message "
+        "that was."
+        if story.active_leaf_id is not None
+        else "The message this story was last at wasn't saved, nor any it follows from: "
+        "it opens at its start."
     )
 
 
