@@ -1329,6 +1329,13 @@ _text(
 
 # --- The scene read ------------------------------------------------------
 
+# "Give the location and situation as the passage leaves them" for a stretch
+# of time (Nov 2026): the read closed the scene, code cleared the situation
+# with it, and the read gave no new one, so the next turn's card was blank
+# (2 of 35 time skips played live). Replayed on 74 logged reads, twice each
+# (GLM 5.3): a closed scene with no situation 2 of 56 before, 0 of 60 after;
+# who arrived and left agreed with the old wording on 132 of 145, as the old
+# wording agrees with itself (67 of 74).
 # No time field (Oct 2026): the storyteller no longer gets the card's Time
 # after the opening (prompt.scene_time_shown), and replayed on 30 logged reads
 # of the long run, twice each, who arrived and left matched 60/60 without it.
@@ -1411,7 +1418,8 @@ these, from the latest passage, each with its sentence copied exactly:
 A shortcut is always about one scene as it happens. A passage that covers a
 stretch of time (days passing, a run of meetings told in summary) is the story
 moving: people meet, hear news and act on it over that time. Report no
-shortcuts for it; set "scene_closed" and describe where it ends.
+shortcuts for it; set "scene_closed", and give the "location" and "situation" as the passage
+leaves them at its end, even where the place is the same: the card's old ones no longer hold.
 
 {channels}
 
