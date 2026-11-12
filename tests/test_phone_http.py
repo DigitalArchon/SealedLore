@@ -12,6 +12,7 @@ from sealedlore.phone.http import (
     HttpError,
     RequestParser,
     Response,
+    _body_length,
     host_matches,
     json_response,
     render,
@@ -97,6 +98,41 @@ def test_what_cant_be_read_is_refused_with_a_status(data, status):
     with pytest.raises(HttpError) as caught:
         RequestParser().feed(data)
     assert caught.value.status == status
+
+
+def test_a_content_length_of_thousands_of_digits_is_too_large_not_a_crash():
+    """int() raises ValueError past about 4,300 digits, which went past the
+    parser's HttpError and out of the server's Qt slot."""
+    for digits in ("9" * 5000, "1" + "0" * 5000):
+        data = head(["POST /api/t HTTP/1.1", f"Host: {ONION}", f"Content-Length: {digits}"])
+        assert len(data) < MAX_HEADER_BYTES
+        with pytest.raises(HttpError) as caught:
+            RequestParser().feed(data)
+        assert caught.value.status == 413
+    padded = head(["POST /a HTTP/1.1", f"Host: {ONION}", "Content-Length: " + "0" * 5000 + "2"])
+    (request,) = RequestParser().feed(padded + b"{}")
+    assert request.body == b"{}"
+
+
+@pytest.mark.parametrize("value", ["²", "٣", "３", "1²", " ", ""])
+def test_a_content_length_is_ascii_digits_only(value):
+    """str.isdigit takes "²" (which int() then refuses) and other scripts'
+    digits (which int() reads). The head is read as ASCII first, so this is
+    the rule's own check."""
+    with pytest.raises(HttpError) as caught:
+        _body_length({"content-length": value}, MAX_BODY_BYTES)
+    assert caught.value.status == 400
+
+
+def test_nothing_is_read_after_a_request_that_couldnt_be():
+    """A refused head left the parser half way through it: fed again, it
+    made a request out of the old head and the new bytes."""
+    parser = RequestParser()
+    with pytest.raises(HttpError):
+        parser.feed(head(["POST /a HTTP/1.1", f"Host: {ONION}", "Content-Length: x"]))
+    with pytest.raises(HttpError):
+        parser.feed(get("/b"))
+    assert not parser.pending
 
 
 def test_a_head_that_never_ends_is_refused():

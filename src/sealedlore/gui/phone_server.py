@@ -135,6 +135,14 @@ class _Connection(QObject):
             self._write(render(error_response(exc.status, exc.detail), keep_alive=False))
             self.close()
             return
+        except Exception:  # noqa: BLE001 - bytes from the network must not raise in a Qt slot
+            # Raised out of a slot, an exception can take the app down (PySide
+            # on Python 3.11). Whatever the parser didn't foresee is the
+            # client's bad request.
+            traceback.print_exc()
+            self._write(render(error_response(400), keep_alive=False))
+            self.close()
+            return
         for request in requests:
             try:
                 response = self._server.api.handle(request)

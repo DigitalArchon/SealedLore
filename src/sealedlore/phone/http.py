@@ -86,10 +86,29 @@ class RequestParser:
         self._max_body = max_body
         self._head: tuple[str, str, str, dict[str, str]] | None = None
         self._need = 0
+        self._failed = False
+
+    @property
+    def pending(self) -> bool:
+        """Whether part of a request has come and the rest hasn't."""
+        return bool(self._buffer) or self._head is not None
 
     def feed(self, data: bytes) -> list[Request]:
         """The requests completed by `data`. Raises HttpError on the first
-        that can't be read; nothing after it is read."""
+        that can't be read; nothing after it is read, then or later."""
+        if self._failed:
+            raise HttpError(400, "an earlier request couldn't be read")
+        try:
+            return self._feed(data)
+        except BaseException:
+            # Half a request's state must not be read as the next one's.
+            self._failed = True
+            self._buffer.clear()
+            self._head = None
+            self._need = 0
+            raise
+
+    def _feed(self, data: bytes) -> list[Request]:
         self._buffer += data
         out: list[Request] = []
         while True:
@@ -166,12 +185,15 @@ def _body_length(headers: dict[str, str], most: int) -> int:
     value = headers.get("content-length")
     if value is None:
         return 0
-    if not value.isdigit():
+    # ASCII digits only: str.isdigit takes "²" (which int() then refuses) and
+    # other scripts' digits. And never int() on thousands of them: past about
+    # 4,300 Python raises ValueError instead of reading the number.
+    if not value or not value.isascii() or not value.isdigit():
         raise HttpError(400, "a bad Content-Length")
-    length = int(value)
-    if length > most:
+    digits = value.lstrip("0") or "0"
+    if len(digits) > len(str(most)) or int(digits) > most:
         raise HttpError(413)
-    return length
+    return int(digits)
 
 
 def host_matches(request: Request, onion: str) -> bool:
