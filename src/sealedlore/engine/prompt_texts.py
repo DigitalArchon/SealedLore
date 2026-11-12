@@ -1951,6 +1951,15 @@ come), each with the sentence copied exactly from THE AUTHOR'S TURN, never from
 the passage: [{"event": "event id", "quote": "..."}]. None: "author_told": [].""",
 )
 
+# "An event begins only from the scene as it stands" (Nov 2026): an event
+# written as "he appears at the berth in the small hours" with the trigger
+# "anywhere below" was begun at ten in the morning with the man already in
+# the room, 8 times of 8 on the recommended plot model, and the storyteller
+# cut the scene short to fit it. With the rule it began 1 time of 8 (0 of 8
+# on another model).
+# Over 111 logged requests sent twice, decisions differ between the wordings
+# about as often as either differs from itself (93-97 the same against
+# 98-104), with fewer events begun (39 against 50).
 _text(
     "plot.director",
     PLOT,
@@ -2006,6 +2015,10 @@ The moment
 - A due event that has its lull should begin: that is what it was waiting
   for. The author's character turning in for the night is the clearest case.
 - "any time" events begin as soon as their trigger is happening.
+- An event begins only from the scene as it stands. If what happens has
+  someone come in who is already in the scene, or belongs to another time of
+  day than the clock shows (the small hours, at night, at dawn), it does not
+  begin now, whatever its trigger: wait for the moment it describes.
 - At most one event begins per passage.
 """,
     (("held", "the held character's name"),),
