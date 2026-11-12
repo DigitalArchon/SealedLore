@@ -106,6 +106,7 @@ from sealedlore.engine.prompt import (
     AssembledPrompt,
     AssemblyOptions,
     TurnRequest,
+    as_shown,
     assemble_chat,
     assemble_prompt,
     assemble_question,
@@ -3996,7 +3997,9 @@ class StorySession(
         return self.config.model_prices.get(model)
 
     def system_prompt_text(self) -> str:
-        """The system block exactly as the storyteller receives it.
+        """The system block as the storyteller receives it, for the settings
+        review: all of it but the storyteller's notes, which stand as a line
+        saying there are some (`prompt.as_shown`).
 
         Leaves the inspector's kept prompt alone: a review used to replace it
         with this placeholder turn.
@@ -4070,7 +4073,11 @@ class StorySession(
         return count
 
     def _next_turn_prompt(self) -> AssembledPrompt:
-        """The prompt the storyteller would get next, with a placeholder turn.
+        """The prompt the storyteller would get next, with a placeholder turn,
+        for the settings review alone: the storyteller's notes stand in it as
+        a line saying there are some (`prompt.as_shown`). The review's words
+        reach the author, and it is another model: the notes are the
+        storyteller's, and it can't propose changes to them.
 
         Offline, like the inspector's: assembling never embeds. The inspector's
         kept prompt is put back afterwards.
@@ -4078,13 +4085,15 @@ class StorySession(
         held = self.story.held_character_id
         kept = self.last_prompt
         try:
-            return self.assemble(
-                TurnRequest(
-                    speaker_id=held or DIRECTOR_SPEAKER_ID,
-                    user_text="(The author's next turn goes here.)",
-                    controlled_character_id=held,
-                    agency_mode=self.story.defaults.agency_mode,
-                    npc_scope=self.story.defaults.npc_scope,
+            return as_shown(
+                self.assemble(
+                    TurnRequest(
+                        speaker_id=held or DIRECTOR_SPEAKER_ID,
+                        user_text="(The author's next turn goes here.)",
+                        controlled_character_id=held,
+                        agency_mode=self.story.defaults.agency_mode,
+                        npc_scope=self.story.defaults.npc_scope,
+                    )
                 )
             )
         finally:

@@ -21,7 +21,7 @@ from sealedlore.engine.authoring import current_value, describe, format_value
 from sealedlore.engine.dice import DIFFICULTY_ORDER, chance_for, chip_text, tier_for
 from sealedlore.engine.drafting import StoryDraft
 from sealedlore.engine.export import markdown_user_name, render_markdown
-from sealedlore.engine.prompt import TurnRequest
+from sealedlore.engine.prompt import TurnRequest, as_shown
 from sealedlore.engine.prompt_edits import texts_in_force
 from sealedlore.engine.reasoning import config_params, config_reasoning
 from sealedlore.engine.response_style import PRESETS, label_for
@@ -907,6 +907,9 @@ class Repl:
         prompt = self.session.last_prompt or self.session.assemble(
             self.turn_request("(nothing typed yet)")
         )
+        if not self.session.config.show_plot_spoilers:
+            # As the Prompt page shows it: the storyteller's notes kept.
+            prompt = as_shown(prompt)
         uses_cache = self.session.uses_cache_control()
         print(f"  model: {prompt.model or '(unset)'}  cache_control: {uses_cache}")
         for section in prompt.sections:

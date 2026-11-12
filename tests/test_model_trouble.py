@@ -360,6 +360,30 @@ def test_the_storys_own_prompt_goes_only_after_the_warning_is_accepted(app, conf
     assert all(target.messages == prompt for target in runner.targets)
 
 
+def test_another_roles_model_gets_the_storys_prompt_without_the_storytellers_notes(app, config):
+    """The notes are the storyteller's alone (`prompt.as_shown`): a check of
+    the scene model sends the prompt with a line in their place, a check of
+    the story's own model the prompt as it was sent."""
+    sent = (PromptMessage(role="system", parts=(ContentPart(text="The secret."),)),)
+    kept = (PromptMessage(role="system", parts=(ContentPart(text="(notes, kept)"),)),)
+    for role, expected in (("scene", kept), ("story", sent)):
+        runner = FakeRunner(OVERTHINKING)
+        dialog = ModelTroubleDialog(
+            context(
+                roles=[TroubleRole(role, role.title(), GLM, {}, ReasoningConfig())],
+                story_prompt=sent,
+                story_prompt_for_others=kept,
+                story_prompt_tokens=31_000,
+            ),
+            "slow",
+            runner=runner,
+        )
+        dialog.own.setChecked(True)
+        dialog.understood.setChecked(True)
+        dialog.run()
+        assert runner.targets and all(target.messages == expected for target in runner.targets)
+
+
 def test_without_a_prompt_to_send_the_writing_check_says_why(app, config):
     dialog = ModelTroubleDialog(
         context(story_prompt_why="A private scene is open: nothing from it goes anywhere."),
@@ -491,6 +515,20 @@ def test_the_storys_prompt_is_offered_once_there_is_one_and_never_from_a_private
     )
     context = window._trouble_context()
     assert context.story_prompt is not None and context.story_prompt_tokens > 0
+    # No notes in the story: the one prompt serves every role.
+    assert context.story_prompt_for_others is None
+    window.session.story.storyteller_notes = "The seed corn is under the granary floor."
+    window.session.assemble(
+        TurnRequest(
+            speaker_id="char-serrik", user_text="Go.", controlled_character_id="char-serrik"
+        )
+    )
+    context = window._trouble_context()
+    sent = "\n".join(message.text for message in context.story_prompt)
+    others = "\n".join(message.text for message in context.story_prompt_for_others)
+    assert "seed corn" in sent and "seed corn" not in others
+    assert "kept from the author" in others
+    window.session.story.storyteller_notes = None
 
     window.session.story.private_spans.append(PrivateSpan(model="TEE/glm-5.3"))
     context = window._trouble_context()

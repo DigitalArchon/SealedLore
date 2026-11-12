@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from sealedlore.engine.prompt import AssembledPrompt
+from sealedlore.engine.prompt import AssembledPrompt, as_shown
 from sealedlore.gui.sizing import adjustable_columns
 from sealedlore.gui.winprivacy import copy_text
 from sealedlore.messages import PromptMessage
@@ -71,6 +71,11 @@ SECTION_LABELS = {
 
 # The section list's first row: the request body, not a section.
 WHOLE_REQUEST = "Whole request (JSON)"
+# On a section whose words are kept from the author (the storyteller's notes).
+KEPT_TIP = (
+    "Sent to the storyteller in full. Shown here as a line saying how long they are, so "
+    "the story keeps its secrets: read them under Story → Setup → Storyteller's notes."
+)
 
 
 class ContextInspector(QWidget):
@@ -151,10 +156,16 @@ class ContextInspector(QWidget):
         approximate: bool,
         warnings: Sequence[str] = (),
         extra_body: dict | None = None,
+        secrets: bool = False,
     ) -> None:
         """`warnings`: things wrong with what is sent that the author should
         fix, one line each (style notes that say who plays whom).
-        `extra_body`: the story model's route, as it is sent."""
+        `extra_body`: the story model's route, as it is sent. `secrets`:
+        whether the author asked to see what the story hides (Show plot);
+        unless they did, the storyteller's notes stand as a line saying there
+        are some, in the sections, the request and both copies alike."""
+        if not secrets:
+            prompt = as_shown(prompt)
         budget = prompt.budget
         tilde = "~" if approximate else ""
         lines = [
@@ -203,7 +214,8 @@ class ContextInspector(QWidget):
             label = SECTION_LABELS.get(section.name, section.name)
             item = QTreeWidgetItem([label, f"{tilde}{section.tokens:,}", marker])
             item.setData(0, Qt.UserRole, section.name)
-            item.setToolTip(0, section.name)
+            stands_in = bool(section.kept_as) and not secrets
+            item.setToolTip(0, f"{section.name}: {KEPT_TIP}" if stands_in else section.name)
             item.setTextAlignment(1, Qt.AlignRight | Qt.AlignVCenter)
             self.sections.addTopLevelItem(item)
             self._section_text[section.name] = section.text

@@ -124,6 +124,10 @@ class TroubleContext:
     prices: Mapping[str, ModelPrice] = field(default_factory=dict)
     # What the storyteller was last sent, when it may go to other hosts; else why not.
     story_prompt: tuple[PromptMessage, ...] | None = None
+    # The same prompt for a model that isn't the storyteller's: its notes
+    # stand as a line saying there are some (`prompt.as_shown`), since they
+    # go to no other model. None: the prompt has none, and goes as it is.
+    story_prompt_for_others: tuple[PromptMessage, ...] | None = None
     story_prompt_tokens: int = 0
     story_prompt_why: str = "Send a turn first: this uses what the storyteller was last sent."
     memory_only: bool = False
@@ -510,6 +514,9 @@ class ModelTroubleDialog(QDialog):
 
     def _messages(self, run: int) -> tuple[PromptMessage, ...]:
         if self._uses_own_prompt() and self.context.story_prompt is not None:
+            others = self.context.story_prompt_for_others
+            if others is not None and self.current_role().role != "story":
+                return others
             return self.context.story_prompt
         return check_messages(run)
 

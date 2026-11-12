@@ -42,7 +42,7 @@ from sealedlore.engine.branches import next_branch_name, unique_branch_name
 from sealedlore.engine.chronicle import format_clock
 from sealedlore.engine.export import markdown_user_name, render_markdown
 from sealedlore.engine.plot_md import PLOT_SUFFIX, ParsedPlotFile, parse_plot_markdown
-from sealedlore.engine.prompt import TurnRequest
+from sealedlore.engine.prompt import TurnRequest, as_shown
 from sealedlore.engine.prompt_edits import texts_in_force
 from sealedlore.engine.reasoning import config_params, config_reasoning
 from sealedlore.engine.routing import (
@@ -4320,7 +4320,7 @@ class MainWindow(
                 # The endpoint is sent the bare id.
                 bare = split_model(model)[1]
                 roles.append(TroubleRole(used, ", ".join(names), bare, route, reasoning))
-        prompt, tokens, why = None, 0, ""
+        prompt, for_others, tokens, why = None, None, 0, ""
         if session is None:
             why = "Open a story first: this uses what its storyteller was last sent."
         elif session.in_private:
@@ -4331,6 +4331,8 @@ class MainWindow(
             why = "Send a turn first: this uses what the storyteller was last sent."
         else:
             prompt = tuple(session.last_prompt.messages)
+            # The storyteller's notes go to the storyteller's model alone.
+            for_others = tuple(as_shown(session.last_prompt).messages)
             tokens = session.last_prompt.budget.total
         return TroubleContext(
             endpoint=endpoint,
@@ -4338,6 +4340,7 @@ class MainWindow(
             on_nanogpt=endpoint is not None and on_nanogpt(endpoint.base_url),
             prices=dict(self.config.model_prices),
             story_prompt=prompt,
+            story_prompt_for_others=for_others if for_others != prompt else None,
             story_prompt_tokens=tokens,
             story_prompt_why=why or TroubleContext.story_prompt_why,
             memory_only=session is not None and session.memory_only,
@@ -5227,6 +5230,10 @@ class MainWindow(
         self.config.show_plot_spoilers = on
         save_config(self.config, root=self.root)
         self.refresh_panels()
+        # The Prompt page shows the storyteller's notes only with spoilers.
+        # Nothing is assembled while a job is the story's one writer.
+        if self.session is not None and (self.session.last_prompt is not None or not self._busy):
+            self.refresh_inspector()
 
     def _on_event_marked(self, event_id: str, state: str) -> None:
         if self.session is None or self._busy:
@@ -5434,6 +5441,8 @@ class MainWindow(
             approximate=self.estimator.is_approximate,
             warnings=self._prompt_warnings(),
             extra_body=self.session.route_for("story"),
+            # What the story hides (the storyteller's notes) only when asked.
+            secrets=self.config.show_plot_spoilers,
         )
         self.status_strip.set_budget(prompt.budget, approximate=self.estimator.is_approximate)
 
