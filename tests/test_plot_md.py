@@ -81,9 +81,9 @@ def test_the_sample_parses_without_errors():
     assert not names["Marcus Webb"].is_player_available
     assert names["Ben"].is_player_available
     assert [entry.title for entry in scenario.lore] == [
+        "The farmhouse",
         "Hellsville",
         "The Hidden Caves",
-        "The farmhouse",
     ]
 
     plot = scenario.plot
@@ -391,3 +391,40 @@ A knock at the door.
     # A time that names no hour leaves the clock at 00:00, for the first read to set.
     vague = parse_plot_markdown(text.replace("just after dusk", "the third week of the siege"))
     assert vague.scenario.plot.start_minutes == 0
+
+
+def test_a_plot_knows_the_place_its_story_opens_at():
+    """Events `at:` the place a story opens at never began: no passage named
+    the place in so many words, so the plot never knew anyone was there."""
+    from sealedlore.engine.chronicle import initial_chronicle
+    from sealedlore.engine.plot_md import starting_place
+
+    places = [
+        ("The farmhouse", ["farmhouse", "the farm"]),
+        ("Hellsville", ["the town"]),
+        ("Hollowmouth", []),
+    ]
+    at = "A seemingly abandoned farmhouse, five miles south of Hellsville"
+    assert starting_place(at, places) == "The farmhouse"
+    assert (
+        starting_place("The east gate of Hellsville, in sight of the tower", places) == "Hellsville"
+    )
+    assert starting_place("The barracks, Hollowmouth", places) == "Hollowmouth"
+    assert starting_place("The town square", places) == "Hellsville"
+    # A place the scene is only measured from, or none at all: nothing is guessed.
+    for elsewhere in (
+        "The road north of Hellsville",
+        "A hill above the town",
+        "A cellar",
+        "",
+        None,
+    ):
+        assert starting_place(elsewhere, places) is None
+
+    plot = parse_plot_markdown(SAMPLE.read_text(encoding="utf-8")).scenario.plot
+    assert plot.start_place == "The farmhouse"
+    start = initial_chronicle(plot)
+    assert start.place == "The farmhouse" and start.visited == ["The farmhouse"]
+    # A plot given to a story already under way assumes nowhere.
+    late = initial_chronicle(plot, under_way=True)
+    assert late.place is None and late.visited == []

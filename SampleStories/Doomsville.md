@@ -101,6 +101,14 @@ keep her community going.
 
 # Places
 
+## The farmhouse
+- keywords: farmhouse, the farm
+- picture: pictures/farmhouse.jpg | from the road
+
+The farmhouse where the story begins, five miles south of Hellsville: two storeys
+of white paint gone to grey, one shutter hanging, snow drifted to the windowsills
+and a sagging fence around the yard. From the road it looks abandoned.
+
 ## Hellsville
 - keywords: the town
 - picture: pictures/hellsville.jpg | main street
@@ -115,16 +123,6 @@ Whether they say so, or tell them where it is, is another matter.
 - picture: pictures/hidden-caves.jpg | the cave mouth
 
 A series of caves in the hills near Hellsville. There is not much there.
-
-# Lore
-
-## The farmhouse
-- keywords: farmhouse, the farm
-- picture: pictures/farmhouse.jpg | from the road
-
-The farmhouse where the story begins, five miles south of Hellsville: two storeys
-of white paint gone to grey, one shutter hanging, snow drifted to the windowsills
-and a sagging fence around the yard. From the road it looks abandoned.
 
 # Facts
 
@@ -169,6 +167,20 @@ A horde of the dead descends on Hellsville.
 - tell: While they sleep alone, one of the dead finds them. They do not wake in time. Write the attack and its outcome from the world's side: the character dies, and this is the end of the story.
 
 # Events
+
+## Smoke on the road
+- when: day 1–5
+- at: The farmhouse
+- pacing: quiet moment
+- trigger: The player's character is at the farmhouse with a fire lit or a light showing, and nothing else is going on.
+- tell: Someone on the road north has seen the smoke: a woman pulling a sled of salvage, on her way to Hellsville to trade. She stops at the fence and calls out rather than come any closer. She wants a night out of the wind and will pay for it with news or a tin of something, and she will go on up the road if she is turned away. Asked, she says what she knows of the town: it takes in people who work, and it is run by one man. Whether she is let in, sent on or robbed is the player's character's to decide.
+
+## The dead at the door
+- when: day 2–12
+- at: The farmhouse
+- pacing: any time
+- trigger: It is night at the farmhouse, and the player's character is indoors, resting or asleep.
+- tell: Two of the dead, drawn by the light or the smell of smoke, find the farmhouse in the dark. The first the player's character knows of it is a weight against the door or a face at a window. They can be fought, waited out or slipped past, and the noise of any of it carries.
 
 ## First bandit meeting
 - when: day 2–60

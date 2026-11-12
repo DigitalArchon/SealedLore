@@ -61,9 +61,9 @@ def test_a_sample_opens_clean_and_every_page_fills(app, editor: PlotEditorWindow
         app.processEvents()
         seen += 1
     # The two halves (the story's row is its title and settings, the plot's its
-    # clock), 8 sections, 6 characters, 2 places, 1 lore entry, 3 facts, 6
+    # clock), 8 sections, 6 characters, 3 places, no lore entry, 3 facts, 8
     # events, 4 variants.
-    assert seen == 32
+    assert seen == 34
     halves = [editor.tree.topLevelItem(i) for i in range(editor.tree.topLevelItemCount())]
     assert [half.text(0) for half in halves] == ["The story", "The plot"]
     assert [halves[1].child(i).text(0) for i in range(halves[1].childCount())] == [
@@ -145,13 +145,13 @@ def test_conditions_are_built_not_typed(app, editor: PlotEditorWindow):
 
 
 def test_a_problem_names_its_item_and_selects_it(app, editor: PlotEditorWindow):
-    editor._select((EVENT, 5, -1))
+    editor._select((EVENT, 7, -1))
     page = editor.pages.currentWidget()
     row = rows(page)[0]
     row.kind.setCurrentIndex(row.kind.findData("text"))
     row.text.setText("the moon rises!")
     editor.check_now()
-    assert [p.where for p in editor.problems] == [(EVENT, 5, -1)]
+    assert [p.where for p in editor.problems] == [(EVENT, 7, -1)]
     listed = editor.problem_list.item(0).text()
     assert listed.startswith("Error — Event “Ben in the caves”: Can't read the condition")
     assert editor.summary.text().startswith("1 error stops this file importing")
@@ -159,7 +159,7 @@ def test_a_problem_names_its_item_and_selects_it(app, editor: PlotEditorWindow):
 
     editor._select((HEADER, CHARACTER, -1))
     editor._on_problem_activated(editor.problem_list.item(0))
-    assert editor.current_ref() == (EVENT, 5, -1)
+    assert editor.current_ref() == (EVENT, 7, -1)
 
 
 def test_ticking_the_timeline_moves_the_event(app, editor: PlotEditorWindow):

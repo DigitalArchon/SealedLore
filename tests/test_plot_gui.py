@@ -48,8 +48,10 @@ def test_the_plot_tab_follows_the_story(app, tmp_path: Path):
     assert [c.name for c in session.cast if c.name in ("John", "Jane")] == ["John"]
     session.provider = MockChatProvider(
         [
-            # No director call: "Welcome to Hellsville" happens at a place
-            # that is neither here nor mentioned.
+            # The director is asked about the farmhouse's own event ("Smoke on
+            # the road", a quiet moment's) and holds it; "Welcome to
+            # Hellsville" happens at a place neither here nor mentioned.
+            json.dumps({"directions": []}),
             "John pushed the farmhouse door open.",
             json.dumps({"elapsed": {"amount": 2, "unit": "hours"}}),
         ]
@@ -110,7 +112,7 @@ def test_hidden_cast_and_places_stay_out_of_the_tabs_until_brought_in(app, tmp_p
     assert not any("Hidden Caves" in name for name in _names(window.lore_panel.list))
     assert any("Hellsville" in name for name in _names(window.lore_panel.list))
     panel = window.plot_panel
-    assert panel.where.text() == "Where: none of the named places"
+    assert panel.where.text() == "Where: The farmhouse"
     # Held back is the plot's business: only with spoilers on.
     assert not panel.held_back.isVisibleTo(panel)
 
@@ -132,7 +134,7 @@ def test_hidden_cast_and_places_stay_out_of_the_tabs_until_brought_in(app, tmp_p
 
     session.set_place("Hellsville")
     window._refresh_plot_panel()
-    assert panel.where.text() == "Where: Hellsville"
+    assert panel.where.text() == "Where: Hellsville · been to: The farmhouse"
     window.close()
 
 
