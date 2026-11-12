@@ -7,12 +7,15 @@ models, and the only place that reads or writes them.
 
 from __future__ import annotations
 
+import copy
+import json
+import os
 import shutil
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from sealedlore.ids import new_id, utc_now_iso
 from sealedlore.models.aside import Aside
@@ -30,6 +33,8 @@ from sealedlore.storage import keychain
 from sealedlore.storage.atomic import (
     append_jsonl,
     atomic_write_json,
+    nests_deeper,
+    open_private,
     parse_jsonl_lines,
     read_json,
     read_jsonl,
@@ -236,27 +241,140 @@ def load_config(root: Path | None = None) -> Config:
 
 
 def load_config_or_recover(root: Path | None = None) -> tuple[Config, str | None]:
-    """The config, or the defaults with a note when the file can't be read.
+    """The config, as much of it as can be read, with a note for what
+    couldn't.
 
-    A hand edit gone wrong, or a torn write, must not keep the app from
-    starting: the broken file is set aside as `config.json.broken` (any key
-    still in it can be copied back by hand) and the settings start over.
-    A keychain that couldn't give the keys back is noted too.
+    Nothing in the file must keep the app from starting. A value that
+    doesn't validate (an older SealedLore reading a newer one's settings: a
+    reasoning level or a limit it doesn't know yet, or a hand edit) goes
+    back to its default alone, and everything else is kept: the prompt
+    edits, saved prompts and paired phones with it. A file that isn't JSON
+    at all (a torn write) starts over from the defaults. Either way the file
+    as it was is kept beside it first (`_set_aside`), never over an earlier
+    copy, so what was dropped can be copied back by hand. A keychain that
+    couldn't give the keys back is noted too.
     """
+    path = config_file(root)
     try:
-        return _load_config(root)
-    except (ValueError, OSError) as exc:
-        path = config_file(root)
-        aside = path.with_name(path.name + ".broken")
-        try:
-            path.replace(aside)
-        except OSError:
-            pass
-        reason = str(exc).splitlines()[0][:200]
+        raw = path.read_bytes()
+    except FileNotFoundError:
+        config = Config()
+        return config, _fill_keys(config, root)
+    except OSError as exc:
+        reason = _first_line(exc)
+        return Config(), f"Settings couldn't be read ({reason}); starting with the defaults."
+    try:
+        data = json.loads(raw.decode("utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("not a JSON object")
+        if nests_deeper(data):
+            raise ValueError("nested far deeper than settings ever are")
+    except (ValueError, RecursionError) as exc:  # RecursionError: nesting, on 3.11
+        aside = _set_aside(path, raw)
+        if aside is not None:
+            path.unlink(missing_ok=True)
         return Config(), (
-            f"Settings couldn't be read ({reason}); starting with the defaults. "
-            f"The old file is kept as {aside.name}."
+            f"Settings couldn't be read ({_first_line(exc)}); starting with the defaults."
+            + (f" The old file is kept as {aside.name}." if aside is not None else "")
         )
+    config, dropped = _what_validates(data)
+    notes: list[str] = []
+    if dropped:
+        aside = _set_aside(path, raw)
+        kept = f" The file as it was is kept as {aside.name}." if aside is not None else ""
+        if config is None:
+            notes.append(
+                "Settings couldn't be read (they may be from a newer SealedLore); starting "
+                f"with the defaults.{kept}"
+            )
+        else:
+            notes.append(
+                "Some settings couldn't be read (they may be from a newer SealedLore) and are "
+                f"back to their defaults: {', '.join(dropped)}. Everything else is as it was."
+                f"{kept}"
+            )
+    config = config or Config()
+    key_note = _fill_keys(config, root)
+    return config, " ".join(note for note in [*notes, key_note] if note) or None
+
+
+def _first_line(exc: BaseException) -> str:
+    return (str(exc).splitlines() or [type(exc).__name__])[0][:200]
+
+
+# Each round drops one value; a config has nowhere near this many.
+_MOST_DROPPED = 500
+
+
+def _what_validates(data: dict[str, Any]) -> tuple[Config | None, list[str]]:
+    """The config from `data`, dropping each value validation names until
+    the rest validates, and where each was. None when even what is left
+    won't (an error naming no value)."""
+    data = copy.deepcopy(data)
+    dropped: list[str] = []
+    for _ in range(_MOST_DROPPED):
+        try:
+            return Config.model_validate(data), dropped
+        except ValidationError as exc:
+            location = exc.errors()[0]["loc"]
+        where = _drop(data, location)
+        if where is None:
+            return None, dropped or ["all of them"]
+        dropped.append(where)
+    return None, dropped
+
+
+def _drop(data: dict[str, Any], location: tuple[Any, ...]) -> str | None:
+    """The deepest value along `location` that is in `data`, taken out, so
+    that its default stands in; where it was. A value inside a list (a
+    provider, say) loses only its own field when the error names one.
+    None when not even the first step is there."""
+    path: list[tuple[Any, Any]] = []
+    here: Any = data
+    for step in location:
+        if isinstance(here, dict) and isinstance(step, str) and step in here:
+            path.append((here, step))
+            here = here[step]
+        elif isinstance(here, list) and isinstance(step, int) and 0 <= step < len(here):
+            path.append((here, step))
+            here = here[step]
+        else:
+            break  # a step of the validator's own (a union's member), or missing
+    if not path:
+        return None
+    container, key = path[-1]
+    del container[key]
+    where = ""
+    for _container, step in path:
+        where += f"[{step}]" if isinstance(step, int) else (f".{step}" if where else step)
+    return where
+
+
+def _set_aside(path: Path, raw: bytes) -> Path | None:
+    """The file's bytes as they were, copied beside it as `config.json.broken`,
+    or `.broken-2` and on when that is taken: never over an earlier copy,
+    which may hold what another start dropped. A copy already holding these
+    bytes is used again. None when nothing could be written."""
+    for number in range(1, 1000):
+        aside = path.with_name(path.name + (".broken" if number == 1 else f".broken-{number}"))
+        try:
+            if aside.read_bytes() == raw:
+                return aside
+            continue
+        except FileNotFoundError:
+            pass
+        except OSError:
+            continue
+        try:
+            fd = open_private(aside, os.O_WRONLY | os.O_EXCL)
+        except FileExistsError:
+            continue
+        except OSError:
+            return None
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(raw)
+        return aside
+    return None
 
 
 def save_story_bundle(bundle: StoryBundle, root: Path | None = None) -> None:
