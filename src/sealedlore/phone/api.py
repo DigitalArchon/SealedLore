@@ -281,8 +281,8 @@ class Api:
             return
         self._warned_at = now
         self.backend.warn(
-            "Phone access: many wrong logins or pairing codes in a minute. "
-            "Your phones still work; if it goes on, File → Phone devices… → New address…."
+            "Phone access: many wrong logins or pairing codes in a minute. Your phones "
+            "still work; if it goes on, choose New address… in File → Phone devices…"
         )
 
     def _story_refusal(self) -> Response | None:
