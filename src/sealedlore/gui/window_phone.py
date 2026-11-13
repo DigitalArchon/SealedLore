@@ -763,7 +763,10 @@ def _entries(window) -> tuple[list[dict], dict[str, str]]:
                     }
                     for a in session.asides_at(node.id)
                 ],
-                "can_regenerate": assistant,
+                # As the desktop offers it: not an as-written opening or a
+                # private scene's summary, which nothing wrote as a take.
+                "can_regenerate": assistant
+                and window._retakeable(path[max(0, index - 1) : index + 1]),
                 "can_reroll": assistant and index == len(path) - 1 and node.meta.roll is not None,
                 "can_continue": carries_on and index == len(path) - 1,
                 "can_revise": changeable(index),

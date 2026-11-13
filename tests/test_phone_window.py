@@ -672,3 +672,25 @@ def test_the_phone_is_told_the_window_is_busy_as_the_job_starts(
     wait_for(app, lambda: not window._busy)
     window.close()
 
+
+def test_the_phone_offers_no_regenerate_where_the_desktop_has_none(
+    app, tmp_path, sockets, story, cast
+):
+    """An opening taken as written answers no turn: the desktop offers no
+    Regenerate there, and the phone offered one the desktop then refused."""
+    story.setup.opening_mode = "as_written"
+    story.setup.opening_text = "Snow lies on the yard."
+    window, phone = open_window(tmp_path, sockets, story, cast, ["The hall falls quiet."])
+    window._start(lambda: window.session.begin("char-serrik"))
+    wait_for(app, lambda: not window._busy and window._phone.entries)
+    assert window.session.full_path()[-1].content == "Snow lies on the yard."
+    assert not window._can_regenerate()
+    page = phone.ask("GET", "/api/transcript")[1]
+    assert page["messages"][-1]["can_regenerate"] is False
+
+    phone.ask("POST", "/api/turn", {"text": "Night falls.", "speaker": NARRATOR_SPEAKER_ID})
+    wait_for(app, lambda: not window._busy and len(window.session.full_path()) == 3)
+    wait_for(app, lambda: len(window._phone.entries) == 3)
+    page = phone.ask("GET", "/api/transcript")[1]
+    assert [m["can_regenerate"] for m in page["messages"]] == [False, False, True]
+    window.close()
