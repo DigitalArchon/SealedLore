@@ -79,6 +79,16 @@ class EventHub:
             return
         self._write_all(frame(event, data))
 
+    def publish_to(self, device: str, event: str, data: object, *, content: bool = True) -> None:
+        """To one phone's streams and no other's: what only the phone that
+        asked is to have (Suggest…'s options). Gated as `publish` is."""
+        if content and not self._gate():
+            return
+        message = frame(event, data)
+        for handle, subscriber in list(self._subscribers.items()):
+            if subscriber.device == device and not subscriber.write(message):
+                self._let_go(handle)
+
     def heartbeat(self) -> None:
         self._write_all(HEARTBEAT)
 

@@ -119,6 +119,8 @@ class Backend(Protocol):
 
     def revise(self, node_id: str, change: str) -> None: ...
 
+    def suggest(self, device: str, ask: str | None) -> None: ...
+
     def switch_take(self, node_id: str, step: int) -> None: ...
 
     def switch_branch(self, start_id: str) -> None: ...
@@ -177,6 +179,7 @@ class Api:
             _Route("POST", re.compile(r"/api/reroll"), self._reroll, story=True),
             _Route("POST", re.compile(r"/api/continue"), self._continue, story=True),
             _Route("POST", re.compile(r"/api/revise"), self._revise, story=True),
+            _Route("POST", re.compile(r"/api/suggest"), self._suggest, story=True),
             _Route("POST", re.compile(r"/api/take"), self._take, story=True),
             _Route("GET", re.compile(r"/api/branches"), self._branches, story=True),
             _Route("POST", re.compile(r"/api/branch"), self._branch, story=True),
@@ -440,6 +443,17 @@ class Api:
         if change is None:
             raise HttpError(400, "Say what should change.")
         self.backend.revise(node_id, change)
+        return json_response(202, {"started": True})
+
+    def _suggest(self, request: Request, *, device: str) -> Response:
+        """A few things the author might write next (Suggest…). The job is
+        started here; its options go to this phone alone when it is done, as
+        a "suggestions" event with the `ask` the page sent, by which the page
+        that asked knows them for its own."""
+        ask = _object(request).get("ask")
+        if ask is not None and (not isinstance(ask, str) or not _ID.fullmatch(ask)):
+            raise HttpError(400, "a bad ask id")
+        self.backend.suggest(device, ask)
         return json_response(202, {"started": True})
 
     def _take(self, request: Request, *, device: str) -> Response:

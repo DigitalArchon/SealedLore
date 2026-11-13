@@ -115,6 +115,9 @@ class FakeBackend:
     def revise(self, node_id, change):
         self._act("revise", node_id, change)
 
+    def suggest(self, device, ask):
+        self._act("suggest", device, ask)
+
     def switch_take(self, node_id, step):
         self._act("take", node_id, step)
 
@@ -192,6 +195,7 @@ AUTH_ROUTES = [
     ("POST", "/api/reroll", {"node_id": "n1"}),
     ("POST", "/api/continue", {"node_id": "n1"}),
     ("POST", "/api/revise", {"node_id": "n1", "change": "It was raining."}),
+    ("POST", "/api/suggest", {"ask": "ask-1f"}),
     ("POST", "/api/take", {"node_id": "n1", "step": 1}),
     ("GET", "/api/branches", None),
     ("POST", "/api/branch", {"start_id": "n5"}),
@@ -456,6 +460,46 @@ def test_a_change_names_its_passage_and_says_what_should_change():
         409,
         {"error": "Leave the private scene to change a passage from before it."},
     )
+
+
+def test_suggestions_are_asked_for_by_the_phone_they_will_go_to():
+    api, backend = make()
+    assert answer(api, "POST", "/api/suggest", {"ask": "ask-1f"}) == (202, {"started": True})
+    assert backend.calls[-1] == ("suggest", "phone-1", "ask-1f")
+    assert answer(api, "POST", "/api/suggest", {})[0] == 202
+    assert backend.calls[-1] == ("suggest", "phone-1", None)
+    sent = len(backend.calls)
+    for bad in ({"ask": 7}, {"ask": "../x"}, {"ask": "a" * 97}, {"ask": ""}):
+        assert answer(api, "POST", "/api/suggest", bad)[0] == 400, bad
+    assert len(backend.calls) == sent
+    backend.refuse = Refused(409, "Suggestions are for the character you play.")
+    assert answer(api, "POST", "/api/suggest", {}) == (
+        409,
+        {"error": "Suggestions are for the character you play."},
+    )
+
+
+def test_what_is_for_one_phone_goes_to_its_streams_alone():
+    api, backend = make()
+    got: dict[str, list[bytes]] = {"mine": [], "mine too": [], "other": []}
+    closed: list[str] = []
+    api.hub.subscribe("phone-1", lambda data: got["mine"].append(data) or True, lambda: None)
+    api.hub.subscribe("phone-1", lambda data: got["mine too"].append(data) or True, lambda: None)
+    api.hub.subscribe("phone-2", lambda data: got["other"].append(data) or True, lambda: None)
+    offers = {"ask": "ask-1f", "options": ["I wait.", "I knock."], "private": None}
+    api.hub.publish_to("phone-1", "suggestions", offers)
+    assert got["mine"] == got["mine too"] == [frame("suggestions", offers)]
+    assert got["other"] == []
+    # Gated as every event of the story is: nothing of one that isn't shared.
+    backend.open_id = "private"
+    api.hub.publish_to("phone-1", "suggestions", {"options": [SECRET]})
+    assert len(got["mine"]) == 1
+    api.hub.publish_to("phone-1", "suggestions", {"options": []}, content=False)
+    assert len(got["mine"]) == 2 and got["other"] == []
+    # A stream of that phone's too far behind is let go, as with any event.
+    api.hub.subscribe("phone-2", lambda data: False, lambda: closed.append("behind"))
+    api.hub.publish_to("phone-2", "suggestions", {"options": []}, content=False)
+    assert closed == ["behind"] and api.hub.count("phone-2") == 1
 
 
 def test_transcript_pages_are_bounded():

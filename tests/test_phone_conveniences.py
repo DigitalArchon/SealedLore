@@ -1,10 +1,12 @@
 """The desktop's conveniences from a phone (gui/window_phone.py,
-gui/window_retakes.py): a take steered by a note, and a passage written again
-with a change. Spoken to as a phone would, over the real unix socket with no
-tor (tests/test_phone_window.py has the client)."""
+gui/window_retakes.py): a take steered by a note, a passage written again
+with a change, and suggestions for the author's next turn. Spoken to as a
+phone would, over the real unix socket with no tor (tests/test_phone_window.py
+has the client)."""
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sys
@@ -26,7 +28,10 @@ from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
 
 from sealedlore.gui import window_phone  # noqa: E402
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
+from sealedlore.gui.window_retakes import PRIVATE_NO_WRITER  # noqa: E402
+from sealedlore.models.config import PhoneDevice  # noqa: E402
 from sealedlore.models.node import NARRATOR_SPEAKER_ID  # noqa: E402
+from sealedlore.phone.pairing import token_hash  # noqa: E402
 from sealedlore.providers.mock import MockChatProvider  # noqa: E402
 from tests.test_phone_window import MARKER, open_window, wait_for  # noqa: E402
 
@@ -400,6 +405,213 @@ def test_a_change_for_a_memory_scenes_passage_is_the_scenes_own(
     assert MARKER in private.requests[-1].messages[-1].text
     assert len(window._provider.requests) == told  # the story's model heard nothing
     assert MARKER.encode() not in events.raw()
+    nothing_on_disk(tmp_path)
+    window.session.discard_private()
+    window.close()
+
+
+# --- Suggest… ---------------------------------------------------------------------------
+
+OPTIONS = [
+    '"Who else knows about this door?" I ask.',
+    "I lift the lantern and go down the first three steps.",
+    "I say nothing, and listen.",
+]
+OTHER_TOKEN = "another-phone-s-token"
+
+
+def two_phones(window: MainWindow) -> None:
+    """A second paired phone, beside the one `open_window` pairs (p1)."""
+    window.config.phone.devices.append(
+        PhoneDevice(id="p2", name="Tablet", token_sha256=token_hash(OTHER_TOKEN))
+    )
+
+
+def suggested(events) -> list[dict]:
+    return [data for name, data in events.events() if name == "suggestions"]
+
+
+def test_suggestions_come_to_the_phone_that_asked_and_to_no_other(
+    app, tmp_path, sockets, story, cast
+):
+    window, phone = open_window(
+        tmp_path, sockets, story, cast, ["The door gives.", json.dumps(OPTIONS)]
+    )
+    two_phones(window)
+    play(window, phone, "I push.")
+    window.composer.input.setPlainText("the author's own draft")
+    assert phone.ask("GET", "/api/composer")[1]["can_suggest"] is True
+    mine, other = phone.stream(), phone.stream(OTHER_TOKEN)
+    mine.wait_for("hello")
+    other.wait_for("hello")
+    messages = len(window.session.nodes)
+
+    status, answer = phone.ask("POST", "/api/suggest", {"ask": "ask-1f"})
+    assert (status, answer) == (202, {"started": True})
+    # Nothing a phone asks opens a dialog on the desktop, its progress included.
+    assert window._busy and window._busy_dialog is None
+    assert phone.ask("GET", "/api/state")[1]["desktop_waiting"] is False
+    wait_for(app, lambda: not window._busy)
+    wait_for(app, lambda: bool(suggested(mine)))
+
+    assert suggested(mine) == [{"ask": "ask-1f", "options": OPTIONS, "private": None}]
+    # The other phone saw a job run, and nothing of what it brought.
+    other.wait_for("job_finished")
+    assert suggested(other) == []
+    assert not any(option.encode() in other.raw() for option in OPTIONS)
+    for path in ("/api/state", "/api/composer", "/api/transcript"):
+        assert OPTIONS[0] not in json.dumps(phone.ask("GET", path, token=OTHER_TOKEN)[1])
+    # Offers outside the story: nothing sent, nothing stored, and the desktop
+    # is left as the author had it, with no menu of them there.
+    assert len(window.session.nodes) == messages and window.session.bundle.asides == []
+    assert window.composer.text() == "the author's own draft"
+    assert getattr(window, "_suggest_menu", None) is None
+    assert not any(OPTIONS[0] in json.dumps(entry) for entry in window._phone.entries)
+    window.close()
+
+
+def test_with_nobody_played_or_no_model_to_ask_suggest_is_refused(
+    app, tmp_path, sockets, story, cast, monkeypatch
+):
+    """Each of the desktop's reasons is the phone's, and none opens a dialog
+    there."""
+    window, phone = open_window(
+        tmp_path, sockets, story, cast, ["The door gives.", json.dumps(OPTIONS)], delay=0.05
+    )
+
+    def refused() -> str:
+        status, answer = phone.ask("POST", "/api/suggest", {"ask": "ask-1f"})
+        assert status == 409, answer
+        return answer["error"]
+
+    phone.ask("POST", "/api/turn", {"text": "I push.", "speaker": NARRATOR_SPEAKER_ID})
+    assert window._busy and refused() == window_phone.BUSY
+    wait_for(app, lambda: not window._busy and len(window._phone.entries) == 2)
+    sent = len(window._provider.requests)
+
+    dialog = QDialog(window)
+    dialog.setWindowModality(Qt.ApplicationModal)
+    dialog.show()
+    app.processEvents()
+    try:
+        assert refused() == window_phone.WAITING_ON_DESKTOP
+    finally:
+        dialog.close()
+    monkeypatch.setattr(window, "use_mock", False)
+    assert refused() == window_phone.NO_ENDPOINT
+    monkeypatch.setattr(window, "use_mock", True)
+    monkeypatch.setattr(window.session, "tee_block", "not attested")
+    assert refused() == "The private model can't be used now: not attested"
+    monkeypatch.setattr(window.session, "tee_block", None)
+
+    # Suggestions are for the character played.
+    monkeypatch.setattr(window.session.story, "held_character_id", None)
+    assert phone.ask("GET", "/api/composer")[1]["can_suggest"] is False
+    assert refused() == window_phone.NOBODY_PLAYED
+    monkeypatch.setattr(window.session.story, "held_character_id", "char-serrik")
+
+    # A private scene reopened with no model of its own has nobody to ask.
+    window.session.enter_private(keep="memory", provider=MockChatProvider(["x"]), model="m")
+    monkeypatch.setattr(window.session, "private_provider", None)
+    assert refused() == PRIVATE_NO_WRITER
+    monkeypatch.undo()
+    window.session.discard_private()
+
+    monkeypatch.setattr(window, "_start_suggesting", lambda _done, dialog=True: None)
+    assert refused() == window_phone.NOT_STARTED
+    for _ in range(20):
+        app.processEvents()
+    assert not window._busy and len(window._provider.requests) == sent
+    window.close()
+
+
+def test_with_a_turn_waiting_to_go_suggest_is_refused(app, tmp_path, sockets, story, cast):
+    window, phone = open_window(
+        tmp_path,
+        sockets,
+        story,
+        cast,
+        ["The door gives.", "{}", "The hall.", "{}"],
+        delay=0.05,
+        reads=True,
+    )
+    phone.ask("POST", "/api/turn", {"text": "I push.", "speaker": NARRATOR_SPEAKER_ID})
+    wait_for(app, lambda: window._background)
+    # It needs the story, which the reads after a passage have.
+    assert phone.ask("POST", "/api/suggest", {}) == (409, {"error": window_phone.BUSY})
+    queued = phone.ask("POST", "/api/turn", {"text": "On.", "speaker": NARRATOR_SPEAKER_ID})
+    assert queued == (202, {"queued": True})
+    assert phone.ask("POST", "/api/suggest", {}) == (
+        409,
+        {"error": window_phone.ALREADY_QUEUED},
+    )
+    wait_for(app, lambda: not window._busy and len(window.session.path()) == 4)
+    window.close()
+
+
+def test_when_no_suggestions_come_the_phone_is_told_so_and_stops_waiting(
+    app, tmp_path, sockets, story, cast, monkeypatch
+):
+    window, phone = open_window(tmp_path, sockets, story, cast, ["The door gives."])
+    play(window, phone, "I push.")
+    events = phone.stream()
+    events.wait_for("hello")
+    none = {"options": [], "private": None}
+
+    # Stopped, from the phone.
+    slow = MockChatProvider([json.dumps(OPTIONS) * 20], chunk_size=4)
+    slow.delay = 0.02
+    window._provider = slow
+    assert phone.ask("POST", "/api/suggest", {"ask": "ask-1"})[0] == 202
+    wait_for(app, lambda: bool(slow.requests))
+    assert phone.ask("POST", "/api/stop", {})[0] == 200
+    wait_for(app, lambda: not window._busy)
+    wait_for(app, lambda: suggested(events) == [{"ask": "ask-1", **none}])
+
+    # A reply that can't be read: the failure is said, and nothing is offered.
+    warned: list[tuple] = []
+    monkeypatch.setattr(window, "_warn_plain", lambda *words: warned.append(tuple(words)))
+    window._provider = MockChatProvider(["I'd rather write on."])
+    assert phone.ask("POST", "/api/suggest", {"ask": "ask-2"})[0] == 202
+    wait_for(app, lambda: not window._busy and bool(warned))
+    wait_for(app, lambda: len(suggested(events)) == 2)
+    assert suggested(events)[1] == {"ask": "ask-2", **none}
+    assert "failed" in events.names()
+
+    # The story stops being shared while they are written: none of them go.
+    slow = MockChatProvider([json.dumps(OPTIONS)], chunk_size=4)
+    slow.delay = 0.02
+    window._provider = slow
+    assert phone.ask("POST", "/api/suggest", {"ask": "ask-3"})[0] == 202
+    wait_for(app, lambda: bool(slow.requests))
+    window.phone_share(story.id, False)
+    wait_for(app, lambda: not window._busy)
+    wait_for(app, lambda: len(suggested(events)) == 3)
+    assert suggested(events)[2] == {"ask": "ask-3", **none}
+    assert not any(option.encode() in events.raw() for option in OPTIONS)
+    window.close()
+
+
+def test_a_memory_scenes_suggestions_are_the_scenes_own(app, tmp_path, sockets, story, cast):
+    """Asked in a private scene they are that scene's model's and its text:
+    tagged as the scene for the page to hold back, sent to the phone that
+    asked alone, and in no file."""
+    window, phone = open_window(tmp_path, sockets, story, cast, [])
+    two_phones(window)
+    offers = [f"I say {MARKER} back to her.", "I ask who else has heard it."]
+    private = memory_scene(window, ["A quiet reply.", json.dumps(offers)])
+    mine, other = phone.stream(), phone.stream(OTHER_TOKEN)
+    mine.wait_for("hello")
+    other.wait_for("hello")
+
+    assert phone.ask("POST", "/api/suggest", {"ask": "ask-9"})[0] == 202
+    wait_for(app, lambda: not window._busy)
+    wait_for(app, lambda: bool(suggested(mine)))
+    assert suggested(mine) == [{"ask": "ask-9", "options": offers, "private": "memory"}]
+    other.wait_for("job_finished")
+    assert suggested(other) == [] and MARKER.encode() not in other.raw()
+    assert len(private.requests) == 2 and window._provider.requests == []
+    assert len(window.session.full_path()) == 2
     nothing_on_disk(tmp_path)
     window.session.discard_private()
     window.close()

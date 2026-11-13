@@ -171,6 +171,38 @@ def test_a_change_is_asked_under_its_passage_and_written_in_its_place():
     assert "S.revising = null" in function(script, "loadLatest")
 
 
+def test_suggestions_are_offered_above_the_box_and_never_sent():
+    """Suggest… by the composer (a story: behind More, as on the desktop; a
+    chat: beside Send), only where the desktop says there is someone to
+    suggest for. The offers are this page's own asking's, held back when they
+    are a private scene's, and one touched only fills the box, asking first
+    when the box holds text."""
+    pytest.importorskip("PySide6")  # the desktop's words are the window's
+    from sealedlore.gui.composer import SUGGEST_LABEL
+
+    script = text("app.js")
+    assert f'button("{SUGGEST_LABEL}", suggest)' in function(script, "suggestButton")
+    composer = function(script, "renderComposer")
+    assert composer.count("c.can_suggest") == 2 and composer.count("suggestButton()") == 2
+    # Their list is kept across the composer's rebuilds, as the stage is, and
+    # showing them never builds the composer again (it closed the keyboard).
+    assert "form.replaceChildren(renderStage(), renderSuggestions(), ...rows)" in composer
+    shown = function(script, "renderSuggestions")
+    assert "renderComposer" not in shown
+    assert shown.index("hidden(offered.private)") < shown.index("offered.options.map")
+    events = function(script, "onEvent")
+    mine = events[events.index('case "suggestions"') : events.index('case "notice"')]
+    assert "data.ask !== S.asking" in mine and "renderComposer" not in mine
+    kinds = script[script.index("function privateKinds") : script.index("function offerPrivate")]
+    assert "S.suggestions.private" in kinds
+    # Taken: into the box, after asking when it holds text; nothing is sent.
+    taken = function(script, "takeSuggestion")
+    assert taken.index("window.confirm(") < taken.index("box.value = words")
+    for sends in ("send(", "call(", "fetch(", "submit"):
+        assert sends not in taken, sends
+    assert 'call("POST", "/api/suggest", { ask })' in function(script, "suggest")
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="node isn't installed")
 def test_the_script_parses():
     result = subprocess.run(

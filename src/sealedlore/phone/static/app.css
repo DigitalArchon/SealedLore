@@ -107,6 +107,12 @@ body.story-view #footer { display: none; }
 #composer .row label { font-size: 13px; color: var(--dim); display: flex; flex-direction: column; gap: 2px; }
 #composer .send { margin-left: auto; min-width: 96px; }
 #composer .hint { font-size: 13px; color: var(--dim); }
+/* Suggest…'s offers, above the box to type in. */
+#suggestions { margin-bottom: 6px; max-height: 36vh; overflow-y: auto; }
+#suggestions:empty { display: none; }
+#suggestions .head { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--dim); margin-bottom: 4px; }
+#suggestions .head span { flex: 1; }
+#suggestions .list button { white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* --- panels over the story ---------------------------------------------------------- */
 

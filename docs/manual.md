@@ -2973,7 +2973,11 @@ left blank, it is a plain Regenerate. **Change this passage…** (in a chat,
 same kind of box for what should change; the passage is then written again
 where it stands, and the result is a new take in its place, with the one you
 had a ‹ away. A change that is stopped, or comes back empty, leaves the
-passage as it was, and the phone says so. With the desktop's View → Characters above the box you type
+passage as it was, and the phone says so. **Suggest…**, behind **More** (in a
+chat, beside Send), asks for a few things you might write next and lists them
+above the box, on the phone that asked and nowhere else; touching one puts it
+in the box to change and send yourself (it asks first if the box holds
+something), and nothing is ever sent or kept from them. With the desktop's View → Characters above the box you type
 in, the phone shows who is in the scene at the top of its box, and with
 Characters on each passage, small pictures over each passage (in a private
 scene, only once you choose to see it). The ☰ menu lists the

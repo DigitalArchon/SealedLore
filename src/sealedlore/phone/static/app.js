@@ -26,6 +26,9 @@
     noting: null, // { id, mode, form, field, go } while a few words are written under a passage
     faceUrls: new Map(), // a character's picture, fetched once: id -> object URL
     stageEl: null, // the stage, kept across the composer's rebuilds
+    asking: null, // this page's word for the suggestions it asked for, until they come
+    suggestions: null, // { options, private }: Suggest…'s offers, until one is taken or they are put away
+    suggestEl: null, // their list, kept across the composer's rebuilds
     reconnects: 0,
     ended: false, // revoked or forgotten: nothing more to do
     acknowledged: new Set(), // private kinds the author chose to see, this page session
@@ -70,8 +73,17 @@
     }
     node.textContent = text;
     node.className = error ? "error" : "";
+    placeToast();
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => node.remove(), error ? 8000 : 5000);
+  }
+
+  // Over the story, clear of the composer however tall it stands: with More
+  // open or suggestions listed, a word about a job covered the box to type in.
+  function placeToast() {
+    const node = $("toast");
+    const form = $("composer");
+    if (node && form && form.offsetHeight) node.style.bottom = form.offsetHeight + 12 + "px";
   }
 
   async function call(method, path, body) {
@@ -245,6 +257,7 @@
   }
 
   async function refreshAll() {
+    S.asking = null;
     try {
       const answer = await call("GET", "/api/state");
       S.state = answer.data;
@@ -253,6 +266,7 @@
       } else {
         S.messages = [];
         S.composer = null;
+        S.suggestions = null;
       }
       render();
     } catch (e) {
@@ -352,6 +366,11 @@
     memory: "A picture from a scene kept in memory only.",
     tee: "A picture from a chat on an attested private model.",
   };
+  const PRIVATE_SUGGESTIONS = {
+    scene: "Suggestions from a private scene.",
+    memory: "Suggestions kept in memory only.",
+    tee: "Suggestions from an attested private model.",
+  };
   const PRIVATE_QUESTION = {
     scene: "A Question asked in a private scene.",
     memory: "A Question kept in memory only.",
@@ -384,6 +403,7 @@
     const box = $("messages");
     $("composer").replaceChildren();
     composerKey = "";
+    S.suggestions = null;
     const state = S.state || {};
     const why = state.open_elsewhere
       ? "The story open on the desktop isn't shared with this phone."
@@ -639,6 +659,7 @@
         if (each.private) kinds.add(each.private);
       }
     }
+    if (S.suggestions && S.suggestions.private) kinds.add(S.suggestions.private);
     if (S.state && S.state.private) kinds.add(S.state.private);
     return kinds;
   }
@@ -667,6 +688,7 @@
           S.acknowledged.add(kind);
           closeOverlay();
           renderMessages();
+          renderSuggestions();
         }, "primary"),
         button("Not now", () => {
           S.declined.add(kind);
@@ -908,6 +930,8 @@
         );
       }
     }
+    // Suggest…: in a chat beside Send; in a story behind More, as on the desktop.
+    if (c.chat && c.can_suggest) controls.appendChild(suggestButton());
     controls.appendChild(el("button", { cls: "send primary", text: "Send", attrs: { type: "submit", id: "send" } }));
     rows.push(controls);
     if (!c.chat && S.more && S.choices.speaker !== c.question) {
@@ -930,9 +954,10 @@
           )
         );
       }
+      if (c.can_suggest) more.appendChild(suggestButton());
       rows.push(more);
     }
-    form.replaceChildren(renderStage(), ...rows);
+    form.replaceChildren(renderStage(), renderSuggestions(), ...rows);
     if (focused) text.focus();
     syncSendButton();
     fitComposerSpace();
@@ -941,6 +966,7 @@
   // The composer stands over the bottom of the page: the story keeps that
   // much room below its last message.
   function fitComposerSpace() {
+    placeToast();
     const form = $("composer");
     const box = $("messages");
     if (form && box) box.style.paddingBottom = form.offsetHeight + 24 + "px";
@@ -958,6 +984,116 @@
     send.textContent = writing ? "Stop" : state.busy ? "Queue" : "Send";
     send.className = "send " + (writing ? "danger" : "primary");
     send.disabled = S.sending || (!writing && (!text.value.trim() || state.queued || state.desktop_waiting));
+    const more = $("suggest");
+    if (more) {
+      more.textContent = S.asking ? "Asking…" : "Suggest…";
+      more.disabled = S.asking !== null || Boolean(state.busy || state.queued || state.desktop_waiting);
+    }
+  }
+
+  // --- Suggest… ------------------------------------------------------------------------------
+
+  // A few things the author might write next, asked of the desktop and
+  // offered above the box. They come to this page alone, over its events,
+  // marked with the word it asked by; touching one only puts it in the box.
+  function suggestButton() {
+    const node = button("Suggest…", suggest);
+    node.id = "suggest";
+    return node;
+  }
+
+  function askWord() {
+    const parts = new Uint32Array(2);
+    crypto.getRandomValues(parts);
+    return "ask-" + parts[0].toString(16) + parts[1].toString(16);
+  }
+
+  async function suggest() {
+    if (S.asking) return;
+    const ask = askWord();
+    const failed = (words) => {
+      if (S.asking === ask) S.asking = null;
+      syncSendButton();
+      if (words) toast(words, true);
+    };
+    S.asking = ask;
+    syncSendButton();
+    let answer;
+    try {
+      answer = await call("POST", "/api/suggest", { ask });
+    } catch (e) {
+      failed(S.ended ? "" : "The desktop couldn't be reached.");
+      return;
+    }
+    if (!answer.ok) failed(messageOf(answer));
+  }
+
+  function renderSuggestions() {
+    if (!S.suggestEl) S.suggestEl = el("div", { attrs: { id: "suggestions" } });
+    const node = S.suggestEl;
+    const offered = S.suggestions;
+    if (!offered) {
+      node.replaceChildren();
+    } else if (hidden(offered.private)) {
+      // Asked in a private scene, they are its text: held back as its messages are.
+      node.replaceChildren(
+        button(
+          PRIVATE_SUGGESTIONS[offered.private] + " Tap to see them.",
+          () => askToShow(offered.private),
+          "placeholder"
+        )
+      );
+    } else {
+      const chat = S.composer && S.composer.chat;
+      const away = button("✕", dismissSuggestions);
+      away.setAttribute("aria-label", "Put the suggestions away");
+      node.replaceChildren(
+        el("div", { cls: "head" }, [
+          el("span", {
+            text: chat
+              ? "Touch one to put it in the box, to edit and send:"
+              : "Touch one to put it in the box, to edit and send as your own:",
+          }),
+          away,
+        ]),
+        el(
+          "div",
+          { cls: "list" },
+          offered.options.map((option) => button(option, () => takeSuggestion(option)))
+        )
+      );
+    }
+    fitComposerSpace();
+    return node;
+  }
+
+  function dismissSuggestions() {
+    S.suggestions = null;
+    renderSuggestions();
+  }
+
+  // Into the box, to change and send by hand: nothing here sends it.
+  function takeSuggestion(words) {
+    const c = S.composer;
+    if (!c || !$("turn")) return;
+    if (
+      $("turn").value.trim() &&
+      !window.confirm("The box already holds something you wrote. Replace it with this suggestion?")
+    ) {
+      return;
+    }
+    S.suggestions = null;
+    // Spoken as the character played, whose turn it suggests.
+    const held = !c.chat && c.held && (c.speakers || []).some((o) => o.value === c.held);
+    if (held && S.choices.speaker !== c.held) {
+      S.choices.speaker = c.held;
+      renderComposer();
+    }
+    const box = $("turn");
+    box.value = words;
+    renderSuggestions();
+    syncSendButton();
+    box.focus();
   }
 
   async function send() {
@@ -1171,6 +1307,8 @@
         }
         break;
       case "turn":
+        // The story moves on: what was offered was for the moment before.
+        if (data.kind !== "question" && S.suggestions) dismissSuggestions();
         S.messages.push({
           id: "pending-" + Date.now(),
           kind: data.kind === "question" ? "director" : data.kind,
@@ -1210,6 +1348,17 @@
         showWriting();
         if (nearBottom()) scrollToEnd();
         break;
+      case "suggestions":
+        // This page's own asking only: another page of this phone has its own word.
+        if (!S.asking || data.ask !== S.asking) break;
+        S.asking = null;
+        S.suggestions = (data.options || []).length
+          ? { options: data.options, private: data.private || null }
+          : null;
+        renderSuggestions();
+        syncSendButton();
+        offerPrivate();
+        break;
       case "notice":
         toast(data.text);
         break;
@@ -1228,6 +1377,8 @@
         notAllowed();
         break;
       case "stopped":
+        S.asking = null;
+        syncSendButton();
         setStatus("Phone access was turned off on the desktop.");
         break;
       default:

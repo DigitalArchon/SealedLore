@@ -37,6 +37,7 @@ from sealedlore.gui import image_codec
 from sealedlore.gui.composer import GENERAL_SKILL, QUESTION, STORY_DEFAULT
 from sealedlore.gui.ref_images import image_of
 from sealedlore.gui.transcript import message_kind, speaker_label
+from sealedlore.gui.window_retakes import PRIVATE_NO_WRITER
 from sealedlore.ids import utc_now_iso
 from sealedlore.models.config import PhoneDevice
 from sealedlore.models.node import CHAT_USER_ID, Node
@@ -73,6 +74,9 @@ NOT_IN_PRIVATE = "That waits until the private scene ends."
 EDIT_OPEN = "An edit is open on the desktop. Save or cancel it there first."
 NOT_STARTED = "The desktop couldn't start that now."
 NOT_IN_STORY = "That passage isn't in the story as it stands."
+NOBODY_PLAYED = (
+    "Suggestions are for the character you play: choose one under Playing on the desktop."
+)
 NO_TOR = (
     "Phone access needs tor, and none was found. The AppImage brings its own; running "
     "from source, install tor (for example: sudo apt install tor). Only the program is "
@@ -457,6 +461,13 @@ class PhoneWindow:
         if self._phone is not None:
             self._phone.publish("notice", {"text": text})
 
+    def _phone_suggested(
+        self, device: str, ask: str | None, options: list[str] | None, private: str | None
+    ) -> None:
+        """Suggest…'s options for the phone that asked (None: none came)."""
+        if self._phone is not None:
+            self._phone.suggested(device, ask, options or [], private)
+
     def _phone_turn_sent(self, label: str, text: str, kind: str, origin: str) -> None:
         if self._phone is not None:
             self._phone.publish("turn", {"label": label, "text": text, "kind": kind, "by": origin})
@@ -611,6 +622,26 @@ class _PhoneService(QObject):
     def job_finished(self) -> None:
         self._send_text()
         self.publish("job_finished", {})
+
+    def suggested(
+        self, device: str, ask: str | None, options: list[str], private: str | None
+    ) -> None:
+        """Suggest…'s options, to the phone that asked and to no other: offers
+        made to the author outside the story, passed on and kept nowhere
+        here. `ask` is the page's own word for its asking; `private` the tag
+        of the private scene they were asked in, whose text they are, for
+        the page to hold back as it holds the scene's messages. With none
+        (stopped, failed, or the story is no longer this phone's to see) the
+        phone is told only that none came, so it stops waiting."""
+        hub = self.api.hub
+        if options and self.api.open_available():
+            hub.publish_to(
+                device, "suggestions", {"ask": ask, "options": options, "private": private}
+            )
+        else:
+            hub.publish_to(
+                device, "suggestions", {"ask": ask, "options": [], "private": None}, content=False
+            )
 
     @Slot(str)
     def on_text(self, text: str) -> None:
@@ -809,6 +840,7 @@ class _Backend:
                 "chat": True,
                 "speakers": [{"value": CHAT_USER_ID, "label": "You"}],
                 "speaker": CHAT_USER_ID,
+                "can_suggest": window.session.can_suggest(),
             }
 
         def items(combo, skip) -> list[dict]:
@@ -834,6 +866,8 @@ class _Backend:
             "skills": items(composer.skill, (GENERAL_SKILL, None)),
             "difficulties": items(composer.difficulty, (None,)),
             "difficulty": "standard",
+            # Suggest…: only with a character played, whose turn it suggests.
+            "can_suggest": window.session.can_suggest(),
         }
 
     def branches(self) -> dict:
@@ -984,6 +1018,26 @@ class _Backend:
             # while it is written: an edit open after it would be asked about.
             window._phone_edit_refusal({node.id for node in before})
         window._start_change(node_id, change)
+        self._started()
+
+    def suggest(self, device: str, ask: str | None) -> None:
+        """Suggest…, asked from a phone: the desktop's own job, with no
+        dialog opened there, and its options handed to `device` alone when it
+        is done. In a private scene they are the scene's model's, and tagged
+        as the scene's."""
+        window = self.window
+        window._phone_refusal()
+        session = window.session
+        if not session.can_suggest():
+            raise Refused(409, NOBODY_PLAYED)
+        if session.in_private and session.private_provider is None:
+            raise Refused(409, window._say(PRIVATE_NO_WRITER))
+        private = window._phone_private_tag()
+
+        def done(options: list[str] | None) -> None:
+            window._phone_suggested(device, ask, options, private)
+
+        window._start_suggesting(done, dialog=False)
         self._started()
 
     def switch_take(self, node_id: str, step: int) -> None:

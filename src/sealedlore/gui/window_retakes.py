@@ -18,6 +18,8 @@ one puts its words in the box to change and send; nothing is sent from here.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6.QtCore import QPoint
 from PySide6.QtWidgets import QMessageBox
 
@@ -44,6 +46,11 @@ CHANGE_STOPPED = {
     False: "Stopped before the change was written: the passage is as it was.",
     True: "Stopped before the change was written: the reply is as it was.",
 }
+# A private scene reopened with no model of its own: nothing is written
+# or asked there until one is chosen.
+PRIVATE_NO_WRITER = (
+    "This private scene has no model set up to write with: choose one under Settings → Private."
+)
 SUGGESTING = {
     False: "Asking the storyteller what your character might do next…",
     True: "Asking the model what you might write next…",
@@ -93,10 +100,7 @@ class RetakesWindow:
         session = self.session
         what = "reply" if self.in_chat else "passage"
         if session.in_private and session.private_provider is None:
-            return self._say(
-                "This private scene has no model set up to write with: choose one under "
-                "Settings → Private."
-            )
+            return self._say(PRIVATE_NO_WRITER)
         try:
             path = path_to(session.nodes, node_id)
         except (KeyError, ValueError):
@@ -195,20 +199,39 @@ class RetakesWindow:
                 "Suggestions are for the character you play: choose one under Playing.", 8000
             )
             return
+
+        def show(options: list[str] | None) -> None:
+            if options:
+                self._show_suggestions(options)
+
+        self._start_suggesting(show)
+
+    def _start_suggesting(
+        self, done: Callable[[list[str] | None], None], *, dialog: bool = True
+    ) -> None:
+        """The job that asks for suggestions, and `done` with what it brought
+        once it is in: None when nothing came (stopped, failed) or another
+        story is open by then. The caller has checked it may be asked.
+        `dialog`: the desktop's progress dialog while it runs; a phone's
+        asking (gui/window_phone.py) opens no dialog there. The options are
+        handed to `done` and kept nowhere."""
+        session = self.session
         session.provider = self._current_provider()
-        chat = self.in_chat
         made: dict[str, list[str]] = {}
 
         def job():
             made["options"] = yield from session.suggest_turns()
 
         def after() -> None:
-            options = made.get("options")
-            if options and self.session is session:
-                self._show_suggestions(options)
+            done(made.pop("options", None) if self.session is session else None)
 
         self._after_job = after
-        self._start(job, streaming=False, busy_text=SUGGESTING[chat], job="Suggesting a turn")
+        self._start(
+            job,
+            streaming=False,
+            busy_text=SUGGESTING[self.in_chat] if dialog else None,
+            job="Suggesting a turn",
+        )
 
     def _show_suggestions(self, options: list[str]) -> None:
         """The options in a menu at the Suggest… button (at the box, if the
