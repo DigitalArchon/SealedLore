@@ -133,14 +133,6 @@ each passage it records which place they are at (or none), and every place
 they have been. Events test that with `at = Place` and `visited Place`, so
 there's no need for facts like "at_hellsville".
 
-## Lore
-
-`# Lore` holds background the storyteller needs now and then but that isn't
-somewhere to be: how a technology works, a history, a people. Entries take the
-same settings as places (`keywords`, `always`, `hidden`, `picture`), and an event can
-`reveals:` a hidden one, but the program never records the character as being
-at one, and `at =` / `visited` can't name them.
-
 **Each playable character has their own place.** `at = …` and `visited …`
 are about whoever the author is holding; switch characters and the program
 follows, and switching back finds the first one where they were. To test a
@@ -149,6 +141,14 @@ particular character whoever is held, put their name first:
 is only read from the prose while the author holds them, so progress they
 make off-screen (a search told as cutaways while the author plays someone
 else) is better kept in a fact that the events set.
+
+## Lore
+
+`# Lore` holds background the storyteller needs now and then but that isn't
+somewhere to be: how a technology works, a history, a people. Entries take the
+same settings as places (`keywords`, `always`, `hidden`, `picture`), and an event can
+`reveals:` a hidden one, but the program never records the character as being
+at one, and `at =` / `visited` can't name them.
 
 ## Storyteller's notes
 
