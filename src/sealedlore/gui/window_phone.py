@@ -902,7 +902,9 @@ class _Backend:
             # An older passage's take shows the story as it stood before it
             # while it is written: an edit open after it would be asked about.
             window._phone_edit_refusal({node.id for node in target[:-1]})
-        window._regenerate_node(node_id, self._shape(retake))
+        # The note is the take's alone, and a private scene's when the passage
+        # is: it goes on to the session and is kept nowhere here.
+        window._regenerate_node(node_id, self._shape(retake), note=retake.note)
         self._started()
 
     def reroll(self, node_id: str) -> None:

@@ -32,6 +32,8 @@ from sealedlore.phone.pairing import Claim, Pairing, PairingRefused, device_for
 from sealedlore.phone.sse import EventHub
 
 TEXT_LIMIT = 20_000
+# A note for a take is a few words, not a turn.
+NOTE_LIMIT = 2_000
 TRANSCRIPT_PAGE = 40
 TRANSCRIPT_MOST = 200
 # Wrong logins and pairing codes are never answered by refusing anyone: a
@@ -69,6 +71,9 @@ class Retake:
     node_id: str | None = None
     length: str | None = None
     outcome: str | None = None
+    # The author's words for this take alone (Regenerate with a note); None
+    # for a plain Regenerate.
+    note: str | None = None
 
 
 class Refused(Exception):
@@ -391,12 +396,18 @@ class Api:
         return json_response(200, {"stopping": True})
 
     def _regenerate(self, request: Request, *, device: str) -> Response:
+        """Another take. With a note (Regenerate with a note) the passage is
+        always said: the words are about the one the phone shows, and a phone
+        behind the story mustn't steer a take of one it hasn't seen. A blank
+        note is a plain Regenerate."""
         body = _object(request)
         options = self.backend.composer()
+        note = _words(body, "note")
         retake = Retake(
-            node_id=_node_id(body, required=False),
+            node_id=_node_id(body, required=note is not None),
             length=_choice(body, "length", options),
             outcome=_choice(body, "outcome", options),
+            note=note,
         )
         self.backend.regenerate(retake)
         return json_response(202, {"started": True})
@@ -468,6 +479,19 @@ def _node_id(body: dict, *, required: bool = True) -> str | None:
     if not isinstance(value, str) or not _ID.fullmatch(value):
         raise HttpError(400, "a bad message id")
     return value
+
+
+def _words(body: dict, field: str) -> str | None:
+    """A few words of the author's for one passage, as written but for the
+    space around them; None when there are none."""
+    value = body.get(field)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise HttpError(400, f"{field} is text")
+    if len(value) > NOTE_LIMIT:
+        raise HttpError(413, f"At most {NOTE_LIMIT} characters.")
+    return value.strip() or None
 
 
 _OPTION_LISTS = {

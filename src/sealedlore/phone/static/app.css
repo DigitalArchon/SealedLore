@@ -71,6 +71,12 @@ body.story-view #footer { display: none; }
 .message .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
 .message .take { font-size: 14px; color: var(--dim); }
 .message.writing .text::after { content: " ▍"; color: var(--gold); }
+/* A few words for one passage: a note for a new take of it. */
+.message .note { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.message .note textarea { width: 100%; min-height: 56px; max-height: 30vh; resize: vertical; }
+.message .note .asks { font-size: 14px; }
+.message .note .hint { font-size: 13px; color: var(--dim); }
+.message .note .row { display: flex; gap: 6px; flex-wrap: wrap; }
 .message details { margin-top: 8px; font-size: 15px; }
 .message details summary { color: var(--dim); }
 .branch-start { font-size: 13px; color: var(--gold); margin-bottom: 4px; }

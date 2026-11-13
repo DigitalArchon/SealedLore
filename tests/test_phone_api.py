@@ -407,6 +407,29 @@ def test_retakes_takes_and_branches_are_checked():
     assert backend.calls[-1] == ("branch", "")
 
 
+def test_a_note_for_a_take_goes_with_the_passage_it_is_about():
+    api, backend = make()
+    body = {"node_id": "n1", "note": "  She refuses this time.  ", "length": "brief"}
+    assert answer(api, "POST", "/api/regenerate", body) == (202, {"started": True})
+    assert backend.calls[-1] == (
+        "regenerate",
+        Retake("n1", length="brief", note="She refuses this time."),
+    )
+    # A blank note is a plain Regenerate, with or without the passage named.
+    assert answer(api, "POST", "/api/regenerate", {"node_id": "n1", "note": " \n "})[0] == 202
+    assert backend.calls[-1] == ("regenerate", Retake("n1"))
+    assert answer(api, "POST", "/api/regenerate", {"note": ""})[0] == 202
+    assert backend.calls[-1] == ("regenerate", Retake())
+    # Words are always about a passage the phone names: one behind the story
+    # mustn't steer a take of a passage it hasn't seen.
+    sent = len(backend.calls)
+    assert answer(api, "POST", "/api/regenerate", {"note": "She refuses."})[0] == 400
+    assert answer(api, "POST", "/api/regenerate", {"node_id": "n1", "note": 5})[0] == 400
+    long = "x" * (phone_api.NOTE_LIMIT + 1)
+    assert answer(api, "POST", "/api/regenerate", {"node_id": "n1", "note": long})[0] == 413
+    assert len(backend.calls) == sent
+
+
 def test_transcript_pages_are_bounded():
     api, backend = make()
     answer(api, "GET", "/api/transcript?before=n9&limit=100000")

@@ -22,6 +22,7 @@
     version: -1,
     writing: null, // { card, text } while a passage streams
     continuing: null, // { id, words, text, label, labelText } while a passage is carried on
+    noting: null, // { id, mode, form, field, go } while a few words are written under a passage
     faceUrls: new Map(), // a character's picture, fetched once: id -> object URL
     stageEl: null, // the stage, kept across the composer's rebuilds
     reconnects: 0,
@@ -493,10 +494,19 @@
       actions.children[0].disabled = position <= 1;
       actions.children[2].disabled = position >= count;
     }
-    if (message.can_regenerate && isLast) actions.appendChild(button("Regenerate", () => regenerate(message.id)));
+    if (message.can_regenerate && isLast) {
+      actions.appendChild(button("Regenerate", () => regenerate(message.id)));
+      actions.appendChild(button("Regenerate with a note…", () => openNote(message.id, "retake")));
+    }
     if (message.can_continue) actions.appendChild(button("Continue", () => continuePassage(message.id)));
     if (message.can_reroll) actions.appendChild(button("Roll again", () => reroll(message.id)));
     if (actions.children.length) card.appendChild(actions);
+    const noting = S.noting;
+    if (noting && noting.id === message.id && message[NOTE_WORDS[noting.mode].flag]) {
+      // The same form as before the list was built again: what is typed stays.
+      card.appendChild(noting.form);
+      noting.placed = true;
+    }
     return card;
   }
 
@@ -514,9 +524,15 @@
     }
     const lastPassage = [...S.messages].reverse().find((m) => m.kind === "assistant");
     if (S.continuing) S.continuing.text = null; // found again below, unless it is hidden
+    const noting = S.noting;
+    const typing = noting !== null && document.activeElement === noting.field;
+    if (noting) noting.placed = false;
     S.messages.forEach((message) => nodes.push(messageCard(message, message === lastPassage)));
     if (S.writing) nodes.push(S.writing.card);
     box.replaceChildren(...nodes);
+    // The passage the words were for has gone from the story as it stands.
+    if (noting && !noting.placed && S.noting === noting) S.noting = null;
+    else if (typing) noting.field.focus();
     if (atBottom) scrollToEnd();
     offerPrivate();
   }
@@ -673,6 +689,106 @@
     c.text.textContent = c.base + c.words;
   }
 
+  // --- a few words for one passage ----------------------------------------------------------
+
+  // The form that opens under a passage. `flag` is the entry's own word on
+  // whether the desktop offers it there; the words are a story's and a chat's.
+  const NOTE_WORDS = {
+    retake: {
+      flag: "can_regenerate",
+      asks: "What should the new take do differently?",
+      hint: [
+        "Your note goes to the storyteller with this take only, as an instruction no character " +
+          "hears. Left blank, this is a plain Regenerate.",
+        "Your note goes to the model with this reply only, apart from your message. Left " +
+          "blank, this is a plain Regenerate.",
+      ],
+      go: "Regenerate",
+      blank: true,
+    },
+  };
+
+  function openNote(id, mode) {
+    const open = S.noting;
+    if (open && open.id === id && open.mode === mode) {
+      open.field.focus();
+      return;
+    }
+    if (open && open.field.value.trim() && !window.confirm("Discard what you wrote?")) return;
+    const words = NOTE_WORDS[mode];
+    const chat = S.composer && S.composer.chat ? 1 : 0;
+    const field = el("textarea", { attrs: { rows: "2", maxlength: "2000", "aria-label": words.asks } });
+    const go = button(words.go, sendNote, "primary");
+    const form = el("div", { cls: "note" }, [
+      el("div", { cls: "asks", text: words.asks }),
+      field,
+      el("div", { cls: "hint", text: words.hint[chat] }),
+      el("div", { cls: "row" }, [go, button("Cancel", cancelNote)]),
+    ]);
+    S.noting = { id, mode, form, field, go, sending: false, placed: false };
+    field.addEventListener("input", syncNote);
+    renderMessages();
+    syncNote();
+    if (S.noting) {
+      revealNote();
+      field.focus();
+    }
+  }
+
+  // The composer stands over the bottom of the page: the form is scrolled
+  // clear of it, so its buttons can be reached.
+  function revealNote() {
+    const n = S.noting;
+    if (!n) return;
+    const composer = $("composer");
+    const limit = window.innerHeight - (composer ? composer.offsetHeight : 0) - 8;
+    const bottom = n.form.getBoundingClientRect().bottom;
+    if (bottom > limit) window.scrollBy(0, bottom - limit);
+  }
+
+  function syncNote() {
+    const n = S.noting;
+    if (!n) return;
+    n.go.disabled = n.sending || (!NOTE_WORDS[n.mode].blank && !n.field.value.trim());
+  }
+
+  function cancelNote() {
+    const n = S.noting;
+    if (!n) return;
+    if (n.field.value.trim() && !window.confirm("Discard what you wrote?")) return;
+    closeNote();
+  }
+
+  function closeNote() {
+    S.noting = null;
+    renderMessages();
+  }
+
+  // The words go with the request and are kept nowhere on this page: sent,
+  // the form is gone; refused, it stays as typed with the desktop's reason.
+  async function sendNote() {
+    const n = S.noting;
+    if (!n || n.sending) return;
+    const words = n.field.value.trim();
+    if (!words && !NOTE_WORDS[n.mode].blank) return;
+    n.sending = true;
+    syncNote();
+    let answer;
+    try {
+      const body = retakeBody(n.id);
+      if (words) body.note = words;
+      answer = await call("POST", "/api/regenerate", body);
+    } catch (e) {
+      if (!S.ended) toast("The desktop couldn't be reached. What you wrote is still here.", true);
+      return;
+    } finally {
+      n.sending = false;
+      syncNote();
+    }
+    if (!answer.ok) toast(messageOf(answer), true);
+    else if (S.noting === n) closeNote();
+  }
+
   // --- the composer ------------------------------------------------------------------------
 
   function select(options, value, defaultLabel, onChange) {
@@ -777,6 +893,9 @@
     const form = $("composer");
     const box = $("messages");
     if (form && box) box.style.paddingBottom = form.offsetHeight + 24 + "px";
+    // A note being typed stays clear of the composer as it grows, or as the
+    // phone's keyboard makes the page shorter.
+    if (S.noting && document.activeElement === S.noting.field) revealNote();
   }
 
   function syncSendButton() {
@@ -827,11 +946,16 @@
     }
   }
 
-  async function regenerate(nodeId) {
+  // Another take of a passage, shaped by the composer's Length and Outcome.
+  function retakeBody(nodeId) {
     const body = { node_id: nodeId };
     if (S.choices.length) body.length = S.choices.length;
     if (S.choices.outcome) body.outcome = S.choices.outcome;
-    const answer = await call("POST", "/api/regenerate", body);
+    return body;
+  }
+
+  async function regenerate(nodeId) {
+    const answer = await call("POST", "/api/regenerate", retakeBody(nodeId));
     if (!answer.ok) toast(messageOf(answer), true);
   }
 

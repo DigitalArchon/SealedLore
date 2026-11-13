@@ -112,6 +112,35 @@ def test_a_private_picture_or_question_is_held_back_by_its_own_tag():
     assert "message.pictures" in kinds and "message.asides" in kinds
 
 
+def function(script: str, name: str) -> str:
+    """The text of one of the page's functions, to its closing brace."""
+    start = script.index(f"function {name}(")
+    return script[start : script.index("\n  }\n", start)]
+
+
+def test_a_note_for_a_take_is_asked_under_the_passage_in_the_desktops_words():
+    """Regenerate with a note… on the latest passage, as ⋯ has it on the
+    desktop: a form under the passage, held to no private passage that is
+    still hidden (its card stops at the placeholder), and its words sent with
+    the passage's id and kept nowhere."""
+    pytest.importorskip("PySide6")  # the desktop's words are the window's
+    from sealedlore.gui.note_dialog import RETAKE_ASKS, RETAKE_BUTTON
+    from sealedlore.gui.transcript import REGENERATE_NOTE_LABEL
+
+    script = text("app.js")
+    card = function(script, "messageCard")
+    offered = card.index(f'button("{REGENERATE_NOTE_LABEL}"')
+    assert card.index("if (hidden(kind))") < card.index("return card;") < offered
+    assert 'openNote(message.id, "retake")' in card
+    assert f'asks: "{RETAKE_ASKS}"' in script and f'go: "{RETAKE_BUTTON}"' in script
+    send = function(script, "sendNote")
+    assert "retakeBody(n.id)" in send and "body.note = words" in send
+    assert "node_id: nodeId" in function(script, "retakeBody")
+    # The form's own node is kept across the list's rebuilds, never its text
+    # in the page's state.
+    assert "noting.form" in card and ".value" not in card
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="node isn't installed")
 def test_the_script_parses():
     result = subprocess.run(
