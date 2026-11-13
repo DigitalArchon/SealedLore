@@ -985,7 +985,8 @@ may make up another the next time.
 
 Write your own as plain facts, or leave the box empty for a story with no
 secrets. What your character already knows belongs in World or Lore; the
-notes are for what they would have to find out. Notes a model wrote are kept
+notes are for what they would have to find out. Notes a model wrote, or that
+came with a plot file you imported, are kept
 from you, so the story can surprise you: the tab says only how long they are,
 with **Show them** to read and change them and **Clear them** to take them
 out unread (it asks first). Read and left as they were, they are out of sight
@@ -1008,7 +1009,9 @@ in what it shows and in what it copies, unless **Show plot (spoilers)** is
 ticked on the Plot page; a story with no plot has no such switch, and its
 notes are read in Setup. They are part of the story's setup: a scenario file,
 a restart, Duplicate settings and a story backup carry them, still unread
-where a model wrote them. A simple chat has none.
+where a model wrote them. A plot file can hold them too, under
+`# Storyteller's notes`, and the plot editor has a page for them (below). A
+simple chat has none.
 
 A **scenario** is that setup, plus the cast and supporting characters, lore,
 style, plot, outcome mode, world activity, picture style and reference
@@ -1039,7 +1042,8 @@ Furnace show other kinds of world (grimdark science fiction, traditional
 fantasy, steampunk and a hellscape), each with a plot, a background picture,
 and a picture of every card and every place. Rather than
 write the format by hand, **File → Plot file editor…** writes it for you: the
-world, opening, characters, places, lore, facts and events each get a form,
+world, opening, characters, places, lore, storyteller's notes, facts and
+events each get a form,
 conditions and what an event brings or sets are picked from what the file
 already has, and the problems list at the bottom is exactly what the importer
 would say, each against the item to fix. Characters, places and lore entries
@@ -1048,6 +1052,18 @@ kept in a `pictures` folder beside the plot file, so share the folder with
 the file, and are put on the cards when the file is imported. It needs no story open; the editor's
 own **Start a story from this file** (its File menu) saves and imports in one
 go.
+
+A plot file can carry the story's secrets as well: a `# Storyteller's notes`
+section, the truth behind what the story has not shown yet and what its
+people want and hide, sent to the storyteller alone. In the editor they are
+the **Storyteller's notes** row, after Lore, and are shown there plainly: the
+editor is for whoever writes the file. Whoever imports the file has not read
+them, so in the new story they are unread under Story → Setup… →
+Storyteller's notes until **Show them** is pressed, as a draft's are. The
+importer notes it when they name a character, place or lore entry the file
+keeps hidden, since the storyteller would then know of them before the
+event that brings them in. **Story → Add a plot from a file…** takes a file's
+facts and events only, never its notes.
 
 How a plot is worded matters as much as what is in it: a trigger the
 director can't judge from a passage waits for good, a watched fact with a
@@ -1095,6 +1111,17 @@ and whatever still can't be used is left out. The story's own world, opening
 and cards are never changed, though one of its lore entries may become one of
 the plot's places. A story with a plot has it replaced.
 
+When the plot rests on a truth about something the story already has (what
+a thing really is, what someone is hiding and why), the model may write it as
+storyteller's notes, so the storyteller plays true to it from the first
+passage. That happens only for a story with no notes of its own: notes the
+story has always stand, the model is shown them, and its plot is true to
+them. Notes a plot wrote are kept from you like any a model writes. The
+dialog says only that there are some and how long they are ("The plot also
+wrote notes for the storyteller (120 words)…"), **Show me the plot** does
+not show them, and Story → Setup… → Storyteller's notes shows or clears
+them.
+
 From the guide, the plot is written when you create the story, before Start;
 from an idea, once you have looked the drafted story over in Setup. A story
 already under way can have one too: the model is shown where the story stands
@@ -1115,7 +1142,12 @@ rather not: the plot is written again with that change, checked as before,
 and still hidden, and the dialog says only that it was done unless you look.
 Ask again as often as you like; **Undo the last change** puts the plot back
 as it was before the last request. **Story → Change the plot with the
-model…** does the same for any story with a plot.
+model…** does the same for any story with a plot. Notes the plot itself wrote
+for the storyteller may be written again with it, for as long as you have
+not changed them (the dialog then says "The storyteller's notes were
+rewritten." once you have looked at the plot, never what they say, and undo
+puts them back); notes of your own, or that you have changed, are never
+touched.
 
 ### The plot editor on a story
 
@@ -1124,9 +1156,9 @@ story with everything a plot file can hold of it filled in: its title and
 settings, world, opening, characters, places, lore, their pictures and its
 plot. **Open a story…** in the editor's File menu does the same for any of
 your stories. The editor's tree is in two halves: **The story**, what every
-story has (its title and settings, world, opening, characters, places and
-lore), and **The plot**, what a plot adds (its clock, facts, timeline and
-optional events). Every page says which half it is in.
+story has (its title and settings, world, opening, characters, places, lore
+and storyteller's notes), and **The plot**, what a plot adds (its clock,
+facts, timeline and optional events). Every page says which half it is in.
 
 Anything there can be changed: write the plot, rewrite a character, add or
 remove people, places and lore, hide someone until an event brings them in,
@@ -1143,7 +1175,10 @@ has, saving makes another. **Start a new story from this** (or **Start the
 story**, on the new one) saves and starts it in the main window. **Save a
 copy as a plot file…** writes it all as a plot file, its pictures beside it,
 to keep or share. The editor shows the whole plot, so it is a spoiler of its
-own.
+own: the story's **Storyteller's notes** are on their row there in full,
+unread or not. Looking changes nothing. Notes you change in the editor are
+saved as read; left as they are, notes a model wrote are still unread in the
+new story's Setup.
 
 ## Your characters
 

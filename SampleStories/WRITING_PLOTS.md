@@ -20,6 +20,7 @@ samples (`Doomsville.md` and the others beside this file).
 | `aftermath:` | the storyteller | for the rest of the story once the event is seen or learned of; the director, to judge a reveal |
 | a `[watch]` fact's meaning | the reader after each passage | against the author's turn and that passage alone |
 | a character's card | the storyteller and every read | from the start, or once an event brings them in |
+| `# Storyteller's notes` | the storyteller alone | with every passage, from the first |
 | a place's name and `keywords:` | the program, the reader, lore | the name to follow the character; name and keywords to wake `at:` events and to choose lore |
 
 Nobody sees the plot whole. The director never sees what happened ten turns
@@ -331,3 +332,38 @@ event is seen or learned of, whichever way it went, on screen or off.
   works. The program never records the character as at a lore entry.
 - **A place's text is what it is like.** When and how things happen there
   belong to events.
+
+## Storyteller's notes, hidden lore, or a hidden character
+
+Three ways to keep something from the player, each for a different thing.
+
+- **The notes are for a truth about what the story already has**: what a
+  thing really is, who did it, what someone on the cast wants and is hiding,
+  and why. The storyteller has them from the first passage, so the people
+  concerned act on them from the start, and what the player's character finds
+  out is the same whenever they find it.
+
+  ```markdown
+  # Storyteller's notes
+
+  The farmhouse was not abandoned. The family that lived in it is buried
+  behind the barn, and whoever buried them left a week ago, meaning to come
+  back for what is in the cellar.
+  ```
+
+- **Hidden lore is for what an event reveals**: something the storyteller
+  itself should not use until then. A hidden entry reaches no model before
+  its event, where the notes are known from the start.
+- **A hidden character or place is for someone or somewhere that must not
+  appear before their event.** Told of them early, the storyteller brings
+  them in early. So the notes never name a person or a place the plot keeps
+  hidden: say "the man who runs the town turned a family away last winter",
+  and let the event that brings him in name him. The importer notes a hidden
+  name it finds there.
+- **Write plain facts, not scenes.** "The well was fouled on purpose" can be
+  found out a dozen ways; a scene written in advance happens one way, and is
+  an event's to tell.
+- **Leave out what the player's character already knows.** That is the world
+  or lore: the notes are for what they would have to find out.
+- **Keep them short.** They are sent with every passage. A plot that rests on
+  no secret needs none.

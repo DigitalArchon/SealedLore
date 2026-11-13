@@ -33,8 +33,9 @@ import would check it.
 ## How the file is laid out
 
 - Top-level sections are `# Headings`: World (or World info, Setting),
-  Opening (or Start), Characters (or Cast), Places, Lore, Facts,
-  Timeline and Events (or Optional events). All are optional, and they can come in any
+  Opening (or Start), Characters (or Cast), Places, Lore, Storyteller's notes
+  (or Notes for the storyteller), Facts, Timeline and Events (or Optional
+  events). All are optional, each at most once, and they can come in any
   order. Any other `#` heading is reported and ignored; a `# Map` section,
   from a file made for a map, is skipped with a note.
 - Inside a section, each item is a `## Heading`. An event's variants are
@@ -148,6 +149,42 @@ particular character whoever is held, put their name first:
 is only read from the prose while the author holds them, so progress they
 make off-screen (a search told as cutaways while the author plays someone
 else) is better kept in a fact that the events set.
+
+## Storyteller's notes
+
+`# Storyteller's notes` (or `# Notes for the storyteller`) holds what only
+the storyteller is told: the truth behind what the story has not shown yet,
+and what its people want and hide. It is prose, taken as written like
+`# World`, sub-headings included, with no settings and no items of its own.
+
+```markdown
+# Storyteller's notes
+
+The fever on the east road was no accident: someone fouled the well at the
+crossroads, and the miller saw who. He says nothing, because the same people
+hold his debts.
+
+The ferryman wants to be gone before the thaw, and hides that he cannot swim.
+```
+
+The storyteller has the notes with every passage from the first, and holds
+to them: when the player's character looks, asks or is there, what they find
+is what the notes say. They are not lore. Nothing looks them up by a keyword,
+no event reveals them, and they are never somewhere to be. The director and
+the reads are not sent them.
+
+Whoever imports the file has not read them. In the new story they are under
+**Story → Setup… → Storyteller's notes**, which says only how long they are
+until its author asks to see them, so a file's secrets can still surprise
+whoever plays it. An empty section is no notes, and
+**Story → Add a plot from a file…** takes a file's facts and events alone,
+never its notes.
+
+The importer notes it when the notes name a character, a place or a lore
+entry the file marks `hidden: yes`: the storyteller would know of them
+before the event that brings them in. That is a note, never an error. What
+belongs in the notes, in hidden lore and on a hidden card is in
+`WRITING_PLOTS.md`.
 
 ## Pictures
 
