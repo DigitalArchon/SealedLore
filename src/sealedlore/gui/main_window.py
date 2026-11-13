@@ -1655,8 +1655,14 @@ class MainWindow(
         problems = self.session.attach_plot(
             scenario.plot, people=[*scenario.cast, *scenario.supporting], lore=scenario.lore
         )
+        # The file's storyteller's notes are a story's, as its world is.
+        unused = (
+            "world, cast, places and storyteller's notes"
+            if scenario.storyteller_notes
+            else "world, cast and places"
+        )
         self.statusBar().showMessage(
-            "Plot attached: its facts and events. The world, cast and places in the file "
+            f"Plot attached: its facts and events. The {unused} in the file "
             "were not used; start a new story from the file to use those too.",
             10000,
         )

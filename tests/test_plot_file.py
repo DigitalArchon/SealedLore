@@ -374,3 +374,139 @@ def test_an_empty_document_renders_nothing_alarming():
     rendered, problems = check_plot_document(PlotDocument())
     assert rendered.text.strip() == ""
     assert all(not p.error for p in problems)
+
+
+# --- the storyteller's notes ---------------------------------------------------------
+
+NOTED = """\
+# World
+
+A harbour town. Old Bram keeps the light.
+
+# Characters
+
+## Mara Quill
+- role: player
+- present: yes
+
+A boatwright.
+
+## Teodor Vask
+- hidden: yes
+
+A customs captain.
+
+## Old Bram
+- hidden: yes
+
+The lighthouse keeper.
+
+# Places
+
+## The Drowned Chapel
+- keywords: the sea cave, the cave
+- hidden: yes
+
+A chapel in a sea cave.
+
+# Storyteller's notes
+
+{notes}
+
+# Events
+
+## The captain comes
+- brings: Teodor Vask, Old Bram
+- reveals: The Drowned Chapel
+
+A ship puts in.
+"""
+
+
+def test_the_storytellers_notes_are_a_section_of_prose_imported_unread():
+    """`# Storyteller's notes`: what only the storyteller is told. Taken as
+    written, sub-headings included, and whoever imports the file has not
+    read them (Setup keeps them unread until asked)."""
+    written = (
+        "The harbour master is in the smugglers' pay,\nand has been for years.\n\n"
+        "## What they hide\n\nMara Quill owes him money."
+    )
+    parsed = parse_plot_markdown(NOTED.format(notes=written))
+    assert parsed.ok and parsed.problems == []
+    scenario = parsed.scenario
+    # As prose is read anywhere in a file: a wrapped line joins the one before.
+    assert scenario.storyteller_notes == (
+        "The harbour master is in the smugglers' pay, and has been for years.\n\n"
+        "## What they hide\nMara Quill owes him money."
+    )
+    assert scenario.storyteller_notes_by == "model"
+    # Never lore: nothing to reveal, nowhere to be, no keywords to wake it.
+    assert [entry.title for entry in scenario.lore] == ["The Drowned Chapel"]
+    assert [place.name for place in scenario.plot.places] == ["The Drowned Chapel"]
+    assert "harbour master" not in scenario.model_dump_json(exclude={"storyteller_notes"})
+
+
+def test_the_notes_are_read_anywhere_among_the_sections_and_under_either_name():
+    plain = "The harbour master is in the smugglers' pay.\n\nHe hides it badly."
+    for heading in ("Storyteller's notes", "Storyteller’s notes", "Notes for the storyteller"):
+        first = f"# {heading}\n\n{plain}\n\n# World\n\nA harbour town.\n"
+        last = f"# World\n\nA harbour town.\n\n# {heading}\n\n{plain}\n"
+        for text in (first, last):
+            parsed = parse_plot_markdown(text)
+            assert parsed.ok and parsed.problems == []
+            assert parsed.scenario.storyteller_notes == plain
+    # Once: a second section is an error, as two of any section are.
+    twice = (
+        "# World\n\nA town.\n\n# Storyteller's notes\n\nOne.\n\n"
+        "# Notes for the storyteller\n\nTwo.\n"
+    )
+    parsed = parse_plot_markdown(twice)
+    assert [(p.line, p.error) for p in parsed.problems] == [(9, True)]
+
+
+def test_an_empty_notes_section_is_no_notes():
+    parsed = parse_plot_markdown("# World\n\nA town.\n\n# Storyteller's notes\n\n# Facts\n")
+    assert parsed.ok
+    assert parsed.scenario.storyteller_notes is None
+    assert parsed.scenario.storyteller_notes_by == "author"
+    # As a file with no such section.
+    plain = parse_plot_markdown("# World\n\nA town.\n").scenario
+    assert plain.storyteller_notes is None and plain.storyteller_notes_by == "author"
+
+
+def test_notes_keep_lines_that_look_like_settings_as_prose():
+    text = (
+        "# World\n\nA town.\n\n# Storyteller's notes\n\n"
+        "- hidden: the ledger, under the floor\n- keywords: none of these are settings\n"
+    )
+    parsed = parse_plot_markdown(text)
+    assert parsed.problems == []
+    assert parsed.scenario.storyteller_notes == (
+        "- hidden: the ledger, under the floor\n- keywords: none of these are settings"
+    )
+
+
+def test_notes_that_name_someone_hidden_are_noted_never_refused():
+    """The storyteller has the notes from the first passage: a hidden person
+    or place named there is known to it before the event that brings them in.
+    A note, since the author may mean it."""
+    secret = "Teodor Vask is paid by the smugglers. The crates wait in the sea cave."
+    parsed = parse_plot_markdown(NOTED.format(notes=secret))
+    assert parsed.ok
+    found = [p.message for p in parsed.problems]
+    assert found == [
+        "The storyteller's notes name Teodor Vask, who is hidden: the storyteller would learn "
+        "of them before the event that brings them in.",
+        "The storyteller's notes name The Drowned Chapel, which is hidden: the storyteller "
+        "would learn of it before the event that reveals it.",
+    ]
+    heading = NOTED.split("\n").index("# Storyteller's notes") + 1
+    assert {p.line for p in parsed.problems} == {heading}, "the section's heading"
+    # By any part of a name, as the story finds people; a one-word keyword is
+    # the story's everyday word, not the secret.
+    partly = parse_plot_markdown(NOTED.format(notes="Vask is paid. They wait in the cave."))
+    assert ["Teodor Vask" in p.message for p in partly.problems] == [True]
+    # A name the world already uses is no secret, and notes that name nobody
+    # hidden say nothing.
+    assert parse_plot_markdown(NOTED.format(notes="Old Bram is paid too.")).problems == []
+    assert parse_plot_markdown(NOTED.format(notes="Mara Quill owes money.")).problems == []

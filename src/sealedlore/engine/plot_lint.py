@@ -11,6 +11,10 @@ secret.
 
 The samples are held to it (tests/test_samples.py), and a plot the model
 writes is sent back to be put right when it fails it (engine/plot_draft.py).
+
+The storyteller's notes (a plot file's `# Storyteller's notes`) are sent from
+the first passage, so a hidden name in them is early whatever the events say:
+`hidden_named`, which the importer notes (engine/plot_md.py).
 Pure.
 """
 
@@ -111,6 +115,43 @@ def known_once(
     return known
 
 
+def _secrets(
+    people: Sequence[Character],
+    lore: Sequence[LoreEntry],
+    told: str,
+    only: Collection[str] | None = None,
+) -> list[Character | LoreEntry]:
+    """The hidden characters and entries whose names are secrets: those the
+    story doesn't name from its start (`told`), among `only` when given."""
+    hidden_people = [c for c in people if c.plot_hidden and (only is None or c.id in only)]
+    hidden_lore = [e for e in lore if e.plot_hidden and (only is None or e.id in only)]
+    secrets: list[Character | LoreEntry] = [c for c in hidden_people if not mentions(told, c)]
+    secrets += [entry for entry in hidden_lore if not names_entry(told, entry)]
+    return secrets
+
+
+def _named(text: str, secrets: Sequence[Character | LoreEntry]) -> list[tuple[str, bool]]:
+    """Those of `secrets` a text names, each as (name, whether a lore entry):
+    a person by any part of their name, as the story finds people; an entry
+    by its title or a keyword of more than one word."""
+    return [
+        (item.name, False) if isinstance(item, Character) else (item.title, True)
+        for item in secrets
+        if (mentions(text, item) if isinstance(item, Character) else names_entry(text, item))
+    ]
+
+
+def hidden_named(
+    text: str, people: Sequence[Character], lore: Sequence[LoreEntry], told: str = ""
+) -> list[tuple[str, bool]]:
+    """The hidden characters and entries a text names, each as (name, whether
+    a lore entry or place), people first. For a text the storyteller has from
+    the first passage (the storyteller's notes): whatever it names, the
+    storyteller knows of before any event brings it in. `told`: what the
+    story says from the start, where a name is no secret."""
+    return _named(text, _secrets(people, lore, told))
+
+
 @dataclass(frozen=True)
 class TooEarly:
     """A secret an event's text names before its time."""
@@ -146,21 +187,13 @@ def named_too_early(
     happened by then brings it in. `told`: what the story says from the start
     (its world and opening), where a name is no secret. `only`: the ids to
     look for (all hidden ones without)."""
-    hidden_people = [c for c in people if c.plot_hidden and (only is None or c.id in only)]
-    hidden_lore = [e for e in lore if e.plot_hidden and (only is None or e.id in only)]
-    secrets: list[Character | LoreEntry] = [c for c in hidden_people if not mentions(told, c)]
-    secrets += [entry for entry in hidden_lore if not names_entry(told, entry)]
+    secrets = _secrets(people, lore, told, only)
     if not secrets:
         return []
     by_id = {c.id: c for c in people}
 
     def named(text: str, allowed: set[str]) -> list[tuple[str, bool]]:
-        return [
-            (item.name, False) if isinstance(item, Character) else (item.title, True)
-            for item in secrets
-            if item.id not in allowed
-            and (mentions(text, item) if isinstance(item, Character) else names_entry(text, item))
-        ]
+        return _named(text, [item for item in secrets if item.id not in allowed])
 
     found: list[TooEarly] = []
     for event in plot.events:

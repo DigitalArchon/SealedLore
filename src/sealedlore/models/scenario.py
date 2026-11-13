@@ -47,6 +47,7 @@ class Scenario(BaseModel):
     # The storyteller's notes and who wrote them (`Story.storyteller_notes`):
     # part of the story as it is set up, so a restart or a shared scenario
     # keeps its secrets, still unread where a model wrote them.
+    # A plot file's `# Storyteller's notes` come in as a model's: unread.
     storyteller_notes: str | None = None
     storyteller_notes_by: NotesBy = "author"
     opening_text: str = ""

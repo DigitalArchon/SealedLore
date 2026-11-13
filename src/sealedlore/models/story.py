@@ -121,8 +121,9 @@ class StoryDefaults(BaseModel):
 
 OpeningMode = Literal["generate", "as_written"]
 # Who wrote the storyteller's notes as they stand: the author, who has then
-# read them, or a model (a draft, a follow-up), whose text Setup keeps out of
-# sight until the author asks to see it.
+# read them, or a model (a draft, a follow-up, a plot's writer), whose text
+# Setup keeps out of sight until the author asks to see it. A plot file's
+# notes are imported as a model's: whoever imports a file has not read them.
 NotesBy = Literal["author", "model"]
 StoryMode = Literal["story", "chat"]
 ChatKeep = Literal["disk", "memory"]

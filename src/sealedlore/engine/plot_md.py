@@ -16,6 +16,7 @@ from typing import Literal, get_args
 
 from sealedlore.engine.chronicle import time_of_day_minutes
 from sealedlore.engine.picture_styles import read_style
+from sealedlore.engine.plot_lint import hidden_named
 from sealedlore.engine.validators import name_forms
 from sealedlore.models.character import Character
 from sealedlore.models.lore import LoreEntry
@@ -58,6 +59,11 @@ _SECTIONS = {
     "events": "events",
     "optional events": "events",
     "map": "map",
+    # What only the storyteller is told (`Story.storyteller_notes`): prose,
+    # never lore. Not a place, never revealed, no keywords.
+    "storyteller's notes": "storyteller",
+    "storyteller’s notes": "storyteller",
+    "notes for the storyteller": "storyteller",
 }
 
 _OPENING_FIELDS = {"mode", "location", "time", "situation"}
@@ -1145,6 +1151,35 @@ class _Parser:
         scene.situation = values.get("situation", (0, ""))[1] or None
         return found.prose, mode
 
+    def storyteller_notes(
+        self,
+        block: _Block | None,
+        people: Sequence[Character],
+        lore: Sequence[LoreEntry],
+        told: str,
+    ) -> str:
+        """`# Storyteller's notes`: what only the storyteller is told, taken as
+        written, sub-headings included; "" for none. The storyteller has them
+        from the first passage, so a hidden character or place named in them
+        is known to it before the event that brings them in: noted, since the
+        author may mean it (engine/plot_lint.py has the name matching)."""
+        if block is None:
+            return ""
+        notes = block.text()
+        for name, entry in hidden_named(notes, people, lore, told):
+            self.note(
+                block.line,
+                f"The storyteller's notes name {name}, "
+                + (
+                    "which is hidden: the storyteller would learn of it before the event "
+                    "that reveals it."
+                    if entry
+                    else "who is hidden: the storyteller would learn of them before the "
+                    "event that brings them in."
+                ),
+            )
+        return notes
+
     def literal(
         self, front: dict[str, tuple[int, str]], key: str, choices: tuple[str, ...]
     ) -> str | None:
@@ -1234,6 +1269,16 @@ class _Parser:
             )
         titles = [entry.title for entry in lore]
         self.names_like_places(cast + supporting, titles)
+        notes = self.storyteller_notes(
+            sections.get("storyteller"),
+            cast + supporting,
+            lore,
+            # What the story says from its start: a name in it is no secret.
+            "\n".join(
+                part or ""
+                for part in (world, opening, scene.location, scene.time_of_day, scene.situation)
+            ),
+        )
 
         facts = self.facts(sections.get("facts"))
         ids = self.event_ids([sections.get("timeline"), sections.get("events")])
@@ -1302,6 +1347,10 @@ class _Parser:
             lore=lore,
             supporting=supporting,
             plot=plot,
+            # Whoever imports a file hasn't read its secrets: Setup keeps
+            # them unread until asked, as it does a draft's.
+            storyteller_notes=notes or None,
+            storyteller_notes_by="model" if notes else "author",
         )
         agency = self.literal(front, "agency", get_args(AgencyMode))
         if agency:

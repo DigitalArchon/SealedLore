@@ -85,13 +85,16 @@ def make_config() -> Config:
     )
 
 
-def build(tmp_path: Path):
-    bundle = bundle_from_scenario(parse_plot_markdown(PLOT_FILE).scenario)
+def build(tmp_path: Path, plot_file: str = PLOT_FILE, notes: str | None = NOTES):
+    """`notes`: given to the story by hand, or None for whatever the plot
+    file itself holds."""
+    bundle = bundle_from_scenario(parse_plot_markdown(plot_file).scenario)
     story = bundle.story
     story.defaults.main_model = STORY_MODEL
     story.defaults.context_token_budget = 3_000
-    story.storyteller_notes = NOTES
-    story.storyteller_notes_by = "model"
+    if notes is not None:
+        story.storyteller_notes = notes
+        story.storyteller_notes_by = "model"
     bundle.lore += [
         LoreEntry(title=f"Entry {i}", content=f"Old lore number {i} about the town.")
         for i in range(12)
@@ -345,3 +348,27 @@ def test_the_stories_search_never_finds_a_storys_notes(tmp_path: Path):
     assert [hit.story_id for hit in search_stories("granary", tmp_path)] == [session.story.id]
     for spoilers in (False, True):
         assert list(search_stories(MARKER, tmp_path, spoilers=spoilers)) == []
+
+
+def test_a_plot_file_s_own_notes_come_in_unread_and_go_to_the_storyteller_alone(tmp_path: Path):
+    """`# Storyteller's notes` in a plot file: whoever imports it has not
+    read them, and in play they go where a story's notes go and nowhere else
+    (never the director, the plot's read or the scene's)."""
+    text = PLOT_FILE + f"\n# Storyteller's notes\n\n{NOTES}\n"
+    session, main, held = build(tmp_path, plot_file=text, notes=None)
+    story = session.story
+    assert MARKER in story.storyteller_notes and story.storyteller_notes_by == "model"
+    assert MARKER not in story.plot.model_dump_json(), "the plot holds none of them"
+    for i in range(3):
+        play(session, turn(held, f"I walk the road into town, step {i}."))
+    kinds = {entry["kind"] for entry in read_api_log(story.id, root=tmp_path)}
+    assert {"scene_request", "chronicle_request", "director_request"} <= kinds
+    with_marker = [p for p in main.payloads if MARKER in json.dumps(p)]
+    assert with_marker
+    for payload in with_marker:
+        system = system_of(payload)
+        assert payload["model"] == STORY_MODEL and system.startswith(RULES_OPENING)
+        assert system.index("# SETTING") < system.index(HEADING) < system.index(MARKER)
+        assert json.dumps(payload).count(MARKER) == 1
+    side = {p["model"] for p in main.payloads if MARKER not in json.dumps(p)}
+    assert {"side/scene", "side/plot"} <= side

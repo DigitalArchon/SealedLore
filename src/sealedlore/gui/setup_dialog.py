@@ -68,7 +68,8 @@ DENSITY_LABELS = {
 
 GENERATE_LABEL = "The model writes the opening from these notes"
 NOTES_TAB = "Storyteller's notes"
-# The storyteller's notes a model wrote (a draft, a follow-up), not yet read.
+# The storyteller's notes a model wrote (a draft, a follow-up, a plot's
+# writer) or a plot file brought, not yet read.
 NOTES_UNREAD = "The storyteller has notes for this story that you have not read ({words})."
 SHOW_NOTES = "Show them"
 CLEAR_NOTES = "Clear them"
@@ -583,7 +584,8 @@ class SetupDialog(QDialog):
 
     def _notes_tab(self) -> QWidget:
         """The storyteller's notes (`Story.storyteller_notes`): what only the
-        storyteller knows. Notes a model wrote (a draft's, a follow-up's) are
+        storyteller knows. Notes a model wrote (a draft's, a follow-up's, a
+        plot's) or an imported plot file brought are
         its secrets from the author too, so they stay out of sight, a line
         saying how long they are in their place, until the author asks here
         to see them; left unread and unchanged, they are still unread the
@@ -597,7 +599,7 @@ class SetupDialog(QDialog):
                 "The storyteller's secrets: the truth behind what the story has not shown "
                 "yet, and what its people want and hide. The storyteller holds to them, and "
                 "gives them up only as your character finds them out. Write your own, or "
-                "leave what a draft wrote unread."
+                "leave unread what a draft, a plot or an imported plot file brought."
             )
         )
         # Unread: a line and two buttons where the notes would be.
