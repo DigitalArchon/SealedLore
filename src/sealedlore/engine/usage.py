@@ -64,7 +64,8 @@ KIND_LABELS: dict[str, str] = {
     # What the endpoint charged for the video (NanoGPT: on accepting it).
     "video_response": "Videos",
     # A private scene kept in memory only logs what it cost and nothing else;
-    # one kept on disk logs as usual (tagged private).
+    # one kept on disk logs as usual, tagged private, and counts here too: its
+    # turns, questions and prompts were all listed as story turns.
     "private_response": "Private scenes",
     "handoff_response": "Private scene handoffs",
 }
@@ -132,6 +133,8 @@ def _kind_of(entry: dict[str, Any]) -> str | None:
     kind = entry.get("kind")
     if not isinstance(kind, str):
         return None
+    if kind == "response" and entry.get("private"):
+        return "private_response"
     if kind == "response" and entry.get("aside"):
         return "aside"
     return kind if kind in KIND_LABELS else None
@@ -155,6 +158,8 @@ def usage_fields(entry: Any) -> dict[str, Any]:
     kept = {key: entry[key] for key in ("kind", "id", "request_log_ref", "usage") if key in entry}
     if entry.get("aside"):
         kept["aside"] = True
+    if entry.get("private"):
+        kept["private"] = True
     payload = entry.get("payload")
     if isinstance(payload, dict) and isinstance(payload.get("model"), str):
         kept["payload"] = {"model": payload["model"]}

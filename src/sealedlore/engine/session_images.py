@@ -321,7 +321,9 @@ class ImageRuntime:
                 question="",
                 summaries=summaries,
                 lore=lore,
-                standing_lore=self.lore_layout().standing,
+                standing_lore=self.lore_layout(
+                    self.config.private_budget if span is not None else None
+                ).standing,
                 supporting=self.supporting_for(path[-1].content if path else "", path),
                 on_file=self.visible_supporting(),
                 scene_log=log_on_path(self.story.scene_log, path),

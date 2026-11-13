@@ -1179,3 +1179,36 @@ def test_a_scene_teaches_its_own_model_s_count_and_never_the_story_model_s(
         assert "local/model" not in written
     else:
         assert written["local/model"] == session.estimator.factor_for("local/model")
+
+
+def test_a_question_in_a_scene_begins_as_the_scene_s_turns_do(tmp_path: Path):
+    """A lorebook that goes whole at the story's budget and is selected from
+    at the private model's: the Question took the story's layout, so its
+    system block was not the turns', and it read none of their cache."""
+    session, main, held = build(tmp_path)
+    session.story.defaults.context_token_budget = 1_000_000
+    session.config.private_budget = 6_000
+    private = enter(session)
+    play(session, turn(held, "I whisper to her."))
+    turn_system = private.requests[-1].messages[0].text
+    assert session.lore_layout().mode == "whole"
+    assert session.lore_layout(session.config.private_budget).mode != "whole"
+    list(session.ask("Why did she look away?"))
+    assert private.requests[-1].messages[0].text == turn_system
+
+
+def test_a_disk_scene_s_calls_count_as_private_scenes_too(tmp_path: Path):
+    """Logged as usual and tagged private, a scene kept on disk had every
+    call (its turns, questions, prompts) listed under Story turns."""
+    from sealedlore.engine.usage import usage_fields
+
+    session, _main, held = build(tmp_path)
+    play(session, turn(held, "Before."))
+    enter(session, keep="disk")
+    play(session, turn(held, "I whisper."))
+    log = read_api_log(session.story.id, root=tmp_path)
+    lines = {line.label: line.calls for line in usage_report(log).lines}
+    assert lines.get("Private scenes") == 1 and lines.get("Story turns") == 1
+    # The cost readout reads the log cut down to what it needs: the same count.
+    cut = {line.label: line.calls for line in usage_report([usage_fields(e) for e in log]).lines}
+    assert cut == lines

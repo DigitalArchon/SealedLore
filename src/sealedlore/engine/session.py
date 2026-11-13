@@ -1073,11 +1073,12 @@ class StorySession(
         report = self._select(layout.selectable, turn, history, query, allow_network=allow_network)
         return replace(report, standing=layout.standing)
 
-    def lore_layout(self) -> LoreLayout:
-        """Whether the lorebook goes whole into the system block or is selected from."""
+    def lore_layout(self, budget: int | None = None) -> LoreLayout:
+        """Whether the lorebook goes whole into the system block or is selected from.
+        `budget`: another than the story's (a private scene's model has its own)."""
         return lore_layout(
             self.visible_lore(),
-            budget=self.story.defaults.context_token_budget,
+            budget=budget or self.story.defaults.context_token_budget,
             share=self.config.lore_whole_share,
             count_tokens=self._count_lore_tokens,
         )
@@ -4447,9 +4448,15 @@ class StorySession(
             split = self.split(history)
             verbatim, summaries = list(split.verbatim), list(split.summaries)
         plot = self.story.plot
+        options = options or self.assembly_options()
         prompt = assemble_question(
             story=self.story,
-            cast=self.visible_cast(),
+            # In a private scene, the cast and the standing lore as the
+            # scene's own turns have them (`private_assemble`): with the
+            # story's, a lorebook that goes whole at the story's budget and
+            # not at the private model's gave the Question another system
+            # block than the turns', and none of their cache.
+            cast=self.visible_cast(history) if span is not None else self.visible_cast(),
             history_nodes=verbatim,
             question=question,
             # The events the author's character knows of, as a turn is told
@@ -4468,12 +4475,14 @@ class StorySession(
             summaries=summaries,
             lore=lore,
             recall=recall,
-            standing_lore=self.lore_layout().standing,
+            standing_lore=self.lore_layout(
+                options.token_budget if span is not None else None
+            ).standing,
             supporting=self.supporting_for(question, history),
             on_file=self.visible_supporting(),
             scene_log=log_on_path(self.story.scene_log, history),
             estimator=self.estimator,
-            options=options or self.assembly_options(),
+            options=options,
             rendered=rendered,
         )
         self.last_prompt = prompt
