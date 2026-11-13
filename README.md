@@ -37,6 +37,16 @@ fun to play. This app will remain focused on text based roleplay.
 
 ### New in version 3
 
+- **Livelier play** (3.1.0b12). When your turn only waits, or lets time
+  pass, the storyteller makes the next move instead of describing the room
+  again, and it is reminded of the habits its recent passages have fallen
+  into. A story can keep **storyteller's notes** (Story → Setup… →
+  Storyteller's notes): its secrets, what people want and hide, sent to the
+  storyteller alone. A draft or a plot the model writes can write them, and
+  you don't see them unless you ask. **Regenerate with a note…**, **Change
+  this passage…** and **Suggest…** are on the desktop and the phone. The scene
+  card keeps what is still open, a promise or an appointment, from scene to
+  scene, and plots fit the moment they begin in better.
 - **Updates, and a second review** (3.1.0b11). AppImageUpdate, Gear Lever and
   AppImageLauncher can now update the AppImage, downloading only what changed.
   A review of the whole app fixed about thirty bugs, among them a way anyone
