@@ -3865,6 +3865,11 @@ class MainWindow(
         worker.waiting.connect(self._waits.wait)
         worker.passage_done.connect(self._on_passage_done)
         worker.failed.connect(self._on_failed)
+        # Busy before the phones are told: the state they are sent with the
+        # job's start says so, and the page shows Stop from the first word.
+        # Set after, the page kept Send until the passage was in.
+        self._busy = True
+        self._background = False
         self._phone_job_started(
             worker,
             streaming=streaming,
@@ -3881,8 +3886,6 @@ class MainWindow(
 
         self._worker = worker
         self._thread = thread
-        self._busy = True
-        self._background = False
         self._update_controls()
         self._show_busy(busy_text)
         thread.start()

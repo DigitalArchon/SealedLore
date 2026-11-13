@@ -652,3 +652,23 @@ def test_the_phone_shows_the_looks_when_the_desktop_does(app, tmp_path, sockets,
     status, body = phone.ask("GET", "/api/pictures/serrik-portrait?thumb=1")
     assert status == 200 and body[:3] == b"\xff\xd8\xff"
     window.close()
+
+
+def test_the_phone_is_told_the_window_is_busy_as_the_job_starts(
+    app, tmp_path, sockets, story, cast
+):
+    """The page shows Stop from the state sent with a job's start. That state
+    was built before the window called itself busy, so the page kept Send
+    until the passage was in."""
+    window, phone = open_window(tmp_path, sockets, story, cast, ["The hall falls quiet."])
+    events = phone.stream()
+    events.wait_for("hello")
+    phone.ask("POST", "/api/turn", {"text": "Night falls.", "speaker": NARRATOR_SPEAKER_ID})
+    events.wait_for("job_finished")
+    seen = events.events()
+    started = next(i for i, (name, _) in enumerate(seen) if name == "job_started")
+    state = next(data for name, data in seen[started:] if name == "state")
+    assert state["busy"] is True
+    wait_for(app, lambda: not window._busy)
+    window.close()
+
