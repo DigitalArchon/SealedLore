@@ -3911,7 +3911,18 @@ class MainWindow(
                 self._drop_queued()
                 self.statusBar().showMessage("Stopping the background reads", 4000)
             else:
-                self.statusBar().showMessage("Stopping — partial text is kept", 4000)
+                self.statusBar().showMessage(self._stopping_words(), 4000)
+
+    def _stopping_words(self) -> str:
+        """What Stop says of the job it stops. Only a passage being written
+        keeps what had come: a change to a passage attaches nothing unless it
+        came whole, and a review, a summary or a Question has no part to keep
+        (every one was told "partial text is kept")."""
+        if self._job_name == "The change":
+            return "Stopping — the passage stays as it was"
+        if self._job_name == "Generation" and self._streaming_job:
+            return "Stopping — partial text is kept"
+        return "Stopping…"
 
     def _on_notice(self, text: str) -> None:
         self._waits.stop()

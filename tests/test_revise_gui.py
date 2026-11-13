@@ -140,6 +140,8 @@ def test_a_stopped_change_keeps_nothing_and_says_so(app, tmp_path: Path, story, 
         ),
     )
     window.stop_generation()
+    # Said at once, and true of this job: nothing partial is kept of a change.
+    assert window.statusBar().currentMessage() == "Stopping — the passage stays as it was"
     wait_for(app, lambda: not window._busy)
     app.processEvents()
 
