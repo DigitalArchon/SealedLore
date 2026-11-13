@@ -24,12 +24,20 @@ from sealedlore.gui.plot_editor import (  # noqa: E402
     HEADER,
     OPTIONAL,
     REF_ROLE,
+    STORYTELLER,
     TIMELINE,
     PlotEditorWindow,
 )
-from sealedlore.gui.plot_editor_pages import WayPage, condition_key  # noqa: E402
+from sealedlore.gui.plot_editor_pages import (  # noqa: E402
+    STORYTELLER_IN_A_FILE,
+    StorytellerNotesPage,
+    WayPage,
+    condition_key,
+)
 
 SAMPLE = Path(__file__).resolve().parents[1] / "SampleStories" / "Doomsville.md"
+# Doomsville with every part of the format the sample leaves out.
+EXTENDED = Path(__file__).resolve().parent / "data" / "doomsville_extended.md"
 
 
 @pytest.fixture
@@ -61,9 +69,9 @@ def test_a_sample_opens_clean_and_every_page_fills(app, editor: PlotEditorWindow
         app.processEvents()
         seen += 1
     # The two halves (the story's row is its title and settings, the plot's its
-    # clock), 8 sections, 6 characters, 3 places, no lore entry, 3 facts, 8
-    # events, 4 variants.
-    assert seen == 34
+    # clock), 9 sections (the storyteller's notes among them), 6 characters, 3
+    # places, no lore entry, 3 facts, 8 events, 4 variants.
+    assert seen == 35
     halves = [editor.tree.topLevelItem(i) for i in range(editor.tree.topLevelItemCount())]
     assert [half.text(0) for half in halves] == ["The story", "The plot"]
     assert [halves[1].child(i).text(0) for i in range(halves[1].childCount())] == [
@@ -162,6 +170,83 @@ def test_a_problem_names_its_item_and_selects_it(app, editor: PlotEditorWindow):
     assert editor.current_ref() == (EVENT, 7, -1)
 
 
+def test_the_storytellers_notes_have_a_page_in_the_story_s_half(app, editor: PlotEditorWindow):
+    """The editor is for whoever writes the file: its notes for the
+    storyteller are shown there plainly, after Lore."""
+    story_half = editor.tree.topLevelItem(0)
+    assert [story_half.child(i).text(0) for i in range(story_half.childCount())] == [
+        "World",
+        "Opening",
+        "Characters",
+        "Places",
+        "Lore",
+        "Storyteller's notes",
+    ]
+    editor._select((HEADER, STORYTELLER, -1))
+    page = editor.pages.currentWidget()
+    assert isinstance(page, StorytellerNotesPage)
+    assert page.scope.text() == "The story · Storyteller's notes"
+    assert page.readers.text() == STORYTELLER_IN_A_FILE
+    assert "sent to the storyteller alone" in page.about.text()
+    assert "unread in Story → Setup → Storyteller's notes" in page.readers.text()
+    assert page.notes.toPlainText() == "" and not editor.modified
+    # A page of its own: nothing to add under it, remove or move.
+    for button in (editor.add_button, editor.remove_button, editor.up_button):
+        assert not button.isEnabled()
+
+    page.notes.setPlainText("The farmhouse well is fouled.\n\n## Who knows\n\nOnly Jane.")
+    editor.check_now()
+    assert editor.modified and editor.problems == []
+    assert editor.document.storyteller_notes.startswith("The farmhouse well is fouled.")
+    rendered = editor.rendered.text
+    assert "\n# Storyteller's notes\n\nThe farmhouse well is fouled." in rendered
+    assert rendered.index("# Places") < rendered.index("# Storyteller's notes")
+    assert rendered.index("# Storyteller's notes") < rendered.index("# Facts")
+    scenario = parse_plot_markdown(rendered).scenario
+    assert "## Who knows" in scenario.storyteller_notes
+    assert scenario.storyteller_notes_by == "model", "whoever imports it has not read them"
+    # Another page and back: the notes are the document's.
+    editor._select((HEADER, CHARACTER, -1))
+    editor._select((HEADER, STORYTELLER, -1))
+    assert editor.pages.currentWidget().notes.toPlainText().endswith("Only Jane.")
+
+
+def test_a_problem_with_the_notes_selects_their_page(app, editor: PlotEditorWindow):
+    hidden = next(c.name for c in editor.document.characters if c.hidden)
+    editor._select((HEADER, STORYTELLER, -1))
+    editor.pages.currentWidget().notes.setPlainText(f"{hidden} is not who they say.")
+    editor.check_now()
+    assert [(p.where, p.error) for p in editor.problems] == [((STORYTELLER, 0, -1), False)]
+    listed = editor.problem_list.item(0).text()
+    assert listed.startswith(
+        f"Note — Storyteller's notes: The storyteller's notes name {hidden}, who is hidden"
+    )
+    assert editor.summary.text() == "Imports, with 1 note."
+    row = editor.tree.currentItem()
+    assert row.text(0) == "Storyteller's notes" and "who is hidden" in row.toolTip(0)
+
+    editor._select((HEADER, CHARACTER, -1))
+    editor._on_problem_activated(editor.problem_list.item(0))
+    assert editor.current_ref() == (HEADER, STORYTELLER, -1)
+    assert isinstance(editor.pages.currentWidget(), StorytellerNotesPage)
+
+
+def test_a_file_s_notes_open_in_the_editor_and_save_as_they_were(app, tmp_path: Path):
+    window = PlotEditorWindow()
+    assert window.open_path(EXTENDED)
+    window._select((HEADER, STORYTELLER, -1))
+    page = window.pages.currentWidget()
+    shown = page.notes.toPlainText()
+    assert shown.startswith("The Northern Camp's council has known for two winters")
+    assert "## What they hide" in shown
+    target = tmp_path / "two-roads.md"
+    assert window._write(target)
+    saved = parse_plot_markdown(target.read_text(encoding="utf-8")).scenario
+    original = parse_plot_markdown(EXTENDED.read_text(encoding="utf-8")).scenario
+    assert saved.storyteller_notes == original.storyteller_notes
+    window.close()
+
+
 def test_ticking_the_timeline_moves_the_event(app, editor: PlotEditorWindow):
     index = next(i for i, e in enumerate(editor.document.events) if not e.timeline)
     editor._select((EVENT, index, -1))
@@ -228,7 +313,6 @@ def test_discarding_on_close_really_discards(app, tmp_path: Path, monkeypatch):
     assert untitled.close()
 
 
-EXTENDED = Path(__file__).resolve().parent / "data" / "doomsville_extended.md"
 PICTURES = EXTENDED.parent / "pictures"
 
 

@@ -441,6 +441,56 @@ class WorldPage(Page):
         self.item.world = self.world.toPlainText()
 
 
+# What the storyteller's notes are, and who reads them: for a plot file, and
+# for a story opened in the editor.
+STORYTELLER_ABOUT = (
+    "The truth behind what the story has not shown yet, and what its people want and "
+    "hide. They are sent to the storyteller alone, which holds to them from the first "
+    "passage; they are never lore, and no event reveals them."
+)
+STORYTELLER_IN_A_FILE = (
+    "Whoever imports this file finds them unread in Story → Setup → Storyteller's notes, "
+    "so the story can still surprise them."
+)
+STORYTELLER_IN_A_STORY = (
+    "Notes you change here are saved as read. Left as they are, notes a model wrote stay "
+    "unread in Story → Setup → Storyteller's notes."
+)
+STORYTELLER_HOW = (
+    "Taken as written, sub-headings included. Leave out the name of anyone or anywhere "
+    "the plot keeps hidden: the storyteller would know of them before their event."
+)
+
+
+class StorytellerNotesPage(Page):
+    """`# Storyteller's notes`: shown plainly, since the editor is for
+    whoever writes the file."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.notes = GrowingText(lines=12, fill=True)
+        self.notes.setPlaceholderText(
+            "What only the storyteller knows: what a thing really is, who did it, what "
+            "someone is hiding and why."
+        )
+        self.about = hint(STORYTELLER_ABOUT)
+        self.readers = hint(STORYTELLER_IN_A_FILE)
+        self._form.addRow(self.about)
+        self._form.addRow(self.readers)
+        self._form.addRow(hint(STORYTELLER_HOW))
+        self._form.addRow(self.notes)
+        self._watch(self.notes)
+
+    def set_story_mode(self, story: bool) -> None:
+        self.readers.setText(STORYTELLER_IN_A_STORY if story else STORYTELLER_IN_A_FILE)
+
+    def _fill(self) -> None:
+        self.notes.setPlainText(self.item.storyteller_notes)
+
+    def _store(self) -> None:
+        self.item.storyteller_notes = self.notes.toPlainText()
+
+
 class OpeningPage(Page):
     def __init__(self) -> None:
         super().__init__()

@@ -32,9 +32,16 @@ from sealedlore.gui.plot_editor import (  # noqa: E402
     OPTIONAL,
     PLACE,
     PLOT,
+    STORYTELLER,
     PlotEditorWindow,
 )
-from sealedlore.gui.plot_editor_pages import CharacterPage, EntryPage, WayPage  # noqa: E402
+from sealedlore.gui.plot_editor_pages import (  # noqa: E402
+    STORYTELLER_IN_A_STORY,
+    CharacterPage,
+    EntryPage,
+    StorytellerNotesPage,
+    WayPage,
+)
 from sealedlore.gui.plot_pictures import keep_picture  # noqa: E402
 from sealedlore.models.character import Character  # noqa: E402
 from sealedlore.models.image import ImageRef  # noqa: E402
@@ -409,3 +416,42 @@ def test_a_background_chosen_in_the_editor_goes_behind_the_new_story(
     assert new.story.background_image == "images/background.png"
     assert (story_dir(made.id, tmp_path) / "images/background.png").read_bytes() == PNG
     assert window.session.story.background_image is None, "the old story has none still"
+
+
+def test_a_story_s_notes_are_shown_plainly_and_saved_as_read_only_when_changed(
+    app, window, monkeypatch, tmp_path
+):
+    """Opened in the editor, a story's notes for the storyteller are on a
+    page of their own. Untouched, a new story has them as they were, unread
+    if a model wrote them; changed here, whoever changed them has read them."""
+    story = window.session.story
+    story.storyteller_notes = "The keep's well is poisoned, and Maela did it."
+    story.storyteller_notes_by = "model"
+    window.session.save()
+    editor = editor_on_story(window)
+    editor._select((HEADER, STORYTELLER, -1))
+    page = editor.pages.currentWidget()
+    assert isinstance(page, StorytellerNotesPage)
+    assert page.notes.toPlainText() == "The keep's well is poisoned, and Maela did it."
+    assert page.readers.text() == STORYTELLER_IN_A_STORY
+    assert not editor.modified
+
+    editor._select((HEADER, "world", -1))
+    editor.pages.currentWidget().world.setPlainText("The keep fell in the night.")
+    titled(monkeypatch, "Untouched notes")
+    assert editor.save()
+    made = next(s for s in story_listings(tmp_path) if s.title == "Untouched notes")
+    new = load_story_bundle(made.id, root=tmp_path).story
+    assert new.storyteller_notes == "The keep's well is poisoned, and Maela did it."
+    assert new.storyteller_notes_by == "model", "still unread in Setup"
+
+    # The editor goes on with the new story: now the notes are changed.
+    editor._select((HEADER, STORYTELLER, -1))
+    editor.pages.currentWidget().notes.setPlainText("The cistern is poisoned, and Idris did it.")
+    assert editor.save()
+    new = load_story_bundle(made.id, root=tmp_path).story
+    assert new.storyteller_notes == "The cistern is poisoned, and Idris did it."
+    assert new.storyteller_notes_by == "author"
+    # The story it all came from is as it was.
+    kept = load_story_bundle(story.id, root=tmp_path).story
+    assert (kept.storyteller_notes_by, kept.world_bible) == ("model", story.world_bible)

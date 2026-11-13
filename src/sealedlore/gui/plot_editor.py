@@ -13,8 +13,8 @@ is exactly what File → Import would say, each against the item to fix.
 The tree is in two halves (the author, Nov 2026: which parts were the plot
 and which only writing a story wasn't clear): the story, with what every
 story has, plot or none (its title and settings, world, opening, characters,
-places and lore), and the plot, with what a plot adds (its clock, facts and
-events). Every page says which half it is in.
+places, lore and storyteller's notes), and the plot, with what a plot adds
+(its clock, facts and events). Every page says which half it is in.
 
 It is its own window and needs no story open. Saving writes the `.md`;
 "Start a story from this file" hands the saved file to the main window's
@@ -71,6 +71,8 @@ from sealedlore.engine.plot_file import (
     NOTES,
     OPENING,
     PLACE,
+    STORYTELLER,
+    STORYTELLER_HEADING,
     WORLD,
     DocProblem,
     ItemRef,
@@ -100,6 +102,7 @@ from sealedlore.gui.plot_editor_pages import (
     PlotPage,
     SectionPage,
     StoryPage,
+    StorytellerNotesPage,
     WayPage,
     WorldPage,
 )
@@ -133,13 +136,14 @@ _GROUPS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
         FRONT,
         STORY_HALF,
         "What every story has, with a plot or without: its title and settings, world, "
-        "opening, characters, places and lore",
+        "opening, characters, places, lore and storyteller's notes",
         [
             (WORLD, "World"),
             (OPENING, "Opening"),
             (CHARACTER, "Characters"),
             (PLACE, "Places"),
             (LORE, "Lore"),
+            (STORYTELLER, STORYTELLER_HEADING),
         ],
     ),
     (
@@ -183,6 +187,8 @@ _SECTION_ABOUT = {
 }
 _PLOT_SECTIONS = {PLOT, FACT, TIMELINE, OPTIONAL, EVENT}
 _LISTS = (CHARACTER, PLACE, LORE, FACT, TIMELINE, OPTIONAL)
+# The rows that are a page of their own, with nothing listed under them.
+_OWN_PAGES = (FRONT, WORLD, OPENING, STORYTELLER, PLOT)
 # What other items name each kind of item by, and the field of its name.
 _NAMED: dict[str, tuple[ReferenceKind, str]] = {
     CHARACTER: ("character", "name"),
@@ -321,6 +327,7 @@ class PlotEditorWindow(QMainWindow):
             CHARACTER: CharacterPage(self._folder, self.save),
             PLACE: EntryPage(is_place=True, folder=self._folder, save_first=self.save),
             LORE: EntryPage(is_place=False, folder=self._folder, save_first=self.save),
+            STORYTELLER: StorytellerNotesPage(),
             FACT: FactPage(),
             EVENT: WayPage(is_event=True),
             "variant": WayPage(is_event=False),
@@ -435,6 +442,9 @@ class PlotEditorWindow(QMainWindow):
         story_page = self._pages[FRONT]
         assert isinstance(story_page, StoryPage)
         story_page.set_story_mode(story is not None)
+        notes_page = self._pages[STORYTELLER]
+        assert isinstance(notes_page, StorytellerNotesPage)
+        notes_page.set_story_mode(story is not None)
         for page in (self._pages[CHARACTER], self._pages[PLACE], self._pages[LORE]):
             page.pictures.set_story(story is not None)
         if story is None:
@@ -582,7 +592,7 @@ class PlotEditorWindow(QMainWindow):
 
     def _select(self, ref: ItemRef | None) -> None:
         item = self._find(ref)
-        if item is None and ref is not None and ref[0] in (FRONT, WORLD, OPENING, NOTES):
+        if item is None and ref is not None and ref[0] in (*_OWN_PAGES, NOTES):
             item = self._find((HEADER, FRONT if ref[0] == NOTES else ref[0], -1))
         if item is None:
             item = self.tree.topLevelItem(0)
@@ -605,7 +615,7 @@ class PlotEditorWindow(QMainWindow):
             return
         kind, index, variant = ref
         if kind == HEADER:
-            if index in (FRONT, WORLD, OPENING, PLOT):
+            if index in _OWN_PAGES:
                 page = self._pages[index]
                 page.load(self.document, self.document)
                 self._dress(page, index)
@@ -642,6 +652,7 @@ class PlotEditorWindow(QMainWindow):
             FRONT: "Title and settings",
             WORLD: "World",
             OPENING: "Opening",
+            STORYTELLER: STORYTELLER_HEADING,
             PLOT: "Its clock",
             CHARACTER: "A character",
             PLACE: "A place",
@@ -856,7 +867,7 @@ class PlotEditorWindow(QMainWindow):
             section = ref[1]
             if section == FRONT:
                 return [p for p in self.problems if p.where is None or p.where[0] in (FRONT, NOTES)]
-            if section in (WORLD, OPENING):
+            if section in (WORLD, OPENING, STORYTELLER):
                 return [p for p in self.problems if p.where == (section, 0, -1)]
             return []
         return [p for p in self.problems if p.where == ref]
