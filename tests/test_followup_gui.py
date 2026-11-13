@@ -172,3 +172,40 @@ def test_the_plot_is_changed_from_its_own_dialog_and_kept_hidden(app, window, mo
     event = window.session.story.plot.events[0]
     assert "storms" in event.tell or "storms" in (event.lead_in_text or "")
     assert window.follow_up_plot_action.isEnabled()
+
+
+def test_the_plot_s_own_notes_are_said_to_be_there_in_its_dialog_and_never_shown(
+    app, window, monkeypatch
+):
+    secret = "The well under Calder Keep is poisoned, crate ZQX-SECRET and all."
+    noted = PLOT.replace("# Facts", f"# Storyteller's notes\n\n{secret}\n\n# Facts")
+    again = noted.replace("crate ZQX-SECRET", "cask ZQX-SECRET").replace("rides up to", "storms")
+    model(window, monkeypatch, noted, again)
+    monkeypatch.setattr(PlotDialog, "exec", lambda dialog: QDialog.Accepted)
+
+    def choose_changes(dialog: PlotReadyDialog) -> int:
+        dialog.choice = FOLLOW_UP
+        return QDialog.Accepted
+
+    monkeypatch.setattr(PlotReadyDialog, "exec", choose_changes)
+    logs: list[str] = []
+
+    def look(dialog: FollowUpDialog) -> None:
+        dialog.reveal()
+        logs.append(dialog.log.toPlainText() + dialog.view.toPlainText())
+
+    seen = drive(
+        monkeypatch,
+        lambda d: logs.append(d.log.toPlainText()),
+        ask(app, window, "Make the captain's arrival violent."),
+        look,
+    )
+    window.write_plot_action.trigger()
+    wait_until(app, lambda: seen)
+    settle(app)
+    assert "The plot also wrote notes for the storyteller (11 words)" in logs[0]
+    story = window.session.story
+    assert "cask ZQX-SECRET" in story.storyteller_notes and story.storyteller_notes_by == "model"
+    # Shown the plot, and told the notes were rewritten: never what they say.
+    assert "The captain comes" in logs[1]
+    assert "ZQX-SECRET" not in "".join(logs) and "poisoned" not in "".join(logs)

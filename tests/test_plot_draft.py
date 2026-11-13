@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from sealedlore.engine.plot_draft import (
+    NOTES_STAND,
     PlotWishes,
     build_plot_messages,
     drop_broken,
@@ -23,9 +24,10 @@ from sealedlore.engine.plot_draft import (
 )
 from sealedlore.engine.plot_file import render_plot_markdown
 from sealedlore.engine.plot_md import parse_plot_markdown
+from sealedlore.engine.prompt import SECTION_NOTES, TurnRequest
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PLOT_EXAMPLE, TEXTS
 from sealedlore.engine.session import StorySession
-from sealedlore.engine.story_plot import document_from_story, without_plot
+from sealedlore.engine.story_plot import document_from_story, notes_from_plot, without_plot
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
 from sealedlore.engine.usage import KIND_LABELS
 from sealedlore.models.character import Character
@@ -112,6 +114,14 @@ def test_the_prompt_s_example_reads_cleanly_into_a_story_that_has_its_market():
     assert [place.name for place in merged.places] == ["The Salt Market", "The Drowned Chapel"]
     assert merged.places[0].story_id == "l-market"
     assert [e.name for e in merged.lore] == ["The Boatwrights' Guild"]
+    # Its storyteller's notes: two sentences about what the story already
+    # has, naming nobody and nowhere the plot keeps hidden.
+    notes = merged.storyteller_notes
+    assert notes.startswith("The crates that pass through the Salt Market by night")
+    assert notes.count(". ") == 1 and notes.endswith("never found one.")
+    assert parsed.scenario.storyteller_notes == notes
+    for hidden in ("Vask", "Teodor", "Chapel", "sea cave"):
+        assert hidden not in notes
 
 
 def test_the_rules_are_in_the_system_prompt_and_the_story_in_the_request():
@@ -485,3 +495,115 @@ def test_a_plot_with_nothing_for_the_first_hours_is_sent_back_for_it():
     assert nothing_at_first(Plot(events=[later, first])) == ""
     # A story that opens on its third day counts from there.
     assert nothing_at_first(Plot(start_minutes=2 * 1440 + 600, events=[later])) == ""
+
+
+# --- the plot's own notes for the storyteller -------------------------------------------
+
+EXAMPLE_NOTES = "The crates that pass through the Salt Market by night hold muskets"
+STORY_NOTES = "Mara's father drowned running salt, and Oswin Hale let him."
+
+
+def test_the_writer_is_told_what_notes_are_for_and_what_they_must_not_name():
+    system = DEFAULT_TEXTS["authoring.plot"]
+    assert "- `# Storyteller's notes`: only when the plot rests on a truth" in system
+    assert "\nStoryteller's notes:\n- When the plot rests on a truth about something" in system
+    assert "the story's own notes\n  don't already say it" in system
+    assert "Never name there a person or a place the plot keeps hidden" in system
+    assert "Keep `hidden: yes` for people and\n  places that must not appear" in system
+    # The story's own notes stand: it is told to write none beside them.
+    assert (
+        "write no `# Storyteller's notes` section of your own"
+        in (DEFAULT_TEXTS["authoring.plot.notes"])
+    )
+
+
+def test_a_reply_s_notes_are_taken_only_for_a_story_with_none_of_its_own():
+    reply = read_reply(PLOT_EXAMPLE).document
+    assert reply.storyteller_notes.startswith(EXAMPLE_NOTES)
+    bare = without_plot(document_from_story(harbour()))
+    merged, notes = merge_reply(bare, reply)
+    assert merged.storyteller_notes == reply.storyteller_notes and notes == []
+
+    bundle = harbour()
+    bundle.story.storyteller_notes = STORY_NOTES
+    own = without_plot(document_from_story(bundle))
+    merged, notes = merge_reply(own, reply)
+    assert merged.storyteller_notes == STORY_NOTES, "the story's notes always stand"
+    assert notes == [NOTES_STAND]
+    assert "muskets" not in NOTES_STAND, "said to be left out, never what they say"
+    # A plot written again: still the story's, unless they were the plot's own.
+    merged, notes = merge_reply(own, reply, revise=True)
+    assert merged.storyteller_notes == STORY_NOTES and notes == [NOTES_STAND]
+    merged, notes = merge_reply(own, reply, revise=True, notes_own=True)
+    assert merged.storyteller_notes == reply.storyteller_notes and notes == []
+    # One that writes none leaves the plot's own as they were.
+    silent = reply.model_copy(update={"storyteller_notes": ""})
+    merged, notes = merge_reply(own, silent, revise=True, notes_own=True)
+    assert merged.storyteller_notes == STORY_NOTES and notes == []
+
+
+def test_notes_naming_whom_the_plot_hides_go_back_with_the_other_problems():
+    base = without_plot(document_from_story(harbour()))
+    told = PLOT_EXAMPLE.replace(
+        "The harbour\nwatch's own sergeant takes a share",
+        "Teodor Vask\nhas come to take a share",
+    )
+    merged, _ = merge_reply(base, read_reply(told).document)
+    problem = (
+        "The storyteller's notes name Teodor Vask, who is hidden: the storyteller would learn "
+        "of them before the event that brings them in."
+    )
+    assert plot_problems(merged, own_notes=True) == [problem]
+    # The story's own notes are not the plot writer's to change.
+    assert plot_problems(merged) == []
+
+
+def test_the_story_text_never_holds_the_notes():
+    """They are told to the writer under their own words, once."""
+    bundle = harbour()
+    bundle.story.storyteller_notes = STORY_NOTES
+    shown = without_plot(document_from_story(bundle, for_model=True))
+    assert shown.storyteller_notes == STORY_NOTES
+    text = story_text(shown)
+    assert "drowned running salt" not in text and "Storyteller's notes" not in text
+
+
+def test_a_plot_s_notes_reach_the_story_unread_and_stay_the_plot_s(tmp_path: Path):
+    session = session_for(harbour(), tmp_path, [PLOT_EXAMPLE])
+    draft, _ = run(session.draft_plot(PlotWishes()))
+    story = session.story
+    assert story.storyteller_notes.startswith(EXAMPLE_NOTES)
+    assert story.storyteller_notes_by == "model", "unread in Setup until asked"
+    assert notes_from_plot(story)
+    assert draft.notes == [], "nothing about them is said among what was left out"
+    assert draft.document.storyteller_notes == story.storyteller_notes
+    # The storyteller is sent them from the first passage.
+    first = TurnRequest(speaker_id="c-mara", user_text="I look.", controlled_character_id="c-mara")
+    assert "muskets" in session.assemble(first).section(SECTION_NOTES).text
+
+
+def test_a_story_s_own_notes_stand_and_the_plot_s_are_left_out(tmp_path: Path):
+    bundle = harbour()
+    bundle.story.storyteller_notes = STORY_NOTES
+    session = session_for(bundle, tmp_path, [PLOT_EXAMPLE])
+    draft, _ = run(session.draft_plot(PlotWishes()))
+    story = session.story
+    assert (story.storyteller_notes, story.storyteller_notes_by) == (STORY_NOTES, "author")
+    assert not notes_from_plot(story) and story.plot.notes_given == ""
+    assert draft.notes == [NOTES_STAND]
+    user = session.provider.requests[0].messages[-1].text
+    assert user.count("drowned running salt") == 1
+    assert "muskets" not in story.model_dump_json()
+
+
+def test_notes_naming_someone_hidden_are_sent_back_once(tmp_path: Path):
+    told = PLOT_EXAMPLE.replace(
+        "The harbour\nwatch's own sergeant takes a share",
+        "Teodor Vask\nhas come to take a share",
+    )
+    session = session_for(harbour(), tmp_path, [told, PLOT_EXAMPLE])
+    draft, _ = run(session.draft_plot(PlotWishes()))
+    assert draft.repaired and draft.notes == []
+    again = session.provider.requests[1].messages[-1].text
+    assert "The storyteller's notes name Teodor Vask, who is hidden" in again
+    assert "Vask" not in session.story.storyteller_notes

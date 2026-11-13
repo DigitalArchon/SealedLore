@@ -75,18 +75,28 @@ class PlotDraftRuntime:
         *,
         newcomers: str = "",
         revise: bool = False,
+        notes_own: bool = False,
         details: dict,
     ) -> Generator[SessionNotice, None, PlotDraft]:
         """The call, at most one more to put it right, and the plot given to
         the story: a first plot (`draft_plot`) or one written again at the
-        author's request (`revise`, engine/session_followup.py). `details`
-        go in the API log beside each request."""
+        author's request (`revise`, engine/session_followup.py). `notes_own`:
+        the story's storyteller's notes are the old plot's writer's own, so
+        the plot written again may write them again. `details` go in the API
+        log beside each request."""
         model = self.authoring_model
         text, completed = yield from self._plot_call(messages, model, "first", details)
         merged, notes = merge_reply(
-            base, read_reply(text).document, newcomers=newcomers, revise=revise
+            base,
+            read_reply(text).document,
+            newcomers=newcomers,
+            revise=revise,
+            notes_own=notes_own,
         )
-        problems = plot_problems(merged, opening=not self.nodes)
+        # Whatever notes the document holds are the writer's own unless the
+        # story had notes that stand.
+        own = notes_own or not base.storyteller_notes.strip()
+        problems = plot_problems(merged, opening=not self.nodes, own_notes=own)
         if completed.finish_reason == "length":
             problems.insert(0, "The reply was cut off before its end: write the plot shorter.")
         repaired = False
@@ -95,7 +105,11 @@ class PlotDraftRuntime:
             again = build_repair_messages(messages, text, problems, self.texts)
             text, completed = yield from self._plot_call(again, model, "repair", details)
             fixed, fixed_notes = merge_reply(
-                base, read_reply(text).document, newcomers=newcomers, revise=revise
+                base,
+                read_reply(text).document,
+                newcomers=newcomers,
+                revise=revise,
+                notes_own=notes_own,
             )
             if fixed.events:
                 merged, notes, repaired = fixed, fixed_notes, True
@@ -104,10 +118,11 @@ class PlotDraftRuntime:
             raise ValueError("the model wrote no event the story could use: ask again")
         notes += dropped
         # What it couldn't put right but the story can play past: said, kept.
-        notes += plot_problems(document, opening=not self.nodes)
+        notes += plot_problems(document, opening=not self.nodes, own_notes=own)
         if completed.finish_reason == "length":
             notes.append("The model ran out of room: the plot may be missing its last part.")
-        notes += self.set_plot_document(document)
+        # Notes the document changed are the plot writer's: unread in Setup.
+        notes += self.set_plot_document(document, notes_by="model")
         return PlotDraft(document=document_from_story(self.bundle), notes=notes, repaired=repaired)
 
     def _plot_call(

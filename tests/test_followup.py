@@ -11,10 +11,22 @@ from pathlib import Path
 
 import pytest
 
-from sealedlore.engine.followup import STORY, FollowUpTurn, render_earlier, setup_fingerprint
-from sealedlore.engine.plot_draft import PlotWishes, merge_reply, plot_reply_text, read_reply
+from sealedlore.engine.followup import (
+    NOTES_REWRITTEN,
+    STORY,
+    FollowUpTurn,
+    render_earlier,
+    setup_fingerprint,
+)
+from sealedlore.engine.plot_draft import (
+    NOTES_STAND,
+    PlotWishes,
+    merge_reply,
+    plot_reply_text,
+    read_reply,
+)
 from sealedlore.engine.prompt_texts import PLOT_EXAMPLE
-from sealedlore.engine.story_plot import document_from_story, without_plot
+from sealedlore.engine.story_plot import document_from_story, notes_from_plot, without_plot
 from sealedlore.storage.repository import load_story_bundle, read_api_log
 from tests.conftest import make_exchange
 from tests.test_plot_draft import harbour, run, session_for
@@ -238,14 +250,18 @@ WITHOUT_VASK = PLOT_EXAMPLE[PLOT_EXAMPLE.index("# Places") :].split("# Timeline"
 def test_the_plot_as_it_is_is_the_model_s_last_reply(tmp_path: Path):
     session = session_for(harbour(), tmp_path, [PLOT_EXAMPLE, CRUELLER])
     run(session.draft_plot(PlotWishes()))
-    previous = plot_reply_text(document_from_story(session.bundle))
+    # The notes its writer gave the story are part of its reply, and only that.
+    previous = plot_reply_text(document_from_story(session.bundle), own_notes=True)
     assert previous.startswith("# Characters\n\n## Teodor Vask")
     assert "## The Salt Market\n\n## The Drowned Chapel" in previous, "the story's own: a title"
     assert "Stalls under the cliff" not in previous and "# World" not in previous
+    assert "\n# Storyteller's notes\n\nThe crates that pass through" in previous
+    assert "muskets" not in plot_reply_text(document_from_story(session.bundle))
     run(session.follow_up_plot("Make Vask crueller."))
     messages = session.provider.requests[-1].messages
     assert [m.role for m in messages] == ["system", "user", "assistant", "user"]
     assert messages[2].parts[0].text == previous
+    assert "muskets" not in messages[1].parts[0].text, "never told twice"
     assert "The author asks: Make Vask crueller." in messages[3].parts[0].text
 
 
@@ -289,6 +305,58 @@ def test_merging_a_plot_written_again_takes_its_words_for_the_plot_s_own():
     assert vask.story_id == "c-vask" and "he enjoys a confession" in vask.description
     gone, _ = merge_reply(first, read_reply(WITHOUT_VASK).document, revise=True)
     assert "Teodor Vask" not in [c.name for c in gone.characters]
+
+
+QUIETER = CRUELLER.replace("hold muskets for a rising\ninland", "hold nothing but salt fish")
+
+
+def test_a_plot_written_again_may_write_its_own_notes_again_and_undo_puts_them_back(
+    tmp_path: Path,
+):
+    session = session_for(harbour(), tmp_path, [PLOT_EXAMPLE, QUIETER])
+    run(session.draft_plot(PlotWishes()))
+    story = session.story
+    first = story.storyteller_notes
+    assert "muskets" in first and notes_from_plot(story)
+    (turn, _draft), _ = run(session.follow_up_plot("No rising: it is only fish."))
+    assert "salt fish" in story.storyteller_notes and "muskets" not in story.storyteller_notes
+    assert story.storyteller_notes_by == "model" and notes_from_plot(story)
+    # Said to have changed, never what they say.
+    assert turn.changed == ["The plot: 5 events", NOTES_REWRITTEN]
+    assert session.undo_follow_up("plot")
+    assert story.storyteller_notes == first and notes_from_plot(story)
+
+
+def test_a_plot_written_again_keeps_notes_it_does_not_write_again(tmp_path: Path):
+    silent = (
+        CRUELLER[: CRUELLER.index("# Storyteller's notes")]
+        + (CRUELLER[CRUELLER.index("# Facts") :])
+    )
+    session = session_for(harbour(), tmp_path, [PLOT_EXAMPLE, silent])
+    run(session.draft_plot(PlotWishes()))
+    first = session.story.storyteller_notes
+    (turn, _draft), _ = run(session.follow_up_plot("Make Vask crueller."))
+    assert session.story.storyteller_notes == first and notes_from_plot(session.story)
+    assert turn.changed == ["The plot: 5 events"]
+
+
+def test_the_story_s_own_notes_are_never_a_plot_s_to_write_again(tmp_path: Path):
+    """Notes the author wrote or has read, or a draft's: told to the writer
+    as the story's, and whatever its reply says of notes is left out."""
+    session = session_for(harbour(), tmp_path, [PLOT_EXAMPLE, QUIETER])
+    run(session.draft_plot(PlotWishes()))
+    story = session.story
+    # Read in Setup, and one word changed there: the author's from then on.
+    story.storyteller_notes = story.storyteller_notes.replace("muskets", "powder")
+    story.storyteller_notes_by = "author"
+    kept = story.storyteller_notes
+    (turn, draft), _ = run(session.follow_up_plot("No rising: it is only fish."))
+    messages = session.provider.requests[-1].messages
+    assert "Storyteller's notes" not in messages[2].parts[0].text
+    assert messages[1].parts[0].text.count("hold powder") == 1
+    assert (story.storyteller_notes, story.storyteller_notes_by) == (kept, "author")
+    assert turn.changed == ["The plot: 5 events"]
+    assert NOTES_STAND in draft.notes
 
 
 def test_the_fingerprint_ignores_what_the_story_writes_as_it_goes():

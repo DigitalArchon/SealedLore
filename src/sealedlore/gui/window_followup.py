@@ -16,7 +16,7 @@ from PySide6.QtWidgets import QMessageBox
 
 from sealedlore.engine.followup import PLOT, STORY
 from sealedlore.engine.session import SessionNotice
-from sealedlore.engine.story_plot import document_from_story, safe_prose
+from sealedlore.engine.story_plot import document_from_story, notes_from_plot, safe_prose
 from sealedlore.gui.followup_dialog import FollowUpDialog
 from sealedlore.gui.plot_dialog import plot_preview
 from sealedlore.providers.base import ProviderError, StreamCancelled, error_detail
@@ -126,8 +126,13 @@ class FollowUpWindow:
     ) -> None:
         session = self.session
         story = session.story
-        # A draft's notes for the storyteller: said to be there, never shown.
-        unread = drafted and target == STORY and story.storyteller_notes_by == "model"
+        # A draft's notes for the storyteller, or those the plot's writer
+        # wrote: said to be there, never shown.
+        unread = (
+            drafted and story.storyteller_notes_by == "model"
+            if target == STORY
+            else notes_from_plot(story)
+        )
         dialog = FollowUpDialog(
             self._dialog_parent(),
             target=target,

@@ -26,7 +26,12 @@ from PySide6.QtWidgets import QDialog, QMessageBox, QWidget
 
 from sealedlore.engine.plot_draft import PlotDraft, PlotWishes
 from sealedlore.engine.session import SessionNotice
-from sealedlore.engine.story_plot import PictureReader, PlotDocumentError, apply_document
+from sealedlore.engine.story_plot import (
+    PictureReader,
+    PlotDocumentError,
+    apply_document,
+    notes_from_plot,
+)
 from sealedlore.gui.plot_dialog import EDIT, FOLLOW_UP, PlotDialog, PlotReadyDialog, plot_preview
 from sealedlore.gui.plot_editor import PlotEditorWindow
 from sealedlore.models.plot_file import PlotDocument
@@ -134,13 +139,17 @@ class PlotWindow:
         on to `then`, or to the plot editor (and the author starts the story
         when they are ready)."""
         session = self.session
+        story = session.story
+        # Notes the plot wrote for the storyteller: said to be there, never shown.
+        secrets = (story.storyteller_notes or "") if notes_from_plot(story) else ""
         dialog = PlotReadyDialog(
             self._dialog_parent(),
-            title=session.story.title,
+            title=story.title,
             plot=plot_preview(draft.document),
             notes=draft.notes,
             go_on="Start the story…" if then is not None else "Close",
             spoilers_on=self.config.show_plot_spoilers,
+            secret_words=len(secrets.split()),
         )
         try:
             dialog.exec()

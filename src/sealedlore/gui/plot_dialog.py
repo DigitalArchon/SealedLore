@@ -9,7 +9,9 @@ window's worker (`StorySession.draft_plot`, gui/window_plot.py).
 choose whether to see the plot (spoilers) or meet it in play, so it opens on
 neither: the plot stays hidden until they ask to see it, and Keep it a
 surprise is the default. Nothing written for the story is shown before that,
-not even what was left out of it (those notes are spoilers too).
+not even what was left out of it (those notes are spoilers too). Storyteller's
+notes the plot wrote are never shown here at all, only said to be there:
+Setup shows them when asked.
 """
 
 from __future__ import annotations
@@ -37,6 +39,18 @@ from sealedlore.models.plot_file import OpeningDoc, PlotDocument
 
 WRITE_LABEL = "Write a plot with the model…"
 EDIT, CONTINUE, FOLLOW_UP = "edit", "continue", "follow_up"
+# After a plot that wrote notes for the storyteller: that it did, and where
+# they are. Never what they say (as a draft's, gui/followup_dialog.py).
+PLOT_SECRETS_WRITTEN = (
+    "The plot also wrote notes for the storyteller ({words}): the truth its events rest "
+    "on. They are kept from you so the story can surprise you; Story → Setup → "
+    "Storyteller's notes shows or clears them."
+)
+
+
+def secrets_written(text: str, words: int) -> str:
+    """`text` (a `{words}` slot) for notes of that many words."""
+    return text.format(words=f"{words:,} word{'' if words == 1 else 's'}")
 
 
 def _hint(text: str) -> QLabel:
@@ -139,7 +153,9 @@ class PlotReadyDialog(QDialog):
     """The plot is written: hidden until the author asks to see it. After
     exec: `choice` (EDIT for the plot editor, FOLLOW_UP to ask for changes,
     CONTINUE), `revealed`, and
-    `keep_spoilers_off` (only offered while the Plot page shows spoilers)."""
+    `keep_spoilers_off` (only offered while the Plot page shows spoilers).
+    `secret_words`: how long the storyteller's notes the plot wrote are, to
+    say that there are some."""
 
     def __init__(
         self,
@@ -150,6 +166,7 @@ class PlotReadyDialog(QDialog):
         notes: list[str],
         go_on: str,
         spoilers_on: bool,
+        secret_words: int = 0,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("The plot is written")
@@ -169,6 +186,11 @@ class PlotReadyDialog(QDialog):
                 "look it over first: it shows everything, the people it keeps hidden too."
             )
         )
+        self.secrets = _hint(
+            secrets_written(PLOT_SECRETS_WRITTEN, secret_words) if secret_words else ""
+        )
+        self.secrets.setVisible(bool(secret_words))
+        layout.addWidget(self.secrets)
         self.show_button = QPushButton("Show me the plot (spoilers)")
         self.show_button.clicked.connect(self.reveal)
         layout.addWidget(self.show_button, 0, Qt.AlignLeft)

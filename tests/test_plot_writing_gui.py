@@ -16,7 +16,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication, QDialog, QMessageBox  # noqa: E402
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox  # noqa: E402
 
 from sealedlore.engine.plot_draft import PlotWishes  # noqa: E402
 from sealedlore.gui.generate_dialog import GenerateDialog  # noqa: E402
@@ -107,12 +107,17 @@ def ready(monkeypatch, *, choice: str = CONTINUE, reveal: bool = False) -> list[
                 "go_on": dialog.go_on_button.text(),
                 "keep_off_shown": not dialog.keep_off.isHidden(),
                 "keep_off": dialog.keep_off.isChecked(),
+                "secrets": "" if dialog.secrets.isHidden() else dialog.secrets.text(),
             }
         )
         if reveal:
             dialog.reveal()
             seen[-1]["plot"] = dialog.view.toPlainText()
             seen[-1]["notes"] = dialog.notes.text()
+            seen[-1]["everything"] = "\n".join(
+                [label.text() for label in dialog.findChildren(QLabel)]
+                + [dialog.view.toPlainText(), dialog.view.toHtml()]
+            )
         dialog.choice = choice
         return QDialog.Accepted
 
@@ -137,7 +142,15 @@ def test_the_story_menu_writes_a_plot_and_keeps_it_a_surprise(app, window, monke
     seen = ready(monkeypatch)
     window.write_plot_action.trigger()
     wait_until(app, lambda: seen)
-    assert seen == [{"hidden": True, "go_on": "Close", "keep_off_shown": False, "keep_off": False}]
+    assert seen == [
+        {
+            "hidden": True,
+            "go_on": "Close",
+            "keep_off_shown": False,
+            "keep_off": False,
+            "secrets": "",
+        }
+    ]
     session = window.session
     assert session.story.plot is not None
     vask = next(c for c in session.cast if c.name == "Teodor Vask")
@@ -165,8 +178,32 @@ def test_shown_the_plot_and_its_notes_once_asked(app, window, monkeypatch):
     assert shown["keep_off_shown"] and shown["keep_off"] is True
     assert "The captain comes" in shown["plot"] and "Teodor Vask" in shown["plot"]
     assert "Odd" in shown["notes"] and "tide" in shown["notes"]
+    assert shown["secrets"] == "", "it wrote no notes for the storyteller"
     # Looked at: spoilers stay as they were.
     assert window.config.show_plot_spoilers
+
+
+def test_notes_the_plot_wrote_are_said_to_be_there_and_never_shown(app, window, monkeypatch):
+    """Show me the plot shows the plot: the truth it wrote for the
+    storyteller stays unread until Setup is asked for it."""
+    secret = "The well under Calder Keep is poisoned, crate ZQX-SECRET and all."
+    noted = PLOT.replace("# Facts", f"# Storyteller's notes\n\n{secret}\n\n# Facts")
+    model(window, monkeypatch, noted)
+    monkeypatch.setattr(PlotDialog, "exec", lambda dialog: QDialog.Accepted)
+    seen = ready(monkeypatch, reveal=True)
+    window.write_plot_action.trigger()
+    wait_until(app, lambda: seen)
+    shown = seen[0]
+    story = window.session.story
+    assert story.storyteller_notes == secret and story.storyteller_notes_by == "model"
+    assert shown["secrets"] == (
+        "The plot also wrote notes for the storyteller (11 words): the truth its events rest "
+        "on. They are kept from you so the story can surprise you; Story → Setup → "
+        "Storyteller's notes shows or clears them."
+    )
+    assert "The captain comes" in shown["plot"]
+    assert "ZQX-SECRET" not in shown["everything"] and "poisoned" not in shown["everything"]
+    assert "Storyteller's notes\n" not in shown["plot"], "not a section of what is shown"
 
 
 def test_keeping_it_a_surprise_turns_the_plot_page_s_spoilers_off(app, window, monkeypatch):

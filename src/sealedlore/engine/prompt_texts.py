@@ -4406,7 +4406,9 @@ _text(
 
 # The example in the plot writer's prompt: a line of the reply each, never
 # wrapped (a fact's line can't continue, and a model copies whatever the
-# example does). tests/test_plot_draft.py checks it imports cleanly.
+# example does). tests/test_plot_draft.py checks it imports cleanly. Its
+# storyteller's notes are two sentences about what the story already has (its
+# market, its watch), and name nobody and nowhere the plot keeps hidden.
 PLOT_EXAMPLE = "\n".join(
     [
         "# Characters",
@@ -4431,6 +4433,12 @@ PLOT_EXAMPLE = "\n".join(
         "",
         "A half-flooded chapel in a sea cave below the cliffs, reached only at low",
         "tide. Crates are stacked on its old altar.",
+        "",
+        "# Storyteller's notes",
+        "",
+        "The crates that pass through the Salt Market by night hold muskets for a rising",
+        "inland, not brandy, and the stallholders are paid to see nothing. The harbour",
+        "watch's own sergeant takes a share, which is why the watch has never found one.",
         "",
         "# Facts",
         "",
@@ -4517,7 +4525,11 @@ PLOT_EXAMPLE = "\n".join(
 # were written by hand). The reply is a plot file's plot, read by the plot
 # editor's reader and judged by the importer, as a file would be. The rules are
 # WRITING_PLOTS.md's, from watching plots play; the example is checked to
-# import cleanly (tests/test_plot_draft.py). Not measured yet.
+# import cleanly (tests/test_plot_draft.py). Not measured yet. Since Nov 13
+# 2026 a plot may write storyteller's notes (the truth it rests on, about
+# what the story already has), taken only for a story with none of its own
+# (plot_draft.merge_reply): its rules, under "Storyteller's notes", are not
+# measured either.
 _text(
     "authoring.plot",
     AUTHORING,
@@ -4558,6 +4570,8 @@ the story already has.
   event has happened and the author's character has seen it or heard of it.
 - A watched fact's meaning is all a small reader model has, after each
   passage, to decide whether the fact changed.
+- `# Storyteller's notes` are read by the storyteller alone, with every
+  passage from the first, as true. The author never reads them.
 
 ## The format
 
@@ -4579,6 +4593,9 @@ settings. A way an event can go (a variant) is a `###` heading under it.
   story should find it (an event `reveals:` it); its text is what it is like.
 - `# Lore`: only new background the plot needs, written as a place is; a
   hidden entry is revealed by an event.
+- `# Storyteller's notes`: only when the plot rests on a truth about
+  something the story already has. Plain prose under the heading: no `##`
+  headings, no settings.
 - `# Facts`: one line each, `- name: starting value (value, value) [watch] —
   meaning`. A name is lower-case letters, digits and `_`. A fact that starts
   at yes or no is yes or no and needs no list. `[watch]` only for a fact the
@@ -4718,6 +4735,19 @@ Places and lore:
 - Hide a place the story should find, and reveal it with the event that finds
   it. Lore is for what isn't somewhere to be.
 
+Storyteller's notes:
+- When the plot rests on a truth about something already in the story (what a
+  thing really is, what someone is hiding and why), and the story's own notes
+  don't already say it, write it under `# Storyteller's notes`, as plain
+  facts. The storyteller then plays true to it from the first passage, and
+  the events that bring it out have something to bring out.
+- Never name there a person or a place the plot keeps hidden: the storyteller
+  would have the name before the event that brings them in.
+- The notes don't take the place of hiding. Keep `hidden: yes` for people and
+  places that must not appear before their event, and hidden lore for what an
+  event reveals.
+- A plot that rests on no such truth has no notes: leave the section out.
+
 ## A good plot
 
 - A spine: a few timeline events that build on one another, the later ones
@@ -4790,6 +4820,8 @@ _text(
 # said a packet of papers lay under the floor; the plot's hidden lore, written
 # without them, would have said whatever it invented). Its reply is kept from
 # the author as the notes are. Not measured beyond that it holds to them.
+# A story's notes always stand: notes the reply writes beside them are left
+# out (plot_draft.merge_reply), hence its last sentence. Not measured.
 _text(
     "authoring.plot.notes",
     AUTHORING,
@@ -4798,7 +4830,8 @@ _text(
     "What the storyteller alone knows of this story (the author has not been told):\n\n"
     "{notes}\n\n"
     "The plot is true to this. Build on it, never contradict it, and don't write any of it "
-    "again as lore of your own: what is hidden there is already kept.",
+    "again as lore of your own: what is hidden there is already kept. These notes stand as "
+    "they are, so write no `# Storyteller's notes` section of your own.",
     (("notes", "the storyteller's notes"),),
 )
 

@@ -31,7 +31,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.followup import PLOT, STORY, FollowUpTurn
-from sealedlore.gui.plot_dialog import preview_html
+from sealedlore.gui.plot_dialog import PLOT_SECRETS_WRITTEN, preview_html, secrets_written
 from sealedlore.gui.sizing import GrowingText, may_discard, size_to_screen
 
 STORY_EXAMPLE = (
@@ -62,7 +62,8 @@ class FollowUpDialog(QDialog):
     it, and what the window does next (Setup, Start, or nothing). `notes`:
     what a draft left out, shown first. `preview`: the story or the plot as
     it is now, as Markdown. `secret_words`: how long the storyteller's notes
-    a draft wrote are, to say that there are some."""
+    a draft wrote are (or, for a plot, the notes its writer wrote), to say
+    that there are some."""
 
     send_requested = Signal(str)
     undo_requested = Signal()
@@ -127,8 +128,8 @@ class FollowUpDialog(QDialog):
         self.log.setObjectName("followUpLog")
         layout.addWidget(self.log, 1)
         if secret_words:
-            count = f"{secret_words:,} word{'' if secret_words == 1 else 's'}"
-            self._add(f"<i>{html.escape(SECRETS_WRITTEN.format(words=count))}</i>")
+            said = secrets_written(PLOT_SECRETS_WRITTEN if plot else SECRETS_WRITTEN, secret_words)
+            self._add(f"<i>{html.escape(said)}</i>")
         if notes:
             self._add(
                 "<i>Left out of the draft:</i><br>"

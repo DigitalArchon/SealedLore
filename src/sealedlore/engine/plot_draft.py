@@ -16,6 +16,12 @@ already answers to, and a secret named before its time (engine/plot_lint.py)
 are sent back once to be put right (`plot_problems`); whatever the importer
 still refuses after that is left out, and said (`drop_broken`).
 
+A reply may hold storyteller's notes (`# Storyteller's notes`): the truth its
+events rest on, about what the story already has. They are taken only for a
+story with none of its own, whose notes always stand; and they stay the
+plot's (engine/story_plot.py `notes_from_plot`), so a plot written again at
+the author's request is shown them as its own and may write them again.
+
 Pure: the session makes the calls (engine/session_plot_draft.py).
 """
 
@@ -31,6 +37,7 @@ from sealedlore.engine.plot_file import (
     FACT,
     LORE,
     PLACE,
+    STORYTELLER,
     ReadPlotDocument,
     check_plot_document,
     describe_where,
@@ -132,8 +139,8 @@ class PlotDraft:
 def story_text(document: PlotDocument) -> str:
     """The story as the model is shown it: its own parts, as a plot file,
     with none of the settings a plot needn't know. Its storyteller's notes
-    are told apart from it, under their own words (`authoring.plot.notes`):
-    never twice."""
+    are told apart from it, under their own words (`authoring.plot.notes`),
+    or as the model's own last reply's (`plot_reply_text`): never twice."""
     shown = document.model_copy(
         update={
             "facts": [],
@@ -216,19 +223,21 @@ def build_plot_messages(
     ]
 
 
-def plot_reply_text(document: PlotDocument) -> str:
+def plot_reply_text(document: PlotDocument, *, own_notes: bool = False) -> str:
     """A story's plot as a reply of the plot writer's holds it: the people,
     places and lore it keeps hidden, its places (one of the story's own by
     its title alone), its facts and its events. What a follow-up hands the
-    model as its own last reply."""
+    model as its own last reply. `own_notes`: the story's storyteller's
+    notes are the plot writer's own (`story_plot.notes_from_plot`), so they
+    are part of that reply; any other notes are the story's, and told to it
+    as the story's."""
     shown = document.model_copy(
         update={
             "title": "",
             "description": "",
             "world": "",
             "notes": "",
-            # The story's own, told to the writer as the story's.
-            "storyteller_notes": "",
+            "storyteller_notes": document.storyteller_notes if own_notes else "",
             "background": "",
             "picture_style": "",
             "agency": None,
@@ -331,8 +340,19 @@ def read_reply(text: str) -> ReadPlotDocument:
     return read_plot_document(tidy_reply(text))
 
 
+NOTES_STAND = (
+    "Left out the plot's own notes for the storyteller: the story has notes already, and "
+    "they stand."
+)
+
+
 def merge_reply(
-    story: PlotDocument, reply: PlotDocument, *, newcomers: str = "", revise: bool = False
+    story: PlotDocument,
+    reply: PlotDocument,
+    *,
+    newcomers: str = "",
+    revise: bool = False,
+    notes_own: bool = False,
 ) -> tuple[PlotDocument, list[str]]:
     """The story's own parts with the reply's plot.
 
@@ -349,6 +369,12 @@ def merge_reply(
     people, places and lore the old plot kept hidden are the plot's, so the
     reply's words for them stand (on the same cards), and those it no longer
     has go with the old plot.
+
+    The reply's storyteller's notes are taken only when the story has none
+    of its own: a story's notes always stand (the writer was shown them, and
+    told to be true to them). `notes_own`: the story's notes are the old
+    plot's writer's own, so the revised plot's take their place; a reply
+    that writes none leaves them, since nothing says they stopped being true.
     """
     if newcomers not in ("", *NEWCOMERS):
         # Loud for the yes or no it once was, too.
@@ -358,6 +384,11 @@ def merge_reply(
     merged.facts = [fact.model_copy(deep=True) for fact in reply.facts]
     merged.events = [event.model_copy(deep=True) for event in reply.events]
     notes: list[str] = []
+    if reply.storyteller_notes.strip():
+        if not merged.storyteller_notes.strip() or (revise and notes_own):
+            merged.storyteller_notes = reply.storyteller_notes.strip()
+        elif _norm(reply.storyteller_notes) != _norm(merged.storyteller_notes):
+            notes.append(NOTES_STAND)
     if revise:
         _take_revised(merged, reply)
     names = {
@@ -491,7 +522,9 @@ def nothing_at_first(plot: Plot) -> str:
     return NOTHING_AT_FIRST.format(day=first)
 
 
-def plot_problems(document: PlotDocument, *, opening: bool = False) -> list[str]:
+def plot_problems(
+    document: PlotDocument, *, opening: bool = False, own_notes: bool = False
+) -> list[str]:
     """What stops the plot working as written, in words for the model: the
     importer's errors, a newcomer's name another answers to, and a secret
     named before its time. All at once: live (GLM 5.3), a reply sent back
@@ -499,13 +532,22 @@ def plot_problems(document: PlotDocument, *, opening: bool = False) -> list[str]
     still named early, none of which it had been told of. The importer reads
     past what it refuses, so what it made of the rest is judged too.
     `opening`: the story hasn't begun, so a plot with nothing for its first
-    hours is said too (`nothing_at_first`)."""
+    hours is said too (`nothing_at_first`). `own_notes`: the document's
+    storyteller's notes are the plot writer's own, so the importer's note of
+    a hidden person or place named in them is put to it too (the story's own
+    notes are not its to change)."""
     rendered, problems = check_plot_document(document)
     found = [
         f"{describe_where(document, problem.where)}: {problem.message}"
         for problem in problems
         if problem.error
     ]
+    if own_notes:
+        found += [
+            problem.message
+            for problem in problems
+            if not problem.error and problem.where is not None and problem.where[0] == STORYTELLER
+        ]
     scenario = parse_plot_markdown(rendered.text).scenario
     if scenario.plot is None:
         return [*found, "There is no plot: write its facts and events."]

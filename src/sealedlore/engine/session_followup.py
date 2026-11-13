@@ -43,6 +43,7 @@ from sealedlore.engine.plot_draft import (
 from sealedlore.engine.session_plot import SessionNotice
 from sealedlore.engine.story_plot import (
     document_from_story,
+    notes_from_plot,
     plot_uses,
     take_out_character,
     without_plot,
@@ -153,24 +154,32 @@ class FollowUpRuntime:
             raise ValueError("say what you'd like changed first")
         base = without_plot(document_from_story(self.bundle))
         shown = without_plot(document_from_story(self.bundle, for_model=True))
+        # Notes the plot's own writer gave the story are part of its last
+        # reply, and its to write again; any others are the story's, told to
+        # it as the story's. Never both.
+        own = notes_from_plot(self.story)
+        notes_before = self.story.storyteller_notes
         messages = build_plot_revision_messages(
             story_text(shown),
-            plot_reply_text(document_from_story(self.bundle)),
+            plot_reply_text(document_from_story(self.bundle), own_notes=own),
             plot_request_text(request, self.follow_up_history(PLOT), self.texts),
             plays=self._plot_plays(),
             so_far=self._plot_so_far(),
-            notes=self.story.storyteller_notes or "",
+            notes="" if own else self.story.storyteller_notes or "",
             texts=self.texts,
         )
         turn = FollowUpTurn(target=PLOT, request=request.strip())
         undo = self._kept_for_undo(turn)
         draft = yield from self._write_plot(
-            messages, base, revise=True, details={"request": request}
+            messages, base, revise=True, notes_own=own, details={"request": request}
         )
         if not self.nodes:
             self._drop_plot_orphans()
             draft.document = document_from_story(self.bundle)
         turn.changed = [f"The plot: {len(draft.document.events)} events"]
+        if self.story.storyteller_notes != notes_before:
+            # That they changed, never what they say.
+            turn.changed.append(NOTES_REWRITTEN)
         turn.refused = list(draft.notes)
         self.follow_up_history(PLOT).append(turn)
         self._changed_by_follow_up(undo)
@@ -213,6 +222,9 @@ class FollowUpRuntime:
         else:
             live.plot = kept.plot
             live.plot_schedule = kept.plot_schedule
+            # A plot written again may have written its own notes again.
+            live.storyteller_notes = kept.storyteller_notes
+            live.storyteller_notes_by = kept.storyteller_notes_by
             for node in self.nodes:
                 if node.id == undo.leaf_id:
                     node.meta.chronicle = undo.leaf_chronicle
