@@ -4802,6 +4802,13 @@ class MainWindow(
             return NOT_A_TAKE
         open_scene = self._open_scene()
         if may_retake(turn.meta.private_span, open_scene):
+            if open_scene is not None and self.session.private_provider is None:
+                # The scene was kept on disk and reopened with no private
+                # model set: nothing can write a take of it.
+                return self._say(
+                    "The private scene has no model to send to (Settings → Private): "
+                    "end the scene to go on."
+                )
             return None
         if open_scene is not None:
             return self._say("Leave the private scene to retake a passage from before it.")

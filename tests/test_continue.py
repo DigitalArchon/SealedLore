@@ -445,3 +445,27 @@ def test_a_scene_reopened_with_no_private_model_is_never_carried_on(tmp_path: Pa
     with pytest.raises(ValueError, match="no model to send to"):
         list(reopened.continue_passage())
     assert len(main.requests) == sent
+
+
+def test_a_scene_reopened_with_no_private_model_is_never_retaken_either(tmp_path: Path):
+    """Regenerate there failed as "Generation failed": it is refused in the
+    same words as a turn or Continue, and nothing reaches the story's model."""
+    session, main, held = build_private(tmp_path)
+    enter_private(session, keep="disk")
+    for _event in session.send(
+        TurnRequest(speaker_id=held, user_text="I whisper to her.", controlled_character_id=held)
+    ):
+        pass
+    session.save()
+    reopened = StorySession(
+        load_story_bundle(session.story.id, root=tmp_path),
+        session.config,
+        main,
+        root=tmp_path,
+        estimator=TokenEstimator(counter=fallback_counter),
+        learn_corrections=False,
+    )
+    sent = len(main.requests)
+    with pytest.raises(ValueError, match="no model to send to"):
+        list(reopened.regenerate())
+    assert len(main.requests) == sent

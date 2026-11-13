@@ -282,3 +282,18 @@ def test_a_refused_summary_is_not_a_chapter(session: StorySession):  # noqa: F81
     ledger = "\n".join(f"## {h}\n- a line" for h in ("Bonds", "Who knows what"))
     refused = why_not_whole(StreamCompleted(**REFUSED))
     assert "declined" in check_ledger(ledger, None, finish_reason="refusal", unfit=refused)
+
+
+def test_a_refused_take_of_an_older_passage_is_noted_under_its_own_turn(
+    session: StorySession,  # noqa: F811
+):
+    """Regenerate on an older passage, declined before any text: the note
+    went under the story's last message, three exchanges on."""
+    for _ in range(3):
+        list(session.send(turn()))
+    path = session.path()
+    first_turn, first_passage, last = path[0], path[1], path[-1]
+    session.provider = Ending([""], REFUSED)
+    list(session.regenerate(first_passage.id))
+    assert any(note.startswith(DECLINED) for note in first_turn.meta.notes)
+    assert not any(note.startswith(DECLINED) for note in last.meta.notes)

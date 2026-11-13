@@ -2026,6 +2026,10 @@ class StorySession(
             raise ValueError("that private scene has ended; its messages can't be retaken")
         if span_id is None and self.in_private:
             raise ValueError("leave the private scene before retaking a passage from outside it")
+        if span_id is not None and self.private_provider is None:
+            # A scene kept on disk, the app reopened in it with no private
+            # model: said in words (it failed as "Generation failed").
+            raise ValueError(PRIVATE_NO_MODEL)
         # Outside a private scene, the story's own messages only.
         history = self.model_nodes(history, include_span=span_id)
 
@@ -2502,11 +2506,15 @@ class StorySession(
         elif completed is not None and completed.finish_reason == "length":
             # Under the passage too: it looks whole once the notice is gone.
             yield self._kept_notice(
-                cut_off_notice(request.params.max_tokens, completed), node=written
+                cut_off_notice(request.params.max_tokens, completed), node=written or parent
             )
         elif completed is not None and declined(completed):
-            # Under the passage, or the author's turn when nothing came.
-            yield self._kept_notice(declined_notice(completed, chat=self.story.chat), node=written)
+            # Under the passage, or the author's turn when nothing came: the
+            # turn this was written for, wherever the story's last message is
+            # (a take of an older passage noted itself under the newest one).
+            yield self._kept_notice(
+                declined_notice(completed, chat=self.story.chat), node=written or parent
+            )
         elif completed is not None and completed.unterminated and written is not None:
             # Kept, as a passage stopped partway is, but never passed off
             # as whole: the text is all that came, and may be only a start.
