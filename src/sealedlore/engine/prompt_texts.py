@@ -4077,7 +4077,9 @@ SealedLore's settings, and what each is for:
   read it; the storyteller holds to it and gives it up as the author's
   character finds it out. The truth behind anything the setup leaves open
   (what is really there, who did it, what someone is hiding and why) and, for
-  the few central people, what each wants and what each hides. Plain facts,
+  the few central people, what each wants and what each hides. Nothing about
+  the author's own character beyond what the premise says: their past, what
+  they carry and what they think are the author's to decide. Plain facts,
   60 to 250 words. null when the story has no secrets.
 - "style": how passages should read. Set only what the premise implies and
   leave the rest null.
@@ -4529,7 +4531,9 @@ PLOT_EXAMPLE = "\n".join(
 # 2026 a plot may write storyteller's notes (the truth it rests on, about
 # what the story already has), taken only for a story with none of its own
 # (plot_draft.merge_reply): its rules, under "Storyteller's notes", are not
-# measured either.
+# measured either. Tried live once (Sonnet 4.6): three paragraphs of truths the
+# events rested on, nobody hidden named, and one of them decided what the
+# author's own character kept in a locked box, hence the rule against that.
 _text(
     "authoring.plot",
     AUTHORING,
@@ -4743,6 +4747,8 @@ Storyteller's notes:
   the events that bring it out have something to bring out.
 - Never name there a person or a place the plot keeps hidden: the storyteller
   would have the name before the event that brings them in.
+- Decide nothing there about the character the author plays: their past, what
+  they carry or keep locked away and what they think are the author's to say.
 - The notes don't take the place of hiding. Keep `hidden: yes` for people and
   places that must not appear before their event, and hidden lore for what an
   event reveals.
