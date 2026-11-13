@@ -22,6 +22,7 @@
     version: -1,
     writing: null, // { card, text } while a passage streams
     continuing: null, // { id, words, text, label, labelText } while a passage is carried on
+    revising: null, // { id, words, text, label, labelText } while a passage is written again with a change
     noting: null, // { id, mode, form, field, go } while a few words are written under a passage
     faceUrls: new Map(), // a character's picture, fetched once: id -> object URL
     stageEl: null, // the stage, kept across the composer's rebuilds
@@ -288,6 +289,7 @@
     if (branches.ok) S.branches = branches.data.branches || [];
     S.writing = null;
     S.continuing = null;
+    S.revising = null;
   }
 
   async function loadEarlier() {
@@ -460,6 +462,16 @@
       Object.assign(going, { text, base: message.text, label: labelNode, labelText: label });
       showContinuing();
     }
+    const again = S.revising;
+    if (again && again.id === message.id) {
+      // Written again with a change: what comes takes this passage's place,
+      // and until the first of it comes the passage shows as it was.
+      card.classList.add("writing");
+      const labelText = label + " · being written again";
+      Object.assign(again, { text, base: message.text, label: labelNode, labelText });
+      labelNode.textContent = labelText;
+      showRevising();
+    }
     if (message.ooc) card.appendChild(el("div", { cls: "ooc", text: "Out of character: " + message.ooc }));
     // A picture or a Question has its own tag: one made in a private scene
     // before its first message hangs on a public passage, and is held back
@@ -499,6 +511,12 @@
       actions.appendChild(button("Regenerate with a note…", () => openNote(message.id, "retake")));
     }
     if (message.can_continue) actions.appendChild(button("Continue", () => continuePassage(message.id)));
+    if (message.can_revise) {
+      const chat = S.composer && S.composer.chat;
+      actions.appendChild(
+        button(chat ? "Change this reply…" : "Change this passage…", () => openNote(message.id, "change"))
+      );
+    }
     if (message.can_reroll) actions.appendChild(button("Roll again", () => reroll(message.id)));
     if (actions.children.length) card.appendChild(actions);
     const noting = S.noting;
@@ -524,6 +542,7 @@
     }
     const lastPassage = [...S.messages].reverse().find((m) => m.kind === "assistant");
     if (S.continuing) S.continuing.text = null; // found again below, unless it is hidden
+    if (S.revising) S.revising.text = null;
     const noting = S.noting;
     const typing = noting !== null && document.activeElement === noting.field;
     if (noting) noting.placed = false;
@@ -689,6 +708,20 @@
     c.text.textContent = c.base + c.words;
   }
 
+  // Change this passage…: the passage is written again where it stands, not
+  // in a new card. When the job settles the list is loaded again, and shows
+  // the new take in its place (or the passage as it was, if none came).
+  function startRevising(id) {
+    S.revising = { id, words: "", text: null, label: null, labelText: "" };
+    renderMessages();
+  }
+
+  function showRevising() {
+    const r = S.revising;
+    if (!r || !r.text) return;
+    r.text.textContent = r.words || r.base;
+  }
+
   // --- a few words for one passage ----------------------------------------------------------
 
   // The form that opens under a passage. `flag` is the entry's own word on
@@ -705,6 +738,20 @@
       ],
       go: "Regenerate",
       blank: true,
+    },
+    change: {
+      flag: "can_revise",
+      asks: "What should change?",
+      hint: [
+        "The storyteller writes this passage again with your change made, keeping the rest in " +
+          "the same words wherever it can. The result is a new take in this one's place; this " +
+          "one is kept (‹ ›).",
+        "The model writes this reply again with your change made, keeping the rest in the same " +
+          "words wherever it can. The result is a new take in this one's place; this one is " +
+          "kept (‹ ›).",
+      ],
+      go: "Change",
+      blank: false,
     },
   };
 
@@ -775,9 +822,13 @@
     syncNote();
     let answer;
     try {
-      const body = retakeBody(n.id);
-      if (words) body.note = words;
-      answer = await call("POST", "/api/regenerate", body);
+      if (n.mode === "change") {
+        answer = await call("POST", "/api/revise", { node_id: n.id, change: words });
+      } else {
+        const body = retakeBody(n.id);
+        if (words) body.note = words;
+        answer = await call("POST", "/api/regenerate", body);
+      }
     } catch (e) {
       if (!S.ended) toast("The desktop couldn't be reached. What you wrote is still here.", true);
       return;
@@ -1131,11 +1182,13 @@
         break;
       case "job_started":
         if (data.continues) startContinuing(data.continues);
+        else if (data.revises) startRevising(data.revises);
         else if (data.streaming) writingCard(data.question ? "Answer" : S.composer && S.composer.chat ? "Assistant" : "Story");
         break;
       case "thinking":
         if (S.writing && !S.writing.words) S.writing.label.textContent = "Thinking…";
         else if (S.continuing && !S.continuing.words && S.continuing.label) S.continuing.label.textContent = "Thinking…";
+        else if (S.revising && !S.revising.words && S.revising.label) S.revising.label.textContent = "Thinking…";
         break;
       case "text":
         if (S.continuing) {
@@ -1143,6 +1196,12 @@
           if (S.continuing.label) S.continuing.label.textContent = S.continuing.labelText;
           showContinuing();
           if (nearBottom()) scrollToEnd();
+          break;
+        }
+        if (S.revising) {
+          S.revising.words += data.text;
+          if (S.revising.label) S.revising.label.textContent = S.revising.labelText;
+          showRevising();
           break;
         }
         if (!S.writing) writingCard("Story");

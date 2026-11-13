@@ -2968,7 +2968,12 @@ it was rolled) and **Continue**, which writes more of it onto its end (the
 length under the box says how much). **Regenerate with a note…**, beside
 Regenerate, opens a box under the passage for a few words on what the new take
 should do differently, as ⋯ → Regenerate with a note… does on the desktop;
-left blank, it is a plain Regenerate. With the desktop's View → Characters above the box you type
+left blank, it is a plain Regenerate. **Change this passage…** (in a chat,
+**Change this reply…**), under any passage the desktop offers it on, opens the
+same kind of box for what should change; the passage is then written again
+where it stands, and the result is a new take in its place, with the one you
+had a ‹ away. A change that is stopped, or comes back empty, leaves the
+passage as it was, and the phone says so. With the desktop's View → Characters above the box you type
 in, the phone shows who is in the scene at the top of its box, and with
 Characters on each passage, small pictures over each passage (in a private
 scene, only once you choose to see it). The ☰ menu lists the

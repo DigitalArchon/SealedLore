@@ -141,6 +141,36 @@ def test_a_note_for_a_take_is_asked_under_the_passage_in_the_desktops_words():
     assert "noting.form" in card and ".value" not in card
 
 
+def test_a_change_is_asked_under_its_passage_and_written_in_its_place():
+    """Change this passage… (a chat: Change this reply…) wherever the entry
+    says the desktop offers it; the change goes with the passage's id; and the
+    job that writes it is shown in that passage's own card, never a new one."""
+    pytest.importorskip("PySide6")  # the desktop's words are the window's
+    from sealedlore.gui.note_dialog import CHANGE_ASKS, CHANGE_BUTTON
+    from sealedlore.gui.transcript import CHANGE_LABELS
+
+    script = text("app.js")
+    card = function(script, "messageCard")
+    offered = card[card.index("if (message.can_revise)") :]
+    assert all(f'"{label}"' in offered for label in CHANGE_LABELS.values())
+    assert 'openNote(message.id, "change")' in offered
+    assert card.index("if (hidden(kind))") < card.index("if (message.can_revise)")
+    assert f'asks: "{CHANGE_ASKS}"' in script and f'go: "{CHANGE_BUTTON}"' in script
+    assert 'call("POST", "/api/revise", { node_id: n.id, change: words })' in function(
+        script, "sendNote"
+    )
+    # A job that says which passage it writes again never opens a new card.
+    events = function(script, "onEvent")
+    started = events[events.index('case "job_started"') : events.index('case "thinking"')]
+    assert started.index("startRevising(data.revises)") < started.index("writingCard(")
+    words = events[events.index('case "text"') : events.index('case "notice"')]
+    assert words.index("if (S.revising)") < words.index("writingCard(")
+    # Until the first of the new words come the passage shows as it was, and
+    # the list loaded again when the job settles lets go of it.
+    assert "r.words || r.base" in function(script, "showRevising")
+    assert "S.revising = null" in function(script, "loadLatest")
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="node isn't installed")
 def test_the_script_parses():
     result = subprocess.run(

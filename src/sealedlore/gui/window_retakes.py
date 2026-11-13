@@ -38,6 +38,12 @@ from sealedlore.gui.note_dialog import (
 from sealedlore.gui.suggest_menu import SuggestMenu
 from sealedlore.tree import path_to
 
+# A change stopped before its reply was whole, in a story's words and a
+# chat's (False, True): said on the desktop and to the phones.
+CHANGE_STOPPED = {
+    False: "Stopped before the change was written: the passage is as it was.",
+    True: "Stopped before the change was written: the reply is as it was.",
+}
 SUGGESTING = {
     False: "Asking the storyteller what your character might do next…",
     True: "Asking the model what you might write next…",
@@ -126,16 +132,34 @@ class RetakesWindow:
             return
         if not session.can_revise(node_id):
             return
-        path = session.full_path()
-        latest = bool(path) and path[-1].id == node_id
-        before = path_to(session.nodes, node_id)[:-1]
         # An older passage's new take streams in under its turn, so the
         # story is shown as it stood there: an edit open on a later message
         # is asked about first.
-        if not latest and not self._edit_allows_leave(keeping={node.id for node in before}):
+        before = self._before_older(node_id)
+        if before is not None and not self._edit_allows_leave(keeping={node.id for node in before}):
             return
+        self._start_change(node_id, change)
+
+    def _before_older(self, node_id: str) -> list | None:
+        """The story before a passage that it went on from, which is what
+        shows while a new take of that passage is written; None for the
+        latest passage, whose take is written where the story ends."""
+        session = self.session
+        path = session.full_path()
+        if path and path[-1].id == node_id:
+            return None
+        return path_to(session.nodes, node_id)[:-1]
+
+    def _start_change(self, node_id: str, change: str) -> None:
+        """The change asked for, started. The caller has checked that it may
+        be: the dialog above, or a phone (gui/window_phone.py), whose words
+        came with its request and which is refused where the desktop would
+        ask."""
+        session = self.session
+        chat = self.in_chat
         session.provider = self._current_provider()
-        if not latest:
+        before = self._before_older(node_id)
+        if before is not None:
             self._show_nodes(before)
             self._focus_after_job = before[-1].id if before else None
 
@@ -145,15 +169,16 @@ class RetakesWindow:
                 return
             if result.stopped_early:
                 # A change stopped partway is no passage: nothing is kept.
-                self.statusBar().showMessage(
-                    "Stopped before the change was written: the "
-                    f"{'reply' if chat else 'passage'} is as it was.",
-                    8000,
-                )
+                # The phones showed the passage being written again, so they
+                # are told too.
+                self.statusBar().showMessage(CHANGE_STOPPED[chat], 8000)
+                self._phone_notice(CHANGE_STOPPED[chat])
 
         self._after_job = after
         self.statusBar().showMessage("Writing the change as a new take", 6000)
-        self._start(lambda: session.revise_passage(node_id, change), job="The change")
+        self._start(
+            lambda: session.revise_passage(node_id, change), job="The change", revising=node_id
+        )
 
     # --- Suggest… ----------------------------------------------------------------
 

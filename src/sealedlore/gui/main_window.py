@@ -3820,6 +3820,7 @@ class MainWindow(
         job: str | None = None,
         sent: _Sent | None = None,
         continuing: str | None = None,
+        revising: str | None = None,
         progress: bool = False,
     ) -> None:
         """Run a job on the worker thread.
@@ -3829,9 +3830,10 @@ class MainWindow(
         looked as if they had failed, so a progress dialog says what's running
         and offers Stop. `job` names it in a failure ("Review failed"); `sent`
         is the turn or Question it answers; `continuing` the passage the job
-        writes more of, which streams onto its end. `progress`: the job's
-        notices say how far it has got, in its progress dialog (a plot being
-        written).
+        writes more of, which streams onto its end; `revising` the passage it
+        writes again with a change, which a phone shows written in that
+        passage's place. `progress`: the job's notices say how far it has
+        got, in its progress dialog (a plot being written).
         """
         self._job_name = job or ("Question" if question is not None else "Generation")
         self._progress_in_dialog = progress
@@ -3864,7 +3866,11 @@ class MainWindow(
         worker.passage_done.connect(self._on_passage_done)
         worker.failed.connect(self._on_failed)
         self._phone_job_started(
-            worker, streaming=streaming, question=question, continuing=continuing
+            worker,
+            streaming=streaming,
+            question=question,
+            continuing=continuing,
+            revising=revising,
         )
         worker.finished.connect(thread.quit)
         # Cleanup hangs off the thread rather than the worker: the worker must

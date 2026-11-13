@@ -32,6 +32,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 
 from sealedlore import __version__
 from sealedlore.engine.dice import chip_text
+from sealedlore.engine.revision import revisable
 from sealedlore.gui import image_codec
 from sealedlore.gui.composer import GENERAL_SKILL, QUESTION, STORY_DEFAULT
 from sealedlore.gui.ref_images import image_of
@@ -71,6 +72,7 @@ LEAVING_ASKS = "Leaving this story needs an answer on the desktop."
 NOT_IN_PRIVATE = "That waits until the private scene ends."
 EDIT_OPEN = "An edit is open on the desktop. Save or cancel it there first."
 NOT_STARTED = "The desktop couldn't start that now."
+NOT_IN_STORY = "That passage isn't in the story as it stands."
 NO_TOR = (
     "Phone access needs tor, and none was found. The AppImage brings its own; running "
     "from source, install tor (for example: sudo apt install tor). Only the program is "
@@ -428,16 +430,32 @@ class PhoneWindow:
         service.rebuild()
 
     def _phone_job_started(
-        self, worker: GenerationWorker, *, streaming: bool, question, continuing: str | None = None
+        self,
+        worker: GenerationWorker,
+        *,
+        streaming: bool,
+        question,
+        continuing: str | None = None,
+        revising: str | None = None,
     ) -> None:
         if self._phone is not None:
             self._phone.job_started(
-                worker, streaming=streaming, question=question is not None, continues=continuing
+                worker,
+                streaming=streaming,
+                question=question is not None,
+                continues=continuing,
+                revises=revising,
             )
 
     def _phone_job_finished(self) -> None:
         if self._phone is not None:
             self._phone.job_finished()
+
+    def _phone_notice(self, text: str) -> None:
+        """A word of the window's own for the phones, as a job's notices are
+        passed on: never anything of the story's text."""
+        if self._phone is not None:
+            self._phone.publish("notice", {"text": text})
 
     def _phone_turn_sent(self, label: str, text: str, kind: str, origin: str) -> None:
         if self._phone is not None:
@@ -566,9 +584,12 @@ class _PhoneService(QObject):
         streaming: bool,
         question: bool,
         continues: str | None = None,
+        revises: str | None = None,
     ) -> None:
         """`continues`: the passage the job writes more of, which the page
-        streams onto the end of that message rather than into a new one."""
+        streams onto the end of that message rather than into a new one.
+        `revises`: the passage it writes again with a change, which the page
+        shows written in that message's place."""
         self._text.clear()
         worker.text_delta.connect(self.on_text)
         worker.reasoning_delta.connect(self.on_reasoning)
@@ -577,7 +598,13 @@ class _PhoneService(QObject):
         worker.passage_done.connect(self.on_passage_done)
         worker.failed.connect(self.on_failed)
         self.publish(
-            "job_started", {"streaming": streaming, "question": question, "continues": continues}
+            "job_started",
+            {
+                "streaming": streaming,
+                "question": question,
+                "continues": continues,
+                "revises": revises,
+            },
         )
         self.publish_state()
 
@@ -634,6 +661,21 @@ def _entries(window) -> tuple[list[dict], dict[str, str]]:
     archived = session.split().archived_ids
     take_of = session.take_positions()
     carries_on = session.can_continue()
+    # Change this passage…, as `StorySession.can_revise` decides it, worked
+    # out along the path: asked of the session once per passage, a long
+    # story's list took a walk of the whole tree for each.
+    open_scene = session.open_span.id if session.open_span is not None else None
+    can_write = not (session.in_private and session.private_provider is None)
+
+    def changeable(index: int) -> bool:
+        return (
+            can_write
+            and index > 0
+            and revisable(path[index - 1 : index + 1])
+            and path[index].meta.private_span == open_scene
+            and path[index - 1].meta.private_span == open_scene
+        )
+
     # Who was there on each passage, as they looked (View → Characters on each
     # passage), when the desktop shows them.
     faces = window._faces_along(path) or {}
@@ -693,6 +735,7 @@ def _entries(window) -> tuple[list[dict], dict[str, str]]:
                 "can_regenerate": assistant,
                 "can_reroll": assistant and index == len(path) - 1 and node.meta.roll is not None,
                 "can_continue": carries_on and index == len(path) - 1,
+                "can_revise": changeable(index),
                 "faces": [
                     {"name": character.name, "picture": ref.id}
                     for character, ref in faces.get(node.id, [])
@@ -872,7 +915,7 @@ class _Backend:
     def _assistant_on_path(self, node_id: str | None) -> str:
         ids = [e["id"] for e in self.service.entries if e["kind"] == "assistant"]
         if not ids or (node_id is not None and node_id not in ids):
-            raise Refused(409, "That passage isn't in the story as it stands.")
+            raise Refused(409, NOT_IN_STORY)
         return node_id or ids[-1]
 
     def _retake_refused(self, path: Sequence[Node]) -> None:
@@ -922,6 +965,25 @@ class _Backend:
         if entry is None or not entry["can_continue"]:
             raise Refused(409, "Only the latest passage can be continued.")
         self.window.continue_passage(self._shape(retake))
+        self._started()
+
+    def revise(self, node_id: str, change: str) -> None:
+        """Change this passage…, with the words the phone sent: refused
+        wherever the desktop wouldn't offer it or would have to ask, started
+        through the window's own seam otherwise. The change is the passage's
+        take's alone (a private scene's when the passage is) and is kept
+        nowhere here."""
+        window = self.window
+        window._phone_refusal()
+        self._assistant_on_path(node_id)
+        if not window.session.can_revise(node_id):
+            raise Refused(409, window._change_refusal(node_id))
+        before = window._before_older(node_id)
+        if before is not None:
+            # An older passage's take shows the story as it stood before it
+            # while it is written: an edit open after it would be asked about.
+            window._phone_edit_refusal({node.id for node in before})
+        window._start_change(node_id, change)
         self._started()
 
     def switch_take(self, node_id: str, step: int) -> None:

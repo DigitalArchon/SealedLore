@@ -453,7 +453,9 @@ def test_a_passage_carried_on_from_the_phone(app, tmp_path, sockets, story, cast
     assert status == 202
     events.wait_for("changed")
     started = [data for name, data in events.events() if name == "job_started"]
-    assert started == [{"streaming": True, "question": False, "continues": passage.id}]
+    assert started == [
+        {"streaming": True, "question": False, "continues": passage.id, "revises": None}
+    ]
     texts = "".join(data["text"] for name, data in events.events() if name == "text")
     assert texts == "\n\nBeyond it, stairs go down."
 

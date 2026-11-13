@@ -32,7 +32,7 @@ from sealedlore.phone.pairing import Claim, Pairing, PairingRefused, device_for
 from sealedlore.phone.sse import EventHub
 
 TEXT_LIMIT = 20_000
-# A note for a take is a few words, not a turn.
+# A note for a take, or a change asked of a passage, is a few words, not a turn.
 NOTE_LIMIT = 2_000
 TRANSCRIPT_PAGE = 40
 TRANSCRIPT_MOST = 200
@@ -117,6 +117,8 @@ class Backend(Protocol):
 
     def continue_passage(self, retake: Retake) -> None: ...
 
+    def revise(self, node_id: str, change: str) -> None: ...
+
     def switch_take(self, node_id: str, step: int) -> None: ...
 
     def switch_branch(self, start_id: str) -> None: ...
@@ -174,6 +176,7 @@ class Api:
             _Route("POST", re.compile(r"/api/regenerate"), self._regenerate, story=True),
             _Route("POST", re.compile(r"/api/reroll"), self._reroll, story=True),
             _Route("POST", re.compile(r"/api/continue"), self._continue, story=True),
+            _Route("POST", re.compile(r"/api/revise"), self._revise, story=True),
             _Route("POST", re.compile(r"/api/take"), self._take, story=True),
             _Route("GET", re.compile(r"/api/branches"), self._branches, story=True),
             _Route("POST", re.compile(r"/api/branch"), self._branch, story=True),
@@ -427,6 +430,18 @@ class Api:
         self.backend.continue_passage(retake)
         return json_response(202, {"started": True})
 
+    def _revise(self, request: Request, *, device: str) -> Response:
+        """A passage written again with a change (Change this passage…):
+        which one, always, since a phone behind the story can't change one
+        it hasn't seen, and what should change."""
+        body = _object(request)
+        node_id = _node_id(body) or ""
+        change = _words(body, "change")
+        if change is None:
+            raise HttpError(400, "Say what should change.")
+        self.backend.revise(node_id, change)
+        return json_response(202, {"started": True})
+
     def _take(self, request: Request, *, device: str) -> Response:
         body = _object(request)
         step = body.get("step")
@@ -482,8 +497,9 @@ def _node_id(body: dict, *, required: bool = True) -> str | None:
 
 
 def _words(body: dict, field: str) -> str | None:
-    """A few words of the author's for one passage, as written but for the
-    space around them; None when there are none."""
+    """A few words of the author's for one passage (a take's note, a change
+    asked of it), as written but for the space around them; None when there
+    are none."""
     value = body.get(field)
     if value is None:
         return None

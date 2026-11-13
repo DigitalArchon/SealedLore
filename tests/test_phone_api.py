@@ -112,6 +112,9 @@ class FakeBackend:
     def continue_passage(self, retake):
         self._act("continue", retake)
 
+    def revise(self, node_id, change):
+        self._act("revise", node_id, change)
+
     def switch_take(self, node_id, step):
         self._act("take", node_id, step)
 
@@ -188,6 +191,7 @@ AUTH_ROUTES = [
     ("POST", "/api/regenerate", {}),
     ("POST", "/api/reroll", {"node_id": "n1"}),
     ("POST", "/api/continue", {"node_id": "n1"}),
+    ("POST", "/api/revise", {"node_id": "n1", "change": "It was raining."}),
     ("POST", "/api/take", {"node_id": "n1", "step": 1}),
     ("GET", "/api/branches", None),
     ("POST", "/api/branch", {"start_id": "n5"}),
@@ -428,6 +432,30 @@ def test_a_note_for_a_take_goes_with_the_passage_it_is_about():
     long = "x" * (phone_api.NOTE_LIMIT + 1)
     assert answer(api, "POST", "/api/regenerate", {"node_id": "n1", "note": long})[0] == 413
     assert len(backend.calls) == sent
+
+
+def test_a_change_names_its_passage_and_says_what_should_change():
+    api, backend = make()
+    body = {"node_id": "n1", "change": "  It was raining.\n"}
+    assert answer(api, "POST", "/api/revise", body) == (202, {"started": True})
+    assert backend.calls[-1] == ("revise", "n1", "It was raining.")
+    sent = len(backend.calls)
+    long = "x" * (phone_api.NOTE_LIMIT + 1)
+    for bad, status in (
+        ({"change": "It was raining."}, 400),  # which passage is always said
+        ({"node_id": "../x", "change": "It was raining."}, 400),
+        ({"node_id": "n1"}, 400),
+        ({"node_id": "n1", "change": "  \n "}, 400),
+        ({"node_id": "n1", "change": ["rain"]}, 400),
+        ({"node_id": "n1", "change": long}, 413),
+    ):
+        assert answer(api, "POST", "/api/revise", bad)[0] == status, bad
+    assert len(backend.calls) == sent
+    backend.refuse = Refused(409, "Leave the private scene to change a passage from before it.")
+    assert answer(api, "POST", "/api/revise", body) == (
+        409,
+        {"error": "Leave the private scene to change a passage from before it."},
+    )
 
 
 def test_transcript_pages_are_bounded():
