@@ -15,6 +15,8 @@ from sealedlore.engine.session import StorySession
 from sealedlore.engine.story_plot import (
     PlotDocumentError,
     document_from_story,
+    notes_from_plot,
+    notes_mark,
     plot_changes,
     safe_prose,
     without_plot,
@@ -416,3 +418,76 @@ def test_a_plot_written_for_a_story_starts_at_the_hour_its_scene_names(
     plain.story.setup.starting_scene.time_of_day = "Dusk"
     plain.nodes.extend(make_exchange(1))
     assert document_from_story(plain).start_time == "00:00"
+
+
+# --- the storyteller's notes -----------------------------------------------------------
+
+
+def test_the_story_s_notes_are_in_its_document_and_stay_without_its_plot(plain: StoryBundle):
+    plain.story.storyteller_notes = "The keep's well is poisoned."
+    plain.story.storyteller_notes_by = "model"
+    document = document_from_story(plain)
+    assert document.storyteller_notes == "The keep's well is poisoned."
+    _plot_for(document)
+    # They are the story's, not the plot's.
+    assert without_plot(document).storyteller_notes == "The keep's well is poisoned."
+    assert "# Storyteller's notes\n\nThe keep's well" in render_plot_markdown(document).text
+    # Unchanged in the document, they are no change to the story.
+    assert plot_changes(document, plain, begun=False).storyteller_notes is None
+    document.storyteller_notes = "The cistern is poisoned."
+    assert plot_changes(document, plain, begun=False).storyteller_notes == (
+        "The cistern is poisoned."
+    )
+    document.storyteller_notes = ""
+    assert plot_changes(document, plain, begun=False).storyteller_notes == ""
+
+
+def test_a_document_s_notes_reach_the_story_as_whoever_wrote_them(
+    plain: StoryBundle, tmp_path: Path
+):
+    """Changed by hand they are the author's, who has read them. From the
+    plot's writer they are a model's, unread in Setup, and the plot keeps
+    their fingerprint (never their words) so it can tell they are its own."""
+    session = _session(plain, tmp_path)
+    story = session.story
+    document = document_from_story(session.bundle)
+    _plot_for(document)
+    session.set_plot_document(document)
+    assert story.storyteller_notes is None and story.plot.notes_given == ""
+    assert not notes_from_plot(story)
+
+    document = document_from_story(session.bundle)
+    document.storyteller_notes = "The keep's well is poisoned."
+    session.set_plot_document(document, notes_by="model")
+    assert story.storyteller_notes == "The keep's well is poisoned."
+    assert story.storyteller_notes_by == "model"
+    assert story.plot.notes_given == notes_mark("The keep's well is poisoned.")
+    assert "poisoned" not in story.plot.model_dump_json()
+    assert notes_from_plot(story)
+    saved = load_story_bundle(story.id, root=tmp_path).story
+    assert notes_from_plot(saved)
+
+    # The same document again changes nothing, and the mark is kept.
+    session.set_plot_document(document_from_story(session.bundle), notes_by="model")
+    assert notes_from_plot(story)
+    # Read or changed by the author, they are the story's from then on.
+    story.storyteller_notes_by = "author"
+    assert not notes_from_plot(story)
+    story.storyteller_notes_by = "model"
+    story.storyteller_notes = "Rewritten by a follow-up on the story."
+    assert not notes_from_plot(story)
+
+    # Changed through a document by hand: the author's, and no longer the plot's.
+    document = document_from_story(session.bundle)
+    document.storyteller_notes = "The cistern is poisoned."
+    session.set_plot_document(document)
+    assert (story.storyteller_notes, story.storyteller_notes_by) == (
+        "The cistern is poisoned.",
+        "author",
+    )
+    assert story.plot.notes_given == "" and not notes_from_plot(story)
+    # Taken away, they are nobody's.
+    document = document_from_story(session.bundle)
+    document.storyteller_notes = ""
+    session.set_plot_document(document, notes_by="model")
+    assert (story.storyteller_notes, story.storyteller_notes_by) == (None, "author")

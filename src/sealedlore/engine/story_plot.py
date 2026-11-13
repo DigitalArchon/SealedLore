@@ -25,6 +25,7 @@ and `set_story_document` apply them to an open story.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -52,6 +53,7 @@ from sealedlore.models.plot_file import (
 )
 from sealedlore.models.scenario import Scenario
 from sealedlore.models.scene import SceneState
+from sealedlore.models.story import NotesBy, Story
 from sealedlore.storage.image_meta import picture_kind
 from sealedlore.storage.images import IMAGES_DIR, REFS_DIR
 from sealedlore.storage.repository import StoryBundle
@@ -92,6 +94,41 @@ def safe_prose(text: str, *, under: int) -> str:
 def _line(text: str | None) -> str:
     """A setting's value is one line."""
     return " ".join((text or "").split())
+
+
+# --- the storyteller's notes a plot's writer gave -------------------------------
+
+
+def notes_mark(notes: str | None) -> str:
+    """A fingerprint of storyteller's notes, "" for none: what a plot keeps
+    of the notes its writer gave the story (`Plot.notes_given`), so nothing
+    holds their words twice."""
+    text = (notes or "").strip()
+    return hashlib.sha256(text.encode("utf-8")).hexdigest() if text else ""
+
+
+def notes_from_plot(story: Story) -> bool:
+    """Whether the story's notes are its plot's own: a model wrote them, and
+    they are still, word for word, the ones the plot's writer gave with the
+    plot the story has (nobody has changed them since, in Setup, the editor
+    or a follow-up on the story). Then a plot written again at the author's
+    request may write them again (engine/plot_draft.py); any other notes are
+    the story's, and always stand."""
+    mark = notes_mark(story.storyteller_notes)
+    return bool(
+        mark
+        and story.storyteller_notes_by == "model"
+        and story.plot is not None
+        and story.plot.notes_given == mark
+    )
+
+
+def carry_notes_mark(plot: Plot | None, previous: Plot | None) -> None:
+    """A plot put in another's place keeps what the old one says of the
+    notes: they are checked against the story's notes whenever asked, so a
+    mark that no longer fits says nothing."""
+    if plot is not None and previous is not None and not plot.notes_given:
+        plot.notes_given = previous.notes_given
 
 
 # --- the story as a document ---------------------------------------------------
@@ -303,6 +340,7 @@ def document_from_story(
         picture_style=write_style(story.picture_style, story.image_style),
         background=(story.background_image or "") if whole else "",
         world=safe_prose(story.world_bible or "", under=1),
+        storyteller_notes=safe_prose(story.storyteller_notes or "", under=1),
         opening=OpeningDoc(
             mode=setup.opening_mode,
             location=_line(scene.location),
@@ -379,7 +417,8 @@ def document_from_story(
 
 
 def without_plot(document: PlotDocument) -> PlotDocument:
-    """The story's own parts alone: what a new plot is written against."""
+    """The story's own parts alone: what a new plot is written against. The
+    storyteller's notes stay: they are the story's, not the plot's."""
     return document.model_copy(update={"facts": [], "events": []}, deep=True)
 
 
@@ -415,6 +454,10 @@ class PlotChanges:
     new_lore: list[LoreEntry] = field(default_factory=list)
     characters: list[CardChange] = field(default_factory=list)
     entries: list[CardChange] = field(default_factory=list)
+    # The storyteller's notes as the document has them, in the importer's
+    # words ("" for none), when it changed them; None when it left them as
+    # the story has them.
+    storyteller_notes: str | None = None
     # What couldn't be done, said for the author.
     notes: list[str] = field(default_factory=list)
 
@@ -616,9 +659,19 @@ def plot_changes(document: PlotDocument, bundle: StoryBundle, *, begun: bool) ->
             if change is not None:
                 changes.entries.append(change)
 
+    if document.storyteller_notes.strip() != original.storyteller_notes.strip():
+        changes.storyteller_notes = scenario.storyteller_notes or ""
     if scenario.plot is not None:
         changes.plot = _rekeyed(scenario.plot, ids, changes.notes)
     return changes
+
+
+def write_notes(story: Story, notes: str, by: NotesBy) -> None:
+    """The storyteller's notes a document changed, on the story: `by` the
+    author (whoever changed them in the plot editor has read them) or a
+    model (a plot's writer: Setup keeps them unread). No notes are nobody's."""
+    story.storyteller_notes = notes.strip() or None
+    story.storyteller_notes_by = by if story.storyteller_notes else "author"
 
 
 # --- a document made a story ---------------------------------------------------------
@@ -962,6 +1015,10 @@ def apply_document(
         story.picture_style, story.image_style = scenario.picture_style, scenario.image_style
     if document.world != before.world:
         story.world_bible = scenario.world_bible
+    if document.storyteller_notes != before.storyteller_notes:
+        # Whoever changed them in the editor has read them. Untouched, they
+        # stay as they are, and unread if a model wrote them.
+        write_notes(story, scenario.storyteller_notes or "", "author")
     if document.background != before.background:
         _apply_background(document.background.strip(), bundle, read, notes)
     opening, was = document.opening, before.opening
@@ -1035,7 +1092,9 @@ def apply_document(
         bundle.lore.extend(entry for entry in listed if _index(bundle.lore, entry) is None)
 
     # Its plot, keyed to the story's cards; its days drawn again when it plays.
+    previous = story.plot
     story.plot = _rekeyed(scenario.plot, ids, notes) if scenario.plot is not None else None
+    carry_notes_mark(story.plot, previous)
     story.plot_schedule = {}
     if setup.starting_scene != SceneState():
         story.scene = setup.starting_scene.model_copy(deep=True)

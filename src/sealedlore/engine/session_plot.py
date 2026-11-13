@@ -91,7 +91,14 @@ from sealedlore.engine.scene_state import (
 from sealedlore.engine.scene_update import (
     render_card,
 )
-from sealedlore.engine.story_plot import PictureReader, apply_document, plot_changes
+from sealedlore.engine.story_plot import (
+    PictureReader,
+    apply_document,
+    carry_notes_mark,
+    notes_mark,
+    plot_changes,
+    write_notes,
+)
 from sealedlore.engine.validators import (
     mentions,
 )
@@ -113,6 +120,7 @@ from sealedlore.models.plot import (
     Plot,
 )
 from sealedlore.models.plot_file import PlotDocument
+from sealedlore.models.story import NotesBy
 from sealedlore.providers.base import (
     ChatRequest,
     ProviderError,
@@ -318,11 +326,19 @@ class PlotRuntime:
         self.save()
         return problems
 
-    def set_plot_document(self, document: PlotDocument) -> list[str]:
+    def set_plot_document(
+        self, document: PlotDocument, *, notes_by: NotesBy = "author"
+    ) -> list[str]:
         """Give the story the plot a document holds (engine/story_plot.py): its
         facts and events, the places among its lore, the cards it adds, and
         what it changes of the cards it keeps hidden. A document with no facts
         and no events takes the story's plot away.
+
+        The storyteller's notes are written only when the document changed
+        them, as `notes_by`'s: the author's, who has then read them, or a
+        model's (the plot's writer: they stay unread in Setup, and the plot
+        keeps their fingerprint, `Plot.notes_given`, so the plot written
+        again may write them again).
 
         A plot written by the model (session_plot_draft.py) comes through
         here; the plot editor saves with `set_story_document`, or as a new
@@ -365,6 +381,12 @@ class PlotRuntime:
         self.cast.extend(changes.new_cast)
         self.supporting.extend(changes.new_supporting)
         self.bundle.lore.extend(changes.new_lore)
+        carry_notes_mark(changes.plot, self.story.plot)
+        if changes.storyteller_notes is not None:
+            write_notes(self.story, changes.storyteller_notes, notes_by)
+            if changes.plot is not None:
+                given = self.story.storyteller_notes if notes_by == "model" else None
+                changes.plot.notes_given = notes_mark(given)
         if changes.plot is None:
             self.story.plot = None
             self.save()

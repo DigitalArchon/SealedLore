@@ -131,11 +131,14 @@ class PlotDraft:
 
 def story_text(document: PlotDocument) -> str:
     """The story as the model is shown it: its own parts, as a plot file,
-    with none of the settings a plot needn't know."""
+    with none of the settings a plot needn't know. Its storyteller's notes
+    are told apart from it, under their own words (`authoring.plot.notes`):
+    never twice."""
     shown = document.model_copy(
         update={
             "facts": [],
             "events": [],
+            "storyteller_notes": "",
             "agency": None,
             "world_activity": None,
             "perspective": None,
@@ -224,6 +227,8 @@ def plot_reply_text(document: PlotDocument) -> str:
             "description": "",
             "world": "",
             "notes": "",
+            # The story's own, told to the writer as the story's.
+            "storyteller_notes": "",
             "background": "",
             "picture_style": "",
             "agency": None,

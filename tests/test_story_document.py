@@ -324,3 +324,82 @@ def test_a_background_chosen_in_the_editor_or_taken_away(source: StoryBundle):
     apply_document(before.model_copy(deep=True), unchanged, before=before)
     assert unchanged.story.background_image == "images/background.jpg"
     assert "images/background.jpg" in unchanged.pending_files
+
+
+# --- the storyteller's notes -----------------------------------------------------------
+
+SECRETS = "The keep's well is poisoned.\n\n## Who knows\n\nOnly Maela, who did it."
+
+
+def test_the_storyteller_s_notes_are_written_only_when_the_editor_changed_them(
+    source: StoryBundle,
+):
+    """An untouched document leaves the notes and who wrote them exactly as
+    they were: notes a model wrote stay unread in Setup. Whoever changes them
+    in the editor has read them."""
+    source.story.storyteller_notes = SECRETS
+    source.story.storyteller_notes_by = "model"
+    before = document_from_story(source, whole=True)
+    assert before.storyteller_notes == SECRETS
+
+    same = _copy(source)
+    apply_document(before.model_copy(deep=True), same, before=before)
+    assert same.story.storyteller_notes == SECRETS
+    assert same.story.storyteller_notes_by == "model"
+
+    document = before.model_copy(deep=True)
+    document.storyteller_notes = "The well is clean.\nThe cistern is not."
+    changed = _copy(source)
+    apply_document(document, changed, before=before)
+    # In the importer's words: a line wrapped in the file is one line.
+    assert changed.story.storyteller_notes == "The well is clean. The cistern is not."
+    assert changed.story.storyteller_notes_by == "author"
+
+    document.storyteller_notes = "  "
+    cleared = _copy(source)
+    apply_document(document, cleared, before=before)
+    assert cleared.story.storyteller_notes is None
+    assert cleared.story.storyteller_notes_by == "author"
+    # The story the editor was opened on is never written.
+    assert source.story.storyteller_notes == SECRETS
+
+
+def test_notes_with_a_heading_of_their_own_come_back_as_the_story_had_them(source: StoryBundle):
+    """A `# Heading` in the notes would end the section in a file: it is a
+    level down in the document, and the story keeps its own text unless the
+    notes were changed."""
+    source.story.storyteller_notes = "# The truth\n\nThe well is poisoned."
+    before = document_from_story(source, whole=True)
+    assert before.storyteller_notes == "## The truth\n\nThe well is poisoned."
+    document = before.model_copy(deep=True)
+    document.world = "The keep fell in the night."
+    new = _copy(source)
+    apply_document(document, new, before=before)
+    assert new.story.storyteller_notes == "# The truth\n\nThe well is poisoned."
+
+
+def test_the_session_saves_notes_changed_in_the_editor_as_read(source: StoryBundle, tmp_path: Path):
+    source.story.storyteller_notes = SECRETS
+    source.story.storyteller_notes_by = "model"
+    save_story_bundle(source, root=tmp_path)
+    session = StorySession(
+        source,
+        make_config(),
+        MockChatProvider([]),
+        root=tmp_path,
+        estimator=TokenEstimator(counter=fallback_counter),
+        learn_corrections=False,
+    )
+    before = document_from_story(source, whole=True)
+    document = before.model_copy(deep=True)
+    document.opening.location = "The gatehouse"
+    session.set_story_document(document, before=before)
+    assert (session.story.storyteller_notes, session.story.storyteller_notes_by) == (
+        SECRETS,
+        "model",
+    )
+    document.storyteller_notes = "The cistern is poisoned."
+    session.set_story_document(document, before=before)
+    reread = load_story_bundle(source.story.id, root=tmp_path).story
+    assert reread.storyteller_notes == "The cistern is poisoned."
+    assert reread.storyteller_notes_by == "author"

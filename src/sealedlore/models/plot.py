@@ -139,6 +139,13 @@ class Plot(BaseModel):
     # names none, and whoever the author plays is then nowhere the plot knows
     # until a passage puts them somewhere.
     start_place: str | None = None
+    # A fingerprint of the storyteller's notes the plot's writer gave the
+    # story with this plot (engine/story_plot.py `notes_mark`), blank for a
+    # plot that brought none: a plot from a file, the editor, or one written
+    # for a story with notes of its own. While the story's notes are still
+    # those, they are the plot's, and the plot written again may write them
+    # again (`notes_from_plot`). Never the notes' words.
+    notes_given: str = ""
 
     def fact(self, name: str) -> FactDef | None:
         return next((fact for fact in self.facts if fact.name == name), None)

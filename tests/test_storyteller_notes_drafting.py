@@ -30,7 +30,7 @@ from sealedlore.engine.followup import (
     setup_fingerprint,
     setup_view,
 )
-from sealedlore.engine.plot_draft import story_text
+from sealedlore.engine.plot_draft import plot_reply_text, story_text
 from sealedlore.engine.story_plot import document_from_story
 from sealedlore.models.authoring import SettingsChange
 from sealedlore.models.generation import ReasoningConfig
@@ -255,8 +255,14 @@ def test_a_settings_review_cannot_change_the_notes():
 
 
 def test_a_plot_is_drafted_from_the_story_without_its_notes():
+    """The story's document holds its notes (a plot file can, and the plot
+    editor shows them), but the story as the plot's writer is shown it never
+    does: they are told to it once, under their own words. Nor does what the
+    author is shown of a plot, or the plot as its writer's last reply."""
     bundle = with_notes()
     for for_model in (False, True):
         document = document_from_story(bundle, for_model=for_model)
+        assert MARKER in document.storyteller_notes
         assert MARKER not in story_text(document)
-        assert MARKER not in document.model_dump_json()
+        assert MARKER not in plot_reply_text(document)
+        assert MARKER not in document.model_dump_json(exclude={"storyteller_notes"})

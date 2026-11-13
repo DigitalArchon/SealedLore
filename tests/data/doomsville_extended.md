@@ -274,6 +274,20 @@ What Rosa finally works out from the static: the relay mast in the Belt still
 has a working repeater, and anyone who climbs it with a battery can talk to
 both the Camp and Hellsville at once, for as long as the battery lasts.
 
+# Storyteller's notes
+
+The Northern Camp's council has known for two winters that somebody lives south
+of the river: its patrols have seen smoke there, and the council voted to keep
+it from the rest of the Camp. Marcus Webb has turned travellers away from
+Hellsville's gate before and told nobody; he is afraid of what the town would
+do if it knew how near other people are.
+
+## What they hide
+
+Constable Hollis keeps a count of the town's ammunition that is lower than the
+one he gives Marcus. Rosa Delgado has heard a voice in the static twice, and
+has not said so.
+
 # Facts
 
 - john: at the camp (at the camp, in the belt, at the tower, at hellsville) — where John Carver's search has got to, whichever character the author is holding

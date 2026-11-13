@@ -170,6 +170,9 @@ class PlotDocument(BaseModel):
     characters: list[CharacterDoc] = Field(default_factory=list)
     places: list[EntryDoc] = Field(default_factory=list)
     lore: list[EntryDoc] = Field(default_factory=list)
+    # `# Storyteller's notes`: what only the storyteller is told, as prose.
+    # Not the author's own `notes` above, which no model and no story reads.
+    storyteller_notes: str = ""
     facts: list[FactDoc] = Field(default_factory=list)
     # Timeline and optional events together, each saying which it is, so the
     # author can move one between the two without it changing lists.

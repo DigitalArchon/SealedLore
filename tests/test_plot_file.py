@@ -10,6 +10,7 @@ from sealedlore.engine.plot_file import (
     CHARACTER,
     EVENT,
     FACT,
+    STORYTELLER,
     check_plot_document,
     describe_where,
     read_plot_document,
@@ -510,3 +511,61 @@ def test_notes_that_name_someone_hidden_are_noted_never_refused():
     # hidden say nothing.
     assert parse_plot_markdown(NOTED.format(notes="Old Bram is paid too.")).problems == []
     assert parse_plot_markdown(NOTED.format(notes="Mara Quill owes money.")).problems == []
+
+
+def test_a_document_carries_the_notes_and_writes_them_between_lore_and_facts():
+    """A field the reader doesn't carry is a field the editor silently
+    deletes: the fixture's notes are read, written after `# Lore` and before
+    `# Facts`, and imported the same again."""
+    text = EXTENDED.read_text(encoding="utf-8")
+    notes = parse_plot_markdown(text).scenario.storyteller_notes
+    assert notes.startswith("The Northern Camp's council has known for two winters")
+    assert "## What they hide" in notes and notes.endswith("has not said so.")
+
+    document = read_plot_document(text).document
+    assert document.storyteller_notes == notes
+    assert document.notes.startswith("Two strands"), "the author's own comment is another thing"
+    rendered = render_plot_markdown(document).text
+    lore, section, facts = (
+        rendered.index("\n# Lore\n"),
+        rendered.index("\n# Storyteller's notes\n"),
+        rendered.index("\n# Facts\n"),
+    )
+    assert lore < section < facts
+    assert parse_plot_markdown(rendered).scenario.storyteller_notes == notes
+    # A document with none writes no section.
+    assert "Storyteller" not in render_plot_markdown(PlotDocument(world="A town.")).text
+
+
+def test_the_reader_takes_the_notes_wherever_and_however_they_are_headed():
+    plain = "The harbour master is in the smugglers' pay.\n\nHe hides it badly."
+    for heading in ("Storyteller's notes", "Notes for the storyteller"):
+        text = f"# {heading}\n\n{plain}\n\n# World\n\nA harbour town.\n"
+        read = read_plot_document(text)
+        assert read.problems == [] and read.document.storyteller_notes == plain
+        # Written back under the one heading, in its place.
+        assert render_plot_markdown(read.document).text.endswith(
+            f"# Storyteller's notes\n\n{plain}\n"
+        )
+    twice = (
+        "# World\n\nA town.\n\n# Storyteller's notes\n\nOne.\n\n"
+        "# Notes for the storyteller\n\nTwo.\n"
+    )
+    read = read_plot_document(twice)
+    assert read.document.storyteller_notes == "One."
+    assert any("second such section" in p.message for p in read.problems)
+    # Lines shaped like settings are the notes' own prose, there and back.
+    listed = "- hidden: the ledger, under the floor\n- keywords: none of these are settings"
+    document = read_plot_document(f"# World\n\nA town.\n\n# Storyteller's notes\n\n{listed}\n")
+    again = parse_plot_markdown(render_plot_markdown(document.document).text)
+    assert again.scenario.storyteller_notes == listed and again.problems == []
+
+
+def test_a_hidden_name_in_the_notes_is_a_problem_of_the_notes_own():
+    """The editor shows the importer's note against the notes' page."""
+    secret = "Teodor Vask is paid by the smugglers. The crates wait in the sea cave."
+    document = read_plot_document(NOTED.format(notes=secret)).document
+    document.title = "Salt and Tide"
+    _rendered, problems = check_plot_document(document)
+    assert [(p.where, p.error) for p in problems] == [((STORYTELLER, 0, -1), False)] * 2
+    assert describe_where(document, problems[0].where) == "Storyteller's notes"

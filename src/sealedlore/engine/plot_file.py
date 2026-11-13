@@ -68,6 +68,10 @@ LORE = "lore"
 FACT = "fact"
 EVENT = "event"
 NOTES = "notes"
+# The storyteller's notes (`# Storyteller's notes`); `NOTES` is the author's
+# own comment at the top of the file.
+STORYTELLER = "storyteller"
+STORYTELLER_HEADING = "Storyteller's notes"
 
 UNNAMED = "Unnamed"
 _FRONT_KEYS = (
@@ -308,6 +312,11 @@ def render_plot_markdown(document: PlotDocument) -> RenderedPlot:
             writer.flag("hidden", entry.hidden)
             writer.pictures(entry.pictures)
             writer.prose(entry.description)
+
+    if document.storyteller_notes.strip():
+        writer.current = (STORYTELLER, 0, -1)
+        writer.heading(1, STORYTELLER_HEADING)
+        writer.prose(document.storyteller_notes)
 
     if document.facts:
         writer.current = (FACT, 0, -1)
@@ -611,6 +620,8 @@ class _Reader:
             opening.time = found.values.get("time", (0, ""))[1]
             opening.situation = found.values.get("situation", (0, ""))[1]
             opening.notes = found.prose
+        if "storyteller" in sections:
+            document.storyteller_notes = sections["storyteller"].text()
         for name in ("characters", "places", "lore", "facts", "timeline", "events"):
             block = sections.get(name)
             if block is None:
@@ -765,6 +776,8 @@ def describe_where(document: PlotDocument, where: ItemRef | None) -> str:
         return "World"
     if section == OPENING:
         return "Opening"
+    if section == STORYTELLER:
+        return STORYTELLER_HEADING
     items: list[str]
     if section == CHARACTER:
         items = [c.name for c in document.characters]
@@ -799,6 +812,8 @@ __all__ = [
     "NOTES",
     "OPENING",
     "PLACE",
+    "STORYTELLER",
+    "STORYTELLER_HEADING",
     "WORLD",
     "DocProblem",
     "ItemRef",

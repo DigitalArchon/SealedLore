@@ -104,9 +104,11 @@ class PlotDialog(QDialog):
 def plot_preview(document: PlotDocument) -> str:
     """The plot's own parts, as the plot file writes them: whom and what it
     keeps hidden, its places, facts and events. The story's world, opening
-    and own cards are left out: they are the story's, not news."""
+    and own cards are left out: they are the story's, not news. So are the
+    storyteller's notes, whoever wrote them: Setup shows those when asked."""
     shown = document.model_copy(
         update={
+            "storyteller_notes": "",
             "title": "",
             "description": "",
             "agency": None,
