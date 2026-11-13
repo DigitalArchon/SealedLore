@@ -164,7 +164,9 @@ class GenerateDialog(QDialog):
         self.reply_view = QPlainTextEdit()
         self.reply_view.setReadOnly(True)
         self.reply_view.setObjectName("inspectorPayload")
-        self.reply_view.setMaximumHeight(160)
+        # Room to read it: a reply that couldn't be used may be most of a
+        # story's setup, and it sat in a box four lines high.
+        self.reply_view.setMinimumHeight(160)
         self.reply_view.hide()
 
         # Chosen before the draft, so the opening is written in them: a
@@ -266,7 +268,7 @@ class GenerateDialog(QDialog):
         layout.addLayout(form)
         layout.addWidget(self.busy_bar)
         layout.addWidget(self.progress)
-        layout.addWidget(self.reply_view)
+        layout.addWidget(self.reply_view, 1)
         layout.addWidget(self.buttons)
         # The premise and the model as the dialog opened, to tell on Cancel
         # whether anything typed would be lost.

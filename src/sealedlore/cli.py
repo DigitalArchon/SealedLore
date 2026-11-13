@@ -462,6 +462,21 @@ CHAT_COMMANDS = frozenset(
 )
 
 
+# How much of a request `/inspect` prints from its start and from its end.
+INSPECT_HEAD = 1_500
+INSPECT_TAIL = 3_000
+
+
+def _both_ends(text: str) -> str:
+    """A long request's start and its end: the first 4,000 characters alone
+    never got past the standing rules, and what changes from turn to turn
+    (the scene, the directives, the author's turn) is at the end."""
+    if len(text) <= INSPECT_HEAD + INSPECT_TAIL:
+        return text
+    left_out = len(text) - INSPECT_HEAD - INSPECT_TAIL
+    return f"{text[:INSPECT_HEAD]}\n  … {left_out:,} characters left out …\n{text[-INSPECT_TAIL:]}"
+
+
 class Repl:
     def __init__(self, session: StorySession) -> None:
         self.session = session
@@ -928,7 +943,7 @@ class Repl:
                 use_cache_control=uses_cache,
             )
         )
-        print(json.dumps(payload, indent=2)[:4000])
+        print(_both_ends(json.dumps(payload, indent=2, ensure_ascii=False)))
 
     def command_budget(self) -> None:
         prompt = self.session.last_prompt

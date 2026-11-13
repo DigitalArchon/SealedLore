@@ -86,3 +86,16 @@ def test_exporting_where_nothing_can_be_written_says_so(
     argv = ["--data-dir", str(tmp_path), *verb, session.story.id, str(folder), *flags]
     assert cli_main(argv) == 1
     assert "Couldn't write" in capsys.readouterr().err
+
+
+def test_inspect_shows_a_long_request_s_end_as_well_as_its_start():
+    """Its first 4,000 characters alone never got past the standing rules."""
+    from sealedlore.cli import INSPECT_HEAD, INSPECT_TAIL, _both_ends
+
+    short = "x" * 100
+    assert _both_ends(short) == short
+    long = "RULES " * 2_000 + "THE AUTHOR'S TURN: I open the door."
+    shown = _both_ends(long)
+    assert shown.startswith("RULES") and shown.endswith("I open the door.")
+    assert "characters left out" in shown
+    assert len(shown) < INSPECT_HEAD + INSPECT_TAIL + 80

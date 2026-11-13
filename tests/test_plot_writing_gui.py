@@ -318,7 +318,6 @@ def test_a_premise_draft_s_plot_is_written_after_setup_and_before_start(app, win
     monkeypatch.setattr(
         window, "start_story", lambda: order.append(f"start:{bool(window.session.story.plot)}")
     )
-    monkeypatch.setattr(QMessageBox, "exec", lambda box: 0)  # the draft's own notes
     seen = ready(monkeypatch)
 
     def draft(dialog) -> int:
