@@ -38,6 +38,8 @@ from sealedlore.engine.validators import locate_quote, mentions, name_forms, ope
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.character import Character
 from sealedlore.models.scene import (
+    STILL_OPEN_LENGTH,
+    STILL_OPEN_MOST,
     OffstageCharacter,
     Privacy,
     SceneShortcut,
@@ -331,7 +333,9 @@ def render_card(
     ]
     if away:
         lines.append(f"Not in the scene: {', '.join(away)}")
-    return "\n".join(lines)
+    lines.append("Still open:")
+    lines.extend(f"- {line}" for line in scene.still_open or ["(nothing)"])
+    return "\n".join(lines).replace("- (nothing)", "(nothing)")
 
 
 # --- the per-turn read ------------------------------------------------------
@@ -399,6 +403,10 @@ class SceneDelta:
     # Everyone in the scene, for a card being tracked for the first time.
     # None when the read wasn't asked for it.
     already_here: list[Resolved] | None = None
+    # What is still open, the whole list as it stands after the passage; None
+    # when the read gave none (an older reply, or a read that left it out),
+    # and the card's then stands.
+    still_open: list[str] | None = None
     closed: bool = False
     gist: str | None = None
     shortcuts: list[SceneShortcut] = field(default_factory=list)
@@ -572,6 +580,8 @@ class SceneDelta:
             value = getattr(self, name)
             if value:
                 setattr(after, name, value)
+        if self.still_open is not None:
+            after.still_open = list(self.still_open)
 
         if self.already_here is not None:
             after.present_character_ids = []
@@ -599,6 +609,28 @@ class SceneDelta:
         after.set_at_node_id = node_id
         after.changes = diff(scene, after, cast_by_id, how=self.how)
         return after
+
+
+# A line that says something isn't known is a mystery, not something anyone is
+# counting on: the read is told to leave those out, and about one line in
+# eight was one all the same.
+_A_MYSTERY = re.compile(r"\b(?:unknown|unexplained|unresolved|unsettled|unclear)\b", re.IGNORECASE)
+
+
+def _still_open(raw: object) -> list[str] | None:
+    """The read's list of what is still open: short plain lines, a few at
+    most, none of them a mystery. Anything but a list is no answer, and the
+    card's own then stands."""
+    if not isinstance(raw, list):
+        return None
+    lines: list[str] = []
+    for item in raw:
+        line = " ".join(item.split()) if isinstance(item, str) else ""
+        if not line or len(line) > STILL_OPEN_LENGTH or line in lines:
+            continue
+        if not _A_MYSTERY.search(line):
+            lines.append(line)
+    return lines[:STILL_OPEN_MOST]
 
 
 def _add(scene: SceneState, person: Resolved) -> None:
@@ -692,6 +724,7 @@ def parse_delta(
         arrived=arrived,
         left=left,
         already_here=already_here,
+        still_open=_still_open(data.get("still_open")),
         closed=closed,
         gist=gist,
         shortcuts=shortcuts,
@@ -808,6 +841,8 @@ def cut_to(scene: SceneState, character: Character, *, cast: Sequence[Character]
     return SceneState(
         location=note,
         situation=f"The story has moved to {character.name}.",
+        # What people are counting on is the story's, wherever it is told from.
+        still_open=list(scene.still_open),
         present_character_ids=[character.id],
         offstage_but_nearby=left_behind,
         tracked=False,

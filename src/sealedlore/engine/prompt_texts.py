@@ -557,6 +557,18 @@ _text(
     "until one of them passes it on or the aftermath shows it.",
 )
 
+# What the scene read keeps as still open (see "still_open" in its own
+# instructions, with the measurement): one line here, whatever scene it is.
+_text(
+    "turn.scene.still_open",
+    TURN,
+    "Scene: still open",
+    "In the scene block when something from earlier is still open: a promise, an "
+    "appointment, something owed.",
+    "Still open from earlier (someone is counting on it): {open}",
+    (("open", "what is still open, the lines separated by semicolons"),),
+)
+
 _text(
     "turn.scene.public",
     TURN,
@@ -1618,6 +1630,23 @@ _text(
 
 # --- The scene read ------------------------------------------------------
 
+# "still_open" (Nov 2026): what someone is counting on, kept across scenes.
+# The situation's "what is unresolved" is cleared when a scene closes, so a
+# promised inspection was gone from the card a passage after it was made and
+# nothing ever came of it. Chained over a played story's fourteen reads, the
+# list took the promise up when it was made, replaced it when the captain made
+# a firmer one, kept it through two changes of scene and dropped it when three
+# days had passed. With the storyteller's move in force, a card carrying the
+# line had the captain follow it up on 7 of 9 takes of a time skip and the two
+# idle turns after it, against 1 of 9 without; in the middle of a conversation
+# it changed nothing (3 of 9 either way). Who arrives and leaves is read as
+# before: over 149 logged reads, as a plain read had them 123 and 126 times
+# (two runs), where two plain reads agree 127 times. About one line in eight
+# was a mystery all the same ("who she is remains unknown"), which the rule
+# rules out: code drops those (scene_update `_still_open`). A tighter wording
+# ("after this scene is over", "not a question being asked right now") named
+# no fewer mysteries and agreed less with a plain read on who arrives and
+# leaves (110 of 142 and 118 of 149): not used.
 # "Give the location and situation as the passage leaves them" for a stretch
 # of time (Nov 2026): the read closed the scene, code cleared the situation
 # with it, and the read gave no new one, so the next turn's card was blank
@@ -1654,6 +1683,7 @@ if that changed; else null",
   "arrived": [{"name": "...", "how": "a few words: how they came in"}],
   "left": [{"name": "...", "how": "a few words: where they went"}],
   "scene_closed": null,
+  "still_open": ["what is left hanging, a short line each: the whole list after this passage"],
   "shortcuts": [{"name": "...", "kind": "already_there", "quote": "..."}]
 }
 
@@ -1682,6 +1712,15 @@ The scene
   bystanders could. Leave it null when the passage does not change it.
 - Where the card says "(not recorded)", fill the field in if the passage
   establishes it, even though the passage didn't change it.
+- "still_open" is what someone in the story is still counting on beyond this
+  moment: a promise made, an appointment set, a debt, something asked for and
+  not yet given, a threat not yet carried out. Not a mystery, a mood or a
+  question in someone's mind. Give the whole list as it stands after this
+  passage, at most four lines, each short and plain ("Elena will look at
+  John's arm in the morning"). Keep a line from the card word for word until the
+  passage settles it, breaks it or makes it moot; then leave it out. Most
+  passages change nothing: return the card's lines as they are, or [] if it has
+  none.
 - Spell names as the people on file are spelled, or as the passage has them.
 
 Shortcuts

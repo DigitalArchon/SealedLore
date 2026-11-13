@@ -122,6 +122,8 @@ def diff(
         changes.append(SceneChange(kind="privacy", detail=after.privacy))
     if after.situation != before.situation and after.situation:
         changes.append(SceneChange(kind="situation", detail=after.situation))
+    if after.still_open != before.still_open:
+        changes.append(SceneChange(kind="open", detail="; ".join(after.still_open) or None))
     return changes
 
 
@@ -140,6 +142,8 @@ def describe_changes(changes: Sequence[SceneChange]) -> str:
             parts.append(f"{change.detail} scene")
         elif change.kind == "situation":
             parts.append("situation updated")
+        elif change.kind == "open":
+            parts.append(f"still open: {change.detail}" if change.detail else "nothing left open")
     return ", ".join(parts)
 
 

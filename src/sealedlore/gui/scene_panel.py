@@ -67,6 +67,17 @@ class ScenePanel(QWidget):
         self.time_of_day = QLineEdit()
         self.situation = GrowingText(lines=2, most=8)
         self.situation.setPlaceholderText("One or two lines of immediate framing.")
+        # What someone in the story is still counting on, kept from scene to
+        # scene by the read after each passage: the author's to put right.
+        self.still_open = GrowingText(lines=1, most=5)
+        self.still_open.setPlaceholderText(
+            "A promise, an appointment, something owed: one to a line."
+        )
+        self.still_open.setToolTip(
+            "What someone in the story is still counting on. The scene read keeps it from "
+            "scene to scene until a passage settles it, and the storyteller is shown it; "
+            "change or remove a line here."
+        )
         self.privacy = QComboBox()
         for label, value in _PRIVACY_CHOICES:
             self.privacy.addItem(label, value)
@@ -78,6 +89,7 @@ class ScenePanel(QWidget):
         self.location.textChanged.connect(self._apply_edits)
         self.time_of_day.textChanged.connect(self._apply_edits)
         self.situation.textChanged.connect(self._apply_edits)
+        self.still_open.textChanged.connect(self._apply_edits)
         self.privacy.currentIndexChanged.connect(self._apply_edits)
 
         form = QFormLayout()
@@ -86,6 +98,7 @@ class ScenePanel(QWidget):
         form.addRow("Time", self.time_of_day)
         self._form = form
         form.addRow("Situation", self.situation)
+        form.addRow("Still open", self.still_open)
         form.addRow("Who can know", self.privacy)
 
         # What the latest passage changed, and the way to take it back.
@@ -212,6 +225,7 @@ class ScenePanel(QWidget):
         set_field_text(self.location, scene.location or "")
         set_field_text(self.time_of_day, scene.time_of_day or "")
         self.situation.setPlainText(scene.situation or "")
+        self.still_open.setPlainText("\n".join(scene.still_open))
         self.privacy.setCurrentIndex(
             next(i for i, (_, value) in enumerate(_PRIVACY_CHOICES) if value == scene.privacy)
         )
@@ -362,6 +376,11 @@ class ScenePanel(QWidget):
         scene.location = self.location.text().strip() or None
         scene.time_of_day = self.time_of_day.text().strip() or None
         scene.situation = self.situation.toPlainText().strip() or None
+        scene.still_open = [
+            " ".join(line.split())
+            for line in self.still_open.toPlainText().splitlines()
+            if line.strip()
+        ]
         scene.privacy = self.privacy.currentData()
         scene.present_others = self._present_others()
         if self._others_touched:

@@ -1991,6 +1991,15 @@ story shows who is here by their faces: a glance after each passage shows
 who the storyteller thinks is in the room, and a tick on the Scene page fixes
 it.
 
+The read also keeps what is **still open**: what someone in the story is
+counting on beyond the moment, such as a promise made, an appointment set or
+something owed ("Elena will look at John's arm in the morning"). The Scene
+page lists it under **Still open**, one to a line, at most four. It stays
+from scene to scene, where the situation is written afresh, until a passage
+settles it or makes it moot, and the storyteller is shown it each turn, so a
+promise is still there to be kept, or broken, when the story next has room.
+Change or remove a line whenever the read has it wrong.
+
 The same read catches the shortcuts. If a passage has someone simply already
 there, listening in from outside, or acting on something they couldn't know,
 the status bar names it once, quoting the sentence, and the sentence stays

@@ -382,6 +382,8 @@ def render_scene_block(
         source = "story" if scene.source == "story" else "author"
         lines.append(texts[f"turn.scene.set_by_{source}"])
         lines.extend(f"{label}: {value}" for label, value in setting)
+    if scene.still_open:
+        lines.append(texts.fill("turn.scene.still_open", open="; ".join(scene.still_open)))
     if scene.privacy in ("private", "public"):
         lines.append(texts[f"turn.scene.{scene.privacy}"])
 

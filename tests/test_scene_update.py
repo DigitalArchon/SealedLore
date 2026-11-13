@@ -481,3 +481,96 @@ def test_an_arrival_the_text_never_names_is_dropped():
     # Named in the author's turn is named.
     delta = SceneDelta(arrived=[Resolved("Elena Ruiz", "elena")])
     assert delta.unnamed_arrivals((passage, "I let Elena in."), people=[elena]) == []
+
+
+# --- what is still open ------------------------------------------------------
+# A promise or an appointment made in one scene was gone from the card a
+# passage later: the situation's "what is unresolved" is cleared when a scene
+# closes, and nothing ever came of the captain's promised inspection.
+
+PROMISE = "Elena will look at John's arm in the morning"
+
+
+def test_the_read_s_list_of_what_is_still_open_is_kept_on_the_card():
+    before = tracked(present_character_ids=["char-jane"])
+    after = read(still_open=[PROMISE]).applied_to(
+        before, cast=CAST, held_id="char-jane", node_id="n2"
+    )
+    assert after.still_open == [PROMISE]
+    assert [(c.kind, c.detail) for c in after.changes] == [("open", PROMISE)]
+    from sealedlore.engine.scene_state import describe_changes
+
+    assert describe_changes(after.changes) == f"still open: {PROMISE}"
+
+
+def test_what_is_still_open_outlives_the_scene_it_was_said_in():
+    before = tracked(
+        present_character_ids=["char-jane"], situation="On the quarterdeck.", still_open=[PROMISE]
+    )
+    # The scene closes and the read keeps the line: the situation goes, it stays.
+    moved = read(location="The hold", scene_closed={"gist": "They spoke."}, still_open=[PROMISE])
+    after = moved.applied_to(before, cast=CAST, held_id="char-jane", node_id="n2")
+    assert after.situation is None and after.still_open == [PROMISE]
+    assert not [c for c in after.changes if c.kind == "open"], "unchanged is not a change"
+    # A read that says nothing of it (an older reply) leaves the card's own.
+    silent = read(location="The galley").applied_to(
+        after, cast=CAST, held_id="char-jane", node_id="n3"
+    )
+    assert silent.still_open == [PROMISE]
+    # Settled: the read leaves it out, and the notice says nothing is left.
+    done = read(still_open=[]).applied_to(silent, cast=CAST, held_id="char-jane", node_id="n4")
+    assert done.still_open == []
+    assert [(c.kind, c.detail) for c in done.changes] == [("open", None)]
+    # A cut to another character keeps it: it is the story's, not one room's.
+    assert cut_to(silent, CAST[1], cast=CAST).still_open == [PROMISE]
+
+
+def test_only_short_plain_lines_are_kept_and_four_at_most():
+    delta = read(
+        still_open=["  One   thing ", "", 7, "One thing", "x" * 200, "Two", "Three", "Four", "Five"]
+    )
+    assert delta.still_open == ["One thing", "Two", "Three", "Four"]
+    # A mystery is nothing anyone is counting on: the read is told so, and
+    # held to it.
+    mysteries = read(
+        still_open=["Who the girl at the window is remains unknown", "Marta leaves at first light"]
+    )
+    assert mysteries.still_open == ["Marta leaves at first light"]
+    assert read(still_open="everything").still_open is None
+    assert read().still_open is None
+
+
+def test_the_read_is_shown_the_card_s_list_and_the_storyteller_one_line():
+    from sealedlore.engine.prompt_texts import DEFAULT_TEXTS
+    from sealedlore.engine.rules import render_scene_block
+    from sealedlore.engine.scene_update import render_card
+
+    scene = tracked(
+        present_character_ids=["char-jane"], still_open=[PROMISE, "Hollis is owed a day"]
+    )
+    card = render_card(scene, cast=CAST, held_id="char-jane")
+    assert card.endswith(f"Still open:\n- {PROMISE}\n- Hollis is owed a day")
+    assert render_card(tracked(), cast=CAST, held_id=None).endswith("Still open:\n(nothing)")
+    cast_by_id = {c.id: c for c in CAST}
+    block = render_scene_block(scene, cast_by_id, "char-jane", "whole_story")
+    line = DEFAULT_TEXTS.fill("turn.scene.still_open", open=f"{PROMISE}; Hollis is owed a day")
+    assert line in block
+    assert "Still open" not in render_scene_block(tracked(), cast_by_id, None, "whole_story")
+    assert '"still_open"' in DEFAULT_TEXTS["scene_read.system"]
+
+
+def test_the_scene_page_shows_the_list_and_takes_the_author_s_changes():
+    from PySide6.QtWidgets import QApplication
+
+    from sealedlore.gui.scene_panel import ScenePanel
+
+    QApplication.instance() or QApplication([])
+    scene = tracked(present_character_ids=["char-jane"], still_open=[PROMISE])
+    panel = ScenePanel()
+    panel.set_scene(scene, CAST, held_id="char-jane")
+    assert panel.still_open.toPlainText() == PROMISE
+    panel.still_open.setPlainText(f"{PROMISE}\n\n  Hollis is  owed a day ")
+    assert scene.still_open == [PROMISE, "Hollis is owed a day"]
+    panel.still_open.setPlainText("")
+    assert scene.still_open == []
+    panel.deleteLater()

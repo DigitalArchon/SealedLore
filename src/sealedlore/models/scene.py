@@ -22,7 +22,10 @@ Privacy = Literal["public", "private"]
 # The three ways of putting someone in a scene by shortcut, which is what the
 # presence rule exists to stop (the second rule in CONTRIBUTING.md).
 ShortcutKind = Literal["already_there", "perceived_from_outside", "knew_without_being_told"]
-SceneChangeKind = Literal["arrived", "left", "location", "time", "situation", "privacy"]
+SceneChangeKind = Literal["arrived", "left", "location", "time", "situation", "privacy", "open"]
+# The most lines of what is still open a card keeps, and the longest a line may be.
+STILL_OPEN_MOST = 4
+STILL_OPEN_LENGTH = 160
 
 
 class OffstageCharacter(BaseModel):
@@ -64,6 +67,12 @@ class SceneState(BaseModel):
     # one character while the setting's regulars came and went unseen.
     present_others: list[str] = Field(default_factory=list)
     offstage_but_nearby: list[OffstageCharacter] = Field(default_factory=list)
+    # What someone in the story is still counting on beyond this moment: a
+    # promise made, an appointment set, something owed. Kept by the scene read
+    # (or the author) and carried from scene to scene, where the situation is
+    # cleared when a scene closes: a promised meeting used to be gone from the
+    # card one passage after it was made.
+    still_open: list[str] = Field(default_factory=list)
     # Whether what happens here stays with those present. None is unknown.
     privacy: Privacy | None = None
     # Whether `present_others` has been kept, by the scene read or by hand.
