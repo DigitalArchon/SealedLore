@@ -241,9 +241,23 @@ def test_the_notes_reach_only_requests_that_carry_the_storytellers_system_block(
         assert json.dumps(payload).count(MARKER) == 1
     # Every side model's requests are among those without: the reads, the
     # plot, the summaries, the lore pick, drafting and the review.
-    assert {p["model"] for p in with_marker} <= {STORY_MODEL, "side/pictures"}
+    assert {p["model"] for p in with_marker} == {STORY_MODEL}
     side = {p["model"] for p in without}
-    assert {"side/scene", "side/plot", "side/summaries", "side/lore", "side/authoring"} <= side
+    # The picture and video prompt writers among them: they write from the
+    # story's prompt, less the notes (nothing in the notes is to be seen in a
+    # picture, and the prompt they write is shown to the author).
+    assert {
+        "side/scene",
+        "side/plot",
+        "side/summaries",
+        "side/lore",
+        "side/authoring",
+        "side/pictures",
+    } <= side
+    pictures = [p for p in without if p["model"] == "side/pictures"]
+    from_the_story = [p for p in pictures if system_of(p).startswith(RULES_OPENING)]
+    assert from_the_story, "the picture and video prompts are written from the story's prompt"
+    assert not any(HEADING in system_of(p) for p in pictures)
     assert MARKER not in json.dumps(session.embeddings.calls)
 
     # The private model wrote the scene's passages from the same block.

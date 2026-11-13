@@ -183,6 +183,11 @@ class AssemblyOptions:
     # passage is made of, and the recent passages' habits of phrasing when
     # they have any (engine/habits.py).
     prose_reminders: bool = False
+    # Leave the storyteller's notes out: for whoever writes from the story's
+    # prompt without being the storyteller (the picture and video prompt
+    # writers). Nothing in the notes should be seen in a picture, and the
+    # prompt they write is shown to the author.
+    without_notes: bool = False
     # Whether a turn that waits, says next to nothing or lets time pass hands
     # the next move to the storyteller (`Config.storyteller_moves`,
     # engine/initiative.py).
@@ -691,11 +696,12 @@ def _assemble(
         # The storyteller's own: the truth behind what the story hasn't shown.
         # Right after the setting it is the truth of, and as stable: a
         # function of the story's notes alone, so the cache prefix holds.
-        add_system_part(
-            SECTION_NOTES,
-            render_storyteller_notes(story.storyteller_notes, options.texts),
-            render_storyteller_notes(story.storyteller_notes, options.texts, kept=True),
-        )
+        if not options.without_notes:
+            add_system_part(
+                SECTION_NOTES,
+                render_storyteller_notes(story.storyteller_notes, options.texts),
+                render_storyteller_notes(story.storyteller_notes, options.texts, kept=True),
+            )
         add_system_part(SECTION_STANDING_LORE, render_standing_lore(standing_lore, options.texts))
 
         # Which cards go whole, condensed or short depends on the cast and its

@@ -13,6 +13,7 @@ while the author plays on.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 
 from sealedlore.engine.image_prompt import (
     IMAGE_PROMPT_MAX_TOKENS,
@@ -325,7 +326,15 @@ class ImageRuntime:
                 on_file=self.visible_supporting(),
                 scene_log=log_on_path(self.story.scene_log, path),
                 estimator=self.estimator,
-                options=self.private_options() if span is not None else self.assembly_options(),
+                # Without the storyteller's notes: nothing in them is to be
+                # seen in a picture, and the prompt written here is shown to
+                # the author. (A story that has notes pays for it: without
+                # them the request no longer begins as the story's turns do,
+                # so it reads none of their cache.)
+                options=replace(
+                    self.private_options() if span is not None else self.assembly_options(),
+                    without_notes=True,
+                ),
                 rendered=question,
             )
         if span is not None:

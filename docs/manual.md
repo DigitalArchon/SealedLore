@@ -996,9 +996,10 @@ playthrough.
 Nothing that reads the story as you play is sent them: not the scene and plot
 reads, the chapters or the lore pick, and a settings review is told only that
 there are notes. What does have them is whatever writes from the
-storyteller's own prompt: a private scene's model, the writer of a picture's
-or a video's prompt, and a Question, which the storyteller answers from them
-(asking it outright what is under the floor is one way to be told). One other
+storyteller's own prompt: a private scene's model, and a Question, which the
+storyteller answers from them (asking it outright what is under the floor is
+one way to be told). The writer of a picture's or a video's prompt reads the
+story without them: nothing in them is for a picture to show. One other
 model is told them: the one that writes or rewrites a plot for the story, so
 that the plot is true to them; what it writes is kept from you as they are. The
 Prompt page shows a line in their
