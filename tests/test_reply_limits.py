@@ -156,3 +156,26 @@ def test_a_refusals_body_is_read_to_64_kb_its_start_kept_and_the_rest_unread():
     assert response.status_code == 404 and len(response.content) == ERROR_BODY_BYTES
     assert response.content.startswith(words)
     assert body.sent <= 2 * MB, "the rest left unread"
+
+
+def test_a_redirects_own_body_is_read_to_64_kb_followed_or_not():
+    """httpx reads a redirect it follows whole before following it, where the
+    client's own reading never sees it: a 302 sending megabytes is read to
+    64 KB, its start kept and the rest unread, and the redirect still goes."""
+    sent: list[Pieces] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/moved":
+            body = Pieces(*[b"r" * MB for _ in range(8)])
+            sent.append(body)
+            return httpx.Response(302, headers={"Location": "/here"}, stream=body)
+        return httpx.Response(200, content=b"fine")
+
+    client = make_client("https://example.test", transport=httpx.MockTransport(handler))
+    followed = client.get("https://example.test/moved", follow_redirects=True)
+    assert followed.text == "fine"
+    assert len(followed.history[0].content) == http_module.ERROR_BODY_BYTES == 64 * 1024
+    assert sent[0].sent == MB, "one piece read of eight"
+    not_followed = client.get("https://example.test/moved")
+    assert not_followed.status_code == 302 and len(not_followed.content) == 64 * 1024
+    assert sent[1].sent == MB

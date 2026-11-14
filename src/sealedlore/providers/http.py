@@ -20,7 +20,9 @@ Three things every client here needs and none should have to remember:
 - **What comes back is read only so far.** Only gzip and deflate are asked
   for and read (`ACCEPT_ENCODING`, `refuse_unbounded_encoding`), and a reply
   read whole is read to `REPLY_MAX_BYTES` at most, decoded bytes counted
-  (`_Client`). (The DA apps' standard, Nov 14 2026.)
+  (`_Client`), a refusal's body and a redirect's (one followed included) to
+  `ERROR_BODY_BYTES` (`read_redirect_start`). (The DA apps' standard, Nov 14
+  2026.)
 """
 
 from __future__ import annotations
@@ -268,6 +270,26 @@ class _Client(httpx.Client):
         return response
 
 
+def read_redirect_start(response: httpx.Response) -> None:
+    """A response hook: a redirect's own body (any 3xx) is read to
+    ERROR_BODY_BYTES at most, its start kept and the rest left unread. httpx
+    reads a redirect it follows whole before following it, however large,
+    where `_Client.send` never sees it (the DA apps' standard, Nov 14 2026)."""
+    if not 300 <= response.status_code < 400 or hasattr(response, "_content"):
+        return
+    body = bytearray()
+    try:
+        for piece in response.iter_bytes():
+            body += piece
+            if len(body) >= ERROR_BODY_BYTES:
+                del body[ERROR_BODY_BYTES:]
+                break  # the rest unread
+    finally:
+        response.close()
+    # As httpx's own `read` keeps it: `read`, `content` and `iter_bytes` give it.
+    response._content = bytes(body)
+
+
 def _too_large(request: httpx.Request) -> str:
     return f"{request.url.host} sent more than {REPLY_MAX_BYTES // (1024 * 1024)} MB; not read"
 
@@ -284,5 +306,6 @@ def make_client(base_url: str, **kwargs: Any) -> httpx.Client:
         *hooks.get("response", ()),
         refuse_insecure_redirect,
         refuse_unbounded_encoding,
+        read_redirect_start,
     ]
     return _Client(headers=headers, event_hooks=hooks, **kwargs)
