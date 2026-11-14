@@ -36,6 +36,10 @@ def real():
 
 
 def checks_server(fixture: dict, *, intel_status: int = 200) -> httpx.Client:
+    return httpx.Client(transport=httpx.MockTransport(checks_handler(fixture, intel_status)))
+
+
+def checks_handler(fixture: dict, intel_status: int = 200):
     """Intel's collateral, NVIDIA's answers (by the nonce each was asked for)
     and NVIDIA's keys, exactly as they came at the capture."""
     answers = {item["nonce"]: item["answer"] for item in fixture["nras"]}
@@ -61,7 +65,7 @@ def checks_server(fixture: dict, *, intel_status: int = 200) -> httpx.Client:
                 )
         return httpx.Response(404)
 
-    return httpx.Client(transport=httpx.MockTransport(handler))
+    return handler
 
 
 def checker(fixture: dict, **server) -> TeeClient:
@@ -149,3 +153,70 @@ def test_the_capture_names_what_it_is_and_holds_no_key(real):
     text = FIXTURE.read_text(encoding="utf-8").lower()
     assert "keyless" in real["source"] and "no key and no prompt" in real["source"].lower()
     assert "authorization" not in text and "bearer" not in text and "cpk_" not in text
+
+
+def test_the_provider_attests_real_instances_up_to_the_key_it_cant_know(real, monkeypatch):
+    """The real capture through ChutesE2EEProvider's attestation (Intel's and
+    NVIDIA's real checks at its moment, Chutes' real lists): every check holds
+    but the key binding, which no key of ours can pass (only discovery, with an
+    account, lists the instance's key); with it stood in for, the three are
+    attested from their real evidence, each one's published set named."""
+    import secrets as secrets_module
+
+    from cryptography.hazmat.primitives.asymmetric import mlkem
+
+    import sealedlore.providers.chutes_provider as module
+    from sealedlore.models.config import ProviderConfig
+
+    moment = datetime.fromtimestamp(real["now"], UTC)
+    checks = checks_handler(real)
+    items = real["evidence"]["evidence"]
+
+    def chutes(request: httpx.Request) -> httpx.Response:
+        url = request.url
+        if url.host == "llm.chutes.ai":
+            listed = {
+                "id": real["model"],
+                "chute_id": real["chute_id"],
+                "confidential_compute": True,
+            }
+            return httpx.Response(200, json={"data": [listed]})
+        if url.path == f"/e2e/instances/{real['chute_id']}":
+            made_up = [
+                {
+                    "instance_id": item["instance_id"],
+                    "e2e_pubkey": base64.b64encode(
+                        mlkem.MLKEM768PrivateKey.generate().public_key().public_bytes_raw()
+                    ).decode(),
+                    "nonces": [secrets_module.token_urlsafe(24) for _ in range(10)],
+                }
+                for item in items
+            ]
+            return httpx.Response(200, json={"instances": made_up, "nonce_expires_in": 60})
+        if url.path == f"/chutes/{real['chute_id']}/evidence":
+            return httpx.Response(200, json=real["evidence"])
+        if url.path == "/servers/tdx/measurements":
+            return httpx.Response(200, json=real["measurements"])
+        return checks(request)
+
+    def provider() -> module.ChutesE2EEProvider:
+        client = httpx.Client(transport=httpx.MockTransport(chutes))
+        return module.ChutesE2EEProvider(
+            ProviderConfig(name="Chutes", base_url="https://api.chutes.ai", api_key="cpk_x"),
+            client=client,
+            listing_client=client,
+            checks_client=client,
+            intel=lambda raw, session: dcap.verify(raw, session, now=moment),
+            nvidia=lambda answer, nonce, session: nras.verify(
+                answer, nonce, session, now=real["now"]
+            ),
+        )
+
+    monkeypatch.setattr(module.secrets, "token_hex", lambda _n: real["nonce"])
+    with pytest.raises(TeeRefused, match="doesn't bind the key Chutes lists for it to our nonce"):
+        provider().attest(real["model"])
+    monkeypatch.setattr(module, "key_bound", lambda *_args: True)
+    attestation = provider().attest(real["model"])
+    assert attestation.instances == 3 and attestation.level == "partial"
+    assert (attestation.tcb_status, attestation.gpus) == ("UpToDate", 3)
+    assert "8xpro_6000" in attestation.measurement and "(1.5.0)" in attestation.measurement
