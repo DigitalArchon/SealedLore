@@ -1237,7 +1237,9 @@ def test_keys_past_their_time_are_refused_as_the_other_apps_refuse_them():
 
 
 def test_a_keyset_that_names_no_time_it_holds_until_falls_short_unused():
-    for undated in (None, "4000000000", True, 4.0e9):
+    # A bool (Python counts True as 1, which read as 1970) or a fraction, even one past,
+    # is no time: unused, never refused as expired (the DA apps' rule).
+    for undated in (None, "4000000000", "1000000000", True, False, 4.0e9, 1.5e9):
         client = receipt_client(tied="statement", not_after=undated)
         result = client.attest()
         assert client.keyset is None, undated

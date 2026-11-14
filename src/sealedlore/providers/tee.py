@@ -918,15 +918,12 @@ class TeeClient:
     def _refuse_expired(self, keyset: dict[str, Any] | None) -> None:
         """Keys the gateway's keyset holds only until a time now past are
         refused, as the author's other apps refuse them (DA Assistant's, Nov
-        2026): what was attested is keys no longer in force. A keyset that names
-        no such time isn't used for the receipts, and falls short
-        (`_take_keyset`)."""
+        2026): what was attested is keys no longer in force. Only a whole number
+        of seconds is a time (never a bool, which Python counts as an integer,
+        nor a fraction: the DA apps' rule); a keyset that names no such time
+        isn't used for the receipts, and falls short (`_take_keyset`)."""
         expires = keyset.get("not_after") if keyset is not None else None
-        if (
-            isinstance(expires, (int, float))
-            and not isinstance(expires, bool)
-            and expires < time.time()
-        ):
+        if isinstance(expires, int) and not isinstance(expires, bool) and expires < time.time():
             raise TeeRefused(f"{self.model}'s attested keys expired on {_day(expires)}")
 
     def _attest_gateway_alone(self, gateway: _Gateway, why: str) -> Attestation:
