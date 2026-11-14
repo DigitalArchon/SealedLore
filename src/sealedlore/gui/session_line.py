@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QHBoxLayout, QWidget
 from sealedlore.engine.routing import routable
 from sealedlore.gui.status import ElidingLabel
 from sealedlore.models.config import model_label
-from sealedlore.providers.privacy import Privacy, privacy_of
+from sealedlore.providers.privacy import TINFOIL, Privacy, privacy_of
 
 ROLE_NAMES = {
     "summarisation": "Summaries",
@@ -32,6 +32,10 @@ NO_ENDPOINT = "No endpoint set up: File → Settings…"
 
 
 def _privacy(privacy: Privacy, tee_state: str) -> str:
+    if privacy.service == TINFOIL:
+        # The model button's "🔐 E2EE · Tinfoil" is said here in words.
+        extra = tee_state.replace("🔐 E2EE · Tinfoil", "").strip()
+        return "🔐 end-to-end encrypted, Tinfoil" + (f" ({extra})" if extra else "")
     if privacy.sealed:
         return "🔐 end-to-end encrypted" + (f" ({tee_state})" if tee_state else "")
     if privacy.private:

@@ -1551,8 +1551,22 @@ def run_by(tee: str | None, upstream: TeeUpstream | None) -> str:
     return f"  ·  run by {upstream_label(upstream)}"
 
 
-def tee_tip(tee: str, upstream: TeeUpstream | None) -> str:
-    """A TEE mark's tooltip, with who ran the model where that was looked up."""
+# An "encrypted" mark's tooltip for a message another service sealed
+# (`NodeMeta.tee_service`); NanoGPT's Private Mode keeps TEE_MARK_TIPS'.
+SEALED_BY_TIPS = {
+    "tinfoil": (
+        "End-to-end encrypted through Tinfoil: sealed on this machine to the key of "
+        "Tinfoil's attested router enclave, sent over a connection pinned to its attested "
+        "TLS key, and the reply opened with it. Tinfoil carried ciphertext."
+    ),
+}
+
+
+def tee_tip(tee: str, upstream: TeeUpstream | None, service: str | None = None) -> str:
+    """A TEE mark's tooltip, with who ran the model where that was looked up,
+    and who sealed an encrypted message when that wasn't NanoGPT."""
+    if tee == "encrypted" and service in SEALED_BY_TIPS:
+        return SEALED_BY_TIPS[service]
     tip = TEE_MARK_TIPS[tee]
     if tee in ("verified", "signed") and upstream is not None:
         tip += "\n\n" + upstream_words(upstream)
@@ -2151,7 +2165,7 @@ class TranscriptView(QScrollArea):
             widget.setProperty("private", "true")
             widget.setToolTip(f"Written in a private {part}: only the private model ever saw it.")
         if tee in TEE_MARK_TIPS:
-            widget.setToolTip(tee_tip(tee, node.meta.tee_upstream))
+            widget.setToolTip(tee_tip(tee, node.meta.tee_upstream, node.meta.tee_service))
         if node.meta.private_summary_of:
             widget.setProperty("privatesummary", "true")
             widget.setToolTip(

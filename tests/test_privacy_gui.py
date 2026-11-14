@@ -63,7 +63,7 @@ def test_a_model_field_labels_a_model_by_its_endpoint(app):
     assert sealed.privacy.text() == "🔐 E2EE" and "Chutes" in sealed.privacy.toolTip()
     assert "isn't built into this version" in sealed.privacy.toolTip()
     tinfoil = ModelField("glm-5-3", privacy_of=lambda model: Privacy("sealed", "tinfoil"))
-    assert tinfoil.privacy.text() == "🔐 E2EE" and "Tinfoil" in tinfoil.privacy.toolTip()
+    assert tinfoil.privacy.text() == "🔐 E2EE · Tinfoil" and "Tinfoil" in tinfoil.privacy.toolTip()
     by_address = ModelField("glm-5-3", route_endpoint=lambda model: "https://api.chutes.ai")
     assert by_address.privacy.text() == "🔐 E2EE"
     plain = ModelField("TEE/glm-5.3")

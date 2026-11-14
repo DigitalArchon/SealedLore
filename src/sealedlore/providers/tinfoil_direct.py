@@ -66,7 +66,6 @@ from sealedlore.providers.sealed_ehbp import (
 from sealedlore.providers.wire import to_wire_messages
 from sealedlore.threads import BackgroundThread
 
-TINFOIL_BASE_URL = "https://inference.tinfoil.sh/v1"
 # Tinfoil's attestation bundle service: one GET of /attestation is the whole
 # trust root, checked by the SDK (design §1.1).
 ATC_URL = "https://atc.tinfoil.sh"
@@ -510,3 +509,13 @@ class TinfoilDirect(SealedEhbpProvider):
             raise
         finally:
             self._pin = None
+
+
+def tinfoil_context(base_url: str, model: str) -> Any:
+    """A Tinfoil model's context window from its listing, read without the
+    key (Settings → Private → Detect); None when it isn't listed."""
+    from sealedlore.providers.context_probe import ContextSize
+
+    entry = (Listing(base_url).known() or {}).get(model)
+    tokens = entry.get("context_length") if entry else None
+    return ContextSize(tokens=tokens, source="Tinfoil's model list") if tokens else None

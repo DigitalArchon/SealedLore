@@ -22,8 +22,16 @@ from sealedlore.gui.workers import run_detached
 from sealedlore.models.config import ProviderConfig
 from sealedlore.providers import make_chat_provider
 from sealedlore.providers.base import ChatProvider, ProviderError
-from sealedlore.providers.privacy import Privacy, move_refusal, privacy_for
-from sealedlore.providers.private_mode import ModelRetired, PrivateModeProvider
+from sealedlore.providers.privacy import (
+    NANOGPT_PRIVATE,
+    SERVICE_NAMES,
+    TINFOIL,
+    Privacy,
+    move_refusal,
+    privacy_for,
+)
+from sealedlore.providers.private_mode import ModelRetired
+from sealedlore.providers.sealed_ehbp import SealedEhbpProvider
 from sealedlore.providers.tee import (
     GATEWAY_UNCHECKED,
     GPUS_LOOSE,
@@ -166,6 +174,17 @@ class PrivateWindow:
             return self.private_provider_factory(settings)
         return make_chat_provider(settings)
 
+    def _sealed_by(self) -> str:
+        """Who seals the open scene's or chat's model: NanoGPT's Private Mode
+        unless its endpoint says another service (providers/privacy.py)."""
+        session = self.session
+        if session is None:
+            return SERVICE_NAMES[NANOGPT_PRIVATE]
+        span = session.open_span
+        privacy = session.privacy(span.model if span is not None else session.model)
+        service = privacy.service if privacy.sealed else NANOGPT_PRIVATE
+        return SERVICE_NAMES.get(service, service)
+
     def _wants_attestation(self, privacy: Privacy) -> bool:
         """An end-to-end encrypted model is always attested: its key is what
         everything is sealed to. A TEE/ model, when Settings asks for it."""
@@ -244,6 +263,8 @@ class PrivateWindow:
             return ""
         span = session.open_span
         attestation = span.attestation if span is not None else session.story.chat_attestation
+        if attestation is not None and attestation.encrypted and attestation.service == TINFOIL:
+            return "\n\n" + what_was_attested(attestation)
         if attestation is None or attestation.encrypted:
             return ""
         lines = [what_was_attested(attestation)] if attestation.attested else []
@@ -431,7 +452,7 @@ class PrivateWindow:
             sealed = (
                 self.session.private_provider if span is not None else self._sealed_chat_provider()
             )
-            if not isinstance(sealed, PrivateModeProvider):
+            if not isinstance(sealed, SealedEhbpProvider):
                 return  # a test's stand-in
 
             def attest():
@@ -642,7 +663,7 @@ class PrivateWindow:
         self._retired_model = model
         self._offered_instead = list(offered)
         self._summarise_after_attest = False
-        self.session.tee_block = f"{model} is no longer offered by NanoGPT's Private Mode"
+        self.session.tee_block = f"{model} is no longer offered by {self._sealed_by()}"
         self._tee_state = "⚠ no longer offered"
         self._refresh_model_button()
         self._say_model_retired(model, for_chat)
@@ -652,7 +673,7 @@ class PrivateWindow:
             QMessageBox.warning(
                 self,
                 "Model no longer available",
-                f"{model} is no longer offered by NanoGPT's Private Mode, so nothing can "
+                f"{model} is no longer offered by {self._sealed_by()}, so nothing can "
                 "be sent to it.\n\nChoose another end-to-end encrypted model with the model "
                 "button below the message box.",
             )
@@ -663,8 +684,10 @@ class PrivateWindow:
         choices = self._scene_model_choices(model)
         if not choices:
             then = "End the private scene" + (" without a summary" if written else "")
+            by = self._sealed_by()
+            offers = "NanoGPT offers" if by == SERVICE_NAMES[NANOGPT_PRIVATE] else f"{by} offers"
             text = (
-                f"{then}; NanoGPT offers no other end-to-end encrypted model to carry it "
+                f"{then}; {offers} no other end-to-end encrypted model to carry it "
                 "on. Choose another for new scenes under Settings → Private."
             )
         elif summarise:
@@ -682,7 +705,7 @@ class PrivateWindow:
             QMessageBox.Warning,
             "Model no longer available",
             self._say(
-                f"{model} is no longer offered by NanoGPT's Private Mode, so nothing can be "
+                f"{model} is no longer offered by {self._sealed_by()}, so nothing can be "
                 f"sent to it.\n\n{text}"
             ),
             QMessageBox.NoButton,
@@ -780,13 +803,20 @@ class PrivateWindow:
         summarise, self._summarise_after_attest = self._summarise_after_attest, False
         if attestation is not None:
             older = "  ⚠ older release" if attestation.latest_release else ""
-            self._tee_state = f"end-to-end encrypted{older}"
+            if attestation.service == TINFOIL:
+                self._tee_state = f"🔐 E2EE · Tinfoil{older}"
+                said = (
+                    f"End-to-end encrypted through Tinfoil: {attestation.detail}. Tinfoil "
+                    "sees the account, the model, timing, sizes and cost, never the text."
+                )
+            else:
+                self._tee_state = f"end-to-end encrypted{older}"
+                said = (
+                    f"End-to-end encrypted: {attestation.detail}. NanoGPT relays ciphertext; "
+                    "it sees the account, the model, timing, sizes and usage."
+                )
             self._refresh_model_button()
-            self.statusBar().showMessage(
-                f"End-to-end encrypted: {attestation.detail}. NanoGPT relays ciphertext; it "
-                "sees the account, the model, timing, sizes and usage.",
-                15000,
-            )
+            self.statusBar().showMessage(said, 15000)
             if summarise and not for_chat and not self._busy:
                 self.end_private()  # the author was ending the scene
             return

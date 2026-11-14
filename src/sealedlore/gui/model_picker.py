@@ -46,7 +46,7 @@ from sealedlore.gui.workers import run_detached
 from sealedlore.models.config import ProviderConfig, RecommendedModel, split_model
 from sealedlore.models.route import ModelRoute
 from sealedlore.providers.base import ChatProvider
-from sealedlore.providers.privacy import NANOGPT_TEE, Privacy, privacy_at
+from sealedlore.providers.privacy import NANOGPT_TEE, SERVICE_NAMES, TINFOIL, Privacy, privacy_at
 from sealedlore.providers.private_catalog import encrypted_counterpart
 
 CATALOG_MAX_AGE = timedelta(hours=1)
@@ -312,7 +312,7 @@ class ModelPickerDialog(QDialog):
         # Test the chosen TEE/ or private/ model's enclave before using it.
         from sealedlore.gui.attest_check import AttestationButton
 
-        self.attest = AttestationButton(self._attest_settings)
+        self.attest = AttestationButton(self._attest_settings, privacy_of=self._judge)
         self.status = QLabel()
         self.status.setObjectName("hintLabel")
         self.status.setTextFormat(Qt.PlainText)
@@ -440,9 +440,13 @@ class ModelPickerDialog(QDialog):
         """The Privacy column: end-to-end encrypted, TEE, or nothing. A TEE
         model with an encrypted twin says so (the author: users should see
         which offer full Private Mode, not just TEE)."""
-        label, note = self._judge(model_id).label()
+        privacy = self._judge(model_id)
+        label, note = privacy.label()
         if label.startswith("🔐"):
-            label = "🔐 Encrypted"  # short: the Name column needs the room
+            # Short: the Name column needs the room. Another service than
+            # NanoGPT's Private Mode says which.
+            by = f" ({SERVICE_NAMES[TINFOIL]})" if privacy.service == TINFOIL else ""
+            label = "🔐 Encrypted" + by
         twin = self._twin_of(model_id)
         if twin:
             label = "TEE · 🔐 version"
@@ -774,9 +778,12 @@ class ModelField(QWidget):
         return privacy_at(model, base_url or "")
 
     def _show_privacy(self, text: str) -> None:
-        label, note = self.model_privacy(text).label()
+        privacy = self.model_privacy(text)
+        label, note = privacy.label()
         # Short beside the field; the whole label and note in the tooltip.
-        self.privacy.setText("🔐 E2EE" if label.startswith("🔐") else label)
+        if label.startswith("🔐"):
+            label = "🔐 E2EE" + (" · Tinfoil" if privacy.service == TINFOIL else "")
+        self.privacy.setText(label)
         self.privacy.setToolTip(note)
         self.privacy.setVisible(bool(label))
 

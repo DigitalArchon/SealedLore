@@ -24,6 +24,7 @@ from sealedlore.engine.attestation_check import (
 )
 from sealedlore.gui.workers import run_detached
 from sealedlore.models.config import ProviderConfig
+from sealedlore.providers.privacy import Privacy
 from sealedlore.providers.tee import failure_words
 
 Settings = Callable[[], ProviderConfig | None]
@@ -78,7 +79,16 @@ class AttestationButton(QWidget):
     model; `settings` gives the endpoint and model as they stand when pressed,
     or raises ValueError to refuse in words."""
 
-    def __init__(self, settings: Settings, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        parent: QWidget | None = None,
+        *,
+        privacy_of: Callable[[str], Privacy] | None = None,
+    ) -> None:
+        """`privacy_of` (held weakly, as `settings`): how private a model is
+        on its endpoint, for whether to show the button; without it, by the
+        id alone."""
         super().__init__(parent)
         # Weakly: `settings` is usually a method of the dialog this button sits
         # in, and a button holding its own parent makes a cycle whose
@@ -86,6 +96,13 @@ class AttestationButton(QWidget):
         # in a test run, took the process down).
         self._settings = (
             weakref.WeakMethod(settings) if inspect.ismethod(settings) else lambda: settings
+        )
+        self._privacy_of = (
+            None
+            if privacy_of is None
+            else weakref.WeakMethod(privacy_of)
+            if inspect.ismethod(privacy_of)
+            else lambda: privacy_of
         )
         self._job: int | None = None
         self._model = ""
@@ -113,8 +130,11 @@ class AttestationButton(QWidget):
         self.model_changed("")
 
     def model_changed(self, model: str) -> None:
-        """Show for TEE/ and private/ models; a new model clears the old result."""
-        self.setVisible(testable(model.strip()))
+        """Show for TEE and end-to-end encrypted models (by their endpoint
+        when the button knows it); a new model clears the old result."""
+        judge = self._privacy_of() if self._privacy_of is not None else None
+        model = model.strip()
+        self.setVisible(judge(model).private if judge is not None else testable(model))
         if self._job is None:
             self.result.hide()
             self.result.clear()

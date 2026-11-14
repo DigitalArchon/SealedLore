@@ -34,7 +34,12 @@ from ehbp import EHBPTransport  # noqa: E402
 
 from sealedlore.engine.pricing import parse_price  # noqa: E402
 from sealedlore.engine.reasoning import config_reasoning  # noqa: E402
-from sealedlore.models.config import Config, ModelReasoning, ProviderConfig  # noqa: E402
+from sealedlore.models.config import (  # noqa: E402
+    TINFOIL_BASE_URL,
+    Config,
+    ModelReasoning,
+    ProviderConfig,
+)
 from sealedlore.providers import make_chat_provider  # noqa: E402
 from sealedlore.providers.base import ProviderError, StreamCompleted, TextDelta  # noqa: E402
 from sealedlore.providers.privacy import TINFOIL, privacy_of  # noqa: E402
@@ -51,7 +56,6 @@ from sealedlore.providers.tinfoil_direct import (  # noqa: E402
     ATC_URL,
     DIRECT_FIELDS,
     PIN_MISMATCH,
-    TINFOIL_BASE_URL,
     Listing,
     TinfoilDirect,
     TlsPin,

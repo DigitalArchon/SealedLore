@@ -620,6 +620,8 @@ UNBUILT_API_LABELS: dict[str, str] = {
     "chutes-e2ee": "Chutes E2EE, end-to-end encrypted (not built yet)",
 }
 ANTHROPIC_HOST = "api.anthropic.com"
+# Tinfoil's own API (providers/tinfoil_direct.py).
+TINFOIL_BASE_URL = "https://inference.tinfoil.sh/v1"
 # The hosts whose chat endpoints take only end-to-end encrypted requests, by
 # domain (any host under it), and the protocol each speaks: Tinfoil's
 # inference.tinfoil.sh and its routers; Chutes' api.chutes.ai, llm.chutes.ai

@@ -60,7 +60,13 @@ from sealedlore.models.node import NARRATOR_SPEAKER_ID, Node, NodeMeta, Usage
 from sealedlore.models.private import PrivateKeep, PrivateSpan, TeeUpstream
 from sealedlore.models.summary import Summary
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError, why_not_whole
-from sealedlore.providers.privacy import Privacy, move_refusal, privacy_for, privacy_of
+from sealedlore.providers.privacy import (
+    NANOGPT_PRIVATE,
+    Privacy,
+    move_refusal,
+    privacy_for,
+    privacy_of,
+)
 
 # Fewer than this many recent messages left in a private prompt, and the
 # story is too big for the private model: offer the handoff. Live, a 16k
@@ -344,6 +350,12 @@ class PrivateRuntime:
         ):
             return privacy_for(model, self.private_endpoint())
         return privacy_of(model, self.config)
+
+    def _tee_service(self, model: str) -> str | None:
+        """Who sealed an end-to-end encrypted message, for its mark, when that
+        isn't NanoGPT's Private Mode (the mark always meant NanoGPT's)."""
+        privacy = self.privacy(model)
+        return privacy.service if privacy.sealed and privacy.service != NANOGPT_PRIVATE else None
 
     def span_nodes(self, span: PrivateSpan) -> list[Node]:
         """The scene's messages on the active path, in order."""
@@ -829,6 +841,7 @@ class PrivateRuntime:
         key could have sealed it (providers/private_mode.py)."""
         if node is not None and getattr(self, "_last_sealed", False):
             node.meta.tee = self._with_carried(node, "encrypted")
+            node.meta.tee_service = self._tee_service(node.meta.model or "")
             self._mark_sent(node, "encrypted")
             return
         if node is None or self.private_tee is None:
@@ -884,6 +897,7 @@ class PrivateRuntime:
         if keep_received and parent.meta.tee == "received":
             return
         parent.meta.tee = how
+        parent.meta.tee_service = reply.meta.tee_service if how == "encrypted" else None
 
     def _log_turn(self, kind: str, body: dict[str, Any], span: PrivateSpan | None) -> str:
         """The API log for a turn: as usual, but a memory-only scene's calls

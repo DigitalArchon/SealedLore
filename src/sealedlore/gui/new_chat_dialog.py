@@ -130,7 +130,7 @@ class NewChatDialog(QDialog):
         self.keep_hint.setWordWrap(True)
         self.keep_label = QLabel("Keep")
         # Before starting it: does the model's enclave attest?
-        self.attest = AttestationButton(self._attest_settings)
+        self.attest = AttestationButton(self._attest_settings, privacy_of=self._privacy_of)
 
         form = QFormLayout()
         self.form = form

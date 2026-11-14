@@ -39,7 +39,7 @@ from sealedlore.engine.authoring import (
     review_markdown,
 )
 from sealedlore.engine.session import ReviewSizes
-from sealedlore.gui.model_picker import Browse, ModelField
+from sealedlore.gui.model_picker import Browse, ModelField, PrivacyOf
 from sealedlore.gui.sizing import (
     GrowingText,
     enter_only_on_buttons,
@@ -81,6 +81,7 @@ class ReviewRequestDialog(QDialog):
         last_complaint: str = "",
         clear_marks: Callable[[], None] | None = None,
         parent: QWidget | None = None,
+        privacy_of: PrivacyOf | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Review settings")
@@ -169,7 +170,7 @@ class ReviewRequestDialog(QDialog):
             "questions. Long, and seldom the cause."
         )
 
-        self.model = ModelField(model, browse)
+        self.model = ModelField(model, browse, privacy_of=privacy_of)
         self.model.setPlaceholderText(default_model or "the story's model")
 
         self.size_label = QLabel()

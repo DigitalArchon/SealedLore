@@ -327,4 +327,6 @@ def test_a_private_scene_is_judged_on_its_own_endpoint(tmp_path):
     assert session.privacy("glm-5-3") == Privacy("sealed", TINFOIL)
     assert session.private_endpoint() is cfg.private_provider
     assert session._written_mark("glm-5-3", session.open_span) == "encrypted"
+    assert session._tee_service("glm-5-3") == "tinfoil", "the passage's mark names who sealed it"
     assert session.privacy("z-ai/glm-5.3") == Privacy(), "the story's own models are as they were"
+    assert session._tee_service("private/glm-5-3") is None, "NanoGPT's marks are as they were"

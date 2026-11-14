@@ -32,7 +32,7 @@ from sealedlore.engine.draft_detail import STANDARD, DraftDetail
 from sealedlore.engine.drafting import StoryDraft
 from sealedlore.engine.plot_draft import DEPTHS, NO_NEWCOMERS, PlotWishes
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
-from sealedlore.gui.model_picker import Browse, ModelField
+from sealedlore.gui.model_picker import Browse, ModelField, PrivacyOf
 from sealedlore.gui.plot_wishes import PlotWishesForm
 from sealedlore.gui.sizing import enter_only_on_buttons, may_discard, size_to_screen
 from sealedlore.gui.worker import GenerationWorker
@@ -87,6 +87,7 @@ class GenerateDialog(QDialog):
         reasoning_for: Callable[[str], ReasoningConfig] | None = None,
         characters: Sequence[Character] = (),
         choose: Callable[[list[Character]], list[Character] | None] | None = None,
+        privacy_of: PrivacyOf | None = None,
     ) -> None:
         """`route_for`: the authoring route for the model drafting;
         `reasoning_for`: what the author's reasoning level asks of it.
@@ -130,7 +131,7 @@ class GenerateDialog(QDialog):
         self.choose_button.clicked.connect(self._choose_characters)
         self.choose_button.setVisible(choose is not None)
 
-        self.model = ModelField(model, browse)
+        self.model = ModelField(model, browse, privacy_of=privacy_of)
         self.model.setPlaceholderText(default_model or "the story's model")
         model_hint = QLabel(
             "Blank uses your chat model. A stronger one (e.g. anthropic/claude-opus-5) "

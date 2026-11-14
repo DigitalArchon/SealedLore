@@ -4464,6 +4464,7 @@ class MainWindow(
             characters=characters or (),
             # Any of the author's own may go in, once they keep some.
             choose=self._choose_kept if characters or self._kept() else None,
+            privacy_of=self._privacy_of,
         )
         accepted = dialog.exec() == GenerateDialog.Accepted
         self._remember_authoring_model(dialog.model_text())
@@ -4537,6 +4538,7 @@ class MainWindow(
             last_complaint=last.complaint if last else "",
             clear_marks=self.session.review_marks.clear,
             parent=self,
+            privacy_of=self._privacy_of,
         )
         accepted = dialog.exec() == ReviewRequestDialog.Accepted
         typed_model = dialog.model_text()

@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 from sealedlore.models.config import ProviderConfig
 from sealedlore.providers.base import ProviderError
-from sealedlore.providers.privacy import NANOGPT_PRIVATE, not_built, privacy_for
+from sealedlore.providers.privacy import NANOGPT_PRIVATE, TINFOIL, not_built, privacy_for
 from sealedlore.providers.tee import (
     TeeRefused,
     failure_words,
@@ -44,13 +44,16 @@ def testable(model: str, endpoint: ProviderConfig | None = None) -> bool:
 def check_attestation(settings: ProviderConfig) -> AttestationCheck:
     """Attest `settings.model` on `settings`' endpoint, as entering would."""
     settings = settings.sendable()
-    if settings.key_withheld:
-        return AttestationCheck("error", f"The check couldn't run: {settings.key_withheld}")
     model = settings.model.strip()
     privacy = privacy_for(model, settings)
     refusal = not_built(privacy, settings.base_url)
     if refusal:
         return AttestationCheck("error", f"The check couldn't run: {refusal}")
+    if privacy.service == TINFOIL:
+        # Keyless: Tinfoil's bundle and model list are public.
+        return _check_tinfoil(settings, model)
+    if settings.key_withheld:
+        return AttestationCheck("error", f"The check couldn't run: {settings.key_withheld}")
     if privacy.service == NANOGPT_PRIVATE:
         from sealedlore.providers.private_mode import PrivateModeProvider
 
@@ -113,3 +116,31 @@ def check_attestation(settings: ProviderConfig) -> AttestationCheck:
             detail,
         )
     return AttestationCheck("full", f"✓ {what}{summary}", detail)
+
+
+def _check_tinfoil(settings: ProviderConfig, model: str) -> AttestationCheck:
+    """Tinfoil's own API (providers/tinfoil_direct.py): its router attested
+    from Tinfoil's bundle service, for the endpoint's own host, and the
+    model still listed. Nothing is sent with the key."""
+    from sealedlore.providers.tinfoil_direct import TinfoilDirect
+
+    provider = TinfoilDirect(settings)
+    try:
+        if provider.still_offered(model) is False:
+            return AttestationCheck(
+                "retired", "✗ Not offered by Tinfoil", "Choose another of Tinfoil's models."
+            )
+        attestation = provider.attest()
+    except ProviderError as exc:
+        return AttestationCheck(
+            "refused", f"✗ Refused: {failure_words(exc)}", "Nothing would be sent to it."
+        )
+    finally:
+        provider.close()
+    older = attestation.latest_release
+    return AttestationCheck(
+        "encrypted",
+        "✓ End-to-end encrypted, Tinfoil's router attested"
+        + (f" (⚠ an older enclave release than the latest, {older})" if older else ""),
+        "\n\n".join(p for p in (what_was_attested(attestation), attestation.detail) if p),
+    )

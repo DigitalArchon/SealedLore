@@ -74,6 +74,8 @@ from sealedlore.models.config import (
     RECOMMENDED_IMAGE_MODELS,
     RECOMMENDED_MODELS,
     RECOMMENDED_TEXT_MODELS,
+    SEALED_APIS,
+    TINFOIL_BASE_URL,
     UNBUILT_API_LABELS,
     Config,
     EmbeddingProviderConfig,
@@ -119,6 +121,7 @@ from sealedlore.providers.privacy import (
     privacy_for,
     privacy_of,
 )
+from sealedlore.providers.tinfoil_direct import tinfoil_context
 from sealedlore.storage import keychain
 from sealedlore.storage.paths import config_file
 
@@ -161,6 +164,30 @@ LORE_SELECTORS = (
     ("Jev before each turn", "jev"),
     ("Similarity and keywords", "similarity"),
 )
+
+
+# The services private scenes may go to (Settings → Private → Service), each
+# with its own address and key: (value, label, its address). Chutes E2EE joins
+# them once its client is built (providers/privacy.py BUILT_SERVICES).
+PRIVATE_SERVICES = (
+    ("nanogpt", "NanoGPT (private/ and TEE/ models)", DEFAULT_BASE_URL),
+    ("tinfoil", "Tinfoil, end-to-end encrypted (preliminary)", TINFOIL_BASE_URL),
+    ("other", "Another server (a local one, say)", ""),
+)
+PRIVATE_MODEL_HINTS = {
+    "nanogpt": "e.g. private/glm-5-3, or TEE/glm-5.3-flash",
+    "tinfoil": "e.g. glm-5-3 (Choose lists Tinfoil's models)",
+    "other": "e.g. llama3.1:8b",
+}
+
+
+def private_service_of(endpoint: ProviderConfig | None) -> str:
+    """Which of `PRIVATE_SERVICES` a saved private endpoint is."""
+    if endpoint is None:
+        return "nanogpt"
+    if endpoint.sealed_service() == "tinfoil":
+        return "tinfoil"
+    return "nanogpt" if on_nanogpt(endpoint.base_url) else "other"
 
 
 def _note_label() -> QLabel:
@@ -696,12 +723,18 @@ class SettingsDialog(QDialog):
             number += 1
         return f"{base} {number}"
 
-    def _add_endpoint(self) -> None:
+    def _add_endpoint(self, preset: str = "") -> None:
         """A fresh endpoint, its address to be typed (https://api.anthropic.com
-        for Anthropic's own API, with an Anthropic key)."""
+        for Anthropic's own API, with an Anthropic key), or Tinfoil's own API
+        filled in (`preset` "tinfoil"), its key to be typed."""
         self._store_endpoint_fields()
-        name = self._unique_endpoint_name("New endpoint")
-        self._endpoints.append(ProviderConfig(name=name).model_copy(update={"base_url": ""}))
+        if preset == "tinfoil":
+            name = self._unique_endpoint_name("Tinfoil")
+            added = ProviderConfig(name=name, base_url=TINFOIL_BASE_URL, api="tinfoil")
+        else:
+            name = self._unique_endpoint_name("New endpoint")
+            added = ProviderConfig(name=name).model_copy(update={"base_url": ""})
+        self._endpoints.append(added)
         self._origins.append(None)
         self._named.append(name)
         self._selected = len(self._endpoints) - 1
@@ -921,7 +954,13 @@ class SettingsDialog(QDialog):
         self.endpoint_list.currentRowChanged.connect(self._on_endpoint_row)
         self.add_endpoint = QPushButton("Add")
         self.add_endpoint.setToolTip("Another endpoint, with its own address and key")
-        self.add_endpoint.clicked.connect(self._add_endpoint)
+        self.add_endpoint.clicked.connect(lambda: self._add_endpoint())
+        self.add_tinfoil = QPushButton("Add Tinfoil")
+        self.add_tinfoil.setToolTip(
+            "Tinfoil's own API, end-to-end encrypted (https://inference.tinfoil.sh/v1): "
+            "its address filled in, your Tinfoil key to type"
+        )
+        self.add_tinfoil.clicked.connect(lambda: self._add_endpoint("tinfoil"))
         self.remove_endpoint = QPushButton("Remove")
         self.remove_endpoint.setToolTip(
             "Take the selected endpoint out. Model fields that name it are left as they are."
@@ -936,6 +975,7 @@ class SettingsDialog(QDialog):
         buttons = QHBoxLayout()
         buttons.setContentsMargins(0, 0, 0, 0)
         buttons.addWidget(self.add_endpoint)
+        buttons.addWidget(self.add_tinfoil)
         buttons.addWidget(self.remove_endpoint)
         buttons.addWidget(self.make_default)
         buttons.addStretch(1)
@@ -1108,9 +1148,36 @@ class SettingsDialog(QDialog):
 
     def _private_field_privacy(self, model: str) -> Privacy:
         """How private a model is on the private endpoint as typed."""
+        return privacy_at(model, self.private_url.text().strip(), self._private_api())
+
+    def _private_service(self) -> str:
+        """The service chosen for private scenes (`PRIVATE_SERVICES`)."""
+        combo = getattr(self, "private_service", None)
+        return (combo.currentData() if combo is not None else None) or "nanogpt"
+
+    def _private_api(self) -> str:
+        """What the private endpoint speaks, by the service chosen: Tinfoil's
+        own protocol, or what it spoke (never a sealed one it was moved off)."""
+        if self._private_service() == "tinfoil":
+            return "tinfoil"
         existing = self.config.private_provider
         api = existing.api if existing is not None else "auto"
-        return privacy_at(model, self.private_url.text().strip(), api)
+        return "auto" if api in SEALED_APIS else api
+
+    def _on_private_service(self, *_args) -> None:
+        """Another service: its own address and key, kept apart from the one
+        left (each is bound to its own address when saved: the standard)."""
+        left = self._private_shown
+        self._private_by_service[left] = (self.private_url.text(), self.private_key.text())
+        chosen = self._private_service()
+        default = next(url for value, _label, url in PRIVATE_SERVICES if value == chosen)
+        url, key = self._private_by_service.get(chosen, (default, ""))
+        self.private_url.setText(url)
+        self.private_key.setText(key)
+        self._private_shown = chosen
+        self.private_model.setPlaceholderText(PRIVATE_MODEL_HINTS[chosen])
+        self.private_model._show_privacy(self.private_model.text())
+        self.private_attest.model_changed(self.private_model.text())
 
     def _routed_field(self, text: str, role: str = "") -> ModelField:
         """A role's model field, with its route beside it (NanoGPT only) and
@@ -1808,6 +1875,7 @@ class SettingsDialog(QDialog):
                 name="private-browse",
                 base_url=url,
                 api_key=key,
+                api=self._private_api(),
                 key_in_clear_for=self._cleared(url, key),
             )
         )
@@ -1883,6 +1951,18 @@ class SettingsDialog(QDialog):
         existing = self.config.private_provider
         widget = QWidget()
         form = QFormLayout(widget)
+        # Who the private scenes go to: each service its own address and key.
+        self.private_service = QComboBox()
+        for value, label, _url in PRIVATE_SERVICES:
+            self.private_service.addItem(label, value)
+        shown_service = private_service_of(existing)
+        self.private_service.setCurrentIndex(max(0, self.private_service.findData(shown_service)))
+        self.private_service.setToolTip(
+            "NanoGPT: its private/ models are end-to-end encrypted, its TEE/ models run in "
+            "an enclave but their text passes NanoGPT's gateway. Tinfoil: its own API, every "
+            "model end-to-end encrypted, no relay in between (preliminary). Another server: "
+            "a local one, say, which keeps it on this machine."
+        )
         intro = QLabel(
             "Private scenes (the Private button, under More beside Send) are played on this model "
             "alone: nothing from them reaches the story's model or any other, and only the "
@@ -1901,6 +1981,8 @@ class SettingsDialog(QDialog):
         self.private_url = QLineEdit(existing.base_url if existing else DEFAULT_BASE_URL)
         self.private_url.setPlaceholderText("http://localhost:11434/v1")
         self.private_key = QLineEdit(existing.api_key if existing else "")
+        self._private_shown = shown_service
+        self._private_by_service: dict[str, tuple[str, str]] = {}
         self.private_key.setEchoMode(QLineEdit.Password)
         self.private_key.setPlaceholderText(
             "blank: the main endpoint's key on the same host, else none"
@@ -1924,7 +2006,7 @@ class SettingsDialog(QDialog):
         self.private_model = ModelField(
             existing.model if existing else "", browse, privacy_of=self._private_field_privacy
         )
-        self.private_model.setPlaceholderText("e.g. llama3.1:8b, or TEE/glm-5.3-flash")
+        self.private_model.setPlaceholderText(PRIVATE_MODEL_HINTS[shown_service])
         self.private_budget = QSpinBox()
         self.private_budget.setRange(2_000, 1_000_000)
         self.private_budget.setSingleStep(1_000)
@@ -1967,6 +2049,7 @@ class SettingsDialog(QDialog):
         self.tee_upstreams_note.setWordWrap(True)
         self.private_tee.toggled.connect(self.tee_upstreams.setEnabled)
         self.tee_upstreams.setEnabled(self.private_tee.isChecked())
+        form.addRow("Service", self.private_service)
         form.addRow("Base URL", self.private_url)
         form.addRow("API key", self.private_key)
         form.addRow(self._key_note())
@@ -1983,9 +2066,12 @@ class SettingsDialog(QDialog):
         )
         # Before choosing it: does this model's enclave attest? (The author:
         # rather than start a scene and have it refused.)
-        self.private_attest = AttestationButton(self._private_attest_settings)
+        self.private_attest = AttestationButton(
+            self._private_attest_settings, privacy_of=self._private_field_privacy
+        )
         self.private_model.textChanged.connect(self.private_attest.model_changed)
         self.private_attest.model_changed(self.private_model.text())
+        self.private_service.currentIndexChanged.connect(self._on_private_service)
         form.addRow("", self.private_attest)
         form.addRow("Model for looks", self.private_look_model)
         form.addRow("Context budget", budget_row)
@@ -2027,7 +2113,11 @@ class SettingsDialog(QDialog):
         self.detect_button.setEnabled(False)
         self.detect_note.setText("Asking the server…")
         QApplication.processEvents()
-        found = detect_context(url, key, model)
+        found = (
+            tinfoil_context(url, model)
+            if self._private_service() == "tinfoil"
+            else detect_context(url, key, model)
+        )
         self.detect_button.setEnabled(True)
         if found is None:
             self.detect_note.setText(
@@ -2430,6 +2520,7 @@ class SettingsDialog(QDialog):
                 "base_url": private_url,
                 "api_key": self.private_key.text(),
                 "model": private_model,
+                "api": self._private_api(),
             }
         )
 

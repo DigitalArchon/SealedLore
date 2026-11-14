@@ -528,10 +528,12 @@ made.
 
 **Tinfoil's own API (preliminary).** Tinfoil serves end-to-end encrypted
 models of its own: the same router as NanoGPT's `private/` models, reached
-with no relay in between. Add an endpoint with the address
-`https://inference.tinfoil.sh/v1` and your Tinfoil key; **Speaks** reads
-**Tinfoil, end-to-end encrypted** from the address (or choose it outright).
-Every model on it is end-to-end encrypted (see "Private scenes"): this is
+with no relay in between. In Settings → Endpoints, **Add Tinfoil** fills in
+its address (`https://inference.tinfoil.sh/v1`) and **Speaks** (**Tinfoil,
+end-to-end encrypted**, also read from the address); type your Tinfoil key
+and Save. Its models are then chosen as `Tinfoil::glm-5-3`, and every one is
+end-to-end encrypted (see "Private scenes"). For private scenes alone,
+choose **Tinfoil** as the service under Settings → Private instead. This is
 built and tested against Tinfoil's public listing and attestation, but not
 yet run with an account.
 
@@ -2904,8 +2906,16 @@ endpoint on `https://inference.tinfoil.sh/v1` that speaks **Tinfoil** (see
 - Tinfoil reports no cost in a stream, so each reply's cost is estimated
   from the listed prices (shown with "~").
 
-Replies are marked "end-to-end encrypted", and the model button and Test
-attestation say what was attested. What Tinfoil sees: your account, which
+It works for a private scene (Settings → Private, **Service**: Tinfoil, each
+service with its own address and key) and for a simple chat on a Tinfoil
+model, as NanoGPT's `private/` models do: attested when the scene or chat
+begins, and an end-to-end encrypted chat may move to any end-to-end
+encrypted model, NanoGPT's or Tinfoil's. The model button reads "🔐 E2EE ·
+Tinfoil" and its tooltip says what was attested; the model list's Privacy
+column reads "🔐 Encrypted (Tinfoil)"; replies are marked "end-to-end
+encrypted", their tooltip naming Tinfoil; Test attestation checks a Tinfoil
+model without your key (its attestation and model list are public). What
+Tinfoil sees: your account, which
 model, when, how large the request and reply are, and the cost, never the
 text. What the app doesn't prove: that the router passes your request only to
 attested model enclaves (that is the router's published code, whose
@@ -3295,6 +3305,13 @@ crash reporting.
   scene ends, and only the summary you approve goes back into it. "In
   memory" keeps the scene's messages off the disk; its calls are logged
   without content, so the cost still adds up.
+- **Tinfoil's own API** (preliminary: an endpoint that speaks Tinfoil, or
+  Settings → Private's Tinfoil service): the attestation bundle from
+  `atc.tinfoil.sh`, checked against Sigstore's public records and Tinfoil's
+  latest release on GitHub (through `github-proxy.tinfoil.sh`), and the model
+  list from `inference.tinfoil.sh`, all without your key. The messages are
+  sealed first, and your key goes in a header to `inference.tinfoil.sh`
+  alone, over a connection pinned to the attested enclave's TLS key.
 - **Phone access**, off until you turn it on (File → Phone access): SealedLore
   runs its own tor, which talks to the Tor network's relays and publishes your
   computer's onion address there. The address's key is kept in the keychain

@@ -2623,7 +2623,8 @@ class StorySession(
                     branch_name=revises.meta.branch_name if revises is not None else None,
                     # A TEE model's passage is marked as it is written, and
                     # the mark raised once its reply is checked (`_check_tee`).
-                    tee=self._written_mark(model, span),
+                    tee=(mark := self._written_mark(model, span)),
+                    tee_service=self._tee_service(model) if mark == "encrypted" else None,
                 ),
             )
             self._attach(node, parent=parent)
@@ -3182,6 +3183,7 @@ class StorySession(
             # the text is no longer that, nor whoever ran it.
             node.meta.tee = None
             node.meta.tee_upstream = None
+            node.meta.tee_service = None
         node.content = content
         if ooc is not None:
             node.ooc = ooc.strip() or None
