@@ -263,23 +263,49 @@ def test_a_pictures_request_is_never_sent_on_by_a_redirect_even_on_https(code):
     assert "Nothing was sent there" in said and "s=1" not in said
 
 
-def test_a_request_carrying_the_key_follows_no_redirect():
+def _media_http(handler):
     from sealedlore.providers.media_http import MediaHttp
 
-    seen: list[httpx.Request] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen.append(request)
-        return httpx.Response(302, headers={"location": "https://api.test/v1/moved"})
-
-    http = MediaHttp(
+    return MediaHttp(
         "https://api.test/v1",
         "k",
         timeout_seconds=30,
         client=make_client("https://api.test/v1", transport=httpx.MockTransport(handler)),
     )
-    with pytest.raises(ProviderError, match=r"redirected \(HTTP 302\) to https://api.test"):
-        http.request("GET", "https://api.test/v1/videos/1")
+
+
+def test_a_download_with_the_key_follows_a_redirect_and_leaves_the_key_at_home():
+    """OpenRouter's video download goes with the key to its own host, which may
+    send it on to storage: followed, the key stays at its own origin (httpx
+    drops Authorization off it) and goes on within it."""
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.url.path == "/v1/videos/1":
+            return httpx.Response(302, headers={"location": "/v1/videos/1/content"})
+        if request.url.host == "api.test":
+            return httpx.Response(302, headers={"location": "https://storage.test/v.mp4?s=1"})
+        return httpx.Response(200, content=b"video")
+
+    reply = _media_http(handler).request("GET", "https://api.test/v1/videos/1")
+    assert reply.content == b"video"
+    assert [r.url.host for r in seen] == ["api.test", "api.test", "storage.test"]
+    assert all("authorization" in r.headers for r in seen[:2])
+    assert "authorization" not in seen[2].headers
+
+
+def test_a_key_httpx_would_carry_elsewhere_follows_no_redirect():
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(302, headers={"location": "https://storage.test/v.mp4"})
+
+    with pytest.raises(ProviderError, match=r"redirected \(HTTP 302\) to https://storage.test"):
+        _media_http(handler).request(
+            "GET", "https://api.test/v1/videos/1", headers={"X-API-Key": "k"}
+        )
     assert len(seen) == 1
 
 
@@ -333,6 +359,8 @@ def test_an_upload_follows_no_redirect():
     assert not follows_redirects({}, {"files": {"file": ("a.png", b"x", "image/png")}})
     assert not follows_redirects({}, {"json": {}})
     assert not follows_redirects({"X-API-Key": "k"}, {})
+    assert not follows_redirects({"Authorization": "Bearer k"}, {"json": {}})
+    assert follows_redirects({"Authorization": "Bearer k"}, {})
     assert follows_redirects({}, {"params": {"a": "1"}})
 
 

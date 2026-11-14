@@ -3188,9 +3188,9 @@ crash reporting.
   names a download link is fetched from that link, which may be a content
   network, without the key). WaveSpeed takes pictures as links, so the
   reference pictures are uploaded to it first. A redirect of a request that
-  carries the key, the prompt or a picture is never followed (it would send
-  them on to wherever it points): it is said, and where it pointed; only a
-  download without the key follows one. In a private scene the prompt
+  carries the prompt or a picture is never followed (it would send them on
+  to wherever it points): it is said, and where it pointed. A download
+  follows one, and the key never goes past the endpoint's own address. In a private scene the prompt
   is written by the private model but still sent there, with a warning in
   the dialog.
 - **The video endpoint** (Settings → Video, off until it has a key) gets the

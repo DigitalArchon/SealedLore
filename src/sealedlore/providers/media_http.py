@@ -269,16 +269,21 @@ class MediaHttp:
 
 # What a request carries that a redirect would hand on to wherever it points.
 _KEY_HEADERS = frozenset({"authorization", "x-api-key"})
+# httpx drops Authorization when a redirect leaves the origin; any other
+# header carrying the key it would send on.
+_DROPPED_ELSEWHERE = frozenset({"authorization"})
 _BODY_FIELDS = ("json", "content", "data", "files")
 
 
 def follows_redirects(headers: dict[str, str], kwargs: dict[str, Any]) -> bool:
-    """Whether a redirect of this request may be followed at all: not if it
-    carries the key or a body. A keyless download may (a signed link's
-    storage often redirects), where `make_client`'s guard lets it."""
+    """Whether a redirect of this request may be followed at all: never with a
+    body (a 307/308 sends it on, the prompt and pictures with it). A download
+    may, where `make_client`'s guard lets it (a signed link's storage often
+    redirects), with the key only where httpx leaves it at its own origin:
+    in Authorization, never in a header it would carry elsewhere."""
     if any(kwargs.get(field) is not None for field in _BODY_FIELDS):
         return False
-    return not any(name.lower() in _KEY_HEADERS for name in headers)
+    return not any(name.lower() in _KEY_HEADERS - _DROPPED_ELSEWHERE for name in headers)
 
 
 def _redirected(url: str, response: httpx.Response, *, followed: bool) -> ProviderError:
