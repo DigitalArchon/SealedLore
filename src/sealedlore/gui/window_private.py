@@ -35,8 +35,10 @@ from sealedlore.providers.sealed_ehbp import SealedEhbpProvider
 from sealedlore.providers.tee import (
     GATEWAY_UNCHECKED,
     GPUS_LOOSE,
+    MEASUREMENTS_LISTED,
     OWN_ENCLAVE_UNCHECKED,
     RECEIPT_KEYS_LOOSE,
+    WORKLOAD_UNMEASURED,
     TeeClient,
     failure_words,
     what_was_attested,
@@ -88,6 +90,19 @@ SHORTFALL_TIPS = {
     ),
     "Intel TCB unchecked": (
         "Intel TCB unchecked: Intel's revocation lists and ratings couldn't be fetched."
+    ),
+    # Chutes' own end-to-end encryption (providers/chutes_provider.py): always both.
+    WORKLOAD_UNMEASURED: (
+        "The workload holding the key unmeasured: the Chutes instance's VM image is measured, "
+        "but the program inside it that makes, binds and uses the encryption key (Chutes' "
+        "aegis library, a closed binary) is admitted by Chutes' signature, not measured. So "
+        "Chutes, as the image's signer, could run one that gives the key away. Chutes' "
+        "end-to-end encryption is never fully attested for this reason."
+    ),
+    MEASUREMENTS_LISTED: (
+        "Measurements from Chutes' own list: the instance's MRTD and RTMRs are a set Chutes "
+        "publishes, which Chutes says builds reproducibly from chutesai/sek8s; this app "
+        "doesn't rebuild it, so that they are what that source builds is Chutes' word."
     ),
 }
 # What a private scene pauses, and how to get it back (the author: people
