@@ -330,3 +330,27 @@ def test_a_private_scene_is_judged_on_its_own_endpoint(tmp_path):
     assert session._tee_service("glm-5-3") == "tinfoil", "the passage's mark names who sealed it"
     assert session.privacy("z-ai/glm-5.3") == Privacy(), "the story's own models are as they were"
     assert session._tee_service("private/glm-5-3") is None, "NanoGPT's marks are as they were"
+
+
+def test_a_chat_moved_to_another_service_says_so_under_its_latest_message(tmp_path):
+    """D8: an end-to-end encrypted chat may move to any sealed model, on any
+    service, and the move is noted in the chat; a memory-only chat's note
+    stays in memory with the rest of it."""
+    from tests.conftest import make_exchange
+
+    cfg = endpoints(tinfoil())
+    story = Story(title="Sealed", mode="chat", chat_keep="memory")
+    story.defaults.main_model = "private/glm-5-3"
+    nodes = make_exchange(1)
+    story.active_leaf_id = nodes[-1].id
+    bundle = StoryBundle(story=story, nodes=nodes)
+    session = StorySession(bundle, cfg, MockChatProvider(), root=tmp_path)
+    session.check_chat_model("Tinfoil::glm-5-3")
+    story.defaults.main_model = "Tinfoil::glm-5-3"
+    said = session.note_model_move("private/glm-5-3", "Tinfoil::glm-5-3")
+    assert said and "NanoGPT's Private Mode, end-to-end encrypted" in said
+    assert "Tinfoil, end-to-end encrypted" in said
+    assert nodes[-1].meta.notes == [said]
+    assert session.note_model_move("Tinfoil::glm-5-3", "Tinfoil::kimi-k3-1-pro") is None
+    assert session.note_model_move("private/glm-5-3", "private/kimi-k3") is None
+    assert not any(tmp_path.rglob("nodes.json")), "a memory-only chat writes nothing"

@@ -228,7 +228,7 @@ from sealedlore.providers.base import (
 )
 from sealedlore.providers.decisions import DecisionsClient, build_decisions_payload
 from sealedlore.providers.embeddings import EmbeddingBackend
-from sealedlore.providers.privacy import move_refusal
+from sealedlore.providers.privacy import move_refusal, service_words
 from sealedlore.providers.wire import should_use_cache_control
 from sealedlore.storage.picture_store import DiskPictures, MemoryPictures, PictureStore
 from sealedlore.storage.repository import (
@@ -976,6 +976,27 @@ class StorySession(
         attested, its replies' signatures checked, and every call it makes
         on that model."""
         return self.story.chat and self.privacy(self.model).private
+
+    def note_model_move(self, before: str, after: str) -> str | None:
+        """A chat moved from `before` to `after` on another service (D8: a
+        sealed chat to a sealed model of any service, a TEE chat up to one):
+        said under its latest message (`NodeMeta.notes`), so the chat shows
+        where its messages went from there on. Kept as the chat is (a
+        memory-only chat's in memory). None when the service is the same."""
+        if not self.story.chat or not before or before == after:
+            return None
+        was, now = self.privacy(before), self.privacy(after)
+        if was.service == now.service:
+            return None
+        text = (
+            f"The chat moved from {before} ({service_words(was)}) to {after} "
+            f"({service_words(now)}): its messages from here on go to {after}."
+        )
+        path = self.path()
+        if not path:
+            return None
+        self._kept_notice(text, node=path[-1], severity="info")
+        return text
 
     def check_chat_model(self, model: str) -> None:
         """A TEE chat moves only to another TEE model: it must never hand the

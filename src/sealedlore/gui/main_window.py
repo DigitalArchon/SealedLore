@@ -1962,7 +1962,7 @@ class MainWindow(
         self.reload_transcript()
         self._fetch_host_prices()
         if self.in_chat and self.session.model != model_before:
-            self._chat_model_changed()
+            self._chat_model_changed(model_before)
         self._reassemble_inspector()
         self._update_controls()
         # The opening, the starting scene and the suggested character are only
@@ -4947,6 +4947,7 @@ class MainWindow(
         if not self._chat_model_allowed(chosen):
             return
         defaults = self.session.story.defaults
+        before = self.session.model
         if self.in_chat:
             defaults.main_model = chosen
         else:
@@ -4960,7 +4961,7 @@ class MainWindow(
                 defaults.model_routes.pop("story", None)
         self.session.save()
         if self.in_chat:
-            self._chat_model_changed()
+            self._chat_model_changed(before)
         self.stories.refresh(selected_id=self.session.story.id)
         self._reassemble_inspector()
         self._update_controls()
@@ -5585,7 +5586,7 @@ class MainWindow(
                 self.refresh_summaries()
                 self._cast_changed_soon()
                 if self.in_chat and self.session.model != model_before:
-                    self._chat_model_changed()
+                    self._chat_model_changed(model_before or "")
             else:
                 # The first-run welcome gives way, or says what is still missing.
                 self.reload_transcript()

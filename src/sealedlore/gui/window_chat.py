@@ -260,11 +260,14 @@ class ChatWindow:
             settings.model_copy(update={"model": self.config.bare_model(self.session.model)})
         )
 
-    def _chat_model_changed(self) -> None:
+    def _chat_model_changed(self, before: str = "") -> None:
         """A TEE chat's new model is attested before anything else is sent:
-        the old enclave's key signs nothing the new one writes."""
+        the old enclave's key signs nothing the new one writes. A move to
+        another service is noted in the chat (`note_model_move`)."""
         if self.session is None:
             return
+        if before and self.session.note_model_move(before, self.session.model):
+            self.reload_transcript()
         old, self.session.private_tee = self.session.private_tee, None
         if old is not None:
             old.close()

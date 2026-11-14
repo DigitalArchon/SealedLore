@@ -164,6 +164,14 @@ def privacy_of(ref: str, config: Config) -> Privacy:
 Judge = Callable[[str], Privacy]
 
 
+def service_words(privacy: Privacy) -> str:
+    """Who a model's messages go through, as a note says it."""
+    if not privacy.private:
+        return "not end-to-end encrypted or TEE"
+    name = SERVICE_NAMES.get(privacy.service, privacy.service)
+    return f"{name}, end-to-end encrypted" if privacy.sealed else name
+
+
 def move_refusal(current: str, new: str, *, privacy: Judge) -> str | None:
     """Why a chat on `current` may not move to `new`, or None, each judged by
     `privacy`: an end-to-end encrypted chat moves only to another sealed

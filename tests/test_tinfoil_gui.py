@@ -192,6 +192,7 @@ def test_a_chat_on_tinfoil_is_sealed_attested_and_says_so(app, window, monkeypat
     assert "end-to-end encrypted models only" in limits["allowed_note"]
     assert limits["allowed"]("private/glm-5-3") and not limits["allowed"]("z-ai/glm-5.3")
 
+    window._chat_model_changed("private/glm-5-3")  # no message yet: nothing to note under
     window._on_attested(None, None, [tinfoil_record()], [])
     assert "🔐 E2EE · Tinfoil" in window._private_model_text()
     assert "TEE" not in window._private_model_text()

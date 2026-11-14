@@ -2984,9 +2984,12 @@ story is (Settings → Context), with a plain summariser.
   check showed (see "Private scenes"), every call (summaries and
   picture prompts included) goes to that model, and the chat can move only
   to another TEE model. The text still passes NanoGPT's gateway, as a
-  private scene's does, unless the model is a `private/` one: then it is
-  end-to-end encrypted (see "Private scenes"), and the chat can move only to
-  another `private/` model.
+  private scene's does, unless the model is a `private/` one, or one on
+  Tinfoil's own API (preliminary): then it is end-to-end encrypted (see
+  "Private scenes"), and the chat can move only to another end-to-end
+  encrypted model, NanoGPT's or Tinfoil's. A move to another service is noted
+  under the chat's latest message ("The chat moved from … to …"), kept as the
+  chat is (an in-memory chat's in memory).
 - **Where a chat is kept** is asked when it starts, on any model: **On
   disk**, like any story, or **In memory only**. Nothing of an in-memory
   chat is written on this computer, not even its log, and it teaches the
