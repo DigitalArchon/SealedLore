@@ -999,3 +999,59 @@ def test_a_socks_proxy_the_app_cant_use_is_said_and_nothing_is_sent(fake):
         pytest.skip("socksio is installed here")
     with pytest.raises(ProviderError, match="SOCKS proxy.*nothing was sent"):
         _private_mode._sealing_transport(fake.public_hex, "socks5://127.0.0.2:9050")
+
+
+@pytest.mark.parametrize(
+    "base", ["https://api.openrouter.example/v1", "https://nano-gpt.com.example/api/v1"]
+)
+def test_a_private_model_on_another_endpoint_is_refused_before_anything_is_sent(fake, base):
+    """make_chat_provider made the encrypted client for any host: the key and
+    the preflight went to it, its attestation bundle was asked for, for a
+    model only NanoGPT's relay has (DA Toolkit's)."""
+    from sealedlore.providers import make_chat_provider
+
+    asked: list[str] = []
+
+    def verifier(relay: str, secret: str) -> Verified:
+        asked.append(relay)
+        return record(fake)
+
+    provider = make_chat_provider(
+        ProviderConfig(name="other", base_url=base, api_key="k", model="private/glm-5-3")
+    )
+    assert isinstance(provider, PrivateModeProvider)
+    provider.enclave = Enclave(provider.relay, verifier=verifier)
+    provider._preflight_client = httpx.Client(
+        transport=httpx.MockTransport(lambda r: asked.append(str(r.url)) or httpx.Response(500))
+    )
+    for call in (
+        lambda: list(provider.stream(request())),
+        provider.attest,
+        lambda: provider.check_offered("private/glm-5-3"),
+        lambda: provider.still_offered("private/glm-5-3"),
+    ):
+        with pytest.raises(ProviderError, match="doesn't offer NanoGPT's Private Mode") as refused:
+            call()
+        assert "nothing was sent" in str(refused.value)
+    assert asked == [] and fake.wire == []
+
+
+def test_a_password_in_the_address_never_goes_to_the_relay(fake):
+    """httpx (and requests, in Tinfoil's SDK) send a user name and password
+    written into an address as Basic credentials, over the key's header: the
+    relay took them in place of the key (DA Toolkit's relay_url)."""
+    seen: list[httpx.Request] = []
+
+    def lists(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"data": [{"id": "private/glm-5-3"}]})
+
+    base = "https://alice:s3cret@nano-gpt.com/api/v1"
+    assert _private_mode.relay_url(base) == RELAY
+    provider = PrivateModeProvider(ProviderConfig(name="nano", base_url=base, api_key="k"))
+    assert provider.relay == RELAY
+    from sealedlore.providers.private_catalog import fetch_private_ids
+
+    assert fetch_private_ids(base, client=httpx.Client(transport=httpx.MockTransport(lists)))
+    assert str(seen[0].url) == "https://nano-gpt.com/api/v1/private/tinfoil/models"
+    assert "authorization" not in seen[0].headers

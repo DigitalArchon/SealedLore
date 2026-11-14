@@ -2798,6 +2798,9 @@ attestation is refused, saying why, rather than made without it. A model written
 (`Private/glm-5-3`) is still end-to-end encrypted, never sent the plain way.
 What NanoGPT's relay writes in an error is shown as its own ("NanoGPT's relay
 said (unauthenticated)"), on one line and without characters you can't see.
+A `private/` model goes only through NanoGPT (`https://nano-gpt.com/…`): on
+any other endpoint it is refused before anything is sent. The sealed
+requests go through the proxy your environment sets, as everything else does.
 Wherever you choose a model, the model list's Privacy
 column and the label beside the model field say which kind a model is: "🔐
 Encrypted" in the list and "🔐 E2EE" beside the field, or "TEE" (and, for a

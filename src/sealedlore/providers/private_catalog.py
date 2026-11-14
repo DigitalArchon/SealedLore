@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from sealedlore.models.config import split_model
+from sealedlore.models.config import split_model, without_password
 from sealedlore.providers.http import make_client
 from sealedlore.providers.tee import is_private_mode, is_tee
 
@@ -97,9 +97,9 @@ def private_entries(
 def fetch_private_ids(
     base_url: str, *, timeout: float = 30.0, client: httpx.Client | None = None
 ) -> list[str]:
-    """The relay's list of Private Mode models (public; no key sent). Empty
-    when it can't be read."""
-    parsed = urlparse(base_url)
+    """The relay's list of Private Mode models (public; no key sent, nor a
+    password written into the address). Empty when it can't be read."""
+    parsed = urlparse(without_password(base_url))
     url = f"{parsed.scheme}://{parsed.netloc}{RELAY_MODELS_PATH}"
     own = client is None
     client = client or make_client(url)

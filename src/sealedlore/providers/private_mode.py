@@ -60,13 +60,13 @@ from urllib.parse import urlparse
 
 import httpx
 
-from sealedlore.models.config import ProviderConfig, is_local_host
+from sealedlore.models.config import ProviderConfig, is_local_host, shown, without_password
 from sealedlore.models.private import Attestation
 from sealedlore.providers.base import ChatRequest, ProviderError, StreamEvent, relay_said
 from sealedlore.providers.dcap import since_boot
 from sealedlore.providers.http import environment_proxy, make_client
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
-from sealedlore.providers.private_catalog import fetch_private_ids, offered
+from sealedlore.providers.private_catalog import fetch_private_ids, offered, offers_private_mode
 from sealedlore.providers.tee import is_private_mode
 from sealedlore.providers.wire import to_wire_messages
 
@@ -133,12 +133,30 @@ class Verified:
 
 
 def origin_of(base_url: str) -> str:
-    parsed = urlparse(base_url)
+    """The scheme, host and port of `base_url`, without a user name and
+    password written into it: httpx (and requests, in Tinfoil's SDK) sends
+    those as Basic credentials, over the key's header. NanoGPT's relay takes
+    the API key, never those. (DA Toolkit's relay_url, Nov 2026.)"""
+    parsed = urlparse(without_password(base_url))
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
 def relay_url(base_url: str) -> str:
     return origin_of(base_url) + RELAY_PATH
+
+
+def not_nanogpt(base_url: str) -> str | None:
+    """Why a `private/` model can't be sent through `base_url`, or None: it is
+    NanoGPT's Private Mode, and only NanoGPT's relay speaks it. Another
+    endpoint would be handed the key and the preflight, and its attestation
+    bundle asked for, for a model it doesn't have. (DA Toolkit's, Nov 2026.)"""
+    if offers_private_mode(base_url):
+        return None
+    return (
+        f"{shown(base_url)} doesn't offer NanoGPT's Private Mode: an end-to-end encrypted "
+        "(private/) model is sent only through NanoGPT, so nothing was sent. Choose it on "
+        "the NanoGPT endpoint (https://nano-gpt.com/api/v1)."
+    )
 
 
 def _hardware(document: dict[str, Any]) -> str:
@@ -421,20 +439,30 @@ class PrivateModeProvider(OpenAICompatibleProvider):
     def endpoint(self) -> str:
         return self.relay + "/v1/chat/completions"
 
+    def _on_nanogpt(self) -> None:
+        """Refuse, before anything is fetched or sent, an endpoint that isn't
+        NanoGPT's (`not_nanogpt`)."""
+        refusal = not_nanogpt(self.config.base_url)
+        if refusal:
+            raise ProviderError(refusal)
+
     def attest(self) -> Attestation:
         """Attest now (a worker thread): the window shows what was proved."""
+        self._on_nanogpt()
         return self.enclave.current().attestation
 
     def still_offered(self, model: str) -> bool | None:
         """Whether nano-gpt's Private Mode list still has `model` (public: no
         key sent). None when the list couldn't be read: nothing is known, and
         the preflight still refuses a model that's gone."""
+        self._on_nanogpt()
         ids = fetch_private_ids(self.config.base_url, client=self._preflight_client)
         return offered(model, ids)
 
     def check_offered(self, model: str) -> None:
         """Raise `ModelRetired`, with what is offered instead, if nano-gpt has
         retired `model` (a worker thread)."""
+        self._on_nanogpt()
         ids = fetch_private_ids(self.config.base_url, client=self._preflight_client)
         if offered(model, ids) is False:
             raise ModelRetired(model, ids)
@@ -517,6 +545,7 @@ class PrivateModeProvider(OpenAICompatibleProvider):
     def _prepare(self, request: ChatRequest) -> tuple[str, dict[str, Any], dict[str, str]]:
         if not is_private_mode(request.model):
             raise ProviderError(f"{request.model} isn't a Private Mode model; nothing was sent")
+        self._on_nanogpt()
         # Attested first: nothing, not even nano-gpt's charge, before the
         # enclave has proved what it is.
         self._get_client()
