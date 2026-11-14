@@ -1495,3 +1495,101 @@ def test_a_session_named_by_a_receipt_not_read_is_never_looked_up(no_records_kep
     )
     assert found.mark == "verified" and "wasn't read under the attested keys" in found.upstream.note
     assert redpill_asked(seen) == []
+
+
+# --- Intel's and NVIDIA's evidence, read before it is believed (DA Toolkit, Nov 2026) -------------
+
+
+def test_collateral_that_cant_be_read_is_not_kept_for_the_hour(real):
+    """A 200 that isn't Intel's (a proxy's page, a portal's) was cached as it
+    came, and refused every quote for an hour, however soon Intel's service
+    answered again."""
+
+    def portal(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"<html>Sign in to the network</html>")
+
+    quote = bytes.fromhex(real["intel_quote"])
+    with pytest.raises(dcap.DcapError, match="could not be read"):
+        dcap.verify(quote, httpx.Client(transport=httpx.MockTransport(portal)), now=at(real))
+    assert not dcap._cache
+    assert intel(real).status == "UpToDate"  # Intel's own, a moment later
+    kept = len(dcap._cache)
+    assert kept == 4  # the two CRLs, the TCB info, the QE identity
+
+    def none(request: httpx.Request) -> httpx.Response:
+        raise AssertionError(f"fetched again: {request.url}")
+
+    again = dcap.verify(quote, httpx.Client(transport=httpx.MockTransport(none)), now=at(real))
+    assert again.status == "UpToDate" and len(dcap._cache) == kept
+
+
+def test_collateral_whose_signature_fails_is_not_kept_either(real):
+    for item in real["collateral"]:
+        if "tcb" in item["url"]:
+            item["body"] = base64.b64encode(
+                base64.b64decode(item["body"]).replace(b"UpToDate", b"UpToDatf", 1)
+            ).decode()
+    with pytest.raises(dcap.DcapError, match="signature"):
+        intel(real)
+    assert not dcap._cache
+
+
+def test_a_quote_whose_certificates_cant_be_read_is_one_intel_doesnt_vouch_for(monkeypatch):
+    """dcap.verify raised the PEM reader's ValueError for a quote whose chain
+    is no PEM, and whatever else reading a certificate raised."""
+    session = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(503)))
+    with pytest.raises(dcap.DcapError, match="PCK chain could not be read"):
+        dcap.verify(bytes.fromhex(fake_quote(bytes(64))), session)
+
+    def unreadable(raw, session, now):
+        raise IndexError("index out of range")  # an extension cut short, say
+
+    monkeypatch.setattr(dcap, "_verify", unreadable)
+    with pytest.raises(dcap.DcapError, match=r"could not be read \(IndexError\)") as refused:
+        dcap.verify(b"", session)
+    assert isinstance(refused.value.__cause__, IndexError)
+
+
+def _token(header, claims) -> str:
+    def part(data) -> str:
+        return base64.urlsafe_b64encode(json.dumps(data).encode()).decode().rstrip("=")
+
+    return f"{part(header)}.{part(claims)}.{base64.urlsafe_b64encode(bytes(96)).decode()}"
+
+
+@pytest.mark.parametrize(
+    ("header", "claims", "refusal"),
+    [
+        ([], {}, "malformed token"),
+        ({"alg": "ES384"}, [], "malformed token"),
+        (
+            {"alg": "ES384"},
+            {"iss": nras.ISSUER, "nbf": "x", "exp": 9e12},
+            "validity window is not given as times",
+        ),
+    ],
+)
+def test_a_token_whose_header_or_claims_are_no_such_thing_is_refused_as_nvidias_answer(
+    header, claims, refusal
+):
+    session = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(503)))
+    with pytest.raises(nras.NrasError, match=refusal):
+        nras._verify([["JWT", _token(header, claims)], {}], "00", session, 1.0, signed=False)
+
+
+def test_an_answer_of_nvidias_that_cant_be_read_is_no_verdict():
+    """Past the checks that name what is wrong: a GPU's token that is no text
+    raised AttributeError."""
+    session = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(503)))
+    claims = {
+        "iss": nras.ISSUER,
+        "nbf": 0,
+        "exp": 9e12,
+        "eat_nonce": "00",
+        "x-nvidia-overall-att-result": True,
+        "submods": {"GPU-0": ["DIGEST", ["SHA-256", "ab"]]},
+    }
+    with pytest.raises(nras.NrasError, match=r"could not be read \(AttributeError\)"):
+        nras.verify(
+            [["JWT", _token({"alg": "ES384"}, claims)], {"GPU-0": 5}], "00", session, now=1.0
+        )
