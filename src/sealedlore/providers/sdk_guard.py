@@ -38,6 +38,12 @@ redirect raises is a RedirectNotFollowed (`redirect_refused`), whatever the libr
 finds it among the causes of what the SDK or sigstore raised, which say only "Failed to refresh TUF
 metadata".
 
+And the SDK writes nothing (guard_files): it caches the release's Sigstore bundle, AMD's VCEK
+(named after the physical chip) and, for a TDX router, Intel's collateral and its hardware
+measurements, under the user's cache folder (~/.cache/tinfoil), through module attributes it reads
+at each use; each is pointed at a folder that can't be made, so every write fails as the SDK lets
+one fail, and nothing is read back. Where those attributes aren't as this expects, Unguarded.
+
 And what the SDK's requests read is bounded (the DA apps' security standard, Nov 2026): each asks
 for gzip or deflate alone (requests asks for br and zstd too whenever brotli or zstandard is
 installed, whose ratios are unbounded per chunk), a reply in any other coding is refused unread, a
@@ -55,6 +61,7 @@ from __future__ import annotations
 
 import importlib
 import ipaddress
+import os
 import pkgutil
 import re
 import sys
@@ -80,6 +87,13 @@ REPLY_MAX_BYTES = 32 * 1024 * 1024
 ERROR_BODY_BYTES = 64 * 1024
 # The most read at once: a limit and one byte more where that is less, so little past it is read
 _PIECE = 1024 * 1024
+# The SDK's own caches (tinfoil 0.15): (module, attribute) of each folder it writes into, read at
+# each use (guard_files)
+_SDK_CACHES = (
+    ("tinfoil.github", "_GITHUB_CACHE_DIR"),
+    ("tinfoil.attestation.verify_sev", "_VCEK_CACHE_DIR"),
+    ("tinfoil.attestation.collateral_tdx", "_TDX_CACHE_DIR"),
+)
 # What no address has in it, and parsers may read apart ("https://host\@evil.example/")
 _NOT_IN_AN_ADDRESS = re.compile(r"[\\\s\x00-\x1f\x7f]")
 
@@ -327,9 +341,42 @@ def guard(
     root = sys.modules.get(package)
     if root is None:
         return []
-    changed = _guard_requests(is_local, root, package, check=check)
+    changed = guard_files() if package == "tinfoil" else []
+    changed += _guard_requests(is_local, root, package, check=check)
     if package == "tinfoil":
         changed += guard_sigstore(is_local, check)
+    return changed
+
+
+def nowhere() -> str:
+    """A folder that can't be made, on any system: one under the null device, which is no folder."""
+    return os.path.join(os.devnull, "tinfoil")
+
+
+def guard_files() -> list[str]:
+    """Have the SDK (tinfoil) write nothing: each of its cache folders (_SDK_CACHES) pointed at one that
+    can't be made (`nowhere`), so every write it makes fails, which it lets pass (OSError, ignored), and
+    nothing is read from one. Returns the modules changed (none on a second call). Raises Unguarded
+    where the SDK's caches aren't where this expects (another version): then nothing is attested."""
+    if "tinfoil" not in sys.modules:
+        return []
+    target = nowhere()
+    if os.path.isdir(os.path.dirname(target)):
+        raise Unguarded(f"the SDK's caches can't be kept from the disk: {os.devnull} is a folder here")
+    changed: list[str] = []
+    for name, attribute in _SDK_CACHES:
+        try:
+            module = importlib.import_module(name)
+        except Exception as e:
+            raise Unguarded(
+                f"the SDK's caches can't be kept from the disk: {name} couldn't be loaded ({type(e).__name__})"
+            ) from e
+        current = getattr(module, attribute, None)
+        if not isinstance(current, str):
+            raise Unguarded(f"the SDK's caches can't be kept from the disk: {name} has no {attribute}")
+        if current != target:
+            setattr(module, attribute, target)
+            changed.append(name)
     return changed
 
 

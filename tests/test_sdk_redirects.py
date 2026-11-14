@@ -48,9 +48,11 @@ FILES = {
             def verify(self):
                 return fetch_latest_release("owner/repo")
         """,
-    # As tinfoil.github and tinfoil.attestation.* take it.
+    # As tinfoil.github and tinfoil.attestation.* take it, and where they cache (guard_files).
     "github.py": """
         import requests
+
+        _GITHUB_CACHE_DIR = "/home/someone/.cache/tinfoil"
 
         def fetch_latest_release(repo):
             response = requests.get(f"https://github-proxy.example/repos/{repo}", timeout=5)
@@ -71,6 +73,9 @@ FILES = {
                 return session.get(url, timeout=5).text
             return post(url, json={}, timeout=5).text
         """,
+    "attestation/__init__.py": "",
+    "attestation/verify_sev.py": "_VCEK_CACHE_DIR = '/home/someone/.cache/tinfoil'\n",
+    "attestation/collateral_tdx.py": "_TDX_CACHE_DIR = '/home/someone/.cache/tinfoil'\n",
     # A module the package doesn't import until it is wanted.
     "later/__init__.py": "",
     "later/collateral.py": """
@@ -481,6 +486,147 @@ def test_the_real_sdk_is_guarded_where_it_fetches():
         """
     )
     assert in_a_process_of_its_own(script) == "guarded"
+
+
+def test_the_sdks_caches_are_pointed_where_nothing_can_be_made(network):
+    """guard_files: the SDK's three cache folders, which it reads at each use, at one under the
+    null device; twice is once."""
+    changed = guard()
+    assert {"tinfoil.github", "tinfoil.attestation.verify_sev"} <= set(changed)
+    for name, attribute in sdk_guard._SDK_CACHES:
+        assert (
+            getattr(sys.modules[name], attribute)
+            == sdk_guard.nowhere()
+            == os.path.join(os.devnull, "tinfoil")
+        )
+    assert not os.path.isdir(os.devnull)
+    assert sdk_guard.guard_files() == []
+
+
+def test_an_sdk_whose_caches_arent_where_expected_is_not_attested(network, monkeypatch):
+    """Another version, its cache elsewhere: refused, saying why, rather than left to write."""
+    monkeypatch.delattr(module("attestation.verify_sev"), "_VCEK_CACHE_DIR")
+    with pytest.raises(sdk_guard.Unguarded, match="verify_sev has no _VCEK_CACHE_DIR"):
+        guard()
+    enclave = private_mode.Enclave("https://nano-gpt.com/api/v1/private/tinfoil")
+    with pytest.raises(ProviderError, match="couldn't be attested: the SDK's caches can't be kept"):
+        enclave.current()
+    assert network.sent == []
+
+
+WRITES = """
+import io, json, os, sys, types
+
+import requests
+
+home = os.environ["HOME"]
+from tinfoil import github
+from tinfoil.attestation import collateral_tdx, verify_sev
+from sealedlore.models.config import is_local_host
+from sealedlore.providers import sdk_guard
+
+if sys.argv[1] == "guarded":
+    sdk_guard.guard(is_local_host)
+
+
+from cryptography import x509
+from cryptography.hazmat.primitives.serialization import Encoding
+from sealedlore.providers import dcap
+
+# Any certificate stands for AMD's VCEK here: from_report keeps it before the chain is checked.
+CERTIFICATE = x509.load_pem_x509_certificate(dcap.INTEL_ROOT_PEM).public_bytes(Encoding.DER)
+
+
+def served(adapter, request, **_kw):
+    response = requests.Response()
+    response.status_code, response.url, response.request = 200, request.url, request
+    response._content = (json.dumps({"attestations": [{"bundle": {"b": 1}}]}).encode()
+                         if "attestations" in request.url else CERTIFICATE)
+    return response
+
+
+requests.adapters.HTTPAdapter.send = served
+# The router's Sigstore bundle (the direct path), AMD's VCEK (named after the chip), and Intel's
+# collateral for a TDX router (the relay's path too)
+github.fetch_attestation_bundle("tinfoilsh/confidential-model-router", "ab" * 32)
+signer = types.SimpleNamespace(signingKey=verify_sev.ReportSigner.VcekReportSigner)
+report = types.SimpleNamespace(productName="Genoa", chip_id=bytes(64), reported_tcb=0,
+                               signer_info_parsed=signer)
+verify_sev.CertificateChain.from_report(report)
+collateral_tdx._write_cache(collateral_tdx._get_tcb_info_cache_path("00906ed50000"),
+                            collateral_tdx.CacheEntry(body=b"{}"))
+written = sorted(
+    os.path.relpath(os.path.join(top, name), home)
+    for top, _dirs, names in os.walk(home)
+    for name in names
+)
+print(json.dumps(written))
+"""
+
+
+def test_the_real_sdk_writes_nothing_of_its_own(tmp_path: Path):
+    """tinfoil itself, in a process of its own with a home of the test's own: unguarded, its
+    bundle, VCEK and TDX caches land in ~/.cache/tinfoil; guarded as tinfoil_verify guards it,
+    nothing does, nor ~/.tinfoil (the cache secret is always passed)."""
+    import json
+
+    pytest.importorskip("tinfoil")
+    found = {}
+    for how in ("unguarded", "guarded"):
+        home = tmp_path / how
+        home.mkdir()
+        env = {
+            "HOME": str(home),
+            "XDG_CACHE_HOME": str(home / ".cache"),
+            "XDG_DATA_HOME": str(home / ".local" / "share"),
+        }
+        script = WRITES.replace('sys.argv[1] == "guarded"', repr(how) + ' == "guarded"')
+        found[how] = json.loads(in_a_process_of_its_own(script, **env))
+    tinfoil_files = [name for name in found["unguarded"] if name.startswith(".cache/tinfoil/")]
+    assert len(tinfoil_files) == 3, found["unguarded"]
+    assert any(name.startswith(".cache/tinfoil/VCEK_Genoa_") for name in tinfoil_files)
+    assert found["guarded"] == [], "nothing of the SDK's own"
+    assert not (tmp_path / "guarded" / ".cache" / "tinfoil").exists()
+    assert not (tmp_path / "guarded" / ".tinfoil").exists()
+
+
+def test_what_keeping_the_sdks_files_rests_on_is_where_it_expects():
+    """tinfoil 0.15, as the locks pin it: each cache folder a module attribute read at each
+    use, each write passed over when it fails (OSError) and each read only of a file that is
+    there. A version that moves any of this fails here first (and in the app refuses to attest:
+    Unguarded)."""
+    import inspect
+
+    pytest.importorskip("tinfoil")
+    from tinfoil import github
+    from tinfoil.attestation import collateral_tdx, verify_sev
+
+    for name, attribute in sdk_guard._SDK_CACHES:
+        assert isinstance(getattr(importlib.import_module(name), attribute), str), name
+    for function, attribute in (
+        (github._ensure_github_cache_dir, "_GITHUB_CACHE_DIR"),
+        (github._attestation_bundle_cache_path, "_GITHUB_CACHE_DIR"),
+        (verify_sev._ensure_vcek_cache_dir, "_VCEK_CACHE_DIR"),
+        (verify_sev.CertificateChain._vcek_cache_path, "_VCEK_CACHE_DIR"),
+        (collateral_tdx._ensure_cache_dir, "_TDX_CACHE_DIR"),
+        (collateral_tdx._get_tcb_info_cache_path, "_TDX_CACHE_DIR"),
+    ):
+        assert attribute in inspect.getsource(function), function  # read at each use
+    for function in (
+        github._ensure_github_cache_dir,
+        github.fetch_attestation_bundle,
+        verify_sev._ensure_vcek_cache_dir,
+        verify_sev.CertificateChain.from_report,
+        collateral_tdx._ensure_cache_dir,
+        collateral_tdx._write_cache,
+    ):
+        assert "except OSError" in inspect.getsource(function), function
+    for function in (
+        github.fetch_attestation_bundle,
+        verify_sev.CertificateChain.from_report,
+        collateral_tdx._read_cache,
+    ):
+        assert "os.path.isfile(" in inspect.getsource(function), function
 
 
 def in_a_process_of_its_own(script: str, **env: str) -> str:

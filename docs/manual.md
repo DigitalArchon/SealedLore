@@ -2842,6 +2842,10 @@ by hash like everything else in the AppImage. The AppImage is reproducible,
 so you can rebuild a release and compare its checksum. Tinfoil's library
 keeps Sigstore's public trust root in `~/.cache/sigstore-python` and
 `~/.local/share/sigstore-python`; nothing from your story is kept there.
+Nothing else of it is written: the library would cache what it fetches
+(the release's record, the processor's certificate, which names the chip,
+and Intel's collateral) in `~/.cache/tinfoil`, and the app keeps it from
+writing there.
 
 ## Simple chat
 
