@@ -23,7 +23,7 @@ from sealedlore.providers.base import (
     UnconfiguredProvider,
     error_detail,
 )
-from sealedlore.providers.http import is_secure, make_client
+from sealedlore.providers.http import environment_proxy, is_secure, make_client
 from sealedlore.providers.images import ImageClient
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.storage.atomic import append_jsonl, read_jsonl
@@ -103,6 +103,55 @@ def test_a_local_server_is_never_reached_through_a_proxy(monkeypatch):
     finally:
         local.close()
         remote.close()
+
+
+# (environment, address): the proxy, or None.
+PROXY_CASES = [
+    ({"HTTPS_PROXY": "http://p.test:1"}, "https://nano-gpt.com/api/v1"),
+    ({"HTTPS_PROXY": "p.test:1"}, "https://nano-gpt.com/api/v1"),
+    ({"HTTP_PROXY": "http://p.test:1"}, "https://nano-gpt.com/api/v1"),
+    ({"ALL_PROXY": "http://p.test:2"}, "https://nano-gpt.com/api/v1"),
+    ({"HTTPS_PROXY": "http://p.test:1", "ALL_PROXY": "http://p.test:2"}, "https://nano-gpt.com"),
+    ({"HTTPS_PROXY": "http://p.test:1", "NO_PROXY": "nano-gpt.com"}, "https://nano-gpt.com/api"),
+    ({"HTTPS_PROXY": "http://p.test:1", "NO_PROXY": ".nano-gpt.com"}, "https://nano-gpt.com/api"),
+    ({"HTTPS_PROXY": "http://p.test:1", "NO_PROXY": ".nano-gpt.com"}, "https://a.nano-gpt.com"),
+    ({"HTTPS_PROXY": "http://p.test:1", "NO_PROXY": "gpt.com"}, "https://nano-gpt.com/api"),
+    ({"HTTPS_PROXY": "http://p.test:1", "NO_PROXY": "x.test, *"}, "https://nano-gpt.com/api"),
+    (
+        {"HTTPS_PROXY": "http://p.test:1", "NO_PROXY": "https://nano-gpt.com"},
+        "https://nano-gpt.com",
+    ),
+    ({"HTTPS_PROXY": "http://p.test:1", "NO_PROXY": "http://nano-gpt.com"}, "https://nano-gpt.com"),
+    ({"HTTPS_PROXY": "http://p.test:1", "NO_PROXY": "nano-gpt.com:8443"}, "https://nano-gpt.com"),
+    ({"HTTPS_PROXY": "http://p.test:1", "NO_PROXY": "203.0.113.5"}, "https://203.0.113.5/v1"),
+    ({"HTTPS_PROXY": "http://p.test:1", "NO_PROXY": "2001:db8::5"}, "https://[2001:db8::5]/v1"),
+    ({"HTTP_PROXY": "http://p.test:1"}, "http://192.168.1.10:11434/v1"),
+    ({"HTTPS_PROXY": "http://p.test:1"}, "https://localhost:8443/v1"),
+    ({}, "https://nano-gpt.com/api/v1"),
+]
+
+
+@pytest.mark.parametrize(("environment", "url"), PROXY_CASES)
+def test_a_client_with_its_own_transport_is_given_the_proxy_make_client_would_use(
+    monkeypatch, environment, url
+):
+    """`environment_proxy` reads the environment as httpx does for the clients
+    `make_client` builds (checked here against httpx's own choice), so the
+    sealed request goes where the preflight before it went."""
+    for name in ("http_proxy", "https_proxy", "all_proxy", "no_proxy"):
+        monkeypatch.delenv(name, raising=False)
+        monkeypatch.delenv(name.upper(), raising=False)
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+    client = make_client(url)
+    try:
+        pool = client._transport_for_url(httpx.URL(url))._pool
+        proxy = getattr(pool, "_proxy_url", None)
+        expected = None if proxy is None else (proxy.host.decode(), proxy.port)
+    finally:
+        client.close()
+    found = environment_proxy(url)
+    assert (None if found is None else (httpx.URL(found).host, httpx.URL(found).port)) == expected
 
 
 def _image_client(handler, *, follow: bool = True) -> ImageClient:

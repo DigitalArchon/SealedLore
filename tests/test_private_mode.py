@@ -181,7 +181,7 @@ def setup(fake):
     provider = PrivateModeProvider(
         config,
         enclave=Enclave(RELAY, verifier=verifier, clock=clock),
-        transport_factory=lambda key: EHBPTransport.from_public_key_hex(
+        transport_factory=lambda key, route=None: EHBPTransport.from_public_key_hex(
             key, inner=httpx.MockTransport(fake.handler)
         ),
         preflight_client=httpx.Client(transport=httpx.MockTransport(preflight)),
@@ -239,7 +239,7 @@ def test_nothing_is_sent_or_charged_before_the_enclave_is_attested(fake):
     provider = PrivateModeProvider(
         ProviderConfig(name="nano", base_url=BASE, api_key="k"),
         enclave=Enclave(RELAY, verifier=verifier),
-        transport_factory=lambda key: EHBPTransport.from_public_key_hex(
+        transport_factory=lambda key, route=None: EHBPTransport.from_public_key_hex(
             key, inner=httpx.MockTransport(fake.handler)
         ),
         preflight_client=httpx.Client(
@@ -523,7 +523,7 @@ def sealed_provider(fake: FakeEnclave) -> PrivateModeProvider:
     return PrivateModeProvider(
         ProviderConfig(name="nano", base_url=BASE, api_key="sk-test"),
         enclave=Enclave(RELAY, verifier=lambda relay, secret: record(fake)),
-        transport_factory=lambda key: EHBPTransport.from_public_key_hex(
+        transport_factory=lambda key, route=None: EHBPTransport.from_public_key_hex(
             key, inner=httpx.MockTransport(fake.handler)
         ),
         preflight_client=httpx.Client(transport=httpx.MockTransport(preflight)),
@@ -742,7 +742,7 @@ def sealed_setup(enclave: FakeEnclave, listed: list[str]) -> PrivateModeProvider
     return PrivateModeProvider(
         ProviderConfig(name="nano", base_url=BASE, api_key="sk-test"),
         enclave=Enclave(RELAY, verifier=lambda relay_url, secret: record(enclave)),
-        transport_factory=lambda key: EHBPTransport.from_public_key_hex(
+        transport_factory=lambda key, route=None: EHBPTransport.from_public_key_hex(
             key, inner=httpx.MockTransport(enclave.handler)
         ),
         preflight_client=httpx.Client(transport=httpx.MockTransport(relay)),
@@ -924,3 +924,78 @@ def test_nothing_goes_to_the_relay_that_ehbp_did_not_seal(fake, monkeypatch):
     client.post(RELAY + "/v1/chat/completions", content=b'{"model": "glm-5-3"}')
     assert len(reached) == 1 and ENCAPSULATED_KEY_HEADER in reached[0].headers
     assert b"glm-5-3" not in reached[0].read()
+
+
+PROXY_VARIABLES = ("http_proxy", "https_proxy", "all_proxy", "no_proxy")
+
+
+def _proxy_env(monkeypatch, **set_to: str) -> None:
+    for name in PROXY_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
+        monkeypatch.delenv(name.upper(), raising=False)
+    for name, value in set_to.items():
+        monkeypatch.setenv(name, value)
+
+
+def _connections(monkeypatch) -> list[tuple[str, int]]:
+    """Where a connection was opened to, refused at once: no network."""
+    import httpcore
+    from httpcore._backends.sync import SyncBackend
+
+    opened: list[tuple[str, int]] = []
+
+    def connect(self, host, port, timeout=None, local_address=None, socket_options=None):
+        opened.append((host, port))
+        raise httpcore.ConnectError("no network in tests")
+
+    monkeypatch.setattr(SyncBackend, "connect_tcp", connect)
+    return opened
+
+
+def _sealed_through_the_real_transport(fake: FakeEnclave) -> PrivateModeProvider:
+    preflight = httpx.MockTransport(
+        lambda r: httpx.Response(200, json={"cacheScope": SCOPE, "upstreamModel": "glm-5-3"})
+    )
+    return PrivateModeProvider(
+        ProviderConfig(name="nano", base_url=BASE, api_key="k"),
+        enclave=Enclave(RELAY, verifier=lambda relay, secret: record(fake)),
+        preflight_client=httpx.Client(transport=preflight),
+    )
+
+
+def test_the_sealed_request_goes_through_the_environments_proxy(fake, monkeypatch):
+    """httpx gives a client with a transport of its own no proxy from the
+    environment: the sealed request, alone of all the app's, went straight to
+    nano-gpt from this machine's own address, beside a preflight and an
+    attestation that had gone through the proxy (DA Assistant's, DA Media
+    Browser's)."""
+    _proxy_env(monkeypatch, HTTPS_PROXY="http://proxy.test:3128")
+    opened = _connections(monkeypatch)
+    provider = _sealed_through_the_real_transport(fake)
+    traced: list[str] = []
+    real_trace = provider._trace
+    provider._trace = lambda name, info: (traced.append(name), real_trace(name, info))
+    with pytest.raises(ProviderError):
+        list(provider.stream(request()))
+    assert opened == [("proxy.test", 3128)]
+    # Stop still finds the socket: the trace reaches the proxy's connection.
+    assert "connection.connect_tcp.started" in traced
+
+
+def test_the_sealed_request_skips_the_proxy_where_no_proxy_says(fake, monkeypatch):
+    _proxy_env(monkeypatch, HTTPS_PROXY="http://proxy.test:3128", NO_PROXY="nano-gpt.com")
+    opened = _connections(monkeypatch)
+    with pytest.raises(ProviderError):
+        list(_sealed_through_the_real_transport(fake).stream(request()))
+    assert opened == [("nano-gpt.com", 443)]
+
+
+def test_a_socks_proxy_the_app_cant_use_is_said_and_nothing_is_sent(fake):
+    try:
+        import socksio  # noqa: F401
+    except ImportError:
+        pass
+    else:
+        pytest.skip("socksio is installed here")
+    with pytest.raises(ProviderError, match="SOCKS proxy.*nothing was sent"):
+        _private_mode._sealing_transport(fake.public_hex, "socks5://127.0.0.2:9050")

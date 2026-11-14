@@ -3150,7 +3150,10 @@ sealedlore chat <story-id>
 Nothing leaves your machine except what the features below send, and every
 endpoint must be `https://` (plain `http://` is accepted only for a server
 on this computer or your local network: `localhost`, a private address such
-as `192.168.1.10`, or a `.local` name; a proxy is never used for these). The
+as `192.168.1.10`, or a `.local` name; a proxy is never used for these).
+Requests to anywhere else go through the proxy your environment sets
+(`HTTPS_PROXY`, `HTTP_PROXY` or `ALL_PROXY`, less what `NO_PROXY` names), an
+end-to-end encrypted model's sealed requests included. The
 one exception the other way is phone access, which answers
 phones over plain `http://` on its onion address, where tor encrypts the
 whole way (see [Playing from your phone](#playing-from-your-phone)). An API

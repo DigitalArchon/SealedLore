@@ -64,7 +64,7 @@ from sealedlore.models.config import ProviderConfig, is_local_host
 from sealedlore.models.private import Attestation
 from sealedlore.providers.base import ChatRequest, ProviderError, StreamEvent, relay_said
 from sealedlore.providers.dcap import since_boot
-from sealedlore.providers.http import make_client
+from sealedlore.providers.http import environment_proxy, make_client
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
 from sealedlore.providers.private_catalog import fetch_private_ids, offered
 from sealedlore.providers.tee import is_private_mode
@@ -332,14 +332,33 @@ class Enclave:
                 self._verified = None
 
 
-def _sealing_transport(public_key: str) -> httpx.BaseTransport:
+def _sealing_transport(public_key: str, route: str | None = None) -> httpx.BaseTransport:
+    """EHBP over a transport that goes through `route`, the environment's
+    proxy for the relay (`environment_proxy`), when there is one. httpx gives
+    a client with a transport of its own no proxy from the environment, so
+    the sealed request, alone of all the app's, went direct: from this
+    machine's own address, Tor or a company's proxy notwithstanding, beside
+    a preflight and an attestation that had gone through it."""
     from ehbp import EHBPTransport
 
     # A fresh connection per request, as the plain client does, so the trace
     # hook sees each socket and Stop can shut it down (the EHBP transport
-    # passes the request's extensions through to this one).
-    inner = _NonEmptyBodyTransport(limits=httpx.Limits(max_keepalive_connections=0))
+    # passes the request's extensions through to this one, and the proxy's
+    # own steps are traced too: http.traced_socket).
+    try:
+        inner = _NonEmptyBodyTransport(
+            proxy=route, limits=httpx.Limits(max_keepalive_connections=0)
+        )
+    except ImportError as exc:  # a SOCKS proxy: httpx needs socksio for one
+        raise ProviderError(
+            "the environment's proxy is a SOCKS proxy, which SealedLore can't use "
+            "(httpx's socksio isn't installed); nothing was sent"
+        ) from exc
     return EHBPTransport.from_public_key_hex(public_key, inner=inner)
+
+
+# The sealed transport for an attested key, through a proxy (or None).
+SealingTransport = Callable[[str, str | None], httpx.BaseTransport]
 
 
 class _NonEmptyBodyTransport(httpx.HTTPTransport):
@@ -363,14 +382,14 @@ class PrivateModeProvider(OpenAICompatibleProvider):
         config: ProviderConfig,
         *,
         enclave: Enclave | None = None,
-        transport_factory: Callable[[str], httpx.BaseTransport] = _sealing_transport,
+        transport_factory: SealingTransport = _sealing_transport,
         preflight_client: httpx.Client | None = None,
     ) -> None:
         super().__init__(config)
         self.enclave = enclave or Enclave(relay_url(config.base_url))
         self._transport_factory = transport_factory
         self._preflight_client = preflight_client
-        self._client_key: str | None = None
+        self._client_key: tuple[str, str | None] | None = None
         self._verified: Verified | None = None
 
     def sibling(self) -> PrivateModeProvider:
@@ -440,16 +459,20 @@ class PrivateModeProvider(OpenAICompatibleProvider):
 
     def _get_client(self) -> httpx.Client:
         verified = self.enclave.current()
-        if self._client is None or self._client_key != verified.hpke_public_key:
+        # The proxy is read at each request, as httpx reads it for every other
+        # client of the app's, so the sealed one goes where they go.
+        route = environment_proxy(self.relay)
+        wanted = (verified.hpke_public_key, route)
+        if self._client is None or self._client_key != wanted:
             if self._client is not None:
                 self._client.close()
             self._client = make_client(
                 self.relay,
-                transport=self._transport_factory(verified.hpke_public_key),
+                transport=self._transport_factory(verified.hpke_public_key, route),
                 timeout=httpx.Timeout(self.config.timeout_seconds),
                 follow_redirects=False,
             )
-            self._client_key = verified.hpke_public_key
+            self._client_key = wanted
         self._verified = verified
         return self._client
 

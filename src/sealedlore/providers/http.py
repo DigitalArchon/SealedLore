@@ -1,6 +1,6 @@
 """One place to build an httpx client, so every endpoint gets the same care.
 
-Two things every client here needs and none should have to remember:
+Three things every client here needs and none should have to remember:
 
 - **A local server stays local.** httpx honours `HTTP_PROXY` and friends by
   default (`trust_env`), which would route "http://localhost:11434" through a
@@ -13,11 +13,18 @@ Two things every client here needs and none should have to remember:
   response hook refuses one whose target isn't https (or http to a local server),
   whether or not the client follows redirects, and one from a server on the
   internet into this computer or the local network.
+- **A transport of its own still goes through the proxy.** httpx takes no
+  proxy from the environment for a client given its own transport, so such a
+  client is told the one the environment gives its address
+  (`environment_proxy`), by the same rule as everything else.
 """
 
 from __future__ import annotations
 
+import ipaddress
+import re
 import socket
+import urllib.request
 from typing import Any
 from urllib.parse import urlparse
 
@@ -51,6 +58,71 @@ def traced_socket(event_name: str, info: dict[str, Any]) -> socket.socket | None
 def is_local(url: str) -> bool:
     """A server on this computer or the local network (`is_local_host`)."""
     return is_local_host(urlparse(url).hostname or "")
+
+
+def environment_proxy(url: str) -> str | None:
+    """The proxy the environment gives `url` (HTTPS_PROXY, HTTP_PROXY or
+    ALL_PROXY, less what NO_PROXY names), read as httpx reads them for a
+    client `make_client` builds; None for a server on this computer or the
+    local network, which is never reached through one. For a client given its
+    own transport, which httpx gives no proxy: the end-to-end encrypted
+    request alone of all the app's went direct, from this machine's own
+    address, beside a preflight that had gone through the proxy (DA
+    Assistant's and DA Media Browser's, Nov 2026)."""
+    target = httpx.URL(url)
+    if is_local_host(target.host):
+        return None
+    proxies = urllib.request.getproxies()
+    for entry in (proxies.get("no") or "").split(","):
+        entry = entry.strip()
+        if entry == "*":
+            return None
+        if entry and _passes_by(entry, target):
+            return None
+    proxy = proxies.get(target.scheme) or proxies.get("all")
+    if not proxy:
+        return None
+    return proxy if "://" in proxy else f"http://{proxy}"
+
+
+def _passes_by(entry: str, target: httpx.URL) -> bool:
+    """Whether one NO_PROXY entry keeps `target` off the proxy, as httpx reads
+    it (curl's rules): "example.com" is it and its subdomains, ".example.com"
+    its subdomains alone, an address or "localhost" that host alone, and
+    "scheme://host:port" that scheme, host and port. One that can't be read
+    keeps nothing off the proxy."""
+    if "://" in entry:
+        pattern = entry
+    elif _is_address(entry, ipaddress.IPv4Address):
+        pattern = f"all://{entry}"
+    elif _is_address(entry, ipaddress.IPv6Address):
+        pattern = f"all://[{entry}]"
+    elif entry.lower() == "localhost":
+        pattern = f"all://{entry}"
+    else:
+        pattern = f"all://*{entry}"
+    try:
+        named = httpx.URL(pattern)
+    except httpx.InvalidURL:
+        return False
+    if named.scheme != "all" and named.scheme != target.scheme:
+        return False
+    host = named.host
+    if host.startswith("*."):
+        matched = re.fullmatch(rf".+\.{re.escape(host[2:])}", target.host)
+    elif host.startswith("*") and host != "*":
+        matched = re.fullmatch(rf"(.+\.)?{re.escape(host[1:])}", target.host)
+    else:
+        matched = host in ("", "*") or host == target.host
+    return bool(matched) and (named.port is None or named.port == target.port)
+
+
+def _is_address(entry: str, kind: type[ipaddress.IPv4Address | ipaddress.IPv6Address]) -> bool:
+    try:
+        kind(entry.split("/")[0])
+    except ValueError:
+        return False
+    return True
 
 
 def is_secure(url: str) -> bool:
