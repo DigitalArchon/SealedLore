@@ -3205,6 +3205,7 @@ class StorySession(
             node.meta.tee = None
             node.meta.tee_upstream = None
             node.meta.tee_service = None
+            node.meta.tee_instance = None
         node.content = content
         if ooc is not None:
             node.ooc = ooc.strip() or None

@@ -22,7 +22,13 @@ from sealedlore.gui.workers import run_detached
 from sealedlore.models.config import ProviderConfig
 from sealedlore.providers import make_chat_provider
 from sealedlore.providers.base import ChatProvider, ProviderError
+from sealedlore.providers.chutes_provider import (
+    KEY_BINDING_UNCHECKED,
+    ChutesE2EEProvider,
+    NotOffered,
+)
 from sealedlore.providers.privacy import (
+    CHUTES,
     NANOGPT_PRIVATE,
     SERVICE_NAMES,
     TINFOIL,
@@ -103,6 +109,12 @@ SHORTFALL_TIPS = {
         "Measurements from Chutes' own list: the instance's MRTD and RTMRs are a set Chutes "
         "publishes, which Chutes says builds reproducibly from chutesai/sek8s; this app "
         "doesn't rebuild it, so that they are what that source builds is Chutes' word."
+    ),
+    # Test attestation without a key (`ChutesE2EEProvider.attest_public`).
+    KEY_BINDING_UNCHECKED: (
+        "The key binding unchecked: without a Chutes key, only Chutes' public evidence can be "
+        "read, which doesn't name the key each instance would be sealed to; with the key, "
+        "each request's instance is checked to bind its key before anything is sealed to it."
     ),
 }
 # What a private scene pauses, and how to get it back (the author: people
@@ -280,7 +292,7 @@ class PrivateWindow:
         attestation = span.attestation if span is not None else session.story.chat_attestation
         if attestation is not None and attestation.encrypted and attestation.service == TINFOIL:
             return "\n\n" + what_was_attested(attestation)
-        if attestation is None or attestation.encrypted:
+        if attestation is None or (attestation.encrypted and not attestation.shortfalls):
             return ""
         lines = [what_was_attested(attestation)] if attestation.attested else []
         lines += [
@@ -467,14 +479,15 @@ class PrivateWindow:
             sealed = (
                 self.session.private_provider if span is not None else self._sealed_chat_provider()
             )
-            if not isinstance(sealed, SealedEhbpProvider):
+            if not isinstance(sealed, (SealedEhbpProvider, ChutesE2EEProvider)):
                 return  # a test's stand-in
 
             def attest():
-                # The enclave is Tinfoil's router whatever the model, so a
-                # model nano-gpt has retired would attest: ask its list first.
+                # Tinfoil's router is the enclave whatever the model, so a
+                # model its service no longer offers would attest: ask its
+                # list first. Chutes attests the model's own instances.
                 sealed.check_offered(settings.model)
-                return sealed.attest()
+                return sealed.attest(settings.model)
         else:
             # A key saved for another place than this address goes nowhere:
             # the attestation refuses, saying why (`ProviderConfig.sendable`).
@@ -492,7 +505,7 @@ class PrivateWindow:
         def job() -> None:
             try:
                 result.append(attest())
-            except ModelRetired as exc:
+            except (ModelRetired, NotOffered) as exc:
                 retired.append(exc)
             except Exception as exc:  # shown, never fatal
                 failure.append(failure_words(exc))
@@ -818,7 +831,15 @@ class PrivateWindow:
         summarise, self._summarise_after_attest = self._summarise_after_attest, False
         if attestation is not None:
             older = "  ⚠ older release" if attestation.latest_release else ""
-            if attestation.service == TINFOIL:
+            if attestation.service == CHUTES:
+                self._tee_state = "🔐 E2EE · Chutes ⚠ partial"
+                said = (
+                    f"End-to-end encrypted through Chutes, partially: {attestation.instances} "
+                    "attested instance(s); the workload holding the key is Chutes' signed "
+                    "program, not measured. Chutes sees the account, the model, timing, sizes "
+                    "and cost; the instance's operator, ciphertext."
+                )
+            elif attestation.service == TINFOIL:
                 self._tee_state = f"🔐 E2EE · Tinfoil{older}"
                 said = (
                     f"End-to-end encrypted through Tinfoil: {attestation.detail}. Tinfoil "

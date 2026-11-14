@@ -66,6 +66,7 @@ from sealedlore.gui.speed_test import SpeedTestDialog
 from sealedlore.gui.video_jobs import VideoCatalog
 from sealedlore.models.config import (
     CHAT_API_LABELS,
+    CHUTES_BASE_URL,
     DEFAULT_BASE_URL,
     DEFAULT_EMBEDDING_MODEL,
     DEFAULT_STORY_MODEL,
@@ -76,7 +77,6 @@ from sealedlore.models.config import (
     RECOMMENDED_TEXT_MODELS,
     SEALED_APIS,
     TINFOIL_BASE_URL,
-    UNBUILT_API_LABELS,
     Config,
     EmbeddingProviderConfig,
     KeyMove,
@@ -110,6 +110,7 @@ from sealedlore.models.story import Story
 from sealedlore.phone.torrc import find_tor
 from sealedlore.providers import make_chat_provider
 from sealedlore.providers.base import ChatProvider
+from sealedlore.providers.chutes_provider import chutes_context
 from sealedlore.providers.context_probe import detect_context
 from sealedlore.providers.endpoints import EndpointsProvider, listing_key
 from sealedlore.providers.images import parse_image_models
@@ -172,11 +173,13 @@ LORE_SELECTORS = (
 PRIVATE_SERVICES = (
     ("nanogpt", "NanoGPT (private/ and TEE/ models)", DEFAULT_BASE_URL),
     ("tinfoil", "Tinfoil, end-to-end encrypted (preliminary)", TINFOIL_BASE_URL),
+    ("chutes", "Chutes E2EE, end-to-end encrypted (preliminary, partial)", CHUTES_BASE_URL),
     ("other", "Another server (a local one, say)", ""),
 )
 PRIVATE_MODEL_HINTS = {
     "nanogpt": "e.g. private/glm-5-3, or TEE/glm-5.3-flash",
     "tinfoil": "e.g. glm-5-3 (Choose lists Tinfoil's models)",
+    "chutes": "e.g. Qwen/Qwen3.8-27B-TEE (Choose lists Chutes' confidential models)",
     "other": "e.g. llama3.1:8b",
 }
 
@@ -187,6 +190,8 @@ def private_service_of(endpoint: ProviderConfig | None) -> str:
         return "nanogpt"
     if endpoint.sealed_service() == "tinfoil":
         return "tinfoil"
+    if endpoint.sealed_service() == "chutes-e2ee":
+        return "chutes"
     return "nanogpt" if on_nanogpt(endpoint.base_url) else "other"
 
 
@@ -626,10 +631,6 @@ class SettingsDialog(QDialog):
             self.provider_name.setText(copy.name)
             self.base_url.setText(copy.base_url)
             self.api_key.setText(copy.api_key)
-            if self.chat_api.findData(copy.api) < 0 and copy.api in UNBUILT_API_LABELS:
-                # Not offered until its client exists, but kept: saved as
-                # "From the address", it could become a plain endpoint.
-                self.chat_api.addItem(UNBUILT_API_LABELS[copy.api], copy.api)
             self.chat_api.setCurrentIndex(max(0, self.chat_api.findData(copy.api)))
         finally:
             self._loading_endpoint = False
@@ -731,6 +732,9 @@ class SettingsDialog(QDialog):
         if preset == "tinfoil":
             name = self._unique_endpoint_name("Tinfoil")
             added = ProviderConfig(name=name, base_url=TINFOIL_BASE_URL, api="tinfoil")
+        elif preset == "chutes":
+            name = self._unique_endpoint_name("Chutes")
+            added = ProviderConfig(name=name, base_url=CHUTES_BASE_URL, api="chutes-e2ee")
         else:
             name = self._unique_endpoint_name("New endpoint")
             added = ProviderConfig(name=name).model_copy(update={"base_url": ""})
@@ -961,6 +965,12 @@ class SettingsDialog(QDialog):
             "its address filled in, your Tinfoil key to type"
         )
         self.add_tinfoil.clicked.connect(lambda: self._add_endpoint("tinfoil"))
+        self.add_chutes = QPushButton("Add Chutes")
+        self.add_chutes.setToolTip(
+            "Chutes' end-to-end encrypted models (https://api.chutes.ai), preliminary and "
+            "always partial: its address filled in, your Chutes key to type"
+        )
+        self.add_chutes.clicked.connect(lambda: self._add_endpoint("chutes"))
         self.remove_endpoint = QPushButton("Remove")
         self.remove_endpoint.setToolTip(
             "Take the selected endpoint out. Model fields that name it are left as they are."
@@ -976,6 +986,7 @@ class SettingsDialog(QDialog):
         buttons.setContentsMargins(0, 0, 0, 0)
         buttons.addWidget(self.add_endpoint)
         buttons.addWidget(self.add_tinfoil)
+        buttons.addWidget(self.add_chutes)
         buttons.addWidget(self.remove_endpoint)
         buttons.addWidget(self.make_default)
         buttons.addStretch(1)
@@ -1082,7 +1093,19 @@ class SettingsDialog(QDialog):
     def _sync_api_note(self, *_args) -> None:
         """What the key is sent as, and what the choice of protocol means."""
         sealed = sealed_service(self.base_url.text(), self.chat_api.currentData())
-        if sealed:
+        if sealed == "chutes-e2ee":
+            self.api_note.setText(
+                not_built(privacy_at("", self.base_url.text(), sealed))
+                or (
+                    "Chutes' end-to-end encryption (preliminary, not yet run with an account, "
+                    "always partial): every message is sealed on this computer to one attested "
+                    "Chutes instance's key, and each reply comes whole, not streamed. Only "
+                    "Chutes' confidential models are offered. The key goes to "
+                    "https://api.chutes.ai only, as a Bearer token. Pictures, videos and "
+                    "embeddings need endpoints of their own."
+                )
+            )
+        elif sealed:
             self.api_note.setText(
                 not_built(privacy_at("", self.base_url.text(), sealed))
                 or (
@@ -1160,6 +1183,8 @@ class SettingsDialog(QDialog):
         own protocol, or what it spoke (never a sealed one it was moved off)."""
         if self._private_service() == "tinfoil":
             return "tinfoil"
+        if self._private_service() == "chutes":
+            return "chutes-e2ee"
         existing = self.config.private_provider
         api = existing.api if existing is not None else "auto"
         return "auto" if api in SEALED_APIS else api
@@ -1960,8 +1985,9 @@ class SettingsDialog(QDialog):
         self.private_service.setToolTip(
             "NanoGPT: its private/ models are end-to-end encrypted, its TEE/ models run in "
             "an enclave but their text passes NanoGPT's gateway. Tinfoil: its own API, every "
-            "model end-to-end encrypted, no relay in between (preliminary). Another server: "
-            "a local one, say, which keeps it on this machine."
+            "model end-to-end encrypted, no relay in between (preliminary). Chutes E2EE: each "
+            "message sealed to one attested Chutes instance, always partial (preliminary). "
+            "Another server: a local one, say, which keeps it on this machine."
         )
         intro = QLabel(
             "Private scenes (the Private button, under More beside Send) are played on this model "
@@ -2113,11 +2139,13 @@ class SettingsDialog(QDialog):
         self.detect_button.setEnabled(False)
         self.detect_note.setText("Asking the server…")
         QApplication.processEvents()
-        found = (
-            tinfoil_context(url, model)
-            if self._private_service() == "tinfoil"
-            else detect_context(url, key, model)
-        )
+        service = self._private_service()
+        if service == "tinfoil":
+            found = tinfoil_context(url, model)
+        elif service == "chutes":
+            found = chutes_context(model)
+        else:
+            found = detect_context(url, key, model)
         self.detect_button.setEnabled(True)
         if found is None:
             self.detect_note.setText(

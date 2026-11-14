@@ -299,7 +299,7 @@ def open_reply(blob: bytes, response_key: Any) -> dict[str, Any]:
 # author's D6): each piece of a stream is sealed on its own, a random nonce and
 # no associated data, with nothing a client can see that numbers it, so Chutes'
 # relay could drop, reorder or repeat pieces inside a stream unnoticed
-# (`STREAM_ORDER_UNPROVEN`, design/e2ee-providers.md 2.3). Only its end is
+# (`STREAM_ORDER_UNPROVEN`, SealedLoreDocs design/e2ee-providers.md 2.3). Only its end is
 # protected: the decrypted `[DONE]` and a finish reason. A reply not streamed
 # is sealed whole and has no such gap. Kept here for when a live check shows
 # whether the pieces' nonces are a counter that can be held to.

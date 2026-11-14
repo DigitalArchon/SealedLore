@@ -1559,14 +1559,27 @@ SEALED_BY_TIPS = {
         "Tinfoil's attested router enclave, sent over a connection pinned to its attested "
         "TLS key, and the reply opened with it. Tinfoil carried ciphertext."
     ),
+    "chutes": (
+        "End-to-end encrypted through Chutes (always partial): sealed on this machine to the "
+        "key of one Chutes instance whose attested hardware binds it, and the reply, sent "
+        "whole, opened with it. Chutes and the instance's operator carried ciphertext; the "
+        "workload holding the key is Chutes' signed program, not measured."
+    ),
 }
 
 
-def tee_tip(tee: str, upstream: TeeUpstream | None, service: str | None = None) -> str:
+def tee_tip(
+    tee: str,
+    upstream: TeeUpstream | None,
+    service: str | None = None,
+    instance: str | None = None,
+) -> str:
     """A TEE mark's tooltip, with who ran the model where that was looked up,
-    and who sealed an encrypted message when that wasn't NanoGPT."""
+    and who sealed an encrypted message when that wasn't NanoGPT (and to
+    which instance, where the service chooses one)."""
     if tee == "encrypted" and service in SEALED_BY_TIPS:
-        return SEALED_BY_TIPS[service]
+        sealed_to = f" Sealed to instance {instance}…." if instance else ""
+        return SEALED_BY_TIPS[service] + sealed_to
     tip = TEE_MARK_TIPS[tee]
     if tee in ("verified", "signed") and upstream is not None:
         tip += "\n\n" + upstream_words(upstream)
@@ -2165,7 +2178,9 @@ class TranscriptView(QScrollArea):
             widget.setProperty("private", "true")
             widget.setToolTip(f"Written in a private {part}: only the private model ever saw it.")
         if tee in TEE_MARK_TIPS:
-            widget.setToolTip(tee_tip(tee, node.meta.tee_upstream, node.meta.tee_service))
+            widget.setToolTip(
+                tee_tip(tee, node.meta.tee_upstream, node.meta.tee_service, node.meta.tee_instance)
+            )
         if node.meta.private_summary_of:
             widget.setProperty("privatesummary", "true")
             widget.setToolTip(

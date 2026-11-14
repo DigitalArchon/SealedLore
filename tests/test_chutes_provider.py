@@ -385,7 +385,8 @@ def test_every_shortfall_chutes_names_says_what_it_costs():
         and node.args
         and isinstance(node.args[0], ast.Name)
     }
-    assert named == {WORKLOAD_UNMEASURED, MEASUREMENTS_LISTED}
+    # The keyless check (Test attestation without a key) names a third.
+    assert named == {WORKLOAD_UNMEASURED, MEASUREMENTS_LISTED, module.KEY_BINDING_UNCHECKED}
     assert all(SHORTFALL_TIPS.get(what) for what in named)
 
 

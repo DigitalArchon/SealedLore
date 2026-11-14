@@ -188,8 +188,16 @@ def test_a_sealed_chat_moves_to_any_sealed_model_and_a_tee_chat_up_to_one():
 # --- nothing in the clear to a sealed endpoint ----------------------------------------
 
 
-def test_a_sealed_endpoint_without_its_client_sends_nothing_and_says_what_to_do():
-    """Chutes E2EE's client isn't built yet (Tinfoil's is: tests/test_tinfoil_direct.py)."""
+@pytest.fixture
+def chutes_unbuilt(monkeypatch):
+    """A sealed service whose client this version hasn't: every service has
+    one now, so Chutes E2EE's is taken away to stand for a future one."""
+    import sealedlore.providers.privacy as privacy_module
+
+    monkeypatch.setattr(privacy_module, "BUILT_SERVICES", privacy_module.BUILT_SERVICES - {CHUTES})
+
+
+def test_a_sealed_endpoint_without_its_client_sends_nothing_and_says_what_to_do(chutes_unbuilt):
     provider = make_chat_provider(chutes(model="moonshotai/Kimi-K3-TEE"))
     assert isinstance(provider, NotBuiltProvider)
     with pytest.raises(ProviderError) as refused:
@@ -203,7 +211,7 @@ def test_a_sealed_endpoint_without_its_client_sends_nothing_and_says_what_to_do(
     assert isinstance(make_chat_provider(tinfoil(model="glm-5-3")), TinfoilDirect)
 
 
-def test_the_routing_provider_gives_a_sealed_endpoint_no_plain_client():
+def test_the_routing_provider_gives_a_sealed_endpoint_no_plain_client(chutes_unbuilt):
     cfg = endpoints(chutes(), tinfoil())
     routing = EndpointsProvider(cfg)
     assert isinstance(routing.provider_for("Chutes::m-TEE"), NotBuiltProvider)

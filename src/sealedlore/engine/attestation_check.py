@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 from sealedlore.models.config import ProviderConfig
 from sealedlore.providers.base import ProviderError
-from sealedlore.providers.privacy import NANOGPT_PRIVATE, TINFOIL, not_built, privacy_for
+from sealedlore.providers.privacy import CHUTES, NANOGPT_PRIVATE, TINFOIL, not_built, privacy_for
 from sealedlore.providers.tee import (
     TeeRefused,
     failure_words,
@@ -52,6 +52,9 @@ def check_attestation(settings: ProviderConfig) -> AttestationCheck:
     if privacy.service == TINFOIL:
         # Keyless: Tinfoil's bundle and model list are public.
         return _check_tinfoil(settings, model)
+    if privacy.service == CHUTES:
+        # With the key, as a request would attest; without, what is public.
+        return _check_chutes(settings, model)
     if settings.key_withheld:
         return AttestationCheck("error", f"The check couldn't run: {settings.key_withheld}")
     if privacy.service == NANOGPT_PRIVATE:
@@ -144,3 +147,54 @@ def _check_tinfoil(settings: ProviderConfig, model: str) -> AttestationCheck:
         + (f" (⚠ an older enclave release than the latest, {older})" if older else ""),
         "\n\n".join(p for p in (what_was_attested(attestation), attestation.detail) if p),
     )
+
+
+def _check_chutes(settings: ProviderConfig, model: str) -> AttestationCheck:
+    """Chutes' end-to-end encryption (providers/chutes_provider.py), always
+    partial. With the key: discovery and every instance's checks, the key
+    binding included, as a request attests. Without it: the chute's public
+    evidence through the same checks, the key binding left unchecked (only
+    discovery, with the key, names each instance's key), and said."""
+    from sealedlore.providers.chutes_provider import ChutesE2EEProvider, NotOffered
+    from sealedlore.providers.tee import TeeRefused
+
+    keyed = bool(settings.api_key) and not settings.key_withheld
+    provider = ChutesE2EEProvider(settings)
+    try:
+        attestation = provider.attest(model) if keyed else provider.attest_public(model)
+    except NotOffered:
+        return AttestationCheck(
+            "retired",
+            "✗ Not one of Chutes' end-to-end encrypted models",
+            "Chutes offers only its confidential-compute models end to end; choose one of them.",
+        )
+    except TeeRefused as exc:
+        return AttestationCheck(
+            "refused", f"✗ Refused: {failure_words(exc)}", "Nothing would be sent to it."
+        )
+    except ProviderError as exc:
+        return AttestationCheck("error", f"The check couldn't run: {failure_words(exc)}")
+    finally:
+        provider.close()
+    without = (
+        "" if keyed else " Without a Chutes key, discovery and the key binding weren't checked."
+    )
+    # Without the key nothing was sealed to anything: say what was checked,
+    # not what a message would be.
+    what = what_was_attested(attestation) if keyed else KEYLESS_CHUTES
+    return AttestationCheck(
+        "partial",
+        f"⚠ End-to-end encrypted through Chutes, partially: {', '.join(attestation.shortfalls)} "
+        f"({attestation.instances} instance{'s' if attestation.instances != 1 else ''})" + without,
+        "\n\n".join(p for p in (what, attestation.detail) if p),
+    )
+
+
+KEYLESS_CHUTES = (
+    "Checked without a key, from Chutes' public evidence for our nonce: each instance's TDX "
+    "quote up to Intel's root, NVIDIA's verdict on its GPUs, and its VM image among those "
+    "Chutes publishes. Not checked: that a quote binds the key a message would be sealed to "
+    "(only Chutes' list of instances, which needs the key, names it). With the key, that is "
+    "checked before anything is sealed. The workload that holds the key is Chutes' signed "
+    "program, not measured, so it is partial either way."
+)

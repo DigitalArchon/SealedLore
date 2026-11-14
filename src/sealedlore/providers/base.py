@@ -74,6 +74,9 @@ class StreamCompleted:
     # What a refusal names as its reason (Anthropic's `stop_details.category`:
     # "cyber", "bio"...), when the stream carries one; informational only.
     refusal_category: str | None = None
+    # The instance a reply was sealed to, where the provider chooses one
+    # (Chutes' E2EE: providers/chutes_provider.py), for its mark's tooltip.
+    sealed_to: str | None = None
 
 
 StreamEvent = TextDelta | ReasoningDelta | StreamCompleted

@@ -21,7 +21,7 @@ from typing import Any
 
 import httpx
 
-from sealedlore.models.config import ProviderConfig, shown
+from sealedlore.models.config import ProviderConfig, sealed_service, shown
 from sealedlore.providers.base import (
     ChatProvider,
     ChatRequest,
@@ -176,6 +176,11 @@ class StreamingHttpProvider(ChatProvider):
         # Set by cancel(), so a wait before a retry ends at once.
         self._wake = threading.Event()
 
+    # The end-to-end encrypted protocol this client seals every request in
+    # (models/config.py `SEALED_APIS`), or "" for a plain client, which never
+    # reaches a sealed endpoint.
+    seals = ""
+
     def _twin(self) -> StreamingHttpProvider:
         """Another provider on the same endpoint, of this one's kind."""
         return type(self)(self.config)
@@ -207,10 +212,12 @@ class StreamingHttpProvider(ChatProvider):
     def _get_client(self) -> httpx.Client:
         # Judged by the address, whatever the model: a plain client never
         # reaches an end-to-end encrypted endpoint, not even with a listing
-        # (it carries the key). A sealing client has a client of its own.
-        refusal = plain_refusal(self.endpoint, api=self.config.api)
-        if refusal:
-            raise ProviderError(refusal)
+        # (it carries the key). Only the sealing client of that endpoint's
+        # own protocol (`seals`) may: Chutes' seals each request itself.
+        if sealed_service(self.endpoint, self.config.api) != self.seals:
+            refusal = plain_refusal(self.endpoint, api=self.config.api)
+            if refusal:
+                raise ProviderError(refusal)
         if self._client is None:
             self._client = make_client(
                 self.config.base_url,

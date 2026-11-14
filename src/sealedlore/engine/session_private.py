@@ -842,6 +842,8 @@ class PrivateRuntime:
         if node is not None and getattr(self, "_last_sealed", False):
             node.meta.tee = self._with_carried(node, "encrypted")
             node.meta.tee_service = self._tee_service(node.meta.model or "")
+            sealed_to = getattr(getattr(self, "_last_completed", None), "sealed_to", None)
+            node.meta.tee_instance = sealed_to[:8] if isinstance(sealed_to, str) else None
             self._mark_sent(node, "encrypted")
             return
         if node is None or self.private_tee is None:

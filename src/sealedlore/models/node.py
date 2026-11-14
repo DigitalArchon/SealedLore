@@ -139,6 +139,9 @@ class NodeMeta(BaseModel):
     # Who sealed an "encrypted" message, when not NanoGPT's Private Mode (whose
     # marks always meant NanoGPT's): "tinfoil" (providers/privacy.py).
     tee_service: str | None = None
+    # The first 8 characters of the instance an "encrypted" reply was sealed
+    # to, where the service chooses one (Chutes): its tooltip names it.
+    tee_instance: str | None = None
     # The first message of a branch carries its name (engine/branches.py).
     # A branch is made only by rewriting an earlier message; takes are not.
     branch_name: str | None = None

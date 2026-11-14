@@ -1151,9 +1151,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     configure.add_argument("--model")
     configure.add_argument(
         "--api",
-        choices=["auto", "openai", "anthropic", "tinfoil"],
+        choices=["auto", "openai", "anthropic", "tinfoil", "chutes-e2ee"],
         help="what the endpoint speaks: OpenAI's /chat/completions, Anthropic's own API, or "
-        "Tinfoil's, end-to-end encrypted (the default, auto, reads it from the address)",
+        "Tinfoil's or Chutes', end-to-end encrypted (the default, auto, reads it from the "
+        "address)",
     )
     configure.add_argument(
         "--key-storage",

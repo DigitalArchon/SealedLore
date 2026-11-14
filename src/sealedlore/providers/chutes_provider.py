@@ -55,7 +55,7 @@ import secrets
 import threading
 import time
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import httpx
@@ -90,6 +90,7 @@ from sealedlore.providers.chutes_e2ee import (
 )
 from sealedlore.providers.dcap import since_boot
 from sealedlore.providers.http import REPLY_MAX_BYTES, make_client
+from sealedlore.providers.privacy import CHUTES
 from sealedlore.providers.streaming import StreamingHttpProvider, read_body, read_start
 from sealedlore.providers.tee import (
     ATTEMPT_SECONDS,
@@ -159,6 +160,11 @@ EVIDENCE_LIMIT = (
     "Chutes allows 60 calls a minute for everyone's evidence together, and the limit was "
     "reached; this may pass if tried again in a minute"
 )
+
+
+# What the keyless check (`attest_public`) can't show: that the hardware binds
+# the key a request would be sealed to (only discovery, with the key, names it).
+KEY_BINDING_UNCHECKED = "the key binding unchecked (it needs a Chutes key)"
 
 
 def not_chutes(base_url: str) -> str | None:
@@ -260,6 +266,8 @@ class ChutesState:
 
 class ChutesE2EEProvider(StreamingHttpProvider):
     sealed_replies = True
+    # Its own client reaches api.chutes.ai (`StreamingHttpProvider._get_client`).
+    seals = "chutes-e2ee"
 
     def __init__(
         self,
@@ -785,8 +793,82 @@ class ChutesE2EEProvider(StreamingHttpProvider):
             check.note(f"left out, never sealed to: {instance_id[:8]} ({why})")
         attestation = check.attestation("instance", instances=len(attested))
         attestation.encrypted = True
+        attestation.service = CHUTES
         attestation.hardware = "Intel TDX"
         attestation.measurement = "; ".join(names)
+        return attestation
+
+    def attest_public(self, model: str) -> Attestation:
+        """What can be checked of `model`'s instances without the key (network;
+        a worker thread): Chutes' public evidence for the whole chute, for a
+        nonce of ours, the first MAX_INSTANCES of it through tee.py's checks
+        and the published measurements. The key binding isn't checked: only
+        discovery, with the key, names each instance's key
+        (KEY_BINDING_UNCHECKED). For Test attestation without a key and the
+        live check; never for a request: nothing is sealed to what it found."""
+        bare, chute_id = self._chute_for(model)
+        sets = self._measurements()
+        deadline = time.monotonic() + ATTEMPT_SECONDS
+        tee = self._tee(bare)
+        try:
+            with tee.attempt(deadline):
+                body, nonce = self._evidence(f"/chutes/{chute_id}/evidence", bare, deadline)
+                listed = body.get("evidence") if isinstance(body.get("evidence"), list) else []
+                items = [
+                    item
+                    for item in listed
+                    if isinstance(item, dict) and is_chute_id(item.get("instance_id"))
+                ][:MAX_INSTANCES]
+
+                def check(item: dict[str, Any]) -> tuple[str, _Checks | str, str]:
+                    short = item["instance_id"][:8]
+                    try:
+                        found = tee.check_instance(item, nonce)
+                    except StreamCancelled:
+                        raise
+                    except ProviderError as exc:
+                        if time.monotonic() >= deadline:
+                            raise
+                        return item["instance_id"], failure_words(exc), ""
+                    facts = found.quote
+                    known = measured(facts.mrtd, facts.rtmrs, sets) if facts is not None else None
+                    if known is None:
+                        why = f"instance {short}'s measurements aren't a set Chutes publishes"
+                        return item["instance_id"], why, ""
+                    name = f"{known.name} ({known.version})" if known.version else known.name
+                    return item["instance_id"], found, name
+
+                with thread_pool(max(1, min(8, len(items)))) as pool:
+                    results = list(pool.map(check, items))
+        finally:
+            tee.close()
+        attested = [(i, c, n) for i, c, n in results if isinstance(c, _Checks)]
+        left_out = {i: c for i, c, _n in results if isinstance(c, str)}
+        if not attested:
+            reasons = "; ".join(f"{i[:8]}: {why}" for i, why in left_out.items()) or (
+                "Chutes' evidence listed none"
+            )
+            raise TeeRefused(
+                f"none of {bare}'s instances in Chutes' public evidence hold up ({reasons})"
+            )
+        record = _Checks(
+            f"{len(attested)} of the {len(results)} instances of {bare} checked from Chutes' "
+            "public evidence, for our nonce, hold up: Intel's chain, NVIDIA's verdict and a "
+            "published image"
+        )
+        for _instance, found, _name in attested:
+            record.merge(found)
+        record.fall_short(WORKLOAD_UNMEASURED)
+        record.fall_short(MEASUREMENTS_LISTED)
+        record.fall_short(KEY_BINDING_UNCHECKED)
+        record.note("attested: " + ", ".join(f"{i[:8]} ({name})" for i, _c, name in attested))
+        for instance_id, why in left_out.items():
+            record.note(f"left out: {instance_id[:8]} ({why})")
+        attestation = record.attestation("instance", instances=len(attested))
+        attestation.encrypted = True
+        attestation.service = CHUTES
+        attestation.hardware = "Intel TDX"
+        attestation.measurement = "; ".join(sorted({name for _i, _c, name in attested}))
         return attestation
 
     def _instance_and_nonce(self, model: str, chute_id: str) -> tuple[_Instance, str]:
@@ -873,6 +955,7 @@ class ChutesE2EEProvider(StreamingHttpProvider):
         if self._cancelled:
             raise StreamCancelled()
         events, completed = self._read_reply(reply, sent_at)
+        completed = replace(completed, sealed_to=instance.instance_id)
         yield from events
         self._report_reasoning(request, completed)
         self._report_tee(request, completed)
@@ -923,3 +1006,20 @@ class ChutesE2EEProvider(StreamingHttpProvider):
             reasoning_tokens=max(counted, len(reasoning) // 4 if isinstance(reasoning, str) else 0),
             unterminated=finish is None,
         )
+
+
+def chutes_context(model: str) -> Any:
+    """A Chutes model's context from its public listing, read without the key
+    (Settings → Private → Detect); None when it isn't listed as confidential."""
+    from sealedlore.providers.context_probe import ContextSize
+
+    try:
+        entry = (
+            ChutesE2EEProvider(ProviderConfig(name="Chutes", base_url=CHUTES_ORIGIN))
+            .fetch_model_prices()
+            .get(split_model(model)[1].strip())
+        )
+    except ProviderError:
+        return None
+    tokens = entry.get("context_length") if entry else None
+    return ContextSize(tokens=tokens, source="Chutes' model list") if tokens else None

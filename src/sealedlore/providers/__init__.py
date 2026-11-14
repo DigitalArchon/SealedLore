@@ -14,6 +14,7 @@ from sealedlore.providers.endpoints import EndpointsProvider
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
 from sealedlore.providers.privacy import (
+    CHUTES,
     NANOGPT_PRIVATE,
     TINFOIL,
     NotBuiltProvider,
@@ -21,6 +22,9 @@ from sealedlore.providers.privacy import (
     privacy_for,
 )
 from sealedlore.providers.wire import should_use_cache_control, to_wire_messages
+
+# The sealed services this factory has a client for.
+SEALING_CLIENTS = frozenset({NANOGPT_PRIVATE, TINFOIL, CHUTES})
 
 
 def make_chat_provider(settings: ProviderConfig) -> ChatProvider:
@@ -39,6 +43,15 @@ def make_chat_provider(settings: ProviderConfig) -> ChatProvider:
     """
     settings = settings.sendable()
     privacy = privacy_for(settings.model, settings)
+    if privacy.sealed and (not privacy.built or privacy.service not in SEALING_CLIENTS):
+        # A sealed service with no client here (none today; a new one added
+        # before its client): refused in words, never sent in the clear.
+        return NotBuiltProvider(
+            settings,
+            not_built(privacy, settings.base_url)
+            or f"{settings.model} is end-to-end encrypted, and no client here seals it; "
+            "nothing was sent",
+        )
     if privacy.service == NANOGPT_PRIVATE:
         # Imported here: the attestation code behind it is nothing the
         # other clients need.
@@ -49,13 +62,10 @@ def make_chat_provider(settings: ProviderConfig) -> ChatProvider:
         from sealedlore.providers.tinfoil_direct import TinfoilDirect
 
         return TinfoilDirect(settings)
-    if privacy.sealed:
-        return NotBuiltProvider(
-            settings,
-            not_built(privacy, settings.base_url)
-            or f"{settings.model} is end-to-end encrypted, and no client here seals it; "
-            "nothing was sent",
-        )
+    if privacy.service == CHUTES:
+        from sealedlore.providers.chutes_provider import ChutesE2EEProvider
+
+        return ChutesE2EEProvider(settings)
     if settings.speaks() == "anthropic":
         return AnthropicProvider(settings)
     return OpenAICompatibleProvider(settings)

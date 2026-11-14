@@ -65,7 +65,9 @@ SERVICE_NAMES = {
 }
 # The services whose client this version has. A sealed endpoint of any other
 # sends nothing (`NotBuiltProvider`): a plain client would send it in the clear.
-BUILT_SERVICES = frozenset({NANOGPT_PRIVATE, NANOGPT_TEE, TINFOIL})
+# Every service has one now; a sealed service added before its client is
+# refused by `NotBuiltProvider`, never sent in the clear.
+BUILT_SERVICES = frozenset({NANOGPT_PRIVATE, NANOGPT_TEE, TINFOIL, CHUTES})
 
 
 @dataclass(frozen=True)
@@ -97,6 +99,8 @@ class Privacy:
             return "🔐 End-to-end encrypted", E2EE_NOTE
         if self.service == TINFOIL:
             return "🔐 End-to-end encrypted (Tinfoil)", TINFOIL_NOTE
+        if self.service == CHUTES:
+            return "🔐 End-to-end encrypted (Chutes, partial)", CHUTES_NOTE
         if self.sealed:
             name = SERVICE_NAMES.get(self.service, self.service)
             return "🔐 End-to-end encrypted", (
@@ -121,6 +125,14 @@ TINFOIL_NOTE = (
     "machine to a key only Tinfoil's attested router enclave holds, over a connection "
     "pinned to the enclave's attested TLS key. Tinfoil sees your account, the model, "
     "timing, sizes and cost, never the text."
+)
+CHUTES_NOTE = (
+    "End-to-end encrypted to one Chutes instance (preliminary, always partial): each "
+    "message is sealed on this machine to the key of an instance whose Intel TDX quote, "
+    "for our nonce, binds that key, and whose VM image is one Chutes publishes. Not "
+    "attested: the workload that holds the key, which Chutes signs; and the published "
+    "images are Chutes' list. Chutes sees your account, the model, timing, sizes and "
+    "cost; the instance's operator, ciphertext. Replies come whole, not streamed."
 )
 TEE_NOTE = (
     "TEE: the model runs in an attested enclave and its replies are signed, but the text "

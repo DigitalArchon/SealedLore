@@ -423,8 +423,9 @@ class SealedEhbpProvider(OpenAICompatibleProvider):
         """Refuse, before anything is fetched, an endpoint this client can't
         speak to."""
 
-    def attest(self) -> Attestation:
-        """Attest now (a worker thread): the window shows what was proved."""
+    def attest(self, model: str = "") -> Attestation:
+        """Attest now (a worker thread): the window shows what was proved. The
+        enclave is the router's, whatever `model` (Chutes' takes one)."""
         self._before_attest()
         return self.enclave.current().attestation
 

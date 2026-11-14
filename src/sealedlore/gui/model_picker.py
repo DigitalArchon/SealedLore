@@ -46,7 +46,7 @@ from sealedlore.gui.workers import run_detached
 from sealedlore.models.config import ProviderConfig, RecommendedModel, split_model
 from sealedlore.models.route import ModelRoute
 from sealedlore.providers.base import ChatProvider
-from sealedlore.providers.privacy import NANOGPT_TEE, SERVICE_NAMES, TINFOIL, Privacy, privacy_at
+from sealedlore.providers.privacy import CHUTES, NANOGPT_TEE, TINFOIL, Privacy, privacy_at
 from sealedlore.providers.private_catalog import encrypted_counterpart
 
 CATALOG_MAX_AGE = timedelta(hours=1)
@@ -445,7 +445,7 @@ class ModelPickerDialog(QDialog):
         if label.startswith("🔐"):
             # Short: the Name column needs the room. Another service than
             # NanoGPT's Private Mode says which.
-            by = f" ({SERVICE_NAMES[TINFOIL]})" if privacy.service == TINFOIL else ""
+            by = {TINFOIL: " (Tinfoil)", CHUTES: " (Chutes, partial)"}.get(privacy.service, "")
             label = "🔐 Encrypted" + by
         twin = self._twin_of(model_id)
         if twin:
@@ -782,7 +782,9 @@ class ModelField(QWidget):
         label, note = privacy.label()
         # Short beside the field; the whole label and note in the tooltip.
         if label.startswith("🔐"):
-            label = "🔐 E2EE" + (" · Tinfoil" if privacy.service == TINFOIL else "")
+            label = "🔐 E2EE" + {TINFOIL: " · Tinfoil", CHUTES: " · Chutes ⚠ partial"}.get(
+                privacy.service, ""
+            )
         self.privacy.setText(label)
         self.privacy.setToolTip(note)
         self.privacy.setVisible(bool(label))
