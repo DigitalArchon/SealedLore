@@ -27,6 +27,7 @@ from sealedlore.providers.tee import (
     GPUS_LOOSE,
     RECEIPT_KEYS_LOOSE,
     TeeClient,
+    failure_words,
     is_private_mode,
     is_tee,
     move_refusal,
@@ -434,7 +435,7 @@ class PrivateWindow:
             except ModelRetired as exc:
                 retired.append(exc)
             except Exception as exc:  # shown, never fatal
-                failure.append(str(exc))
+                failure.append(failure_words(exc))
 
         # Its own story and thread go with the result: another TEE chat opened
         # meanwhile took A's attestation as its own, and a finishing thread

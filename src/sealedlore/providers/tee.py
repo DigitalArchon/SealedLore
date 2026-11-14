@@ -72,7 +72,7 @@ from urllib.parse import quote, urlparse
 
 import httpx
 
-from sealedlore.models.config import split_model
+from sealedlore.models.config import addresses_shown, split_model
 from sealedlore.models.private import Attestation, TeeUpstream
 from sealedlore.providers import dcap, nras
 from sealedlore.providers.base import ProviderError, checked_key, relay_said
@@ -506,6 +506,25 @@ class _Checks:
 
 class TeeRefused(ProviderError):
     """The enclave's attestation doesn't hold: nothing may be sent to it."""
+
+
+# As much of why an attestation failed as is said (DA Toolkit's engine, Nov 2026).
+FAILURE_CHARS = 700
+
+
+def failure_words(exc: BaseException) -> str:
+    """Why attesting failed, as it may be shown, logged or held in tee_block:
+    a refusal's own words, or a fetch's that failed, on one line, short, and
+    without what a reader can't see (`relay_said`: they may quote the relay,
+    a provider, a certificate's names). Anything else reading the evidence
+    raised (an AttributeError, a KeyError) is named by its type alone: its
+    text is the evidence's, and went into the refusal as it came ("'str'
+    object has no attribute 'get'"). (DA Toolkit's, Nov 2026.)"""
+    if isinstance(exc, (ProviderError, ImportError, httpx.HTTPError, OSError)):
+        said = relay_said(addresses_shown(str(exc)), FAILURE_CHARS)
+        if said:
+            return said
+    return f"what was sent to check couldn't be read ({type(exc).__name__})"
 
 
 @dataclass(frozen=True)

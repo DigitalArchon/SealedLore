@@ -24,6 +24,7 @@ from sealedlore.engine.attestation_check import (
 )
 from sealedlore.gui.workers import run_detached
 from sealedlore.models.config import ProviderConfig
+from sealedlore.providers.tee import failure_words
 
 Settings = Callable[[], ProviderConfig | None]
 
@@ -45,7 +46,7 @@ class AttestationTests(QObject):
             try:
                 return check_attestation(settings)
             except Exception as exc:  # noqa: BLE001 - shown, never fatal
-                return AttestationCheck("error", f"The check couldn't run: {exc}")
+                return AttestationCheck("error", f"The check couldn't run: {failure_words(exc)}")
 
         # A daemon thread nobody waits for (gui/workers.py): an attestation
         # can't be cancelled, and quitting no longer waits for one.

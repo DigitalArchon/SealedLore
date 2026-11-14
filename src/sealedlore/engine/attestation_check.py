@@ -13,7 +13,13 @@ from dataclasses import dataclass
 
 from sealedlore.models.config import ProviderConfig
 from sealedlore.providers.base import ProviderError
-from sealedlore.providers.tee import TeeRefused, is_private_mode, is_tee, what_was_attested
+from sealedlore.providers.tee import (
+    TeeRefused,
+    failure_words,
+    is_private_mode,
+    is_tee,
+    what_was_attested,
+)
 
 
 @dataclass(frozen=True)
@@ -52,7 +58,9 @@ def check_attestation(settings: ProviderConfig) -> AttestationCheck:
                 )
             attestation = provider.attest()
         except ProviderError as exc:
-            return AttestationCheck("refused", f"✗ Refused: {exc}", "Nothing would be sent to it.")
+            return AttestationCheck(
+                "refused", f"✗ Refused: {failure_words(exc)}", "Nothing would be sent to it."
+            )
         finally:
             provider.close()
         older = attestation.latest_release
@@ -70,9 +78,11 @@ def check_attestation(settings: ProviderConfig) -> AttestationCheck:
     try:
         attestation = tee.attest()
     except TeeRefused as exc:
-        return AttestationCheck("refused", f"✗ Refused: {exc}", "Nothing would be sent to it.")
+        return AttestationCheck(
+            "refused", f"✗ Refused: {failure_words(exc)}", "Nothing would be sent to it."
+        )
     except Exception as exc:  # noqa: BLE001 - shown: the check couldn't run
-        return AttestationCheck("error", f"The check couldn't run: {exc}")
+        return AttestationCheck("error", f"The check couldn't run: {failure_words(exc)}")
     finally:
         tee.close()
     parts = []

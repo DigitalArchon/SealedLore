@@ -195,7 +195,7 @@ class PrivateRuntime:
         TEE/ model was attested only as a scene or chat began or its model
         changed: an instance Chutes started later, whose replies are signed
         by none, was never checked, nor a revocation seen."""
-        from sealedlore.providers.tee import TeeRefused
+        from sealedlore.providers.tee import TeeRefused, failure_words
 
         with _REATTESTING:
             if self.tee_block:
@@ -207,7 +207,7 @@ class PrivateRuntime:
         try:
             attestation = tee.attest()
         except Exception as exc:  # refused, or out of reach: either way nothing goes
-            reason = str(exc) or "the enclave's attestation didn't hold"
+            reason = failure_words(exc)
             self.tee_block = f"The attestation was refused: {reason}"
             self._reattested = ("refused", reason)
             raise TeeRefused(f"{self.tee_block}; nothing was sent") from exc
