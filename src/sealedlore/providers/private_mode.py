@@ -49,41 +49,49 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
-import secrets
-import sys
-import threading
-from collections.abc import Callable, Iterator, Sequence
-from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlparse
 
 import httpx
 
 from sealedlore.models.config import (
     ProviderConfig,
-    is_local_host,
-    require_https,
+    require_https,  # noqa: F401 - the rule the SDK's redirects are held to, by this name
     shown,
-    without_password,
 )
-from sealedlore.models.private import Attestation
-from sealedlore.providers.base import ChatRequest, ProviderError, StreamEvent, relay_said
-from sealedlore.providers.dcap import since_boot
-from sealedlore.providers.http import environment_proxy, make_client, reply_json
+from sealedlore.providers.base import ChatRequest, ProviderError, relay_said
+from sealedlore.providers.http import make_client, reply_json
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
 from sealedlore.providers.private_catalog import fetch_private_ids, offered, offers_private_mode
+
+# The parts that are the same whoever relays the ciphertext live in
+# providers/sealed_ehbp.py; these names are kept here, where NanoGPT's client
+# and its tests have always found them.
+from sealedlore.providers.sealed_ehbp import (  # noqa: F401
+    CACHE_SECRET_FIELD,
+    MAX_AGE_SECONDS,
+    RELAY_SAID_CHARS,
+    REQUIRED_STEPS,
+    ROUTER_REPO,
+    Enclave,
+    ModelRetired,
+    SealedEhbpProvider,
+    SealingTransport,
+    Verified,
+    Verifier,
+    _hardware,
+    _NonEmptyBodyTransport,
+    _sealing_transport,
+    attestation_record,
+    origin_of,
+    sdk_verify,
+    windows_roots,
+)
 from sealedlore.providers.tee import is_private_mode
 from sealedlore.providers.wire import to_wire_messages
 
 RELAY_PATH = "/api/v1/private/tinfoil"
-ROUTER_REPO = "tinfoilsh/confidential-model-router"
-MAX_AGE_SECONDS = 5 * 60
 PREFLIGHT_TIMEOUT_SECONDS = 30.0
 ENCLAVE_URL_HEADER = "X-Tinfoil-Enclave-Url"
-# What the relay writes in an error, as much as is said of it (`relay_said`:
-# on one line, without what a reader can't see).
-RELAY_SAID_CHARS = 200
 
 # The request fields Tinfoil's router takes (the proxy's
 # PRIVATE_TINFOIL_CHAT_COMPLETION_BODY_FIELDS, less tools and search, which
@@ -108,43 +116,6 @@ ALLOWED_FIELDS = frozenset(
         "user",
     }
 )
-# The router-only field that scopes the enclave's prompt cache: sealed with
-# the body, never seen by nano-gpt.
-CACHE_SECRET_FIELD = "user_cache_secret"
-
-
-class ModelRetired(ProviderError):
-    """nano-gpt no longer offers this Private Mode model. Attesting says
-    nothing about it (the enclave is Tinfoil's router, whatever the model),
-    so without this a retired model attested fine and its first message came
-    back as a bare preflight refusal."""
-
-    def __init__(self, model: str, offered: Sequence[str] = (), **kwargs: Any) -> None:
-        super().__init__(
-            f"{model} is no longer offered by NanoGPT's Private Mode; choose another private model",
-            **kwargs,
-        )
-        self.model = model
-        # What the relay's list does offer: what a scene may move to.
-        self.offered = list(offered)
-
-
-@dataclass(frozen=True)
-class Verified:
-    """What an attestation proved: the key to seal to, and the record."""
-
-    hpke_public_key: str
-    enclave: str
-    attestation: Attestation
-
-
-def origin_of(base_url: str) -> str:
-    """The scheme, host and port of `base_url`, without a user name and
-    password written into it: httpx (and requests, in Tinfoil's SDK) sends
-    those as Basic credentials, over the key's header. NanoGPT's relay takes
-    the API key, never those. (DA Toolkit's relay_url, Nov 2026.)"""
-    parsed = urlparse(without_password(base_url))
-    return f"{parsed.scheme}://{parsed.netloc}"
 
 
 def relay_url(base_url: str) -> str:
@@ -165,253 +136,16 @@ def not_nanogpt(base_url: str) -> str | None:
     )
 
 
-def _hardware(document: dict[str, Any]) -> str:
-    kind = str(((document.get("enclaveMeasurement") or {}).get("measurement") or {}).get("type"))
-    if "sev-snp" in kind:
-        return "AMD SEV-SNP"
-    if "tdx" in kind:
-        return "Intel TDX"
-    return kind
-
-
-REQUIRED_STEPS = ("verifyCode", "verifyEnclave", "compareMeasurements")
-
-
-def windows_roots() -> None:
-    """On Windows, let OpenSSL's default contexts trust certifi's roots too.
-
-    Inside `SecureClient.verify`, Sigstore's TUF client opens its own urllib3
-    pool, which trusts OpenSSL's defaults: on Windows, the certificates already
-    in the Windows store. Windows fetches most roots only when something asks
-    for them through its own TLS, so a fresh install had 16, without GTS Root
-    R1, the root Sigstore's CDN chains to: every `private/` model was refused
-    ("Failed to refresh TUF metadata"; Windows 11 26H2, Nov 10 2026). Chrome
-    and Firefox keep their own roots and never fetch it for Windows, and a
-    company may turn the fetching off. SSL_CERT_FILE adds certifi's bundle,
-    the one httpx and the SDK's own requests already trust, to the Windows
-    store's (the store still counts, a company's root included). The
-    AppImage's AppRun does the same on Linux. Left alone when set, so the
-    user's own bundle stands, and never on another system."""
-    if sys.platform != "win32" or os.environ.get("SSL_CERT_FILE"):
-        return
-    import certifi  # noqa: PLC0415 - only where it is needed
-
-    os.environ["SSL_CERT_FILE"] = certifi.where()
-
-
 def tinfoil_verify(relay: str, cache_secret: str) -> Verified:
     """Attest Tinfoil's router through nano-gpt's relay (network; worker thread)."""
-    # Imported here: the SDK pulls in sigstore and the OpenAI client, which
-    # nothing else needs, and the app shouldn't pay for them at startup.
-    from tinfoil import SecureClient
-    from tinfoil.github import fetch_latest_release
-
-    from sealedlore.providers import sdk_guard
-
-    # Before it fetches anything: its requests, and Sigstore's TUF client,
-    # follow a redirect anywhere, https to plain http included, and read a
-    # reply whole. guard holds a redirect's target to the rule for any
-    # address (require_https) and raises Unguarded where Sigstore's or TUF's
-    # internals aren't as it expects: the attestation is refused, saying why
-    # (providers/sdk_guard.py).
-    sdk_guard.guard(is_local_host, check=require_https)
-    windows_roots()
-
-    # The secret is passed explicitly, or the SDK would create one in
-    # ~/.tinfoil; this client only verifies, it never sends a request.
-    client = SecureClient(
-        base_url=relay + "/",
-        attestation_bundle_url=relay,
-        transport="ehbp",
-        user_cache_secret=cache_secret,
-    )
-    truth = client.verify()
-    document = client.get_verification_document().to_dict()
-    steps = document.get("steps") or {}
-    incomplete = [
-        step for step in REQUIRED_STEPS if (steps.get(step) or {}).get("status") != "success"
-    ]
-    if document.get("securityVerified") is not True or incomplete or not truth.hpke_public_key:
-        raise ProviderError(
-            "the enclave's attestation was incomplete"
-            + (f" ({', '.join(incomplete)} did not succeed)" if incomplete else "")
-        )
-    digest = document.get("releaseDigest") or truth.digest
-    tag, latest, checked = str(document.get("releaseTag") or ""), "", False
-    try:
-        release = fetch_latest_release(ROUTER_REPO)
-        checked = True
-        if release.digest == digest:
-            tag = tag or release.tag
-        else:
-            latest = release.tag
-    except Exception:  # noqa: BLE001 - reported, never fatal
-        pass
-    return Verified(
-        hpke_public_key=truth.hpke_public_key,
-        enclave=client.enclave,
-        attestation=attestation_record(
-            enclave=client.enclave,
-            hardware=_hardware(document),
-            measurement=str(document.get("enclaveFingerprint") or ""),
-            release_digest=digest,
-            release_tag=tag,
-            latest_release=latest,
-            latest_checked=checked,
-            hpke_public_key=truth.hpke_public_key,
-        ),
-    )
+    return sdk_verify(relay, cache_secret)
 
 
-def attestation_record(
-    *,
-    enclave: str,
-    hardware: str,
-    measurement: str,
-    release_digest: str,
-    release_tag: str,
-    latest_release: str,
-    latest_checked: bool,
-    hpke_public_key: str,
-) -> Attestation:
-    release = release_tag or f"release {release_digest[:12]}"
-    if latest_release:
-        currency = f"an older release than the latest ({latest_release})"
-    elif latest_checked:
-        currency = "the latest release"
-    else:
-        currency = "the latest release couldn't be looked up"
-    measured = f"measured by {hardware}" if hardware else "measured by its hardware"
-    detail = f"{enclave} runs {ROUTER_REPO} {release} ({currency}), {measured}"
-    return Attestation(
-        verified=True,
-        encrypted=True,
-        enclave=enclave,
-        hardware=hardware,
-        measurement=measurement,
-        release_digest=release_digest,
-        release_tag=release_tag,
-        latest_release=latest_release,
-        latest_checked=latest_checked,
-        hpke_key_sha256=hashlib.sha256(hpke_public_key.encode()).hexdigest(),
-        detail=detail,
-    )
+class PrivateModeProvider(SealedEhbpProvider):
+    """NanoGPT's relay: its preflight, its headers, its per-family body
+    shapes and its list of models, around the sealed client."""
 
-
-Verifier = Callable[[str, str], Verified]
-
-
-class Enclave:
-    """The attested enclave one provider and its siblings seal to.
-
-    Shared by `sibling()` and `detached()`, so a background summary is sealed
-    to the same attested key as the turn it follows. Thread-safe: a background
-    chapter and a turn may ask for the key at once.
-    """
-
-    def __init__(
-        self,
-        relay: str,
-        *,
-        verifier: Verifier = tinfoil_verify,
-        # A clock that runs on while the machine sleeps (time.monotonic stops):
-        # after a night's suspend the attestation is hours old, not minutes.
-        clock: Callable[[], float] = since_boot,
-    ) -> None:
-        self.relay = relay
-        # Ours, not nano-gpt's: see the module docstring. One per provider,
-        # never written anywhere, so a memory-only chat leaves nothing.
-        self.cache_secret = secrets.token_hex(32)
-        self._verifier = verifier
-        self._clock = clock
-        self._lock = threading.Lock()
-        self._verified: Verified | None = None
-        self._at = 0.0
-
-    @property
-    def attestation(self) -> Attestation | None:
-        return self._verified.attestation if self._verified is not None else None
-
-    def current(self) -> Verified:
-        """The attested key, attesting first if there is none or it has aged."""
-        with self._lock:
-            fresh = self._verified is not None and 0 <= self._clock() - self._at < MAX_AGE_SECONDS
-            if not fresh:
-                self._verified = None
-                try:
-                    self._verified = self._verifier(self.relay, self.cache_secret)
-                except ProviderError:
-                    raise
-                except Exception as exc:  # noqa: BLE001 - the SDK's own errors
-                    # They can quote the bundle, which came through the relay.
-                    # A redirect the guard refused says why, where sigstore
-                    # says only "Failed to refresh TUF metadata".
-                    from sealedlore.providers.sdk_guard import not_followed
-
-                    refused = not_followed(exc)
-                    why = (
-                        f" ({relay_said(refused, 500)})"
-                        if refused and refused not in str(exc)
-                        else ""
-                    )
-                    raise ProviderError(
-                        "the private model's enclave couldn't be attested: "
-                        f"{relay_said(str(exc), 500)}{why}; nothing was sent"
-                    ) from exc
-                self._at = self._clock()
-            return self._verified
-
-    def invalidate(self, verified: Verified | None = None) -> None:
-        """Forget the key (it was rotated): the next request attests again."""
-        with self._lock:
-            if verified is None or self._verified is verified:
-                self._verified = None
-
-
-def _sealing_transport(public_key: str, route: str | None = None) -> httpx.BaseTransport:
-    """EHBP over a transport that goes through `route`, the environment's
-    proxy for the relay (`environment_proxy`), when there is one. httpx gives
-    a client with a transport of its own no proxy from the environment, so
-    the sealed request, alone of all the app's, went direct: from this
-    machine's own address, Tor or a company's proxy notwithstanding, beside
-    a preflight and an attestation that had gone through it."""
-    from ehbp import EHBPTransport
-
-    # A fresh connection per request, as the plain client does, so the trace
-    # hook sees each socket and Stop can shut it down (the EHBP transport
-    # passes the request's extensions through to this one, and the proxy's
-    # own steps are traced too: http.traced_socket).
-    try:
-        inner = _NonEmptyBodyTransport(
-            proxy=route, limits=httpx.Limits(max_keepalive_connections=0)
-        )
-    except ImportError as exc:  # a SOCKS proxy: httpx needs socksio for one
-        raise ProviderError(
-            "the environment's proxy is a SOCKS proxy, which SealedLore can't use "
-            "(httpx's socksio isn't installed); nothing was sent"
-        ) from exc
-    return EHBPTransport.from_public_key_hex(public_key, inner=inner)
-
-
-# The sealed transport for an attested key, through a proxy (or None).
-SealingTransport = Callable[[str, str | None], httpx.BaseTransport]
-
-
-class _NonEmptyBodyTransport(httpx.HTTPTransport):
-    """EHBP passes a request with an empty body through as it came, unsealed:
-    under it, nothing goes to the relay that EHBP didn't seal. (DA Vibe
-    Manager's, DA Private Coder's and DA Toolkit's, Nov 2026.)"""
-
-    def handle_request(self, request: httpx.Request) -> httpx.Response:
-        from ehbp.protocol import ENCAPSULATED_KEY_HEADER
-
-        if ENCAPSULATED_KEY_HEADER not in request.headers:  # httpx's headers ignore case
-            raise ProviderError("refusing to send an unsealed request to the enclave")
-        return super().handle_request(request)
-
-
-class PrivateModeProvider(OpenAICompatibleProvider):
-    sealed_replies = True
+    relay_name = "NanoGPT's relay"
 
     def __init__(
         self,
@@ -421,25 +155,12 @@ class PrivateModeProvider(OpenAICompatibleProvider):
         transport_factory: SealingTransport = _sealing_transport,
         preflight_client: httpx.Client | None = None,
     ) -> None:
-        super().__init__(config)
-        self.enclave = enclave or Enclave(relay_url(config.base_url))
-        self._transport_factory = transport_factory
+        super().__init__(
+            config,
+            enclave=enclave or Enclave(relay_url(config.base_url)),
+            transport_factory=transport_factory,
+        )
         self._preflight_client = preflight_client
-        self._client_key: tuple[str, str | None] | None = None
-        self._verified: Verified | None = None
-
-    def sibling(self) -> PrivateModeProvider:
-        if self._sibling is None:
-            self._sibling = self._twin()
-        self._sibling.reasoning_watch = self.reasoning_watch
-        self._sibling.tee_watch = self.tee_watch
-        return self._sibling
-
-    def detached(self) -> PrivateModeProvider:
-        twin = self._twin()
-        twin.reasoning_watch = self.reasoning_watch
-        twin.tee_watch = self.tee_watch
-        return twin
 
     def _twin(self) -> PrivateModeProvider:
         return PrivateModeProvider(
@@ -454,6 +175,10 @@ class PrivateModeProvider(OpenAICompatibleProvider):
         return self.enclave.relay
 
     @property
+    def sealed_url(self) -> str:
+        return self.relay
+
+    @property
     def endpoint(self) -> str:
         return self.relay + "/v1/chat/completions"
 
@@ -464,10 +189,8 @@ class PrivateModeProvider(OpenAICompatibleProvider):
         if refusal:
             raise ProviderError(refusal)
 
-    def attest(self) -> Attestation:
-        """Attest now (a worker thread): the window shows what was proved."""
+    def _before_attest(self) -> None:
         self._on_nanogpt()
-        return self.enclave.current().attestation
 
     def still_offered(self, model: str) -> bool | None:
         """Whether nano-gpt's Private Mode list still has `model` (public: no
@@ -502,25 +225,6 @@ class PrivateModeProvider(OpenAICompatibleProvider):
             plain.close()
 
     # --- one request ---------------------------------------------------------------
-
-    def _get_client(self) -> httpx.Client:
-        verified = self.enclave.current()
-        # The proxy is read at each request, as httpx reads it for every other
-        # client of the app's, so the sealed one goes where they go.
-        route = environment_proxy(self.relay)
-        wanted = (verified.hpke_public_key, route)
-        if self._client is None or self._client_key != wanted:
-            if self._client is not None:
-                self._client.close()
-            self._client = make_client(
-                self.relay,
-                transport=self._transport_factory(verified.hpke_public_key, route),
-                timeout=httpx.Timeout(self.config.timeout_seconds),
-                follow_redirects=False,
-            )
-            self._client_key = wanted
-        self._verified = verified
-        return self._client
 
     def _preflight(self, model: str, body_bytes: int) -> tuple[str, str]:
         """nano-gpt's check before a sealed request: (cache scope, upstream model)."""
@@ -586,69 +290,13 @@ class PrivateModeProvider(OpenAICompatibleProvider):
         return self.endpoint, body, headers
 
     def _accept(self, response: httpx.Response) -> None:
-        from ehbp.protocol import RESPONSE_NONCE_HEADER
-
-        # EHBP opens a sealed reply and refuses an unsealed success, but passes
-        # any other status through as it came: one the relay made itself (a
-        # 302 or a 304 with an answer in it) would pass for the enclave's, and
-        # be marked as sealed. Only a success EHBP opened counts, and it keeps
-        # the enclave's nonce header (DA Toolkit 27af7c7, DA Vibe Manager).
-        if not 200 <= response.status_code < 300 or RESPONSE_NONCE_HEADER not in response.headers:
-            raise ProviderError(
-                f"the reply wasn't sealed by the enclave (HTTP {response.status_code}); refused",
-                status_code=response.status_code,
-            )
+        super()._accept(response)
         # And nano-gpt saying the request went the private way at all.
         if response.headers.get("x-nanogpt-private-mode") != "tinfoil":
             raise ProviderError("the reply didn't come back through Private Mode; refused")
 
-    def _http_error(self, url: str, response: httpx.Response) -> ProviderError:
-        """What the relay wrote in refusing: never sealed, so never taken for
-        the model's words (an instruction to the reader in it, say). Said as
-        the relay's, on one line, without control or invisible characters
-        (`relay_said`), and short; the words themselves are kept only for
-        `_missing_seal`, with whether the refusal came back the enclave's way."""
-        from ehbp.protocol import RESPONSE_NONCE_HEADER
-
-        error = super()._http_error(url, response)
-        written = error.body or ""
-        said = relay_said(written, RELAY_SAID_CHARS)
-        labelled = ProviderError(
-            f"{error}; NanoGPT's relay said (unauthenticated): {said}" if said else str(error),
-            status_code=error.status_code,
-        )
-        labelled.retry_after = error.retry_after
-        labelled.relay_body = written
-        labelled.through_enclave = RESPONSE_NONCE_HEADER in response.headers
-        return labelled
-
-    def _finish(self, finish_reason: str | None, saw_done: bool) -> None:
-        if not (finish_reason and saw_done):
-            # The proxy's private_stream_incomplete: whatever came may be partial.
-            raise ProviderError("the encrypted reply ended before it was complete")
-
-    def _stream(self, request: ChatRequest) -> Iterator[StreamEvent]:
-        from ehbp import EHBPError, KeyConfigMismatchError
-
-        for attempt in (0, 1):
-            started = False
-            try:
-                for event in super()._stream(request):
-                    started = True
-                    yield event
-                return
-            except KeyConfigMismatchError as exc:
-                if started or attempt:
-                    # Its title is the relay's: the 422 that says so isn't sealed.
-                    raise ProviderError(
-                        f"the enclave refused our key twice: {relay_said(str(exc))}"
-                    ) from exc
-            except ProviderError as exc:
-                if started or attempt or not _missing_seal(exc):
-                    raise
-            except EHBPError as exc:
-                raise ProviderError(f"the encrypted reply couldn't be opened: {exc}") from exc
-            self.enclave.invalidate(self._verified)
+    def _may_resend(self, error: ProviderError) -> bool:
+        return _missing_seal(error)
 
 
 def _missing_seal(error: ProviderError) -> bool:
