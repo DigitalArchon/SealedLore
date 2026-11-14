@@ -133,7 +133,14 @@ class VideoCatalog(QObject):
             return
 
         def job() -> list[VideoModelInfo]:
-            return list(list_video_models(media.base_url, api=media.api, api_key=media.api_key))
+            return list(
+                list_video_models(
+                    media.base_url,
+                    api=media.api,
+                    api_key=media.api_key,
+                    sealed_api=media.sealed_api,
+                )
+            )
 
         fetching = object()
         self._fetching = fetching

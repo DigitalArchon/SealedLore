@@ -111,7 +111,11 @@ class ImageCatalog(QObject):
         def job() -> list[ImageModelInfo]:
             return list(
                 list_image_models(
-                    media.base_url, api=media.api, api_key=media.api_key, wanted=wanted
+                    media.base_url,
+                    api=media.api,
+                    api_key=media.api_key,
+                    wanted=wanted,
+                    sealed_api=media.sealed_api,
                 )
             )
 

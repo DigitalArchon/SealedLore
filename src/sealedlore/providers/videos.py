@@ -45,6 +45,7 @@ from sealedlore.providers import wavespeed
 from sealedlore.providers.base import ProviderError
 from sealedlore.providers.http import make_client, reply_json
 from sealedlore.providers.media_http import MediaHttp
+from sealedlore.providers.privacy import MEDIA_WAY_OUT, plain_refusal
 
 # A single request (a submit, a status, a download of tens of megabytes).
 VIDEO_REQUEST_TIMEOUT = 300.0
@@ -432,8 +433,18 @@ def list_video_models(
     api_key: str = "",
     client: httpx.Client | None = None,
     timeout_seconds: float = 30.0,
+    sealed_api: str = "auto",
 ) -> list[VideoModelInfo]:
     """The endpoint's video models. Empty if it has none or won't say."""
+    # Never from an end-to-end encrypted endpoint (providers/privacy.py),
+    # by its host or what an endpoint at its address speaks (`sealed_api`,
+    # `Config.sealed_api_at`): a plain listing would go to it in the clear,
+    # WaveSpeed's with the key.
+    refusal = plain_refusal(
+        base_url, "the video models' listing", api=sealed_api, way_out=MEDIA_WAY_OUT
+    )
+    if refusal:
+        raise ProviderError(refusal)
     api = api or media_api(base_url)
     owned = client is None
     http = client or make_client(base_url, timeout=httpx.Timeout(timeout_seconds))
@@ -454,7 +465,13 @@ def list_video_models(
                 else []
             )
         if api == "wavespeed":
-            media = MediaHttp(base_url, api_key, timeout_seconds=timeout_seconds, client=http)
+            media = MediaHttp(
+                base_url,
+                api_key,
+                timeout_seconds=timeout_seconds,
+                client=http,
+                sealed_api=sealed_api,
+            )
             return parse_wavespeed_video_models(wavespeed.models(media))
         return []
     except (httpx.HTTPError, ValueError, ProviderError):

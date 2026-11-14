@@ -337,6 +337,61 @@ def test_an_endpoint_sealed_by_what_it_speaks_alone_is_refused_by_every_plain_cl
     assert session.video_client().http.sealed_api == "tinfoil"
 
 
+@pytest.mark.parametrize("kind", ["pictures", "videos"])
+def test_a_media_endpoints_model_listing_never_comes_from_a_sealed_endpoint(
+    kind, tmp_path, monkeypatch
+):
+    """A picture or video endpoint typed by hand at a sealed host, or at an
+    address an endpoint speaks a sealed protocol on, was listed in the clear
+    (WaveSpeed's listing with the key)."""
+    from sealedlore.models.config import MediaEndpoint
+    from sealedlore.providers.images import list_image_models
+    from sealedlore.providers.videos import list_video_models
+
+    listing = list_image_models if kind == "pictures" else list_video_models
+    client, sent = recording()
+    for api in ("nanogpt", "openrouter", "wavespeed"):
+        with pytest.raises(ProviderError, match="listing would go to it in the clear"):
+            listing(TINFOIL_URL, api=api, api_key="k", client=client)
+        with pytest.raises(ProviderError, match="listing would go to it in the clear"):
+            listing(
+                "https://llm.example.org/v1",
+                api=api,
+                api_key="k",
+                client=client,
+                sealed_api="tinfoil",
+            )
+    assert sent == [], "nothing reached the host"
+
+    # The catalogs hand the listing what the endpoint's address speaks.
+    pytest.importorskip("PySide6")
+    from sealedlore.gui import image_jobs, video_jobs
+
+    mine = ProviderConfig(name="Mine", base_url="https://llm.example.org/v1", api="tinfoil")
+    cfg = endpoints(mine)
+    endpoint = MediaEndpoint(base_url="https://llm.example.org/v1", api_key="m")
+    asked: list[str] = []
+
+    def at_once(_owner, job, done, name=""):
+        try:
+            done(job(), None)
+        except ProviderError as exc:
+            asked.append(str(exc))
+            done(None, str(exc))
+
+    if kind == "pictures":
+        cfg.image_endpoint = endpoint
+        monkeypatch.setattr(image_jobs, "run_detached", at_once)
+        monkeypatch.setattr(image_jobs, "list_image_models", list_image_models)
+        image_jobs.ImageCatalog(cfg, tmp_path).ensure(force=True)
+    else:
+        cfg.video_endpoint = endpoint
+        monkeypatch.setattr(video_jobs, "run_detached", at_once)
+        monkeypatch.setattr(video_jobs, "list_video_models", list_video_models)
+        video_jobs.VideoCatalog(cfg, tmp_path).ensure(force=True)
+    assert asked and "end-to-end encrypted endpoint" in asked[0]
+
+
 # --- the rest that follows the endpoint -----------------------------------------------
 
 
