@@ -1,0 +1,130 @@
+{
+ "reviewed_on": "2026-11-14",
+ "sources": {
+  "chutes-api": "chutesai/chutes-api api/e2e/router.py",
+  "chutes": "chutesai/chutes chutes/entrypoint/verify.py"
+ },
+ "origin": "https://api.chutes.ai",
+ "models_url": "https://llm.chutes.ai/v1/models",
+ "paths": {
+  "discovery": "/e2e/instances/{chute_id}",
+  "invoke": "/e2e/invoke",
+  "chute_evidence": "/chutes/{chute_id}/evidence",
+  "instance_evidence": "/instances/{instance_id}/evidence",
+  "measurements": "/servers/tdx/measurements",
+  "model_path": "/v1/chat/completions"
+ },
+ "invoke_headers": [
+  "X-Chute-Id",
+  "X-Instance-Id",
+  "X-E2E-Nonce",
+  "X-E2E-Stream",
+  "X-E2E-Path"
+ ],
+ "hkdf_info": {
+  "request": "e2e-req-v1",
+  "response": "e2e-resp-v1",
+  "stream": "e2e-stream-v1"
+ },
+ "sizes": {
+  "public_key": 1184,
+  "ciphertext": 1088,
+  "shared_secret": 32,
+  "salt": 16,
+  "nonce": 12,
+  "tag": 16,
+  "key": 32
+ },
+ "response_key_field": "e2e_response_pk",
+ "discovery": {
+  "fields": [
+   "instances",
+   "nonce_expires_in"
+  ],
+  "instance_fields": [
+   "instance_id",
+   "e2e_pubkey",
+   "nonces"
+  ],
+  "max_instances": 5,
+  "max_nonces": 10,
+  "nonce_life_seconds": 60
+ },
+ "evidence_fields": [
+  "evidence",
+  "excluded_instance_ids",
+  "failed_instance_ids"
+ ],
+ "evidence_item_fields": [
+  "attested_body",
+  "certificate",
+  "gpu_evidence",
+  "instance_id",
+  "quote",
+  "signature",
+  "tee_type"
+ ],
+ "evidence_item_read": [
+  "instance_id",
+  "quote",
+  "attested_body",
+  "certificate",
+  "signature"
+ ],
+ "measurement_fields": [
+  "expected_gpus",
+  "fingerprints",
+  "gpu_count",
+  "mrtd",
+  "name",
+  "rtmr0",
+  "rtmr1",
+  "rtmr2",
+  "rtmr3",
+  "version"
+ ],
+ "listing_fields": [
+  "chute_id",
+  "confidential_compute",
+  "context_length",
+  "created",
+  "id",
+  "input_modalities",
+  "max_model_len",
+  "max_output_length",
+  "object",
+  "output_modalities",
+  "owned_by",
+  "parent",
+  "permission",
+  "price",
+  "pricing",
+  "quantization",
+  "root",
+  "supported_features",
+  "supported_sampling_parameters"
+ ],
+ "listing_read": [
+  "id",
+  "chute_id",
+  "confidential_compute",
+  "owned_by",
+  "context_length",
+  "max_output_length",
+  "input_modalities",
+  "output_modalities",
+  "supported_features",
+  "pricing"
+ ],
+ "pricing_read": [
+  "prompt",
+  "completion",
+  "input_cache_read"
+ ],
+ "binding": "report_data[:32] == sha256((nonce_hex + e2e_pubkey_b64).encode())",
+ "attested_body_read": [
+  "evidence.nonce",
+  "evidence.quote or evidence.tdx_quote",
+  "evidence.nvtrust_evidence"
+ ]
+}
