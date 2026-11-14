@@ -3271,8 +3271,9 @@ scenario export carries only the setup. If the app ever crashes outright,
 `crash.log` in the same folder gets the program's stack at that moment (file
 and function names, nothing from your stories); it stays on your machine,
 for you to send along with a bug report if you choose. The app also tells
-the system not to keep a core dump of it (a copy of its memory), so a crash
-never writes a memory-only chat or scene anywhere. Swap and hibernation are
+the system not to keep a core dump of it (a copy of its memory), the command
+line as well as the window, so a crash never writes a memory-only chat or
+scene anywhere. Swap and hibernation are
 the system's own and outside the app's reach: the system may write the app's
 memory there, a memory-only chat or scene included. An encrypted disk, or
 encrypted swap, covers them. On Linux you can also turn swap off while you

@@ -16,6 +16,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from sealedlore import __version__
+from sealedlore.core_dumps import no_core_dumps
 from sealedlore.engine.archival import chapter_number, turns_in
 from sealedlore.engine.authoring import current_value, describe, format_value
 from sealedlore.engine.dice import DIFFICULTY_ORDER, chance_for, chip_text, tier_for
@@ -1123,6 +1124,9 @@ def run_command(args: argparse.Namespace) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    # Before anything else, as the window does: a chat or story played here
+    # is in this process's memory, and a crash must dump it nowhere.
+    no_core_dumps()
     parser = argparse.ArgumentParser(prog="sealedlore", description=__doc__)
     parser.add_argument("--version", action="version", version=f"sealedlore {__version__}")
     parser.add_argument("--data-dir", type=Path, default=None, help="override the data directory")

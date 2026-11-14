@@ -17,6 +17,7 @@ from PySide6.QtCore import QCoreApplication, Qt
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from sealedlore import __version__
+from sealedlore.core_dumps import no_core_dumps
 from sealedlore.gui import plain_text, theme, x11_check
 from sealedlore.gui.collector import install_collector_pause
 from sealedlore.gui.fields import install_wheel_guard
@@ -98,46 +99,9 @@ def build_app(argv: Sequence[str], env: Mapping[str, str] | None = None) -> QApp
     return app
 
 
-PR_SET_DUMPABLE = 4
-# Windows: no critical-error box, and no Windows Error Reporting dialog.
-SEM_FAILCRITICALERRORS = 0x0001
-SEM_NOGPFAULTERRORBOX = 0x0002
-
-
-def _no_core_dumps() -> None:
-    """A native crash must not write the process's memory to disk: a
-    memory-only chat or scene lives nowhere else. `RLIMIT_CORE` 0 stops a
-    core file; not dumpable stops the system's collector (systemd-coredump
-    reads the flag, not the limit) and, as a side effect, a debugger
-    attaching from another process. faulthandler is unaffected: it runs
-    inside the process (crash.log).
-
-    Windows has neither. Its error reporting may still keep or send a
-    minidump whatever the app asks, which the manual says; this only keeps
-    its dialog away. (`ctypes.CDLL(None)` raises TypeError there.)"""
-    if sys.platform == "win32":
-        try:
-            import ctypes
-
-            ctypes.windll.kernel32.SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX)
-        except (OSError, AttributeError):
-            pass
-        return
-    try:
-        import resource
-
-        resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-    except (ImportError, ValueError, OSError):
-        pass
-    if not sys.platform.startswith("linux"):
-        return
-    try:
-        import ctypes
-
-        libc = ctypes.CDLL(None, use_errno=True)
-        libc.prctl(PR_SET_DUMPABLE, 0, 0, 0, 0)
-    except (OSError, AttributeError):
-        pass
+# First thing at every entry point (sealedlore/core_dumps.py); a name here,
+# so tests can stand in for it.
+_no_core_dumps = no_core_dumps
 
 
 def _log_crashes(root: Path | None) -> None:
@@ -156,6 +120,8 @@ def _log_crashes(root: Path | None) -> None:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    # Before anything else: whatever crashes from here on is dumped nowhere.
+    _no_core_dumps()
     arguments = list(sys.argv if argv is None else argv)
     parser = argparse.ArgumentParser(prog="sealedlore-gui")
     parser.add_argument("--version", action="version", version=f"sealedlore {__version__}")
@@ -171,7 +137,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     if problem:
         print(problem, file=sys.stderr)
         return 1
-    _no_core_dumps()
     _log_crashes(options.data_dir)
 
     app = build_app([arguments[0], *qt_arguments])

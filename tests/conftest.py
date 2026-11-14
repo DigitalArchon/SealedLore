@@ -263,6 +263,19 @@ def _writes_left_to_the_cache(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _the_test_process_stays_dumpable(monkeypatch):
+    """The command line's `main` makes its process undumpable, first thing
+    (sealedlore/core_dumps.py): run in this process by the CLI's tests, it
+    would leave the rest of the run so too, and a crash in it with no core
+    for gdb. Its own tests run it in a process of their own
+    (tests/test_core_dumps.py)."""
+    from sealedlore import cli
+
+    monkeypatch.setattr(cli, "no_core_dumps", lambda: None)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def memory_keychain():
     from sealedlore.storage import keychain
 
