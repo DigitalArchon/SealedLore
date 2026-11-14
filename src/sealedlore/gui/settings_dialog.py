@@ -2399,16 +2399,19 @@ class SettingsDialog(QDialog):
                 for move in unasked
             )
             first = unasked[0].now.split("://", 1)[-1]
+            opening = (
+                "This key was saved for one place, and its address now names"
+                if one
+                else "These keys were saved for one place each, and their addresses now name"
+            )
             answer = QMessageBox.question(
                 self,
                 f"Use the saved key with {first}?" if one else "Use the saved keys there?",
-                f"{'This key was' if one else 'These keys were'} saved for one address, and "
-                f"{'its address' if one else 'their addresses'} now name another place:"
-                f"\n\n{listed}\n\nSend {'it' if one else 'them'} there? Whoever runs that "
-                f"place would have {'it' if one else 'them'}. No keeps "
+                f"{opening} another:\n\n{listed}\n\nSend {'it' if one else 'them'} there? "
+                f"Whoever runs that place would have {'it' if one else 'them'}. No keeps "
                 f"{'it' if one else 'them'} for where {'it was' if one else 'they were'} saved, "
-                "and sends nothing there with it: enter the key for the new address to use "
-                f"one there. {after_no}",
+                "sent nowhere else: enter a key for the new address to use one there. "
+                f"{after_no}",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )

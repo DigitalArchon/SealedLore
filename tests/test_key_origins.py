@@ -173,6 +173,17 @@ def test_a_key_typed_anew_is_for_its_address_and_a_kept_one_stays_for_its_own():
     renamed.providers[0].base_url = ELSEWHERE
     assert len(rebind_keys(before, renamed, {"Nano": "NanoGPT"})) == 1
 
+    # A key the keychain couldn't give back this session shows blank: where
+    # it is for is kept, for when it can be read again.
+    locked = before.model_copy(deep=True)
+    locked.video_endpoint = MediaEndpoint(
+        base_url="https://api.wavespeed.ai/api/v3", key_saved_for="https://api.wavespeed.ai"
+    )
+    typed = locked.model_copy(deep=True)
+    typed.video_endpoint = MediaEndpoint(base_url="https://api.wavespeed.ai/api/v3")
+    assert rebind_keys(locked, typed) == []
+    assert typed.video_endpoint.key_saved_for == "https://api.wavespeed.ai"
+
 
 # --- Settings ----------------------------------------------------------------------------
 

@@ -807,12 +807,14 @@ def rebind_keys(
     }
     moves: list[KeyMove] = []
     for slot, holder, address in after.key_holders():
-        key = holder.api_key
-        if not key:
-            continue
         name = slot.removeprefix("provider:")
         renamed_from = renamed.get(name) if slot.startswith("provider:") else None
         was = saved.get(f"provider:{renamed_from}" if renamed_from else slot)
+        key = holder.api_key
+        if not key:
+            if was is not None and not was[0].api_key:
+                holder.key_saved_for = was[0].key_saved_for  # out of reach, never lost
+            continue
         now = key_origin(address)
         if was is None or was[0].api_key != key:
             holder.key_saved_for = now  # entered for this address
