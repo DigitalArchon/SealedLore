@@ -25,8 +25,10 @@ from sealedlore.providers.ethsig import (
 )
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
 from sealedlore.providers.tee import (
+    GATEWAY_UNCHECKED,
     GPUS_LOOSE,
     NRAS_URL,
+    OWN_ENCLAVE_UNCHECKED,
     REATTEST_SECONDS,
     RECEIPT_KEYS_LOOSE,
     TeeClient,
@@ -653,8 +655,16 @@ class InstanceEvidence:
         return {"evidence": evidence, "failed_instance_ids": list(failed)}
 
 
-def shaped(respond, *, model: str = "TEE/kimi-k3", seen: dict | None = None) -> TeeClient:
-    """A TeeClient whose /tee/attestation answers `respond(nonce) -> (status, body)`."""
+def shaped(
+    respond,
+    *,
+    model: str = "TEE/kimi-k3",
+    seen: dict | None = None,
+    aci=(400, {"error": "report=aci is only available for models served through RedPill"}),
+) -> TeeClient:
+    """A TeeClient whose /tee/attestation answers `respond(nonce) -> (status, body)`,
+    and whose gateway report (`report=aci`) answers `aci`: as nano-gpt does for a
+    model only Chutes or Tinfoil serves, unless given."""
     seen = seen if seen is not None else {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -662,6 +672,9 @@ def shaped(respond, *, model: str = "TEE/kimi-k3", seen: dict | None = None) -> 
         if url.startswith(NRAS_URL):
             seen.setdefault("nras_nonces", []).append(json.loads(request.content)["nonce"])
             return httpx.Response(200, json=[["JWT", jwt({"x-nvidia-overall-att-result": True})]])
+        if "/tee/attestation" in url and request.url.params.get("report") == "aci":
+            status, body = aci
+            return httpx.Response(status, json=body)
         if "/tee/attestation" in url:
             status, body = respond(request.url.params["nonce"])
             return httpx.Response(status, json=body)
@@ -838,6 +851,7 @@ def receipt_server(
     session_length: str | None = None,
     served_at: int = SERVED,
     signature_error: tuple[int, str] | None = None,
+    published_not_after: object | None = None,
 ):
     """nano-gpt as live (Nov 4 2026): the attestation's quote binds the signing
     key; the keyset beside it lists that key as its e2ee key ("e2ee"), or the
@@ -856,7 +870,9 @@ def receipt_server(
     `session_status` / a `session_length` header, when given).
 
     `served_at`: when the receipt says the gateway served the reply.
-    `signature_error`: (status, message) the signature lookup answers instead."""
+    `signature_error`: (status, message) the signature lookup answers instead.
+    `published_not_after`: the time the keyset the plain report publishes
+    beside its signing key holds until, when not the gateway's own."""
     import hashlib
 
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -947,7 +963,12 @@ def receipt_server(
                     "signing_address": address,
                     "intel_quote": fake_quote(report),
                     "nvidia_payload": json.dumps({"evidence_list": [{"evidence": "e"}]}),
-                    "attestation": {"report_data": report[:32].hex(), "workload_keyset": keyset},
+                    "attestation": {
+                        "report_data": report[:32].hex(),
+                        "workload_keyset": keyset
+                        if published_not_after is None
+                        else {**keyset, "not_after": published_not_after},
+                    },
                 },
             )
         if "/tee/signature/" in url:
@@ -1058,7 +1079,8 @@ def test_a_keyset_the_quote_binds_itself_is_taken_and_one_tied_neither_way_is_no
     bound = receipt_client(tied="statement")
     assert bound.keyset is not None
     result = bound.attest()
-    assert result.shortfalls == [GPUS_LOOSE], "RedPill's own form binds the receipt keys"
+    # RedPill's own form binds the receipt keys; what is attested is its gateway.
+    assert result.shortfalls == [OWN_ENCLAVE_UNCHECKED, GPUS_LOOSE]
     assert result.attested == "gateway", "the keyset is the gateway's"
     loose = receipt_client(tied="none")
     assert loose.keyset is None
@@ -1219,18 +1241,22 @@ def test_a_keyset_that_names_no_time_it_holds_until_falls_short_unused():
         client = receipt_client(tied="statement", not_after=undated)
         result = client.attest()
         assert client.keyset is None, undated
-        assert besides_receipts(result) == ["receipt keys expired"], undated
+        assert besides_receipts(result) == [OWN_ENCLAVE_UNCHECKED, "receipt keys expired"], undated
         assert "name no time they hold until" in result.detail
 
 
 # --- the gateway's own report (report=aci, nano-gpt, Nov 10 2026) ----------------------
 
 
-def test_the_gateways_report_binds_the_receipt_keys_and_the_attestation_is_whole():
+def test_the_gateways_report_binds_the_receipt_keys_and_the_gateway_is_what_is_attested():
+    """Partial, never full: what is attested is RedPill's gateway, the model's
+    own enclave its word in each receipt (the DA apps' standard; this app
+    counted it full until Nov 14 2026)."""
     seen: list = []
     client = receipt_client(aci="bound", seen=seen)
     result = client.attest()
-    assert result.shortfalls == [GPUS_LOOSE], "whole but for GPUs the quote doesn't name"
+    assert result.level == "partial"
+    assert result.shortfalls == [OWN_ENCLAVE_UNCHECKED, GPUS_LOOSE]
     assert "binds its receipt keys" in result.detail
     # The signing key is one of the gateway's: what was attested is the gateway.
     assert result.attested == "gateway"
@@ -1281,7 +1307,8 @@ def test_the_gateway_stands_in_for_a_model_whose_own_evidence_was_relayed():
     its replies RedPill's, with receipts."""
     client = receipt_client(aci="bound", plain=lambda nonce: (200, RELAYED))
     result = client.attest()
-    assert result.level == "partial" and result.shortfalls == ["no GPU evidence"]
+    assert result.level == "partial"
+    assert result.shortfalls == ["no GPU evidence", OWN_ENCLAVE_UNCHECKED]
     assert "the gateway that answers it is attested instead" in result.detail
     assert result.attested == "gateway"
     assert (
@@ -1298,7 +1325,7 @@ def test_through_the_gateway_alone_a_reply_without_a_receipt_is_not_verified():
     receipt is its word that the model's own enclave answered. A record with no
     receipt was "verified" all the same, as for a model attested itself."""
     bare = receipt_client(aci="bound", plain=lambda nonce: (200, RELAYED), with_receipt=False)
-    assert bare.attest().shortfalls == ["no GPU evidence"]
+    assert bare.attest().shortfalls == ["no GPU evidence", OWN_ENCLAVE_UNCHECKED]
     with pytest.raises(ProviderError, match="no receipt"):
         bare.check_reply("req_9", sent_at=SENT, receipt_id="rcpt-1", body_hash=streamed())
     # A model attested itself needs none: its own key signed the reply.
@@ -1321,7 +1348,7 @@ def test_a_slow_attestation_is_asked_again_with_a_new_nonce_then_the_gateway_sta
     receipt_client(aci="bound", plain=once)
     assert len(asked) == 2 and asked[0] != asked[1]
     always = receipt_client(aci="bound", plain=lambda nonce: (504, timeout))
-    assert always.attest().shortfalls == ["no GPU evidence"]
+    assert always.attest().shortfalls == ["no GPU evidence", OWN_ENCLAVE_UNCHECKED]
     with pytest.raises(TeeRefused, match="provider's side"):
         receipt_client(aci="400", plain=lambda nonce: (504, timeout))
 
@@ -1351,7 +1378,10 @@ def test_a_chutes_model_with_the_gateway_checks_the_replies_redpill_answers(inst
         model="TEE/glm-5.1", aci="bound", plain=lambda nonce: (200, instances.body(nonce))
     )
     result = client.attest()
-    assert result.level == "full" and result.instances
+    # A request may go through RedPill's gateway, whose host is its word.
+    assert result.level == "partial" and result.instances
+    assert result.shortfalls == [OWN_ENCLAVE_UNCHECKED]
+    assert "gateway's attested keys" in what_was_attested(result)
     assert (
         client.check_reply("req_9", sent_at=SENT, receipt_id="rcpt-1", body_hash=streamed())
         == "verified"
@@ -1593,3 +1623,171 @@ def test_an_answer_of_nvidias_that_cant_be_read_is_no_verdict():
         nras.verify(
             [["JWT", _token({"alg": "ES384"}, claims)], {"GPU-0": 5}], "00", session, now=1.0
         )
+
+
+# --- the DA apps' standard (Nov 14 2026): DA Toolkit's policy where it was stricter ----
+
+
+@pytest.mark.parametrize(
+    ("aci", "why"),
+    [
+        ((429, {"error": "Rate limit exceeded"}), "HTTP 429"),
+        ((503, {"error": "Unavailable"}), "HTTP 503: Unavailable"),
+        ((200, {"novel": 1}), "no shape this app reads"),
+    ],
+)
+def test_a_chutes_model_without_the_gateways_report_for_another_reason_falls_short(
+    instances, aci, why
+):
+    """RedPill's gateway answers some models Chutes serves first now and then:
+    with its report not had for any reason but its 400 ("only for models
+    served through RedPill"), whether it may answer isn't known."""
+    result = shaped(lambda nonce: (200, instances.body(nonce)), aci=aci).attest()
+    assert result.level == "partial" and result.shortfalls == [GATEWAY_UNCHECKED]
+    assert why in result.detail
+    whole = shaped(lambda nonce: (200, instances.body(nonce))).attest()
+    assert whole.level == "full", "nano-gpt's 400: RedPill doesn't serve it, nothing unknown"
+
+
+@pytest.mark.parametrize(
+    "said",
+    [{"api_version": "aci/1"}, {"service_capabilities": {"serving": "aggregator"}}],
+)
+def test_a_report_that_says_it_is_redpills_is_the_gateway_whatever_bound_the_key(said):
+    """No report of the gateway's own bound the key, but the plain report says
+    it is RedPill's: what is attested is still its gateway (DA Toolkit's)."""
+
+    def plain(nonce):
+        address = address_of(KEY).lower()
+        report = bytes.fromhex(address[2:]) + bytes(12) + bytes.fromhex(nonce)
+        return 200, {
+            "signing_address": address,
+            "intel_quote": fake_quote(report),
+            "nvidia_payload": json.dumps({"evidence_list": [{"evidence": "e"}]}),
+            **said,
+        }
+
+    result = receipt_client(aci="400", plain=plain).attest()
+    assert result.attested == "gateway" and result.level == "partial"
+    assert OWN_ENCLAVE_UNCHECKED in result.shortfalls
+    assert "RedPill's TEE gateway" in what_was_attested(result)
+
+
+def test_the_keyset_published_beside_the_key_is_refused_past_its_time_too():
+    """The gateway's own report binds a keyset in force; the plain report's
+    copy beside the signing key says it ran out: the relay's word of the keys
+    is held to its time as well (DA Assistant's)."""
+    with pytest.raises(TeeRefused, match="attested keys expired on 1970-01-01"):
+        receipt_client(aci="bound", published_not_after=1)
+    assert receipt_client(aci="bound", published_not_after=4_000_000_000).keyset is not None
+
+
+def test_a_whole_attestation_is_given_three_minutes_and_no_more(monkeypatch):
+    """Each request waits only for what is left of ATTEMPT_SECONDS, and none
+    is begun once it has passed (DA Toolkit's): three addresses asked in
+    turn, 90 seconds each, kept a model "being attested" for nine minutes."""
+    import sealedlore.providers.tee as tee_module
+
+    now = [1000.0]
+    monkeypatch.setattr(tee_module.time, "monotonic", lambda: now[0])
+    seen: list[httpx.Request] = []
+    client = receipt_client(seen=seen)  # attested once, at once
+    assert tee_module.ATTEMPT_SECONDS == 180
+    asked = [r for r in seen if "/tee/attestation" in str(r.url)]
+    assert all(r.extensions["timeout"]["read"] <= 90.0 for r in asked)
+
+    def slow(request: httpx.Request) -> httpx.Response:
+        now[0] += 100.0  # every answer takes a hundred seconds
+        seen.append(request)
+        return httpx.Response(404)
+
+    client._client = httpx.Client(transport=httpx.MockTransport(slow))
+    client._base = None
+    seen.clear()
+    with pytest.raises(TeeRefused, match="wasn't done within 3 minutes"):
+        client.attest()
+    waits = [r.extensions["timeout"]["read"] for r in seen]
+    assert waits[0] == 90.0 and waits[1] == 80.0, "the second waits for what is left"
+    assert len(seen) == 2, "nothing begun once the time was up"
+    assert client._deadline is None
+
+
+@pytest.mark.parametrize(
+    ("body", "what"),
+    [
+        ({"evidence": [], "failed_instance_ids": 5}, "TypeError"),
+        ({"evidence": ["not an instance"]}, "AttributeError"),
+    ],
+)
+def test_evidence_in_no_shape_it_should_be_is_refused_by_what_it_raised(body, what):
+    """It used to come out as that error itself, in the evidence's own words."""
+    with pytest.raises(TeeRefused, match=rf"couldn't be read: .*shape it should be \({what}\)"):
+        shaped(lambda nonce: (200, body)).attest()
+
+
+def test_intel_or_nvidia_checks_that_raise_anything_refuse(monkeypatch):
+    with pytest.raises(TeeRefused, match=r"Intel TDX quote couldn't be read \(KeyError\)"):
+        client_for(intel=KeyError("tcbLevels")).attest()
+    with pytest.raises(TeeRefused, match=r"GPU attestation couldn't be read \(AttributeError\)"):
+        client_for(nvidia=AttributeError("'list' object has no attribute 'get'")).attest()
+    # Intel's or NVIDIA's own refusal is quoted short, on one line.
+    with pytest.raises(TeeRefused) as caught:
+        client_for(intel=dcap.DcapError("revoked\n" + "x" * 2000)).attest()
+    assert "\n" not in str(caught.value) and len(str(caught.value)) < 400
+
+
+def test_an_attestation_never_names_a_route_and_a_signature_lookup_does():
+    """A route a past reply named would pin the next attestation to that
+    reply's route, or, an hour old, make nano-gpt refuse it (DA Toolkit's
+    reading): only the lookups name one."""
+    seen: list[httpx.Request] = []
+    client = receipt_client(seen=seen)
+    client.check_reply("req_9", sent_at=SENT, receipt_id="rcpt-1", body_hash=streamed(), route="r1")
+    client.attest()
+    attested = [r for r in seen if "/tee/attestation" in str(r.url)]
+    looked_up = [r for r in seen if "/tee/signature/" in str(r.url)]
+    assert attested and not any("X-TEE-Verification-Route" in r.headers for r in attested)
+    assert looked_up and all(r.headers["X-TEE-Verification-Route"] == "r1" for r in looked_up)
+
+
+def test_a_provider_that_cant_be_named_leaves_the_mark_as_it_is(monkeypatch):
+    client = receipt_client(aci="bound")
+
+    def broken(receipt):
+        raise RecursionError("deep")
+
+    monkeypatch.setattr(client, "served_by", broken)
+    found = client.check(
+        "req_9", sent_at=SENT, receipt_id="rcpt-1", body_hash=streamed(), name_upstream=True
+    )
+    assert found.mark == "verified" and "RecursionError" in found.upstream.note
+
+
+def test_test_attestation_reads_a_gateway_model_as_partial(monkeypatch):
+    """Through the real client, as Settings' Test attestation runs it."""
+    import sealedlore.providers.tee as tee_module
+    from sealedlore.engine.attestation_check import check_attestation
+
+    real = tee_module.TeeClient
+
+    def wired(base_url, api_key, model):
+        return real(
+            base_url,
+            api_key,
+            model,
+            client=receipt_server(aci="bound"),
+            intel=lambda raw, session: UP_TO_DATE,
+            nvidia=lambda answer, nonce, session: 8,
+            wall=lambda: CHECKED,
+        )
+
+    monkeypatch.setattr(tee_module, "TeeClient", wired)
+    found = check_attestation(
+        ProviderConfig(
+            name="n", base_url="https://nano-gpt.com/api/v1", api_key="k", model="TEE/glm-5.3"
+        )
+    )
+    assert found.outcome == "partial" and found.usable
+    assert found.headline.startswith(
+        "⚠ TEE gateway attested, partially: the model's own enclave unchecked"
+    )

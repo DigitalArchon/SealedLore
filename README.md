@@ -277,7 +277,8 @@ stronger choice. A `TEE/` model's text still passes NanoGPT's gateway in the
 clear, and for now some of what its checks should prove can't be checked
 through NanoGPT. For most of them what is attested is RedPill's TEE gateway,
 which passes each request on to the provider that runs the model: that
-provider is the gateway's word, not something the app checks. The app says
+provider is the gateway's word, not something the app checks, so the app
+counts them as attested only partially. The app says
 what was attested and what fell short on the model button and under each
 message, attests a TEE model again before a message once 15 minutes have
 passed, and refuses the TEE models it can't attest at all.

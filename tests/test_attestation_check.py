@@ -241,3 +241,45 @@ def test_naming_a_tee_replys_provider_is_a_choice_that_says_where_it_goes(app):
     dialog._save()
     assert config.tee_name_upstreams is True
     dialog.deleteLater()
+
+
+def test_every_shortfall_the_tee_check_names_says_what_it_costs():
+    """The model button's tooltip explains each (window_private.SHORTFALL_TIPS):
+    every one providers/tee.py can name, the gateway's two of Nov 14 2026
+    included. Intel's ratings ("Intel TCB OutOfDate") have one of their own."""
+    import ast
+    from pathlib import Path
+
+    import sealedlore.providers.tee as tee_module
+    from sealedlore.gui.window_private import SHORTFALL_TIPS, PrivateWindow
+
+    tree = ast.parse(Path(tee_module.__file__).read_text(encoding="utf-8"))
+    named: set[str] = set()
+    for node in ast.walk(tree):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "fall_short"
+            and node.args
+        ):
+            continue
+        what = node.args[0]
+        if isinstance(what, ast.Constant):
+            named.add(what.value)
+        elif isinstance(what, ast.Name) and isinstance(getattr(tee_module, what.id, None), str):
+            named.add(getattr(tee_module, what.id))  # a module's name, not a local
+    assert tee_module.OWN_ENCLAVE_UNCHECKED in named and tee_module.GATEWAY_UNCHECKED in named
+    missing = sorted(what for what in named if what not in SHORTFALL_TIPS)
+    assert missing == []
+    state = PrivateWindow._attested_state(
+        Attestation(
+            verified=True,
+            level="partial",
+            attested="gateway",
+            shortfalls=[tee_module.OWN_ENCLAVE_UNCHECKED],
+        )
+    )
+    assert (
+        state
+        == "gateway attested (⚠ partial: the model's own enclave unchecked (RedPill's gateway))"
+    )

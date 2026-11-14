@@ -2635,15 +2635,17 @@ computer spends asleep counts):
 Providers that run several instances (such as `TEE/kimi-k3`) have every
 instance checked the same way. Anything forged, revoked, for another nonce,
 keys past the time the gateway holds them until, or a model that offers no
-attestation is **refused**, and nothing is sent to it. Refused when it is
-attested again, nothing more is sent until you choose **Try again**, and the
-message that found it so comes back to the box you type in. What couldn't be
-checked (no GPU evidence offered, GPUs the quote doesn't commit to, Intel's
+attestation is **refused**, and nothing is sent to it, and so is evidence the
+app can't read, or an attestation not done within three minutes. Refused when
+it is attested again, nothing more is sent until you choose **Try again**, and
+the message that found it so comes back to the box you type in. What couldn't
+be checked (no GPU evidence offered, GPUs the quote doesn't commit to, Intel's
 or NVIDIA's service out of reach, NVIDIA's signing keys out of reach, a
 rating below up to date, receipt keys the quote doesn't bind, receipt keys
-that name no time they hold until) is shown as **⚠ partial**, with the
-reasons on the model button and what each one means in its tooltip. Sending
-still goes ahead.
+that name no time they hold until, the model's own enclave when what is
+attested is RedPill's gateway, the gateway itself when NanoGPT couldn't give
+its report just now) is shown as **⚠ partial**, with the reasons on the model
+button and what each one means in its tooltip. Sending still goes ahead.
 
 **What is attested** is said on the model button and in Test attestation,
 with what it leaves to someone's word:
@@ -2653,6 +2655,8 @@ with what it leaves to someone's word:
   runs the model (in November 2026 Phala's, Fortanix's, NEAR AI's, 0G's,
   Tinfoil's router or Chutes'). That machine isn't attested by the app: that
   it is a verified TEE is the gateway's word, in each reply's signed receipt.
+  So such a model is never attested in full: the button says "⚠ partial: the
+  model's own enclave unchecked".
   The GPU evidence NanoGPT's report carries is made for our nonce, but the
   gateway's quote doesn't commit to it, so the button says "GPUs not tied to
   the quote": they may be another machine's.
@@ -2724,14 +2728,20 @@ model, the model button says "receipt keys not in the quote": the receipt's
 word that the model was verified then rests on NanoGPT's relay. A model whose
 own attestation is relayed for a nonce that isn't ours, or times out twice,
 but which the gateway answers, is attested through the gateway: the model
-button says "no GPU evidence", since its own enclave is then the gateway's
-word in each receipt, and a reply of it is verified only with a receipt that
-holds (one without shows as not verified). Any other
+button says "no GPU evidence" and "the model's own enclave unchecked", since
+its own enclave is then the gateway's word in each receipt, and a reply of it
+is verified only with a receipt that holds (one without shows as not
+verified). Any other
 failure (a rate limit, an outage) refuses the model as before, so that a
 model Chutes answers first is never sent to instances that weren't attested
 this time. Models Chutes answers (several Kimi, GLM and
 Gemma ones) attest every instance for our nonce; Chutes signs no replies, so
-theirs show as not verified, unless RedPill's gateway answered instead. The
+theirs show as not verified, unless RedPill's gateway answered instead. Where
+NanoGPT also has the gateway's report for such a model, a request may go
+through the gateway, so it is partial as any the gateway answers is ("the
+model's own enclave unchecked"); where the report couldn't be had for any
+reason but that the gateway doesn't serve the model (a rate limit, an
+outage), the button says "RedPill's gateway unchecked". The
 Tinfoil-hosted `TEE/` models are refused: NanoGPT can't attest them for a
 fresh nonce of ours. Several have an end-to-end encrypted `private/` version,
 which is attested its own way (below).

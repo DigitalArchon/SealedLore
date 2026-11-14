@@ -24,7 +24,9 @@ from sealedlore.providers import make_chat_provider
 from sealedlore.providers.base import ChatProvider, ProviderError
 from sealedlore.providers.private_mode import ModelRetired, PrivateModeProvider
 from sealedlore.providers.tee import (
+    GATEWAY_UNCHECKED,
     GPUS_LOOSE,
+    OWN_ENCLAVE_UNCHECKED,
     RECEIPT_KEYS_LOOSE,
     TeeClient,
     failure_words,
@@ -41,6 +43,19 @@ UNCHECKED_TEE = "⚠ not checked (Check TEE models is off)"
 # What a partial attestation's shortfalls mean (providers/tee.py), in the
 # model button's tooltip: the button names them, this says what they cost.
 SHORTFALL_TIPS = {
+    OWN_ENCLAVE_UNCHECKED: (
+        "The model's own enclave unchecked: what is attested is RedPill's TEE gateway, which "
+        "passes each request on to the machine that runs the model. That machine isn't "
+        "attested by this app: that it is a verified TEE is the gateway's word, in each "
+        "reply's signed receipt. For an enclave attested itself, end to end, use a private/ "
+        "model."
+    ),
+    GATEWAY_UNCHECKED: (
+        "RedPill's gateway unchecked: NanoGPT gave no report of the gateway just now (a rate "
+        "limit or an outage, not that the gateway doesn't serve this model), and the gateway "
+        "answers some of this provider's models now and then: a reply it answers can't be "
+        "checked. Attesting again may find it."
+    ),
     RECEIPT_KEYS_LOOSE: (
         "Receipt keys not in the quote: NanoGPT had no gateway report for this model, so "
         "the hardware's quote binds the key that signs each reply's record, not the key "

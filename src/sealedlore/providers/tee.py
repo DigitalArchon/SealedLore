@@ -86,6 +86,15 @@ TIMEOUT_SECONDS = 30.0
 # Chutes' evidence can take about a minute (nano-gpt, Nov 10 2026; live, 25 s
 # for TEE/gemma4-31b:thinking's 40 instances).
 ATTESTATION_TIMEOUT_SECONDS = 90.0
+# One attestation, all of it, is given this long (DA Toolkit's, the DA apps'
+# standard): each request of it waits only for what is left, and none is
+# begun, nor Intel's or NVIDIA's check, once it has passed (`TeeClient._left`).
+# The endpoints may live under three paths, each asked in turn, for the
+# gateway's report and then the model's own: at 90 seconds each, an address
+# that never answered kept a model "being attested" for nine minutes. Three
+# minutes is the gateway's report, a model's own that timed out upstream (a
+# 504, about a minute) asked once more, and Intel's and NVIDIA's checks.
+ATTEMPT_SECONDS = 180.0
 # A stream's receipt is complete just after the stream ends (nano-gpt's own
 # example waits up to about 20 seconds).
 RECEIPT_WAIT_SECONDS = 20.0
@@ -108,6 +117,18 @@ RECEIPT_KEYS_LOOSE = "receipt keys not in the quote"
 # machine's, the model's upstream say, relayed. A Chutes instance's quote binds
 # its GPU evidence's nonce, so its GPUs are its own.
 GPUS_LOOSE = "GPUs not tied to the quote"
+# Named on the model button too (DA Toolkit's words, the DA apps' standard):
+# what was attested is RedPill's gateway, which passes each request on to the
+# machine that runs the model; that machine's own enclave is the gateway's
+# word in each receipt, not checked here. So such an attestation is partial,
+# never full (it counted as full here until Nov 14 2026).
+OWN_ENCLAVE_UNCHECKED = "the model's own enclave unchecked (RedPill's gateway)"
+# And: a model Chutes answers first, which RedPill's gateway answers now and
+# then, attested while nano-gpt gave no report of the gateway for a reason
+# but that RedPill doesn't serve the model (its 400): a rate limit, an
+# outage, an answer in no shape read. Whether the gateway may answer isn't
+# known, so an outage never reads better than the report would.
+GATEWAY_UNCHECKED = "RedPill's gateway unchecked"
 # RedPill's public records of its gateway's sessions with the machines that
 # run the models (Settings → Private, "Name the provider behind each TEE
 # reply"; `served_by`). Each receipt's `upstream.verified` names its session
@@ -280,11 +301,18 @@ def what_was_attested(attestation: Attestation) -> str:
     if attestation.attested == "instances":
         count = attestation.instances
         listed = f"each of the {count} instances" if count > 1 else "the instance"
-        return (
+        said = (
             f"Attested: {listed} this model's provider listed. They sign no replies, so "
             "nothing shows which machine answered a request: NanoGPT routes each one, "
-            "and a model may be served elsewhere when its provider is busy." + clear
+            "and a model may be served elsewhere when its provider is busy."
         )
+        if OWN_ENCLAVE_UNCHECKED in attestation.shortfalls:
+            # RedPill's gateway attested beside them (DA Toolkit's words).
+            said += (
+                " A reply RedPill's gateway answers in their place is checked against the "
+                "gateway's attested keys, the machine behind it then the gateway's word."
+            )
+        return said + clear
     if attestation.attested == "enclave":
         return (
             "Attested: the enclave whose key signs this model's replies. Whether that "
@@ -580,6 +608,9 @@ class TeeClient:
         # The time of day, which receipts are dated in (`served_at`, Unix
         # seconds); replaceable for tests.
         self._wall = wall
+        # When the attestation under way must be over (time.monotonic;
+        # ATTEMPT_SECONDS), else None.
+        self._deadline: float | None = None
 
     def close(self) -> None:
         if self._owns:
@@ -597,6 +628,21 @@ class TeeClient:
         """A reply failed its check (`check_reply`): the enclave is attested
         again before anything more is sent to it (`due`)."""
         self.attested_at = None
+
+    def _left(self, wanted: float = TIMEOUT_SECONDS) -> float:
+        """How long a request of the attestation under way may wait: `wanted`,
+        or what is left of ATTEMPT_SECONDS when that is less. Refuses once it
+        has passed: asked before each request, and before Intel's and NVIDIA's
+        checks. Outside an attestation (a reply's check), `wanted`."""
+        if self._deadline is None:
+            return wanted
+        left = self._deadline - time.monotonic()
+        if left <= 0:
+            raise TeeRefused(
+                f"{self.model}'s attestation wasn't done within {ATTEMPT_SECONDS / 60:g} "
+                "minutes, and was given up; this may pass if tried again"
+            )
+        return min(wanted, left)
 
     def _get(
         self,
@@ -617,6 +663,9 @@ class TeeClient:
         last: str = ""
         last_status: int | None = None
         for base in [self._base] if self._base else _bases(self.base_url):
+            if self._deadline is not None:
+                # Of an attestation: each address waits only for what is left.
+                timeout = self._left(TIMEOUT_SECONDS if timeout is None else timeout)
             try:
                 response = self._client.get(
                     f"{base}{path}",
@@ -686,9 +735,27 @@ class TeeClient:
 
         One that holds is in force from when it began (`attested_at`) until
         REATTEST_SECONDS later (`due`).
+
+        The whole of it is given ATTEMPT_SECONDS (`_left`). Evidence that
+        isn't in the shape it should be (a list where an object belongs, a key
+        that isn't hex) refuses like any other that doesn't hold, named by
+        what it raised, never in its own words (DA Toolkit's, the DA apps'
+        standard): until Nov 14 2026 that error itself (an AttributeError, a
+        TypeError) came out as the attestation's failure.
         """
         started = self._clock()
-        attestation = self._attest()
+        self._deadline = time.monotonic() + ATTEMPT_SECONDS
+        try:
+            attestation = self._attest()
+        except (ProviderError, ImportError):  # a refusal already; or no cryptography
+            raise
+        except Exception as exc:  # noqa: BLE001 - whatever reading the evidence raised
+            raise TeeRefused(
+                f"{self.model}'s attestation couldn't be read: what its provider sent isn't "
+                f"in the shape it should be ({type(exc).__name__})"
+            ) from exc
+        finally:
+            self._deadline = None
         self.attested_at = started
         return attestation
 
@@ -698,7 +765,7 @@ class TeeClient:
         self.keyset = self.keyset_digest = None
         self.instances = False
         self.receipt_required = False
-        gateway = self._attest_gateway()
+        gateway, unheard = self._attest_gateway()
         try:
             body, nonce = self._fetch_attestation()
         except ProviderError as exc:
@@ -708,9 +775,11 @@ class TeeClient:
                 # author's other apps) or an outage, the gateway standing in would send a
                 # model Chutes answers first (TEE/glm-5.1) to instances not attested this time.
                 return self._attest_gateway_alone(gateway, "its own attestation timed out")
+            if isinstance(exc, TeeRefused):  # out of time (`_left`): said as it is
+                raise
             raise self._refused(exc) from exc
         if isinstance(body.get("evidence"), list):
-            return self._attest_instances(body, nonce, gateway)
+            return self._attest_instances(body, nonce, gateway, unheard)
         if isinstance(body.get("all_attestations"), list) and "signing_address" not in body:
             # RedPill relaying Chutes (live, Sept 2026: TEE/glm-5.1, TEE/qwen3.5-27b,
             # TEE/qwen3.5-397b-a17b; Nov 10 2026: TEE/deepseek-v3.2). The quotes are
@@ -787,10 +856,13 @@ class TeeClient:
             )
         return TeeRefused(f"{self.model}'s attestation couldn't be fetched: {exc}")
 
-    def _attest_gateway(self) -> _Gateway | None:
+    def _attest_gateway(self) -> tuple[_Gateway | None, str]:
         """RedPill's gateway, attested for our nonce (`report=aci`, nano-gpt,
         Nov 10 2026), or None where nano-gpt has no such report: a model only
         Chutes or Tinfoil serves (HTTP 400), an outage, or another shape.
+        With it, why there was none where that wasn't RedPill not serving the
+        model (its 400): a rate limit, an outage, an answer in no shape read
+        (`unheard`, for `_attest_instances`); else "".
 
         The quote's report data is the SHA-256 of RedPill's attestation
         statement, the gateway's whole keyset and our nonce, zero padded
@@ -803,13 +875,16 @@ class TeeClient:
         their time."""
         try:
             body, nonce = self._fetch_attestation(aci=True)
-        except ProviderError:
-            return None
+        except ProviderError as exc:
+            # "report=aci is only available for models served through RedPill"
+            return None, "" if exc.status_code == 400 else failure_words(exc)[:200]
         report = body.get("attestation") if body.get("api_version") == "aci/1" else None
         evidence = report.get("evidence") if isinstance(report, dict) else None
         keyset = report.get("workload_keyset") if isinstance(report, dict) else None
         if not (isinstance(evidence, dict) and isinstance(keyset, dict) and evidence.get("quote")):
-            return None
+            # Answered, but not as RedPill's report (DA Assistant's reading):
+            # no more known of the gateway than if it hadn't been.
+            return None, "its report was in no shape this app reads"
         try:
             raw = bytes.fromhex(str(evidence["quote"]))
             quote = dcap.parse_quote(raw)
@@ -830,7 +905,7 @@ class TeeClient:
             if isinstance(entry, dict)
             and (address := _address_of_public(entry.get("public_key"))) is not None
         )
-        return _Gateway(keyset=keyset, signers=signers, check=check)
+        return _Gateway(keyset=keyset, signers=signers, check=check), ""
 
     def _refuse_expired(self, keyset: dict[str, Any] | None) -> None:
         """Keys the gateway's keyset holds only until a time now past are
@@ -856,6 +931,7 @@ class TeeClient:
         check = _Checks(f"{why}: the gateway that answers it is attested instead")
         check.merge(gateway.check)
         check.fall_short("no GPU evidence")
+        check.fall_short(OWN_ENCLAVE_UNCHECKED)
         check.note(
             "its own enclave isn't attested here: each reply's receipt carries the "
             "gateway's word that its upstream was verified"
@@ -898,8 +974,11 @@ class TeeClient:
             if gateway is not None and address.lower() in gateway.signers:
                 # The gateway's report binds the keyset this key is in: the
                 # receipt key is the hardware's too (nano-gpt's report=aci, Nov
-                # 10 2026). Its keys sign records as this one does.
+                # 10 2026). Its keys sign records as this one does. The keyset
+                # published beside the key is refused past its time too, as DA
+                # Assistant refuses it: it is the relay's word of the keys.
                 check.merge(gateway.check)
+                self._refuse_expired(keyset)
                 keyset, signers = gateway.keyset, gateway.signers
                 tie = "the gateway's quote binds its receipt keys, the signing key among them"
                 attested = "gateway"
@@ -926,6 +1005,26 @@ class TeeClient:
         else:
             raise TeeRefused(f"{self.model}'s attestation didn't bind its signing key to our nonce")
         self._refuse_expired(keyset)
+        caps = body.get("service_capabilities")
+        if attested != "gateway" and (
+            body.get("api_version") == "aci/1"
+            or (isinstance(caps, dict) and caps.get("serving") == "aggregator")
+        ):
+            # The report says it is RedPill's (aci/1, an aggregator), though no
+            # report of the gateway's own bound the key (DA Toolkit's reading).
+            attested = "gateway"
+        if attested == "gateway":
+            # RedPill's gateway, which passes each request on to the machine
+            # that runs the model: its quote and the GPUs' evidence are
+            # checked, not that the model itself runs in an enclave (RedPill
+            # says so in each reply's signed receipt). Partial, never full, as
+            # every DA app reads it (it counted as full here until Nov 14 2026).
+            check.fall_short(OWN_ENCLAVE_UNCHECKED)
+            check.note(
+                "this is RedPill's gateway, which passes each request on to the model's host: "
+                "the gateway's quote and the GPUs' evidence are checked, not that the model "
+                "itself runs in an enclave"
+            )
         self._check_quote(raw, check)
         payload = _json(body.get("nvidia_payload"))
         payload = payload if isinstance(payload, dict) else None
@@ -963,7 +1062,11 @@ class TeeClient:
         check.note(tie)
 
     def _attest_instances(
-        self, body: dict[str, Any], nonce: str, gateway: _Gateway | None = None
+        self,
+        body: dict[str, Any],
+        nonce: str,
+        gateway: _Gateway | None = None,
+        unheard: str = "",
     ) -> Attestation:
         """Per instance: each quote binds an instance key, which signed our nonce.
 
@@ -984,7 +1087,15 @@ class TeeClient:
         A model Chutes answers first falls back to RedPill now and then (nano-gpt,
         Nov 10 2026): with the gateway attested too, such a reply's record and
         receipt are checked against its bound keys, and the gateway's checks
-        count with the instances'.
+        count with the instances'. A request may then go through RedPill's
+        gateway, whose host is its word, not attested here: so the model falls
+        short as any the gateway answers does (`OWN_ENCLAVE_UNCHECKED`; DA
+        Toolkit's, DA Assistant's and DA Vibe Manager's reading; counted whole
+        here until Nov 14 2026). Where nano-gpt had no gateway report for a
+        reason but that RedPill doesn't serve the model (`unheard`: a rate
+        limit, an outage), whether the gateway may answer isn't known: that
+        falls short too (`GATEWAY_UNCHECKED`), so an outage never reads better
+        than the report would.
         """
         failed = [str(i) for i in body.get("failed_instance_ids") or []]
         instances = body["evidence"]
@@ -1004,14 +1115,23 @@ class TeeClient:
             check.merge(result)
         self.instances = True
         if gateway is None:
+            if unheard:
+                check.fall_short(GATEWAY_UNCHECKED)
+                check.note(
+                    f"nano-gpt gave no report of RedPill's gateway just now ({unheard}), and it "
+                    "answers some models Chutes serves first now and then: such a reply can't "
+                    "be checked"
+                )
             attestation = check.attestation("instances", instances=len(instances))
             attestation.detail += "; this provider signs no replies, so answers show as unsigned"
             return attestation
         check.merge(gateway.check)
+        check.fall_short(OWN_ENCLAVE_UNCHECKED)
         self.signers = gateway.signers
         self._take_keyset(
             gateway.keyset,
-            "a reply RedPill's gateway answers instead is checked against its attested keys",
+            "a reply RedPill's gateway answers instead is checked against its attested keys, "
+            "the model's own enclave behind it then the gateway's word in its receipt",
             check,
         )
         attestation = check.attestation("instances", instances=len(instances))
@@ -1064,11 +1184,24 @@ class TeeClient:
         return check
 
     def _check_quote(self, raw: bytes, check: _Checks) -> None:
-        """Intel's verification of one quote, into `check`. Refuses a bad quote."""
+        """Intel's verification of one quote, into `check`. Refuses a bad quote,
+        and one whose verification raised anything else: it couldn't be read.
+        Why is said short and on one line (`relay_said`): a refusal can name a
+        certificate of the quote's own chain, which its sender wrote. Not begun
+        once the attempt's time is up (`_left`). (DA Toolkit's.)"""
+        self._left()
         try:
             intel = self._intel(raw, self._client)
         except dcap.DcapError as exc:
-            raise TeeRefused(f"{self.model}'s Intel TDX quote failed verification: {exc}") from exc
+            raise TeeRefused(
+                f"{self.model}'s Intel TDX quote failed verification: {relay_said(str(exc), 300)}"
+            ) from exc
+        except (ProviderError, ImportError):
+            raise
+        except Exception as exc:  # noqa: BLE001 - not verified, whatever it raised
+            raise TeeRefused(
+                f"{self.model}'s Intel TDX quote couldn't be read ({type(exc).__name__})"
+            ) from exc
         check.note(*intel.notes)
         check.tcb(intel.status)
         if not intel.collateral:
@@ -1101,7 +1234,15 @@ class TeeClient:
             check.fall_short("NVIDIA signature unchecked")
             check.note(f"{exc}, so NVIDIA's verdict is unchecked")
         except nras.NrasError as exc:
-            raise TeeRefused(f"{self.model}'s GPU attestation failed: {exc}") from exc
+            raise TeeRefused(
+                f"{self.model}'s GPU attestation failed: {relay_said(str(exc), 300)}"
+            ) from exc
+        except (ProviderError, ImportError):
+            raise
+        except Exception as exc:  # noqa: BLE001 - not verified, whatever it raised
+            raise TeeRefused(
+                f"{self.model}'s GPU attestation couldn't be read ({type(exc).__name__})"
+            ) from exc
         else:
             check.gpus += gpus
             check.note(
@@ -1114,7 +1255,7 @@ class TeeClient:
         reached. HTTP 4xx is NVIDIA refusing the evidence: that refuses. (It used
         to read "rejected" for an outage too.)"""
         try:
-            response = self._client.post(NRAS_URL, json=payload)
+            response = self._client.post(NRAS_URL, json=payload, timeout=self._left())
         except httpx.HTTPError:
             return None
         if response.status_code >= 500:
@@ -1224,7 +1365,12 @@ class TeeClient:
             return ReplyCheck(
                 mark, TeeUpstream(note="its receipt wasn't read under the attested keys")
             )
-        return ReplyCheck(mark, self.served_by(receipt))
+        try:
+            return ReplyCheck(mark, self.served_by(receipt))
+        except Exception as exc:  # noqa: BLE001 - whatever kept it from being named, the mark stands
+            return ReplyCheck(
+                mark, TeeUpstream(note=f"RedPill's record couldn't be read ({type(exc).__name__})")
+            )
 
     def served_by(self, receipt: dict[str, Any]) -> TeeUpstream:
         """Who ran the model of a reply whose receipt held (`check`), by
