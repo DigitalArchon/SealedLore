@@ -2592,7 +2592,7 @@ class TranscriptView(QScrollArea):
             return
         self._streaming.set_text(body.source + text, keep=False)
         self._stream_timer.start()
-        self.scroll_to_end()
+        self._follow_stream()
 
     def _draw_stream(self) -> None:
         """What streamed in since the last drawing, drawn now."""
@@ -2602,7 +2602,22 @@ class TranscriptView(QScrollArea):
         self._stream_held = False
         widget.set_text(widget.body.source, keep=False)
         self._stream_timer.start()
-        self.scroll_to_end()
+        self._follow_stream()
+
+    def _follow_stream(self) -> None:
+        """The end kept in view as the reply grows, only while the reader is
+        there: scrolled up to read, they stay where they are until they
+        scroll back down (`_on_value_changed`). Every piece used to call
+        `scroll_to_end`, which takes the reader to the end, and dragged them
+        back down with each new word."""
+        if self._follow:
+            QTimer.singleShot(0, self, self._jump_to_bottom)
+
+    @property
+    def following(self) -> bool:
+        """Whether the view keeps to the end as it grows: the reader is
+        there, and hasn't scrolled up."""
+        return self._follow
 
     def end_streaming(self) -> None:
         # The last pieces, held, are drawn: nothing that came is left out.

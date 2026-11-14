@@ -620,7 +620,9 @@ archiving, rebuilding summaries.
   are reading, so going anywhere in it is quick. Scrolling up or down brings
   in the next part as you reach it; the rows at the top and bottom say how
   many messages lie beyond, with **Start of story** and **Latest** to jump to
-  either end. Sending a turn always takes you back to the latest.
+  either end. Sending a turn always takes you back to the latest. While a
+  reply is coming in, you can scroll up to read: the view stays where you
+  put it, and follows the reply again once you scroll back to the end.
 - **Above the transcript**: *Full story* shows every message; *What the
   storyteller sees* shows the chapter summaries standing in for archived
   prose and marks anything left out for budget (View → What the storyteller
@@ -2091,7 +2093,11 @@ much is added, and nothing else about the turn changes, so Regenerate still
 gives another take of the turn as you sent it. The storyteller is shown
 where the passage stops and asked to pick up exactly there; if it writes the
 passage out again before going on, the repeat is left out and the status bar
-says so. Once the new text is in, the scene and the plot are read again over
+says so. After a passage that came to its end, the new text starts a new
+paragraph; after one stopped or cut off mid-sentence, it goes on in the same
+line. Continued again, only the part added last time is new to the model:
+the rest of the passage is read from the cache, on an endpoint that caches
+prompts. Once the new text is in, the scene and the plot are read again over
 the whole passage. In a simple chat it is **⋯ → Continue this reply**. In a
 private scene only the scene's own passages can be continued, and only by
 the scene's own model: one written before it is the story model's, and a

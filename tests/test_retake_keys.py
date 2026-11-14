@@ -273,7 +273,7 @@ def test_under_the_cast_board_only_the_menu_acts(app, tmp_path: Path, story, cas
     window.continue_action.trigger()
     assert not window.board_shown()
     wait_for(app, lambda: not window._busy)
-    assert window.session.path()[-1].content == "The door gives. It swings wide."
+    assert window.session.path()[-1].content == "The door gives.\n\nIt swings wide."
     window.close()
 
 

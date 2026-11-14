@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from sealedlore.messages import PART_JOINER, PromptMessage
+from sealedlore.messages import PromptMessage
 from sealedlore.models.config import CacheControlMode, split_model
 
 if TYPE_CHECKING:
@@ -71,7 +71,7 @@ def to_wire_messages(
     for message in messages:
         blocks: list[dict[str, Any]] = []
         for index, part in enumerate(message.parts):
-            text = part.text if index == 0 else PART_JOINER + part.text
+            text = part.lead(index == 0)
             block: dict[str, Any] = {"type": "text", "text": text}
             if part.cache_breakpoint:
                 block["cache_control"] = cache_marker(ttl)
@@ -92,7 +92,7 @@ def _with_pictures(message: PromptMessage) -> list[dict[str, Any]]:
     would be (the parts joined) with each picture after its part's text."""
     blocks: list[dict[str, Any]] = []
     for index, part in enumerate(message.parts):
-        text = part.text if index == 0 else PART_JOINER + part.text
+        text = part.lead(index == 0)
         if part.text:
             blocks.append({"type": "text", "text": text})
         if part.image:

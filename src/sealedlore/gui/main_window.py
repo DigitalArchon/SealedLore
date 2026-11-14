@@ -427,6 +427,7 @@ class MainWindow(
         self.catalog = ModelCatalog(self)
         self._asking = False
         self._asides_before = 0
+        self._result_before: object | None = None
         # A competence suggestion waiting for the author, set by the worker job.
         self._pending_tiers: tuple[str, dict] | None = None
         self._pending_review: SettingsReview | None = None
@@ -3850,6 +3851,9 @@ class MainWindow(
         # to validate and `last_result` still describes the last real turn.
         self._asking = question is not None
         self._asides_before = len(self.session.bundle.asides) if self.session else 0
+        # The result this job's reply replaces: one that failed before its
+        # request went out leaves the last job's, which isn't counted again.
+        self._result_before = self.session.last_result if self.session else None
 
         if provider is None and self.session is not None:
             # Stop reaches whichever model the job is talking to: in a private
@@ -4152,7 +4156,11 @@ class MainWindow(
     def _finish_job(self) -> None:
         # The worker mutated the session on its own thread; rebuild the view
         # from story state now that it is finished, so the two cannot drift.
+        # A reader who scrolled up while it ran stays where they were: the
+        # rebuild goes to the end.
+        place = None if self.transcript.following else self.transcript.place_of()
         self._reload_unless_editing()
+        self.transcript.keep_place(place)
         focus, self._focus_after_job = self._focus_after_job, None
         if focus is not None:
             QTimer.singleShot(0, self, lambda: self.transcript.scroll_to_node(focus))
@@ -4194,7 +4202,15 @@ class MainWindow(
             self._update_controls()
             return
         result = self.session.last_result if self.session else None
-        if self._streaming_job and result is not None:
+        if (
+            self._streaming_job
+            and result is not None
+            and result is not self._result_before
+            and not result.stopped_early
+        ):
+            # A reply stopped before it ended reports no usage: the cache
+            # readout keeps the last call's, rather than blanking as if the
+            # cache had been lost.
             self.status_strip.add_usage(result.usage)
         self.stories.refresh(selected_id=self.session.story.id if self.session else None)
         self._update_controls()

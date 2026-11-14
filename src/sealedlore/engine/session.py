@@ -72,11 +72,13 @@ from sealedlore.engine.chronicle import (
 from sealedlore.engine.competence import build_inference_messages, parse_tiers
 from sealedlore.engine.continuation import (
     NOT_CONTINUABLE,
+    carried_start,
     continuable,
     continue_request,
     continued,
-    joiner,
+    pieces,
     repeat_length,
+    text_digest,
 )
 from sealedlore.engine.dice import explain, roll_for
 from sealedlore.engine.director import (
@@ -438,6 +440,18 @@ def declined_notice(completed: StreamCompleted, *, chat: bool = False) -> str:
         f"{DECLINED} passage{who}. What came before it stopped is kept as it was, and the "
         "scene, the plot and the looks weren't read from it. Regenerate asks again; a change "
         "to the turn, or another story model, may be what it takes."
+    )
+
+
+def whole_reply(completed: StreamCompleted | None) -> bool:
+    """Whether a reply came back whole: ended by the model of its own
+    accord, not stopped, cut off at the limit, left unfinished or declined
+    (`NodeMeta.finished`)."""
+    return (
+        completed is not None
+        and not completed.unterminated
+        and completed.finish_reason != "length"
+        and not declined(completed)
     )
 
 
@@ -2198,7 +2212,13 @@ class StorySession(
                 reminder=reminder.text if reminder else "",
                 chat=self.story.chat,
             )
-            prompt = continued(prompt, so_far, request, self.estimator)
+            prompt = continued(
+                prompt,
+                pieces(so_far, passage.meta.continued_at, passage.meta.continued_sha),
+                request,
+                self.estimator,
+                cache_from=self.config.min_cacheable_tokens,
+            )
             self.last_prompt = prompt
             self.repeat_dropped = False
             yield from self._generate(
@@ -2462,12 +2482,19 @@ class StorySession(
         # Continue: what goes between the passage and the new text, decided
         # by the first text that comes (the window shows it as it streams).
         before = extend.content.rstrip() if extend is not None else None
+        whole = extend.meta.finished if extend is not None else None
+        # After a whole reply the new text is a paragraph of its own: space
+        # it starts with is held until its first word, and made one break.
+        lead = ""
         try:
             # Checked where it is marked, on the passage (`_check_tee`).
             for event in checked_where_marked(provider.stream(request)):
                 if isinstance(event, TextDelta):
                     if before is not None and not text and event.text:
-                        event = TextDelta(joiner(before, event.text) + event.text)
+                        lead += event.text
+                        if whole and not lead.strip():
+                            continue
+                        event = TextDelta(carried_start(before, lead, whole))
                     text.append(event.text)
                 elif isinstance(event, ReasoningDelta):
                     reasoning.append(event.text)
@@ -2554,10 +2581,12 @@ class StorySession(
         node: Node | None = None
         self.repeat_dropped = False
         if extend is not None:
-            added = self._without_repeat(extend.content.rstrip(), text)
+            added = self._without_repeat(extend.content.rstrip(), text, extend.meta.finished)
             if added.strip():
                 node = extend
-                self._carry_on(extend, added, reasoning, usage, model)
+                self._carry_on(
+                    extend, added, reasoning, usage, model, finished=whole_reply(completed)
+                )
             text = added if added.strip() else ""
         elif revises is not None and (completed is None or not text.strip()):
             # A passage being changed, and the reply stopped partway or empty:
@@ -2586,6 +2615,7 @@ class StorySession(
                     # branch it stays on), and what was asked.
                     revised_from=revises.id if revises is not None else None,
                     revise_note=(change or None) if revises is not None else None,
+                    finished=whole_reply(completed),
                     branch_name=revises.meta.branch_name if revises is not None else None,
                     # A TEE model's passage is marked as it is written, and
                     # the mark raised once its reply is checked (`_check_tee`).
@@ -2629,7 +2659,14 @@ class StorySession(
         self.save()
 
     def _carry_on(
-        self, node: Node, text: str, reasoning: str | None, usage: Usage, model: str
+        self,
+        node: Node,
+        text: str,
+        reasoning: str | None,
+        usage: Usage,
+        model: str,
+        *,
+        finished: bool,
     ) -> None:
         """A continuation written onto its passage: the text joined (`text`
         starts with its joiner), the reasoning after the first's, the cost
@@ -2645,7 +2682,15 @@ class StorySession(
         if node.meta.tee is not None:
             sealed = node.meta.tee == "encrypted" and is_private_mode(model)
             node.meta.tee = "encrypted" if sealed else "unchecked"
-        node.content = node.content.rstrip() + text
+        kept = node.content.rstrip()
+        # Where this continuation begins, beside those before it while the
+        # text is still the one they were taken in: the next Continue sends
+        # the passage cut there (`continuation.pieces`).
+        starts = node.meta.continued_at if node.meta.continued_sha == text_digest(kept) else []
+        node.content = kept + text
+        node.meta.continued_at = [*starts, len(kept)]
+        node.meta.continued_sha = text_digest(node.content)
+        node.meta.finished = finished
         if reasoning:
             node.meta.reasoning = "\n\n".join(
                 part for part in (node.meta.reasoning, reasoning) if part
@@ -2658,7 +2703,7 @@ class StorySession(
         self.prune_shortcuts(node)
         mark_stale(self.bundle.summaries, node.id)
 
-    def _without_repeat(self, before: str, text: str) -> str:
+    def _without_repeat(self, before: str, text: str, whole: bool | None = None) -> str:
         """A continuation that began by writing the passage out again, from its
         first word, has added only what follows the repeat (`repeat_length`).
         The repeat is left out, said (`repeat_dropped`), and kept in the API
@@ -2668,7 +2713,7 @@ class StorySession(
             return text
         self.repeat_dropped = True
         rest = text[repeat:]
-        return joiner(before, rest) + rest if rest.strip() else ""
+        return carried_start(before, rest, whole) if rest.strip() else ""
 
     # --- archival (§5.2, §5.3) ---------------------------------------------
 

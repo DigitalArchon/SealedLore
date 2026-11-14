@@ -26,6 +26,15 @@ class ContentPart:
     # part of `PromptMessage.text`, and never in the API log
     # (`wire.without_pictures`).
     image: str = ""
+    # Joined to the part before it with nothing between: the same text cut
+    # in two, for a cache point between the pieces (Continue keeps what it
+    # added in a part of its own, engine/continuation.py). Every other part
+    # leads with PART_JOINER.
+    glued: bool = False
+
+    def lead(self, first: bool) -> str:
+        """The part's text as it goes after the parts before it."""
+        return self.text if first or self.glued else PART_JOINER + self.text
 
 
 @dataclass(frozen=True)
@@ -35,4 +44,4 @@ class PromptMessage:
 
     @property
     def text(self) -> str:
-        return PART_JOINER.join(part.text for part in self.parts)
+        return "".join(part.lead(index == 0) for index, part in enumerate(self.parts))

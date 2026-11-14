@@ -7,6 +7,7 @@ on open and on every branch switch; only the newest page is built now.
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -436,4 +437,40 @@ def test_the_storyteller_view_pages_and_jumps_the_same_way(styled, cast):
     cards = [c for c in view.findChildren(SummaryCardWidget) if view._layout.indexOf(c) >= 0]
     assert len(cards) == 1, "the chapter cards come with the start of the view"
     assert view.message_widget(nodes[-1].id) is not None and view.at_latest
+    view.close()
+
+
+# --- a reply streaming in -----------------------------------------------------------------
+
+
+def test_scrolled_up_while_a_reply_streams_the_reader_stays_put(styled, cast):
+    """Every piece of a streaming reply took the reader back to the end:
+    scrolled up to read, they were dragged down with each word."""
+    view, _nodes = long_view(styled, cast, 10)
+    bar = view.verticalScrollBar()
+    view.begin_streaming()
+    view.append_streaming("The door opened. ")
+    flush(styled)
+    assert view.following and bar.value() == bar.maximum()
+
+    bar.setValue(bar.maximum() // 3)
+    flush(styled)
+    read_at = bar.value()
+    assert not view.following
+    for _piece in range(30):
+        view.append_streaming("The station hummed through its night cycle. ")
+        time.sleep(0.11)  # past the draw interval, so each piece is drawn
+        flush(styled)
+    assert bar.value() == read_at
+
+    # Back down at the end, it follows the reply again.
+    bar.setValue(bar.maximum())
+    flush(styled)
+    assert view.following
+    for _piece in range(10):
+        view.append_streaming("And on it went, deck after deck. ")
+        time.sleep(0.11)
+        flush(styled)
+    assert bar.value() == bar.maximum()
+    view.end_streaming()
     view.close()

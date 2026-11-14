@@ -55,6 +55,9 @@ class MockChatProvider(ChatProvider):
         self._cancelled = False
         # Seconds to wait before each chunk, to stand in for a slow endpoint.
         self.delay = 0.0
+        # How each reply says it ended: "length" stands for one cut off at
+        # the limit.
+        self.finish_reason = "stop"
 
     def cancel(self) -> None:
         self._cancelled = True
@@ -103,7 +106,7 @@ class MockChatProvider(ChatProvider):
             raw["cost"] = self.usage.cost
         completed = StreamCompleted(
             usage=self.usage,
-            finish_reason="stop",
+            finish_reason=self.finish_reason,
             raw_usage=raw,
             reasoning_tokens=len(self.reasoning or "") // 4,
         )

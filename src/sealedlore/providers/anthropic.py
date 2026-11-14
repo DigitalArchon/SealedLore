@@ -26,7 +26,7 @@ from typing import Any
 
 import httpx
 
-from sealedlore.messages import PART_JOINER, PromptMessage
+from sealedlore.messages import PromptMessage
 from sealedlore.models.config import ProviderConfig
 from sealedlore.providers.anthropic_models import (
     listing_entry,
@@ -98,7 +98,7 @@ def render_messages(
         for part in message.parts:
             marker = cache_marker(ttl) if use_cache_control and part.cache_breakpoint else None
             if part.text:
-                text = part.text if not blocks else PART_JOINER + part.text
+                text = part.lead(not blocks)
                 block: dict[str, Any] = {"type": "text", "text": text}
                 if marker is not None:
                     block["cache_control"] = marker

@@ -161,6 +161,19 @@ class NodeMeta(BaseModel):
     # by no request.
     revised_from: str | None = None
     revise_note: str | None = None
+    # On a passage: whether its reply came back whole (the model stopped of
+    # its own accord), or was stopped, cut off at the limit or left
+    # unfinished (False); None for one written before this was kept, or by
+    # no call. Continue starts a new paragraph after a whole reply
+    # (engine/continuation.py `carried_start`).
+    finished: bool | None = None
+    # On a passage Continue has carried on: where in its text each
+    # continuation began, and the sha256 of the text they were taken in
+    # (`continuation.text_digest`). The next Continue sends the passage in
+    # those pieces, so all but the newest are read from the cache; an edit
+    # changes the text, and the offsets no longer count.
+    continued_at: list[int] = Field(default_factory=list)
+    continued_sha: str | None = None
 
 
 class Node(BaseModel):
