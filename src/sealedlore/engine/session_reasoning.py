@@ -29,6 +29,7 @@ from sealedlore.models.config import ModelPrice, ModelReasoning
 from sealedlore.models.generation import GenerationParams, ReasoningConfig
 from sealedlore.models.node import Node
 from sealedlore.providers.base import ChatRequest, ProviderError, StreamCompleted
+from sealedlore.providers.privacy import NANOGPT_PRIVATE
 from sealedlore.providers.private_catalog import tee_counterpart
 from sealedlore.storage.repository import CONFIG_LOCK
 
@@ -112,7 +113,7 @@ class ReasoningRuntime:
             prices: dict[str, ModelPrice] = {}
             for model, entry in listing.items():
                 own = defaults.get(model)
-                if own is None:
+                if own is None and self.privacy(model).service == NANOGPT_PRIVATE:
                     twin = tee_counterpart(model, defaults)
                     own = defaults.get(twin) if twin else None
                 facts = listed(entry, own)
@@ -141,12 +142,24 @@ class ReasoningRuntime:
     def _params(self, kind: CallKind, model: str, fixed: dict[str, Any]) -> GenerationParams:
         """Every level needs the listing now, "as low as possible" for the
         model's default: fetched once a session, kept a week per model."""
-        return params_for(self.config, kind, model, self.reasoning_facts(model), **fixed)
+        return params_for(
+            self.config,
+            kind,
+            model,
+            self.reasoning_facts(model),
+            privacy=self.privacy(model),
+            **fixed,
+        )
 
     def reasoning_sent(self, kind: CallKind, model: str) -> ReasoningConfig:
         """What a call of `kind` to `model` would ask, from what is known now
         (nothing is fetched: for the window's tools)."""
-        return reasoning_for(level_for(self.config, kind), model, self._known_reasoning(model))
+        return reasoning_for(
+            level_for(self.config, kind),
+            model,
+            self._known_reasoning(model),
+            privacy=self.privacy(model),
+        )
 
     def story_params(self, model: str, **fixed: Any) -> GenerationParams:
         """A story-model turn's parameters: the author's generation settings

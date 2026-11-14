@@ -161,7 +161,7 @@ from sealedlore.providers.embeddings import EmbeddingBackend, OpenAICompatibleEm
 from sealedlore.providers.endpoints import listing_key
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.providers.model_hosts import Host
-from sealedlore.providers.tee import is_tee
+from sealedlore.providers.privacy import Privacy, privacy_of
 from sealedlore.storage import keychain
 from sealedlore.storage.archive import (
     ARCHIVE_FORMAT,
@@ -4337,7 +4337,12 @@ class MainWindow(
             model = span.model if span is not None else ""
             roles = [
                 TroubleRole(
-                    "story", "Private model", model, {}, session.reasoning_sent("story", model)
+                    "story",
+                    "Private model",
+                    model,
+                    {},
+                    session.reasoning_sent("story", model),
+                    privacy=session.privacy(model),
                 )
             ]
         else:
@@ -4360,13 +4365,16 @@ class MainWindow(
                     reasoning = config_reasoning(self.config, kind, model)
                 # The endpoint is sent the bare id.
                 bare = split_model(model)[1]
-                roles.append(TroubleRole(used, ", ".join(names), bare, route, reasoning))
+                privacy = session.privacy(model) if session else privacy_of(model, self.config)
+                roles.append(
+                    TroubleRole(used, ", ".join(names), bare, route, reasoning, privacy=privacy)
+                )
         prompt, for_others, tokens, why = None, None, 0, ""
         if session is None:
             why = "Open a story first: this uses what its storyteller was last sent."
         elif session.in_private:
             why = "A private scene is open: nothing from it goes to any model but the private one."
-        elif is_tee(session.model):
+        elif session.privacy(session.model).private:
             why = "This chat's model is a TEE or encrypted model: its prompts go to no other host."
         elif session.last_prompt is None:
             why = "Send a turn first: this uses what the storyteller was last sent."
@@ -4385,7 +4393,7 @@ class MainWindow(
             story_prompt_tokens=tokens,
             story_prompt_why=why or TroubleContext.story_prompt_why,
             memory_only=session is not None and session.memory_only,
-            private_ids=[m for m in (self.catalog.models or {}) if is_tee(m)],
+            private_ids=[m for m in (self.catalog.models or {}) if self._privacy_of(m).private],
             use_host=self._use_host,
         )
 
@@ -4754,7 +4762,19 @@ class MainWindow(
         return self._current_provider(), endpoint, False
 
     def _browse_models(self, current: str, **limits) -> str | None:
-        return pick_model(self.catalog, self._model_source, current, self, **limits)
+        return pick_model(
+            self.catalog,
+            self._model_source,
+            current,
+            self,
+            privacy_of=self._privacy_of,
+            **limits,
+        )
+
+    def _privacy_of(self, model: str) -> Privacy:
+        """How private a model reference is on the endpoint it names, for the
+        model fields and the picker (providers/privacy.py)."""
+        return privacy_of(model, self.config)
 
     def _route_endpoint_of(self, model: str) -> str | None:
         """The address of the endpoint a model's reference resolves to, for
@@ -4767,7 +4787,13 @@ class MainWindow(
     def _browse_models_and_route(self, current: str, route):
         """Browse… for a field with a route (New simple chat)."""
         return pick_model_and_route(
-            self.catalog, self._model_source, current, route, self._route_endpoint_of, self
+            self.catalog,
+            self._model_source,
+            current,
+            route,
+            self._route_endpoint_of,
+            self,
+            privacy_of=self._privacy_of,
         )
 
     def _qualify_recommended(self, model_id: str) -> str:

@@ -15,8 +15,7 @@ from PySide6.QtWidgets import QHBoxLayout, QWidget
 from sealedlore.engine.routing import routable
 from sealedlore.gui.status import ElidingLabel
 from sealedlore.models.config import model_label
-from sealedlore.providers.private_catalog import privacy_label
-from sealedlore.providers.tee import is_private_mode, is_tee
+from sealedlore.providers.privacy import Privacy, privacy_of
 
 ROLE_NAMES = {
     "summarisation": "Summaries",
@@ -32,10 +31,10 @@ NO_MODEL = "No model chosen: File → Settings… → Models"
 NO_ENDPOINT = "No endpoint set up: File → Settings…"
 
 
-def _privacy(model: str, tee_state: str) -> str:
-    if is_private_mode(model):
+def _privacy(privacy: Privacy, tee_state: str) -> str:
+    if privacy.sealed:
         return "🔐 end-to-end encrypted" + (f" ({tee_state})" if tee_state else "")
-    if is_tee(model):
+    if privacy.private:
         return "TEE" + (f" ({tee_state})" if tee_state else "")
     return ""
 
@@ -69,7 +68,9 @@ def describe_session(session, *, tee_state: str = "") -> tuple[str, str]:
         parts.append("Story · Saved on disk")
         tips.append("A story, saved on disk.")
 
-    privacy = _privacy(model, tee_state)
+    # How private the model is on its endpoint (providers/privacy.py).
+    kind = privacy_of(session.model, session.config)
+    privacy = _privacy(kind, tee_state)
     if not session.model:
         # Said as what to do (Oct 18 2026): "(no model) · via no endpoint
         # set" named what was missing and not where it is set.
@@ -77,7 +78,7 @@ def describe_session(session, *, tee_state: str = "") -> tuple[str, str]:
         tips.append("Nothing can be written until a story model is chosen.")
     else:
         parts.append(shown + (f" · {privacy}" if privacy else ""))
-        label, note = privacy_label(model)
+        label, note = kind.label()
         seen = (
             f" {label}: {note}"
             if label
@@ -86,7 +87,7 @@ def describe_session(session, *, tee_state: str = "") -> tuple[str, str]:
         tips.append(f"Model: {shown} on {host}.{seen}")
     parts.append(f"via {host}" if base_url else NO_ENDPOINT)
 
-    if routable(base_url, model):
+    if routable(base_url, model, provider.api if provider is not None else "auto"):
         route = session.route_text("story")
         parts.append(f"{route} · paid" if route else "NanoGPT's routing")
         tips.append(

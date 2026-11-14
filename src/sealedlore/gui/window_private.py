@@ -22,6 +22,7 @@ from sealedlore.gui.workers import run_detached
 from sealedlore.models.config import ProviderConfig
 from sealedlore.providers import make_chat_provider
 from sealedlore.providers.base import ChatProvider, ProviderError
+from sealedlore.providers.privacy import Privacy, move_refusal, privacy_for
 from sealedlore.providers.private_mode import ModelRetired, PrivateModeProvider
 from sealedlore.providers.tee import (
     GATEWAY_UNCHECKED,
@@ -30,9 +31,6 @@ from sealedlore.providers.tee import (
     RECEIPT_KEYS_LOOSE,
     TeeClient,
     failure_words,
-    is_private_mode,
-    is_tee,
-    move_refusal,
     what_was_attested,
 )
 from sealedlore.storage.repository import save_config
@@ -168,19 +166,21 @@ class PrivateWindow:
             return self.private_provider_factory(settings)
         return make_chat_provider(settings)
 
-    def _wants_attestation(self, model: str) -> bool:
+    def _wants_attestation(self, privacy: Privacy) -> bool:
         """An end-to-end encrypted model is always attested: its key is what
         everything is sealed to. A TEE/ model, when Settings asks for it."""
-        return is_private_mode(model) or (is_tee(model) and self.config.private_verify_tee)
+        return privacy.sealed or (privacy.private and self.config.private_verify_tee)
 
     def _attest_or_say_not(self, settings: ProviderConfig) -> None:
         """Attest a TEE model, or, with "Check TEE models" off in Settings,
         say so on the model button for as long as the scene or chat lasts:
         the switch is easy to turn off and forget, and a TEE model that isn't
-        checked is just a model."""
-        if self._wants_attestation(settings.model):
+        checked is just a model. `settings`: the endpoint its calls go to,
+        with its model (providers/privacy.py judges it there)."""
+        privacy = privacy_for(settings.model, settings)
+        if self._wants_attestation(privacy):
             self._start_attestation(settings)
-        elif is_tee(settings.model):
+        elif privacy.private:
             self._tee_state = UNCHECKED_TEE
             self._refresh_model_button()
             self.statusBar().showMessage(
@@ -259,7 +259,8 @@ class PrivateWindow:
             return ""
         span = self.session.open_span if self.session is not None else None
         model = span.model if span is not None else (self.session.model if self.session else "")
-        prefix = "" if is_private_mode(model) else "TEE "
+        sealed = self.session is not None and self.session.privacy(model).sealed
+        prefix = "" if sealed else "TEE "
         return f"  ·  {prefix}{self._tee_state}"
 
     def _update_private_controls(self) -> None:
@@ -424,7 +425,7 @@ class PrivateWindow:
         tee: TeeClient | None = None
         self._tee_settings = settings
         self._retired_model = None
-        if is_private_mode(settings.model):
+        if privacy_for(settings.model, settings).sealed:
             # The sealing provider attests before it sends anything itself.
             self.session.tee_block = None
             sealed = (
@@ -717,10 +718,12 @@ class PrivateWindow:
         span = self.session.open_span if self.session is not None else None
         if span is None:
             return []
+        endpoint = self.session.private_endpoint()
         return [
             model
             for model in self._offered_instead
-            if model != retired and move_refusal(span.model, model) is None
+            if model != retired
+            and move_refusal(span.model, model, privacy=lambda m: privacy_for(m, endpoint)) is None
         ]
 
     def _choose_scene_model(self, retired: str, choices: list[str], *, summarise: bool) -> None:

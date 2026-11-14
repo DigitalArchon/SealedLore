@@ -228,7 +228,7 @@ from sealedlore.providers.base import (
 )
 from sealedlore.providers.decisions import DecisionsClient, build_decisions_payload
 from sealedlore.providers.embeddings import EmbeddingBackend
-from sealedlore.providers.tee import is_private_mode, is_tee, move_refusal
+from sealedlore.providers.privacy import move_refusal
 from sealedlore.providers.wire import should_use_cache_control
 from sealedlore.storage.picture_store import DiskPictures, MemoryPictures, PictureStore
 from sealedlore.storage.repository import (
@@ -792,7 +792,7 @@ class StorySession(
         """§5.2: the story's own, else the one set for every story, else the
         story's main model. A TEE chat's summaries are its own model's: the
         conversation never leaves it."""
-        if self.story.chat and is_tee(self.model):
+        if self.tee_chat:
             return self.model
         return (
             self.story.defaults.summarization_model or self.config.summarization_model or self.model
@@ -873,7 +873,7 @@ class StorySession(
             "image_prompt": defaults.image_prompt_model or self.config.image_prompt_model,
         }
         role = role_in_use(role, own)
-        if self.story.chat and is_tee(self.model):
+        if self.tee_chat:
             role = "story"  # a TEE chat's every call (its summaries) is its own model's
         return role, (self.model if role == "story" else own[role] or self.model)
 
@@ -890,7 +890,7 @@ class StorySession(
         role, in_use = self._role_in_use(role)
         model = model or in_use
         provider = self.config.endpoint_for(model)
-        if provider is None or not routable(provider.base_url, model):
+        if provider is None or not routable(provider.base_url, model, provider.api):
             return {}
         return route_body(self.role_route(role), model)
 
@@ -972,15 +972,16 @@ class StorySession(
 
     @property
     def tee_chat(self) -> bool:
-        """A chat on a TEE model: attested, its replies' signatures checked,
-        and every call it makes on that model."""
-        return self.story.chat and is_tee(self.model)
+        """A chat on a TEE or end-to-end encrypted model (`privacy`):
+        attested, its replies' signatures checked, and every call it makes
+        on that model."""
+        return self.story.chat and self.privacy(self.model).private
 
     def check_chat_model(self, model: str) -> None:
         """A TEE chat moves only to another TEE model: it must never hand the
         conversation to one that can't be attested, and an end-to-end
         encrypted one never to one whose gateway reads it."""
-        reason = move_refusal(self.model, model) if self.story.chat else None
+        reason = move_refusal(self.model, model, privacy=self.privacy) if self.story.chat else None
         if reason:
             raise ValueError(reason)
 
@@ -2678,12 +2679,13 @@ class StorySession(
         # until the continuation's own reply is checked, and then keeps the
         # less proven of the two marks (`_check_tee`). An end-to-end encrypted
         # model's continuation is proved by its seal as it comes, as its
-        # passage was (`_written_mark`).
+        # passage was (`_written_mark`); `model` is the one it went to, the
+        # open private scene's judged on the scene's own endpoint (`privacy`).
         self._carried_mark = (node.id, node.meta.tee)
         self._carried_upstream = (node.id, node.meta.tee_upstream)
         node.meta.tee_upstream = None
         if node.meta.tee is not None:
-            sealed = node.meta.tee == "encrypted" and is_private_mode(model)
+            sealed = node.meta.tee == "encrypted" and self.privacy(model).sealed
             node.meta.tee = "encrypted" if sealed else "unchecked"
         kept = node.content.rstrip()
         # Where this continuation begins, beside those before it while the

@@ -111,8 +111,14 @@ from sealedlore.providers.base import ChatProvider
 from sealedlore.providers.context_probe import detect_context
 from sealedlore.providers.endpoints import EndpointsProvider, listing_key
 from sealedlore.providers.images import parse_image_models
-from sealedlore.providers.privacy import not_built, privacy_at
-from sealedlore.providers.tee import move_refusal
+from sealedlore.providers.privacy import (
+    Privacy,
+    move_refusal,
+    not_built,
+    privacy_at,
+    privacy_for,
+    privacy_of,
+)
 from sealedlore.storage import keychain
 from sealedlore.storage.paths import config_file
 
@@ -517,7 +523,9 @@ class SettingsDialog(QDialog):
         key as typed, so a key that would go unencrypted is asked about first."""
         if self._catalog is None or not self._may_send(endpoint_keys(self._endpoints_as_typed())):
             return None
-        return pick_model(self._catalog, self._model_source, current, self)
+        return pick_model(
+            self._catalog, self._model_source, current, self, privacy_of=self._field_privacy
+        )
 
     def _model_source(self) -> tuple[ChatProvider, str, bool]:
         """Browse… lists every endpoint's models as the endpoints stand in
@@ -1086,6 +1094,18 @@ class SettingsDialog(QDialog):
         endpoint, _bare = self._resolve(model)
         return (endpoint.base_url.strip() or None) if endpoint is not None else None
 
+    def _field_privacy(self, model: str) -> Privacy:
+        """How private a model reference is on the endpoint it resolves to,
+        as typed (providers/privacy.py)."""
+        endpoint, _bare = self._resolve(model)
+        return privacy_for(model, endpoint)
+
+    def _private_field_privacy(self, model: str) -> Privacy:
+        """How private a model is on the private endpoint as typed."""
+        existing = self.config.private_provider
+        api = existing.api if existing is not None else "auto"
+        return privacy_at(model, self.private_url.text().strip(), api)
+
     def _routed_field(self, text: str, role: str = "") -> ModelField:
         """A role's model field, with its route beside it (NanoGPT only) and
         the models measured for it under Recommended."""
@@ -1093,6 +1113,7 @@ class SettingsDialog(QDialog):
         return ModelField(
             text,
             self._browse,
+            privacy_of=self._field_privacy,
             route_endpoint=self._route_endpoint,
             browse_route=browse,
             hosts_of=self._hosts_of,
@@ -1110,7 +1131,13 @@ class SettingsDialog(QDialog):
 
     def _browse_route(self, current: str, route: ModelRoute | None):
         return pick_model_and_route(
-            self._catalog, self._model_source, current, route, self._route_endpoint, self
+            self._catalog,
+            self._model_source,
+            current,
+            route,
+            self._route_endpoint,
+            self,
+            privacy_of=self._field_privacy,
         )
 
     def _show_routes(self, *_args) -> None:
@@ -1539,7 +1566,9 @@ class SettingsDialog(QDialog):
         """What the level as it stands would send `model`, from what the
         config knows of it (nothing is fetched here)."""
         facts = self.config.model_reasoning.get(model)
-        return reasoning_for(self._reasoning_levels()[kind], model, facts)
+        return reasoning_for(
+            self._reasoning_levels()[kind], model, facts, privacy=self._field_privacy(model)
+        )
 
     def _show_reasoning(self) -> None:
         story_model = self.model.text().strip()
@@ -1791,7 +1820,7 @@ class SettingsDialog(QDialog):
         """Test attestation's endpoint and model, its key asked about first
         when it would go unencrypted. ValueError, said under the button: No."""
         settings = self._private_test_settings()
-        if settings is not None and testable(settings.model):
+        if settings is not None and testable(settings.model, settings):
             if not self._may_send(self._private_keys()):
                 raise ValueError("Not checked: its key would have gone unencrypted.")
             # As it now stands: a key just confirmed for plain http goes with it.
@@ -1878,9 +1907,17 @@ class SettingsDialog(QDialog):
         def browse(current: str) -> str | None:
             if not self._may_send(self._private_keys()):
                 return None
-            return pick_model(self._private_catalog, self._private_source, current, self)
+            return pick_model(
+                self._private_catalog,
+                self._private_source,
+                current,
+                self,
+                privacy_of=self._private_field_privacy,
+            )
 
-        self.private_model = ModelField(existing.model if existing else "", browse)
+        self.private_model = ModelField(
+            existing.model if existing else "", browse, privacy_of=self._private_field_privacy
+        )
         self.private_model.setPlaceholderText("e.g. llama3.1:8b, or TEE/glm-5.3-flash")
         self.private_budget = QSpinBox()
         self.private_budget.setRange(2_000, 1_000_000)
@@ -1928,7 +1965,9 @@ class SettingsDialog(QDialog):
         form.addRow("API key", self.private_key)
         form.addRow(self._key_note())
         form.addRow("Model", self.private_model)
-        self.private_look_model = ModelField(self.config.private_look_model, browse)
+        self.private_look_model = ModelField(
+            self.config.private_look_model, browse, privacy_of=self._private_field_privacy
+        )
         self.private_look_model.setPlaceholderText("the scene's own model")
         self.private_look_model.setToolTip(
             "In a private scene, the model that chooses characters' looks after each passage, "
@@ -2856,7 +2895,9 @@ class SettingsDialog(QDialog):
             )
             if self.story.chat and provider.model and provider.model != self._model_at_open:
                 current = self.story.defaults.main_model or ""
-                refusal = move_refusal(current, provider.model)
+                refusal = move_refusal(
+                    current, provider.model, privacy=lambda m: privacy_of(m, self.config)
+                )
                 if refusal:
                     # A TEE chat never moves to a model that can't be attested
                     # (StorySession.check_chat_model); the endpoint's default

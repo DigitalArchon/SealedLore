@@ -47,7 +47,7 @@ from sealedlore.models.generation import (
     ReasoningConfig,
     ReasoningLevel,
 )
-from sealedlore.providers.tee import is_tee
+from sealedlore.providers.privacy import Privacy, privacy_at, privacy_of
 
 # "story": the story model's own turns (passages, Questions, private turns),
 # which take the author's sampling settings; "side": everything else, which
@@ -130,10 +130,13 @@ def reasoning_for(
     facts: ModelReasoning | None,
     *,
     now: datetime | None = None,
+    privacy: Privacy | None = None,
 ) -> ReasoningConfig:
-    """What to send `model` for the author's `level`."""
+    """What to send `model` for the author's `level`. `privacy`: the model's
+    on its endpoint (providers/privacy.py), else judged by its id alone."""
+    private = (privacy if privacy is not None else privacy_at(model)).private
     if level == "least":
-        if is_tee(model) or reasons_unasked(facts, now) or _reasons_by_default(facts):
+        if private or reasons_unasked(facts, now) or _reasons_by_default(facts):
             return _effort(lowest(facts))
         return ReasoningConfig()
     if facts is not None and facts.reasons is False and not facts.efforts:
@@ -151,15 +154,23 @@ def params_for(
     kind: CallKind,
     model: str,
     facts: ModelReasoning | None,
+    *,
+    privacy: Privacy | None = None,
     **fixed: Any,
 ) -> GenerationParams:
     """One request's parameters: the author's sampling settings for the story
     model's turns (a fresh set for any other call), `fixed` over them, and the
-    reasoning the author's level asks of `model`."""
+    reasoning the author's level asks of `model`. `privacy`: the model's
+    where its call goes; else on the endpoint its reference names."""
     params = config.generation.model_copy(deep=True) if kind == "story" else GenerationParams()
     for name, value in fixed.items():
         setattr(params, name, value)
-    params.reasoning = reasoning_for(level_for(config, kind), model, facts)
+    params.reasoning = reasoning_for(
+        level_for(config, kind),
+        model,
+        facts,
+        privacy=privacy if privacy is not None else privacy_of(model, config),
+    )
     return params
 
 
@@ -171,7 +182,12 @@ def config_params(config: Config, kind: CallKind, model: str, **fixed: Any) -> G
 
 def config_reasoning(config: Config, kind: CallKind, model: str) -> ReasoningConfig:
     """What the author's level asks of `model`, from what the config knows."""
-    return reasoning_for(level_for(config, kind), model, config.model_reasoning.get(model))
+    return reasoning_for(
+        level_for(config, kind),
+        model,
+        config.model_reasoning.get(model),
+        privacy=privacy_of(model, config),
+    )
 
 
 def listed(

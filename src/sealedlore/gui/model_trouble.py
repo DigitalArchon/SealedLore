@@ -70,8 +70,8 @@ from sealedlore.messages import PromptMessage
 from sealedlore.models.config import ModelPrice, ProviderConfig
 from sealedlore.models.generation import ReasoningConfig
 from sealedlore.providers.model_hosts import Host, ModelHosts
+from sealedlore.providers.privacy import Privacy, privacy_for
 from sealedlore.providers.private_catalog import private_alternatives
-from sealedlore.providers.tee import is_tee
 
 TITLES = {
     "slow": "The model takes too long before it writes",
@@ -114,6 +114,9 @@ class TroubleRole:
     model: str
     route: dict = field(default_factory=dict)
     reasoning: ReasoningConfig = field(default_factory=ReasoningConfig)
+    # How private the model is where its calls go (providers/privacy.py);
+    # None: judged on the context's endpoint.
+    privacy: Privacy | None = None
 
 
 @dataclass
@@ -350,7 +353,12 @@ class ModelTroubleDialog(QDialog):
         return self.context.roles[self.role.currentData() or 0]
 
     def _private_model(self) -> bool:
-        return is_tee(self.current_role().model)
+        """A TEE or end-to-end encrypted model: its prompts go to no other
+        host, and only its equally private alternatives are tried."""
+        role = self.current_role()
+        if role.privacy is not None:
+            return role.privacy.private
+        return privacy_for(role.model, self.context.endpoint).private
 
     def _load(self) -> None:
         role = self.current_role()

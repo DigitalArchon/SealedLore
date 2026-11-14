@@ -21,7 +21,7 @@ from typing import Any
 from sealedlore.models.config import Config, on_nanogpt, split_model
 from sealedlore.models.node import Usage
 from sealedlore.models.route import ROUTE_ROLES, ModelRoute
-from sealedlore.providers.tee import is_tee
+from sealedlore.providers.privacy import privacy_at
 
 PRIORITY_LABELS = {
     "subscription": "Subscription routing",
@@ -32,8 +32,12 @@ PRIORITY_LABELS = {
 }
 
 
-def routable(base_url: str, model: str) -> bool:
-    return bool(model.strip()) and on_nanogpt(base_url) and not is_tee(model.strip())
+def routable(base_url: str, model: str, api: str = "auto") -> bool:
+    """A route may be sent: a model on NanoGPT that isn't TEE or end-to-end
+    encrypted there (providers/privacy.py), whose protection is its enclave."""
+    if not model.strip() or not on_nanogpt(base_url):
+        return False
+    return not privacy_at(model.strip(), base_url, api).private
 
 
 def route_body(route: ModelRoute | None, model: str) -> dict[str, Any]:
@@ -105,7 +109,7 @@ def config_route(config: Config, role: str, model: str) -> dict[str, Any]:
     the role's route, or its fallback's when its own model is blank. Only
     on the NanoGPT endpoint the model is reached through."""
     provider = config.endpoint_for(model)
-    if provider is None or not routable(provider.base_url, model):
+    if provider is None or not routable(provider.base_url, model, provider.api):
         return {}
     own = {
         "summarisation": config.summarization_model,

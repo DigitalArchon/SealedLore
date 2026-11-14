@@ -24,7 +24,7 @@ from sealedlore.engine.scene_state import same_person, scene_at
 from sealedlore.models.node import Node
 from sealedlore.models.private import PrivateSpan
 from sealedlore.providers.base import ChatRequest, ProviderError
-from sealedlore.providers.tee import move_refusal
+from sealedlore.providers.privacy import move_refusal
 from sealedlore.tree import path_to
 
 # A reasoning model spends its thinking from this too (the reads' room).
@@ -146,7 +146,8 @@ class LooksRuntime:
         """The model a private scene's looks are chosen on: Settings' choice
         when the scene could move to it, else the scene's own."""
         chosen = self.config.private_look_model.strip()
-        if chosen and move_refusal(span.model, chosen) is None:
+        # Both on the scene's own endpoint (`privacy`).
+        if chosen and move_refusal(span.model, chosen, privacy=self.privacy) is None:
             return chosen
         return span.model
 

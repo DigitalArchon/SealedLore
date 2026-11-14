@@ -12,14 +12,20 @@ from __future__ import annotations
 import httpx
 import pytest
 
+from sealedlore.engine.reasoning import config_reasoning, reasoning_for
+from sealedlore.engine.routing import routable
+from sealedlore.engine.session import StorySession
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.config import (
     Config,
     EmbeddingProviderConfig,
+    ModelReasoning,
     ProviderConfig,
     chat_api,
     sealed_service,
 )
+from sealedlore.models.generation import ReasoningConfig
+from sealedlore.models.story import Story
 from sealedlore.providers import make_chat_provider
 from sealedlore.providers.anthropic import AnthropicProvider
 from sealedlore.providers.base import ChatRequest, ProviderError
@@ -27,6 +33,7 @@ from sealedlore.providers.decisions import DecisionsClient
 from sealedlore.providers.embeddings import OpenAICompatibleEmbeddings
 from sealedlore.providers.endpoints import EndpointsProvider
 from sealedlore.providers.media_http import MediaHttp
+from sealedlore.providers.mock import MockChatProvider
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
 from sealedlore.providers.privacy import (
     CHUTES,
@@ -41,6 +48,7 @@ from sealedlore.providers.privacy import (
     privacy_of,
 )
 from sealedlore.providers.private_mode import PrivateModeProvider
+from sealedlore.storage.repository import StoryBundle
 
 NANO = "https://nano-gpt.com/api/v1"
 TINFOIL_URL = "https://inference.tinfoil.sh/v1"
@@ -269,3 +277,51 @@ def test_jev_and_the_context_probe_send_nothing_to_a_sealed_host():
         DecisionsClient(TINFOIL_URL, "k", client=client).decide("jev", "state", {"q": "?"})
     assert detect_context(CHUTES_URL, "k", "m", client=client) is None
     assert sent == []
+
+
+# --- the rest that follows the endpoint -----------------------------------------------
+
+
+def test_a_sealed_model_starts_at_its_lowest_reasoning_level():
+    cfg = endpoints(tinfoil())
+    facts = ModelReasoning(efforts=["low", "medium", "high"])
+    cfg.model_reasoning["Tinfoil::glm-5-3"] = facts
+    assert config_reasoning(cfg, "story", "Tinfoil::glm-5-3").effort == "low"
+    cfg.model_reasoning["z-ai/glm-5.3"] = facts
+    assert config_reasoning(cfg, "story", "z-ai/glm-5.3") == ReasoningConfig()
+    # Passed in, the endpoint's word wins over the id's.
+    sealed = Privacy("sealed", TINFOIL)
+    assert reasoning_for("least", "glm-5-3", facts, privacy=sealed).effort == "low"
+
+
+def test_no_route_on_a_sealed_protocol():
+    assert routable(NANO, "z-ai/glm-5.3")
+    assert not routable(NANO, "z-ai/glm-5.3", api="tinfoil")
+
+
+def test_a_chat_on_a_sealed_endpoint_is_kept_to_sealed_models(tmp_path):
+    cfg = endpoints(tinfoil())
+    story = Story(title="Sealed", mode="chat", chat_keep="memory")
+    story.defaults.main_model = "Tinfoil::glm-5-3"
+    session = StorySession(StoryBundle(story=story), cfg, MockChatProvider(), root=tmp_path)
+    assert session.tee_chat and session.privacy(session.model).sealed
+    assert session.summarization_model == "Tinfoil::glm-5-3", "its calls stay on its model"
+    with pytest.raises(ValueError, match="isn't end-to-end encrypted"):
+        session.check_chat_model("z-ai/glm-5.3")
+    session.check_chat_model("private/glm-5-3")  # sealed to sealed, any service (D8)
+
+
+def test_a_private_scene_is_judged_on_its_own_endpoint(tmp_path):
+    """The scene's model is on Settings → Private's endpoint, not on the
+    endpoint its bare id would name among the chat endpoints."""
+    cfg = endpoints()
+    cfg.private_provider = ProviderConfig(name="private", base_url=TINFOIL_URL, model="glm-5-3")
+    session = StorySession(
+        StoryBundle(story=Story(title="D")), cfg, MockChatProvider(), root=tmp_path
+    )
+    assert session.privacy("glm-5-3") == Privacy(), "outside a scene: NanoGPT's plain id"
+    session.enter_private(keep="memory", provider=MockChatProvider(), model="glm-5-3")
+    assert session.privacy("glm-5-3") == Privacy("sealed", TINFOIL)
+    assert session.private_endpoint() is cfg.private_provider
+    assert session._written_mark("glm-5-3", session.open_span) == "encrypted"
+    assert session.privacy("z-ai/glm-5.3") == Privacy(), "the story's own models are as they were"

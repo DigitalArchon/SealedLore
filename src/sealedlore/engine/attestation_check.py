@@ -13,11 +13,10 @@ from dataclasses import dataclass
 
 from sealedlore.models.config import ProviderConfig
 from sealedlore.providers.base import ProviderError
+from sealedlore.providers.privacy import NANOGPT_PRIVATE, not_built, privacy_for
 from sealedlore.providers.tee import (
     TeeRefused,
     failure_words,
-    is_private_mode,
-    is_tee,
     what_was_attested,
 )
 
@@ -36,8 +35,10 @@ class AttestationCheck:
         return self.outcome in ("full", "partial", "encrypted")
 
 
-def testable(model: str) -> bool:
-    return is_tee(model)  # TEE/ and private/ both
+def testable(model: str, endpoint: ProviderConfig | None = None) -> bool:
+    """A TEE or end-to-end encrypted model on `endpoint` (by the id alone
+    without one): one there is an enclave of to attest."""
+    return privacy_for(model, endpoint).private
 
 
 def check_attestation(settings: ProviderConfig) -> AttestationCheck:
@@ -46,7 +47,11 @@ def check_attestation(settings: ProviderConfig) -> AttestationCheck:
     if settings.key_withheld:
         return AttestationCheck("error", f"The check couldn't run: {settings.key_withheld}")
     model = settings.model.strip()
-    if is_private_mode(model):
+    privacy = privacy_for(model, settings)
+    refusal = not_built(privacy, settings.base_url)
+    if refusal:
+        return AttestationCheck("error", f"The check couldn't run: {refusal}")
+    if privacy.service == NANOGPT_PRIVATE:
         from sealedlore.providers.private_mode import PrivateModeProvider
 
         provider = PrivateModeProvider(settings)
@@ -73,7 +78,7 @@ def check_attestation(settings: ProviderConfig) -> AttestationCheck:
             + (f" (⚠ an older enclave release than the latest, {older})" if older else ""),
             attestation.detail,
         )
-    if not is_tee(model):
+    if not privacy.private:
         return AttestationCheck("error", "Only TEE/ and private/ models are attested.")
     from sealedlore.providers.tee import TeeClient
 

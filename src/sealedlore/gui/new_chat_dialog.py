@@ -36,7 +36,7 @@ from sealedlore.gui.model_picker import Browse, BrowseRoute, ModelField
 from sealedlore.gui.saved_prompts import SavedPrompts, SavedPromptsButton
 from sealedlore.gui.sizing import GrowingText, may_discard, size_to_screen, typed_texts
 from sealedlore.models.config import Config, ProviderConfig, split_model
-from sealedlore.providers.tee import is_private_mode, is_tee
+from sealedlore.providers.privacy import Privacy, privacy_for
 
 # Any other model: memory only is about this computer, not about the model.
 PLAIN_HINTS = {
@@ -99,6 +99,7 @@ class NewChatDialog(QDialog):
             route_endpoint=self._route_endpoint,
             browse_route=browse_route,
             hosts_of=hosts_of,
+            privacy_of=self._privacy_of,
         )
         self.prompt = QPlainTextEdit()
         self.prompt.setTabChangesFocus(True)
@@ -183,6 +184,10 @@ class NewChatDialog(QDialog):
         endpoint = self._endpoint_of(model)
         return endpoint.base_url if endpoint is not None else None
 
+    def _privacy_of(self, model: str) -> Privacy:
+        """How private `model` is on the endpoint it names (providers/privacy.py)."""
+        return privacy_for(model, self._endpoint_of(model))
+
     def route(self):
         """The route chosen for the chat's model; None: the subscription's."""
         return self.model.effective_route()
@@ -196,14 +201,15 @@ class NewChatDialog(QDialog):
 
     @property
     def tee(self) -> bool:
-        return is_tee(self.model.text().strip())
+        """A TEE or end-to-end encrypted model: the chat is kept to its kind."""
+        return self._privacy_of(self.model.text().strip()).private
 
     def keep_choice(self) -> str:
         return self.keep.currentData()
 
     def _sync(self) -> None:
         model = self.model.text().strip()
-        if is_private_mode(model):
+        if self._privacy_of(model).sealed:
             hints = ENCRYPTED_HINTS
         elif self.tee:
             hints = KEEP_HINTS

@@ -20,7 +20,7 @@ from sealedlore.gui.saved_prompts import SavedPrompts
 from sealedlore.models.node import CHAT_USER_ID
 from sealedlore.models.story import Story
 from sealedlore.providers.base import ChatProvider, ProviderError
-from sealedlore.providers.tee import is_private_mode, move_refusal
+from sealedlore.providers.privacy import NANOGPT_PRIVATE, move_refusal
 from sealedlore.storage.repository import StoryBundle, save_config, save_story_bundle
 
 MEMORY_TITLE = "(in memory only)"
@@ -233,14 +233,17 @@ class ChatWindow:
         to (the author: its list showed every model), and says why."""
         if self.session is None or not self.session.tee_chat:
             return {}
-        current = self.session.model
-        note = (
-            "this chat is end-to-end encrypted: private/ models only"
-            if is_private_mode(current)
-            else "this chat is kept to TEE and end-to-end encrypted models"
-        )
+        session = self.session
+        current = session.model
+        privacy = session.privacy(current)
+        if privacy.service == NANOGPT_PRIVATE:
+            note = "this chat is end-to-end encrypted: private/ models only"
+        elif privacy.sealed:
+            note = "this chat is end-to-end encrypted: end-to-end encrypted models only"
+        else:
+            note = "this chat is kept to TEE and end-to-end encrypted models"
         return {
-            "allowed": lambda model: move_refusal(current, model) is None,
+            "allowed": lambda model: move_refusal(current, model, privacy=session.privacy) is None,
             "allowed_note": note,
         }
 
@@ -274,12 +277,12 @@ class ChatWindow:
     def _sealed_chat_provider(self) -> ChatProvider | None:
         """An end-to-end encrypted chat's client: the one the session's
         routing provider sends its model to, sealed to its attested enclave
-        (providers/endpoints.py makes a `private/` model's endpoint its
-        sealing client). None for any other chat or a story."""
+        (providers/endpoints.py makes an end-to-end encrypted model's endpoint
+        its sealing client). None for any other chat or a story."""
         if (
             self.session is None
             or not self.session.story.chat
-            or not is_private_mode(self.session.model)
+            or not self.session.privacy(self.session.model).sealed
             or self.use_mock
         ):
             return None

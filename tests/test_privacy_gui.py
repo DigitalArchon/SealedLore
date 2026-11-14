@@ -12,8 +12,10 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
+from sealedlore.gui.model_picker import ModelField  # noqa: E402
 from sealedlore.gui.settings_dialog import SettingsDialog  # noqa: E402
 from sealedlore.models.config import Config, ProviderConfig  # noqa: E402
+from sealedlore.providers.privacy import Privacy  # noqa: E402
 
 NANO = "https://nano-gpt.com/api/v1"
 
@@ -49,3 +51,16 @@ def test_an_endpoint_set_to_a_sealed_protocol_keeps_it_through_a_save(app):
     assert "isn't built into this version" in dialog.api_note.text()
     dialog._save()
     assert cfg.active_provider().api == "tinfoil"
+
+
+def test_a_model_field_labels_a_model_by_its_endpoint(app):
+    """The field asks whoever holds the endpoints; without one, the route's
+    address, else the id alone (NanoGPT's prefixes, as before)."""
+    sealed = ModelField("glm-5-3", privacy_of=lambda model: Privacy("sealed", "tinfoil"))
+    assert sealed.privacy.text() == "🔐 E2EE" and "Tinfoil" in sealed.privacy.toolTip()
+    assert "isn't built into this version" in sealed.privacy.toolTip()
+    by_address = ModelField("glm-5-3", route_endpoint=lambda model: "https://api.chutes.ai")
+    assert by_address.privacy.text() == "🔐 E2EE"
+    plain = ModelField("TEE/glm-5.3")
+    assert plain.privacy.text() == "TEE"
+    assert ModelField("z-ai/glm-5.3").privacy.isHidden()

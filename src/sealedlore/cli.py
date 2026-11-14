@@ -59,7 +59,6 @@ from sealedlore.providers import make_session_provider
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError, TextDelta
 from sealedlore.providers.embeddings import OpenAICompatibleEmbeddings
 from sealedlore.providers.mock import MockChatProvider
-from sealedlore.providers.tee import is_private_mode, is_tee
 from sealedlore.storage import folder_lock, keychain
 from sealedlore.storage.archive import ArchiveError, import_archive, write_archive
 from sealedlore.storage.images import all_image_files, reference_files
@@ -1078,7 +1077,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
         return 1
     story = session.story
     refusal = None
-    if session.tee_chat and is_tee(session.model) and not is_private_mode(session.model):
+    if session.tee_chat and session.privacy(session.model).kind == "tee":
         # The app attests a TEE chat each time it opens; the terminal can't.
         refusal = "a TEE chat is attested by the app each time it opens: play it there"
     if refusal is not None:

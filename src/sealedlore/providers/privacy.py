@@ -3,7 +3,9 @@
 Every decision the app makes about a private model goes through here: which
 client is built, whether it must be attested, where a call may go, how its
 passages are marked, what a chat may move to, its reasoning level, whether a
-route is sent, and how the pickers label it.
+route is sent, and how the pickers label it. `tests/test_privacy_seam.py`
+fails on a module outside the allowlist that reads a model's prefix to decide
+any of it.
 
 A model is one of three kinds (`Privacy.kind`):
 

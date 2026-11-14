@@ -128,7 +128,7 @@ class AttestationButton(QWidget):
             # would go unencrypted, and the author said No).
             self._show(AttestationCheck("error", str(exc)))
             return
-        if settings is None or not testable(settings.model):
+        if settings is None or not testable(settings.model, settings):
             self._show(AttestationCheck("error", "Choose a TEE/ or private/ model first."))
             return
         self._job = attestation_tests().start(settings)

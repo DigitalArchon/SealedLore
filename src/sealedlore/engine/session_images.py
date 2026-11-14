@@ -43,7 +43,6 @@ from sealedlore.models.node import Node
 from sealedlore.models.video import GeneratedVideo
 from sealedlore.providers.base import ChatRequest
 from sealedlore.providers.images import ImageClient, ImageModelInfo, parse_image_models
-from sealedlore.providers.tee import is_tee
 from sealedlore.providers.videos import VideoClient
 from sealedlore.storage.image_meta import picture_kind
 from sealedlore.storage.images import IMAGES_DIR, clean_story_images
@@ -302,7 +301,7 @@ class ImageRuntime:
                 # The chat's tail is for its replies, not the picture's prompt.
                 with_chat_tail=False,
             )
-            if is_tee(self.model):
+            if self.privacy(self.model).private:
                 model = self.model
         else:
             lore = (

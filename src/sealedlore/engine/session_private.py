@@ -55,12 +55,12 @@ from sealedlore.engine.prompt import (
 from sealedlore.engine.retrieval import lore_layout
 from sealedlore.engine.scene_state import log_on_path
 from sealedlore.ids import utc_now_iso
-from sealedlore.models.config import split_model
+from sealedlore.models.config import ProviderConfig, split_model
 from sealedlore.models.node import NARRATOR_SPEAKER_ID, Node, NodeMeta, Usage
 from sealedlore.models.private import PrivateKeep, PrivateSpan, TeeUpstream
 from sealedlore.models.summary import Summary
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError, why_not_whole
-from sealedlore.providers.tee import is_private_mode
+from sealedlore.providers.privacy import Privacy, move_refusal, privacy_for, privacy_of
 
 # Fewer than this many recent messages left in a private prompt, and the
 # story is too big for the private model: offer the handoff. Live, a 16k
@@ -321,6 +321,30 @@ class PrivateRuntime:
     def in_private(self) -> bool:
         return self.open_span is not None
 
+    def private_endpoint(self) -> ProviderConfig | None:
+        """The endpoint a private scene's calls go to: its own client's (a
+        scene moved to another model keeps it), else Settings → Private's."""
+        own = getattr(self.private_provider, "config", None)
+        return own if isinstance(own, ProviderConfig) else self.config.private_provider
+
+    def privacy(self, model: str) -> Privacy:
+        """How private `model` is where its calls go (providers/privacy.py):
+        the open private scene's model (and its looks' model) on the scene's
+        own endpoint, any other on the endpoint its reference names. Every
+        decision about a model's privacy in the session asks this."""
+        span = self.open_span
+        if (
+            span is not None
+            and model
+            and model
+            in (
+                span.model,
+                self.config.private_look_model.strip(),
+            )
+        ):
+            return privacy_for(model, self.private_endpoint())
+        return privacy_of(model, self.config)
+
     def span_nodes(self, span: PrivateSpan) -> list[Node]:
         """The scene's messages on the active path, in order."""
         return [node for node in self.full_path() if node.meta.private_span == span.id]
@@ -358,14 +382,14 @@ class PrivateRuntime:
         """Carry the open scene on, and write its summary, with another model:
         nano-gpt retired the one it began on (Oct 2026), and without this a
         scene with messages could only end with nothing carried over. Only to a
-        model as private as the scene's (`tee.move_refusal`): the scene's text
-        goes to it. Earlier messages keep their own `meta.model`."""
-        from sealedlore.providers.tee import move_refusal
-
+        model as private as the scene's (`privacy.move_refusal`, both on the
+        scene's own endpoint): the scene's text goes to it. Earlier messages
+        keep their own `meta.model`."""
         span = self.open_span
         if span is None:
             raise ValueError("no private scene is open")
-        if move_refusal(span.model, model):
+        endpoint = self.private_endpoint()
+        if move_refusal(span.model, model, privacy=lambda m: privacy_for(m, endpoint)):
             raise ValueError(f"{model} isn't as private as {span.model}, the scene's model")
         old, old_tee = self.private_provider, self.private_tee
         for client in (old, old_tee):
@@ -795,7 +819,7 @@ class PrivateRuntime:
         off is just a model, and its passages unmarked, as before."""
         if span is None and not self.story.chat:
             return None
-        if is_private_mode(model):
+        if self.privacy(model).sealed:
             return "encrypted"
         return "unchecked" if self.private_tee is not None else None
 

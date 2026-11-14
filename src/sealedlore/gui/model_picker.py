@@ -46,8 +46,8 @@ from sealedlore.gui.workers import run_detached
 from sealedlore.models.config import ProviderConfig, RecommendedModel, split_model
 from sealedlore.models.route import ModelRoute
 from sealedlore.providers.base import ChatProvider
-from sealedlore.providers.private_catalog import encrypted_counterpart, privacy_label
-from sealedlore.providers.tee import is_tee
+from sealedlore.providers.privacy import NANOGPT_TEE, Privacy, privacy_at
+from sealedlore.providers.private_catalog import encrypted_counterpart
 
 CATALOG_MAX_AGE = timedelta(hours=1)
 
@@ -67,6 +67,10 @@ RouteEndpoint = Callable[[str], "str | None"]
 # A recommended model's id (NanoGPT's) as the field should hold it: named
 # with the NanoGPT endpoint when that isn't the default one.
 Qualify = Callable[[str], str]
+# How private a model reference is on the endpoint it names
+# (providers/privacy.py), from whoever holds the endpoints; without one, a
+# field or picker judges by the route's address, else by the id alone.
+PrivacyOf = Callable[[str], Privacy]
 
 SHORT_ROUTES = {
     "latency": "⚡ Fastest start",
@@ -205,16 +209,16 @@ def _price(value: float | None) -> str:
     return "" if value is None else f"{value:g}"
 
 
-def _hosts(info: ModelInfo) -> str:
+def _hosts(info: ModelInfo, privacy: Privacy) -> str:
     """How many of NanoGPT's hosts serve the model: "—" for a TEE or
     encrypted model, whose enclave is its host, and blank when none are listed."""
-    if is_tee(info.id):
+    if privacy.private:
         return "—"
     return str(len(info.hosts)) if info.hosts else ""
 
 
-def _hosts_tip(info: ModelInfo) -> str:
-    if is_tee(info.id):
+def _hosts_tip(info: ModelInfo, privacy: Privacy) -> str:
+    if privacy.private:
         return "Runs in its attested enclave: no choice of host."
     if len(info.hosts) < 2:
         return "One host: no choice of route." if info.hosts else "No hosts listed."
@@ -236,13 +240,16 @@ class ModelPickerDialog(QDialog):
         allowed_note: str = "",
         route_endpoint: RouteEndpoint | None = None,
         route: ModelRoute | None = None,
+        privacy_of: PrivacyOf | None = None,
     ) -> None:
         """`route_endpoint`: a model's endpoint's base URL, when the model is
         chosen for a field that takes a route (Settings → Models); its
-        current `route`."""
+        current `route`. `privacy_of`: how private each model is where it is
+        listed (the Privacy column and the Hosts one)."""
         super().__init__(parent)
         self.setWindowTitle("Choose a model")
         self.route_endpoint = route_endpoint
+        self.privacy_of = privacy_of
         self.chosen_route = route
         # Only the models this choice may move to (a TEE chat's), and why.
         self.allowed = allowed
@@ -367,6 +374,7 @@ class ModelPickerDialog(QDialog):
         self._select_current()
 
     def _row(self, info: ModelInfo) -> QTreeWidgetItem:
+        kind = self._judge(info.id)
         privacy, note = self._privacy(info.id)
         row = _Row(
             [
@@ -378,7 +386,7 @@ class ModelPickerDialog(QDialog):
                 _price(info.prompt_price),
                 _price(info.completion_price),
                 "✓" if info.reasoning else "",
-                _hosts(info),
+                _hosts(info, kind),
             ]
         )
         # The reference, endpoint and all, is what choosing a row stores.
@@ -386,7 +394,7 @@ class ModelPickerDialog(QDialog):
         row.setData(_COL["Context"], Qt.UserRole, info.context_length)
         row.setData(_COL["In $/M"], Qt.UserRole, info.prompt_price)
         row.setData(_COL["Out $/M"], Qt.UserRole, info.completion_price)
-        if _hosts(info) not in ("", "—"):
+        if _hosts(info, kind) not in ("", "—"):
             row.setData(_COL["Hosts"], Qt.UserRole, len(info.hosts))
         for column in _NUMERIC:
             row.setTextAlignment(column, Qt.AlignRight | Qt.AlignVCenter)
@@ -395,7 +403,7 @@ class ModelPickerDialog(QDialog):
             tip += f"\n\nWrites up to {info.max_output_tokens:,} tokens per reply."
         for column in range(len(COLUMNS)):
             row.setToolTip(column, note if column == _COL["Privacy"] and note else tip)
-        row.setToolTip(_COL["Hosts"], _hosts_tip(info))
+        row.setToolTip(_COL["Hosts"], _hosts_tip(info, kind))
         if info.endpoint:
             row.setToolTip(
                 _COL["Provider"],
@@ -416,14 +424,26 @@ class ModelPickerDialog(QDialog):
         haystack = f"{info.id} {info.name} {info.owner} {info.endpoint} {words}".lower()
         return matches(info, query) or all(word in haystack for word in query.lower().split())
 
+    def _judge(self, model_id: str) -> Privacy:
+        """How private a listed model is where it is listed."""
+        if self.privacy_of is not None:
+            return self.privacy_of(model_id)
+        return privacy_at(model_id, self._endpoint_url(model_id) or "")
+
+    def _twin_of(self, model_id: str) -> str | None:
+        """A NanoGPT TEE model's end-to-end encrypted twin among the listed."""
+        if self._judge(model_id).service != NANOGPT_TEE:
+            return None
+        return encrypted_counterpart(model_id, (self.catalog.models or {}).keys())
+
     def _privacy(self, model_id: str) -> tuple[str, str]:
         """The Privacy column: end-to-end encrypted, TEE, or nothing. A TEE
         model with an encrypted twin says so (the author: users should see
         which offer full Private Mode, not just TEE)."""
-        label, note = privacy_label(model_id)
+        label, note = self._judge(model_id).label()
         if label.startswith("🔐"):
             label = "🔐 Encrypted"  # short: the Name column needs the room
-        twin = encrypted_counterpart(model_id, (self.catalog.models or {}).keys())
+        twin = self._twin_of(model_id)
         if twin:
             label = "TEE · 🔐 version"
             note += f" {twin} is the same model, end-to-end encrypted."
@@ -480,7 +500,7 @@ class ModelPickerDialog(QDialog):
         note = self._privacy(chosen)[1] if chosen else ""
         self.privacy_note.setText(note)
         self.privacy_note.setVisible(bool(note))
-        twin = encrypted_counterpart(chosen or "", (self.catalog.models or {}).keys())
+        twin = self._twin_of(chosen) if chosen else None
         if twin and self.allowed is not None and not self.allowed(twin):
             twin = None
         self._twin = twin
@@ -628,6 +648,7 @@ class ModelField(QWidget):
         recommended: tuple[RecommendedModel, ...] = (),
         qualify_recommended: Qualify | None = None,
         pictures: Callable[[str], tuple[str, str]] | None = None,
+        privacy_of: PrivacyOf | None = None,
     ) -> None:
         """`route_endpoint` (held weakly) gives the field a route: NanoGPT's
         host for its model, chosen from the label beside it; `browse_route`
@@ -639,7 +660,9 @@ class ModelField(QWidget):
         chosen id when that endpoint isn't the default. `pictures` (held
         weakly): for an image model, a few words beside it on whether it can
         be given a picture, and the whole of it for the tooltip
-        (engine/image_variants.py `picture_support`)."""
+        (engine/image_variants.py `picture_support`). `privacy_of` (held
+        weakly): how private the model is on its endpoint, beside it; without
+        it, judged by the route's address, else by the id alone."""
         super().__init__()
         self.route: ModelRoute | None = None
         self._route_endpoint = _weak(route_endpoint) if route_endpoint else None
@@ -647,6 +670,7 @@ class ModelField(QWidget):
         self._browse_route = _weak(browse_route) if browse_route else None
         self._qualify = _weak(qualify_recommended) if qualify_recommended else None
         self._pictures = _weak(pictures) if pictures else None
+        self._privacy_of = _weak(privacy_of) if privacy_of else None
         self.edit = line_edit(text)
         self.edit.textChanged.connect(self.textChanged)
         self._browse = browse
@@ -739,8 +763,18 @@ class ModelField(QWidget):
     def setToolTip(self, text: str) -> None:  # noqa: N802 - Qt naming
         self.edit.setToolTip(text)
 
+    def model_privacy(self, text: str | None = None) -> Privacy:
+        """How private the model in the field (or `text`) is on its endpoint."""
+        model = (self.edit.text() if text is None else text).strip()
+        judge = self._privacy_of() if self._privacy_of is not None else None
+        if judge is not None:
+            return judge(model)
+        getter = self._route_endpoint() if self._route_endpoint is not None else None
+        base_url = getter(model) if getter is not None else None
+        return privacy_at(model, base_url or "")
+
     def _show_privacy(self, text: str) -> None:
-        label, note = privacy_label(text.strip())
+        label, note = self.model_privacy(text).label()
         # Short beside the field; the whole label and note in the tooltip.
         self.privacy.setText("🔐 E2EE" if label.startswith("🔐") else label)
         self.privacy.setToolTip(note)
@@ -831,6 +865,7 @@ def pick_model(
     *,
     allowed: Callable[[str], bool] | None = None,
     allowed_note: str = "",
+    privacy_of: PrivacyOf | None = None,
 ) -> str | None:
     """Open the picker; the chosen model id, or None if cancelled.
 
@@ -846,6 +881,7 @@ def pick_model(
         parent=parent,
         allowed=allowed,
         allowed_note=allowed_note,
+        privacy_of=privacy_of,
     )
     try:
         return dialog.selected_model() if dialog.exec() == QDialog.Accepted else None
@@ -860,12 +896,20 @@ def pick_model_and_route(
     route: ModelRoute | None,
     endpoint: RouteEndpoint | None,
     parent: QWidget | None,
+    *,
+    privacy_of: PrivacyOf | None = None,
 ) -> tuple[str, ModelRoute | None] | None:
     """The picker for a field that takes a route: the model chosen and its
     route (Choose a route…, or the one it had), or None if cancelled.
     `endpoint`: a model's endpoint's base URL, for its route."""
     dialog = ModelPickerDialog(
-        catalog, source, current=current, parent=parent, route_endpoint=endpoint, route=route
+        catalog,
+        source,
+        current=current,
+        parent=parent,
+        route_endpoint=endpoint,
+        route=route,
+        privacy_of=privacy_of,
     )
     try:
         if dialog.exec() != QDialog.Accepted:
