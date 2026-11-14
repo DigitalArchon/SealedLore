@@ -65,7 +65,8 @@ import re
 import secrets
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote, urlparse
@@ -129,6 +130,13 @@ OWN_ENCLAVE_UNCHECKED = "the model's own enclave unchecked (RedPill's gateway)"
 # outage, an answer in no shape read. Whether the gateway may answer isn't
 # known, so an outage never reads better than the report would.
 GATEWAY_UNCHECKED = "RedPill's gateway unchecked"
+# Chutes' own end-to-end encryption (providers/chutes_provider.py), always
+# partial (the author's D6): the VM image is measured, but the workload in it
+# that makes, binds and uses the encryption key (Chutes' aegis library, a
+# closed binary) is admitted by Chutes' signature, not measured; and the
+# measurements it is held to are Chutes' published list, not rebuilt here.
+WORKLOAD_UNMEASURED = "the workload holding the key unmeasured (Chutes signs it)"
+MEASUREMENTS_LISTED = "measurements from Chutes' own list"
 # RedPill's public records of its gateway's sessions with the machines that
 # run the models (Settings → Private, "Name the provider behind each TEE
 # reply"; `served_by`). Each receipt's `upstream.verified` names its session
@@ -332,6 +340,20 @@ def what_was_attested(attestation: Attestation) -> str:
             "cost, never the text. That the router hands your request only to attested "
             "model enclaves is the router's published code, not checked by this app."
         )
+    if attestation.attested == "instance":
+        # Chutes' own end-to-end encryption (providers/chutes_provider.py), in the
+        # design's words (SealedLoreDocs design/e2ee-providers.md 2.5).
+        count = attestation.instances
+        among = f" (one of the {count} attested)" if count > 1 else ""
+        return (
+            "Sealed on this computer to the key of one Chutes instance" + among + ", a TDX "
+            "machine run by a third-party miner, whose quote binds that key and whose VM "
+            "image is one Chutes publishes (reproducible from chutesai/sek8s). Not attested: "
+            "the workload that holds the key, which Chutes signs, and whose encryption is a "
+            "closed binary. Chutes sees your account, the model, timing, sizes and cost; the "
+            "miner, ciphertext. The instance's prompt cache is shared by everyone it serves, "
+            "so how soon a reply begins could hint at what another user sent."
+        )
     return ""
 
 
@@ -495,6 +517,30 @@ def _instance_key(certificate: bytes, body: bytes, signature: bytes) -> bytes | 
     ).digest()
 
 
+@dataclass(frozen=True)
+class QuoteFacts:
+    """What an instance's quote holds that its checks here don't judge: its
+    report data (all 64 bytes, from the quote's own bytes) and its MRTD and
+    RTMR0-3, for a provider that checks them too (providers/chutes_provider.py:
+    the first half binds its encryption key; the registers are held to the
+    sets Chutes publishes)."""
+
+    report_data: bytes
+    mrtd: bytes
+    rtmrs: tuple[bytes, bytes, bytes, bytes]
+
+    @classmethod
+    def of(cls, quote: dcap.Quote) -> QuoteFacts:
+        # The TD report body's fields (Intel TDX, a version 4 quote): MRTD at
+        # 136, RTMR0-3 at 328, 376, 424 and 472, 48 bytes each.
+        body = quote.body
+        return cls(
+            report_data=quote.report_data,
+            mrtd=body[136:184],
+            rtmrs=(body[328:376], body[376:424], body[424:472], body[472:520]),
+        )
+
+
 class _Checks:
     """What one attestation's checks found, gathered across quotes and instances."""
 
@@ -503,6 +549,8 @@ class _Checks:
         self.shortfalls: list[str] = []
         self.status = ""
         self.gpus = 0
+        # One instance's quote, as `_check_instance` read it (not merged).
+        self.quote: QuoteFacts | None = None
 
     def note(self, *notes: str) -> None:
         for note in notes:
@@ -1200,7 +1248,39 @@ class TeeClient:
                 "evidence_list": gpu,
             }
         self._check_gpus(payload, gpu_nonce, check, "the nonce its quote binds")
+        check.quote = QuoteFacts.of(quote)
         return check
+
+    def check_instance(self, item: dict[str, Any], nonce: str) -> _Checks:
+        """One instance's evidence checked as `_attest_instances` checks each
+        (certificate key bound into the quote and signing our nonce and this
+        quote, Intel's checks, NVIDIA's for the nonce the quote binds), for a
+        provider that chooses its instance and leaves out one that fails
+        (providers/chutes_provider.py). Refuses (TeeRefused) as a failing
+        instance refuses there; evidence in a shape that raises anything else
+        is refused named by what it raised, as `attest` refuses it. What it
+        found, with its quote's report data and registers in `quote`. Within
+        an `attempt`, it is given what is left of that attempt's time."""
+        try:
+            return self._check_instance(item, nonce)
+        except (ProviderError, ImportError):
+            raise
+        except Exception as exc:  # noqa: BLE001 - whatever reading the evidence raised
+            raise TeeRefused(
+                f"{self.model}'s instance evidence couldn't be read: it isn't in the shape it "
+                f"should be ({type(exc).__name__})"
+            ) from exc
+
+    @contextmanager
+    def attempt(self, deadline: float) -> Iterator[None]:
+        """Checks made outside `attest` (`check_instance`) held to `deadline`
+        (time.monotonic), as `attest` holds its own to ATTEMPT_SECONDS
+        (`_left`)."""
+        self._deadline = deadline
+        try:
+            yield
+        finally:
+            self._deadline = None
 
     def _check_quote(self, raw: bytes, check: _Checks) -> None:
         """Intel's verification of one quote, into `check`. Refuses a bad quote,
