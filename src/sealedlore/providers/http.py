@@ -17,6 +17,10 @@ Three things every client here needs and none should have to remember:
   proxy from the environment for a client given its own transport, so such a
   client is told the one the environment gives its address
   (`environment_proxy`), by the same rule as everything else.
+- **What comes back is read only so far.** Only gzip and deflate are asked
+  for and read (`ACCEPT_ENCODING`, `refuse_unbounded_encoding`), and a reply
+  read whole is read to `REPLY_MAX_BYTES` at most, decoded bytes counted
+  (`_Client`). (The DA apps' standard, Nov 14 2026.)
 """
 
 from __future__ import annotations
@@ -171,10 +175,102 @@ def reply_json(response: httpx.Response) -> Any:
     return outside_json(response.content)
 
 
+# What a reply may be compressed as, asked for on every request and the only
+# ones read: gzip and deflate expand at most about a thousandfold, so a piece
+# of a reply decoded is a few dozen megabytes at worst before a cap counting
+# decoded bytes sees it. Brotli's and zstd's expansion has no such bound, and
+# httpx asks for and decodes them whenever their packages are installed, which
+# a source install may well have.
+ACCEPT_ENCODING = "gzip, deflate"
+# What httpx would decode: one of gzip or deflate, once, is read; brotli,
+# zstd, or any two stacked (each layer multiplies) are refused. A name httpx
+# doesn't know it passes through as it is, and so does this.
+_DECODED = frozenset({"gzip", "deflate", "br", "zstd"})
+_READ = frozenset({"gzip", "deflate"})
+# A reply read whole (a listing, a JSON answer, an attestation) is read this
+# far and no further, its decoded bytes counted: a stream is read a line at a
+# time (streaming.read_lines), a picture or a video to its own limit
+# (media_http.MEDIA_MAX_BYTES).
+REPLY_MAX_BYTES = 32 * 1024 * 1024
+
+
+class UnreadEncoding(httpx.DecodingError):
+    """A reply compressed some way that isn't read (`refuse_unbounded_encoding`)."""
+
+
+class ReplyTooLarge(httpx.DecodingError):
+    """A reply read whole that ran past REPLY_MAX_BYTES, decoded."""
+
+
+def refuse_unbounded_encoding(response: httpx.Response) -> None:
+    """A response hook: a body compressed as anything but gzip or deflate,
+    once, is refused before a byte of it is read or decoded."""
+    coded = [
+        name
+        for name in (
+            part.strip().lower()
+            for part in response.headers.get_list("content-encoding", split_commas=True)
+        )
+        if name in _DECODED
+    ]
+    if len(coded) > 1 or any(name not in _READ for name in coded):
+        raise UnreadEncoding(
+            f"{response.request.url.host} sent its reply compressed as {', '.join(coded)}, "
+            "which isn't read: only gzip or deflate, once",
+            request=response.request,
+        )
+
+
+class _Client(httpx.Client):
+    """`make_client`'s client: a reply read whole (`get`, `post`, anything
+    but `stream`) is read a piece at a time to REPLY_MAX_BYTES, decoded bytes
+    counted, and refused past it, with nothing more read. httpx would read it
+    all into memory first, however large."""
+
+    def send(
+        self, request: httpx.Request, *, stream: bool = False, **kwargs: Any
+    ) -> httpx.Response:
+        response = super().send(request, stream=True, **kwargs)
+        if stream:
+            return response
+        try:
+            declared = response.headers.get("content-length", "")
+            if (
+                request.method != "HEAD"  # whose length is of a body never sent
+                and declared.isascii()
+                and declared.isdigit()
+                and int(declared) > REPLY_MAX_BYTES
+            ):
+                raise ReplyTooLarge(_too_large(request), request=request)
+            body = bytearray()
+            for piece in response.iter_bytes():
+                body += piece
+                if len(body) > REPLY_MAX_BYTES:
+                    raise ReplyTooLarge(_too_large(request), request=request)
+        except BaseException:
+            response.close()
+            raise
+        # As httpx's own `read` keeps it: what `content`, `text` and `json`
+        # give (tests/test_reply_limits.py holds this to the httpx in use).
+        response._content = bytes(body)
+        return response
+
+
+def _too_large(request: httpx.Request) -> str:
+    return f"{request.url.host} sent more than {REPLY_MAX_BYTES // (1024 * 1024)} MB; not read"
+
+
 def make_client(base_url: str, **kwargs: Any) -> httpx.Client:
-    """An httpx client for `base_url`: no proxies for a local endpoint, and
-    the redirect guard. `kwargs` go to `httpx.Client` as they are."""
+    """An httpx client for `base_url`: no proxies for a local endpoint, the
+    redirect guard, only gzip and deflate, and a reply read whole read to
+    REPLY_MAX_BYTES. `kwargs` go to `httpx.Client` as they are."""
     kwargs.setdefault("trust_env", not is_local(base_url))
+    headers = httpx.Headers(kwargs.pop("headers", None))
+    headers.setdefault("Accept-Encoding", ACCEPT_ENCODING)
     hooks = dict(kwargs.pop("event_hooks", None) or {})
-    hooks["response"] = [*hooks.get("response", ()), refuse_insecure_redirect]
-    return httpx.Client(event_hooks=hooks, **kwargs)
+    hooks["response"] = [
+        *hooks.get("response", ()),
+        refuse_insecure_redirect,
+        refuse_unbounded_encoding,
+    ]
+    return _Client(headers=headers, event_hooks=hooks, **kwargs)
