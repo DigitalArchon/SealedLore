@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any
 
 import httpx
@@ -137,6 +137,13 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
             {**self._headers(), **cache_headers(request)},
         )
 
+    def _request_trace(self) -> Callable[[str, dict[str, Any]], None]:
+        """The `trace` extension for one request, made as it goes: the
+        provider's own (the socket, for Stop). A subclass whose check is the
+        request's own (providers/tinfoil_direct.py, its TLS pin) makes one per
+        request, so two at once never share what one of them found."""
+        return self._trace
+
     def _accept(self, response: httpx.Response) -> None:
         """Called on a successful response before its body is read."""
 
@@ -156,12 +163,14 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
         reasoning_chars = 0
 
         sent_at = time.time()
-        with self._get_client().stream(
+        client = self._get_client()
+        trace = self._request_trace()
+        with client.stream(
             "POST",
             url,
             json=payload,
             headers=headers,
-            extensions={"trace": self._trace},
+            extensions={"trace": trace},
         ) as response:
             if response.status_code >= 400:
                 raise self._http_error(url, response)

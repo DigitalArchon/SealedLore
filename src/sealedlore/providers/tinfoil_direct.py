@@ -18,7 +18,8 @@ relay (design: SealedLoreDocs design/e2ee-providers.md §1):
   completes, before a byte of the request leaves, the certificate's key must
   be the attested one, behind a proxy's tunnel too; and no request's headers
   go out on a connection whose key wasn't checked. A mismatch sends nothing
-  and attests again next time.
+  and attests again next time. Each request has a pin of its own, in its own
+  trace (`_request_trace`): what one handshake found is never another's.
 - **Requests**: `POST {base}/chat/completions`, sealed by EHBP, with the key
   and nothing else of ours in the clear; no preflight, no relay's headers. A
   reply counts only as a 2xx EHBP opened, a stream only with its finish
@@ -418,7 +419,6 @@ class TinfoilDirect(SealedEhbpProvider):
             transport_factory=transport_factory,
         )
         self.listing = listing or Listing(base)
-        self._pin: TlsPin | None = None
 
     def _twin(self) -> TinfoilDirect:
         return TinfoilDirect(
@@ -474,11 +474,28 @@ class TinfoilDirect(SealedEhbpProvider):
     # --- one request ------------------------------------------------------------------
 
     def _trace(self, event_name: str, info: dict[str, Any]) -> None:
+        """Never a request's own trace (`_request_trace` is): one that reaches
+        here has no pin, and sends nothing."""
         super()._trace(event_name, info)  # the socket, for Stop
-        pin = self._pin
-        if pin is None:
+        if event_name.endswith(".send_request_headers.started"):
             raise TlsPinMismatch(NOT_PINNED)
-        pin(event_name, info)
+
+    def _request_trace(self) -> Callable[[str, dict[str, Any]], None]:
+        """A fresh pin for this request alone, on the attestation its client
+        was made for: what one request's handshake found is never another's
+        (two at once on one provider behind an https proxy let the second go
+        on the first's check). Nothing of the pin is kept on the provider."""
+        verified = self._verified
+        if verified is None:
+            raise TlsPinMismatch(NOT_PINNED)
+        pin = TlsPin(self.host, verified.tls_public_key)
+        socket_trace = super()._trace
+
+        def trace(event_name: str, info: dict[str, Any]) -> None:
+            socket_trace(event_name, info)  # the socket, for Stop
+            pin(event_name, info)
+
+        return trace
 
     def _prepare(self, request: ChatRequest) -> tuple[str, dict[str, Any], dict[str, str]]:
         self._before_attest()
@@ -495,7 +512,6 @@ class TinfoilDirect(SealedEhbpProvider):
             efforts = list(entries[request.model].get("reasoning_efforts") or [])
         body = direct_body(self.build_payload(request), request, efforts)
         body[CACHE_SECRET_FIELD] = self.enclave.cache_secret
-        self._pin = TlsPin(self.host, verified.tls_public_key)
         headers = {**self._headers(), "Accept": "text/event-stream"}
         return self.endpoint, body, headers
 
@@ -507,8 +523,6 @@ class TinfoilDirect(SealedEhbpProvider):
             # again before anything more is tried.
             self.enclave.invalidate(self._verified)
             raise
-        finally:
-            self._pin = None
 
 
 def tinfoil_context(base_url: str, model: str) -> Any:

@@ -678,3 +678,84 @@ def test_a_provider_with_no_pin_sends_nothing(fake):
     provider = TinfoilDirect(ProviderConfig(name="Tinfoil", base_url=TINFOIL_BASE_URL))
     with pytest.raises(TlsPinMismatch):
         provider._trace("http11.send_request_headers.started", {"request": None})
+
+
+def test_two_requests_at_once_never_go_on_each_others_pin(fake, tmp_path):
+    """Each request's pin is its own: B, whose handshake was never checked,
+    must not go on the strength of A's (they shared the provider's pin, so
+    behind an https proxy B's host handshake went unchecked), and A is not
+    stopped by B's refusal."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives.serialization import Encoding
+
+    cert_path, _key, fingerprint = certificate(tmp_path, host=HOST)
+    der = x509.load_pem_x509_certificate(cert_path.read_bytes()).public_bytes(Encoding.DER)
+
+    class Ssl:
+        def getpeercert(self, binary: bool) -> bytes:
+            return der
+
+    class Tls:
+        """What httpcore's start_tls hands back: the attested key's certificate."""
+
+        def get_extra_info(self, name: str):
+            return Ssl() if name == "ssl_object" else None
+
+    class Post:
+        method = b"POST"
+
+    lock = threading.Lock()
+    arrived: list[str] = []
+    b_here, a_checked, b_done = threading.Event(), threading.Event(), threading.Event()
+    reached: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        trace = request.extensions["trace"]
+        with lock:
+            which = "A" if not arrived else "B"
+            arrived.append(which)
+        try:
+            if which == "A":
+                assert b_here.wait(5), "B never prepared"
+                trace("connection.start_tls.started", {"server_hostname": HOST})
+                trace("connection.start_tls.complete", {"return_value": Tls()})
+                a_checked.set()
+                assert b_done.wait(5), "B never finished"
+            else:
+                b_here.set()
+                assert a_checked.wait(5), "A never shook hands"
+            # No handshake of B's own: only A's was checked.
+            trace("http11.send_request_headers.started", {"request": Post()})
+        finally:
+            if which == "B":
+                b_done.set()
+        reached.append(which)
+        return fake.handler(request)
+
+    provider = TinfoilDirect(
+        ProviderConfig(name="Tinfoil", base_url=TINFOIL_BASE_URL, api_key="tk", api="tinfoil"),
+        enclave=Enclave(ATC_URL, verifier=lambda url, secret: record(fake, tls=fingerprint)),
+        transport_factory=lambda key, route=None: EHBPTransport.from_public_key_hex(
+            key, inner=httpx.MockTransport(handler)
+        ),
+        listing=listing(),
+    )
+    provider._get_client()  # attested before either goes
+    fake.reply = sse("The door opens.")
+
+    def ask() -> str:
+        try:
+            return text_of(provider.stream(request("glm-5-3")))
+        except TlsPinMismatch:
+            return "refused"
+
+    with ThreadPoolExecutor(2) as pool:
+        first = pool.submit(ask)
+        second = pool.submit(ask)
+        results = sorted([first.result(10), second.result(10)])
+    assert results == ["The door opens.", "refused"], results
+    assert reached == ["A"], "B never went on A's check"
+    assert not hasattr(provider, "_pin"), "nothing of a pin kept on the provider"
