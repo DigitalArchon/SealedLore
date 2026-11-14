@@ -304,10 +304,27 @@ _LOCAL_NETWORKS = tuple(
 _DNS_NAME = re.compile(r"[a-z0-9_-]+(\.[a-z0-9_-]+)*")
 
 
+def _address_as_a_name(host: str) -> bool:
+    """`host` is an address with a dot after it ("192.168.1.50.", "127.0.0.1."):
+    the resolver doesn't read that as the address (glibc's AI_NUMERICHOST
+    refuses it), so it is a name, which DNS resolves wherever it likes. (DA
+    Vibe Manager's netpolicy, Nov 2026.)"""
+    if not host.endswith("."):
+        return False
+    try:
+        ip_address(host.rstrip("."))
+    except ValueError:
+        return False
+    return True
+
+
 def is_local_host(host: str) -> bool:
     """`host` is this computer or on the local network (by its address, or a
     .local or .localhost name: nothing is looked up)."""
-    host = host.strip().lower().rstrip(".")
+    host = host.strip().lower()
+    if _address_as_a_name(host):
+        return False
+    host = host.rstrip(".")
     if host == "localhost" or host.endswith((".localhost", ".local")):
         # Only a name a resolver reads as written: "%", "/" and the like in a
         # name could reach DNS as something else.
@@ -331,7 +348,10 @@ def is_loopback_host(host: str) -> bool:
     taken for another machine (nothing is looked up), and plain http to it
     can be read by anyone on the network between, a café's or a hotel's
     Wi-Fi included."""
-    host = host.strip().lower().rstrip(".")
+    host = host.strip().lower()
+    if _address_as_a_name(host):
+        return False
+    host = host.rstrip(".")
     if host == "localhost" or host.endswith(".localhost"):
         return is_local_host(host)
     try:

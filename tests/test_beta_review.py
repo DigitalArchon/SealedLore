@@ -81,6 +81,25 @@ def test_a_name_after_an_addresss_percent_sign_is_not_local():
     assert is_local_host("studio.local.") and is_local_host("dev.localhost")
 
 
+def test_an_address_with_a_dot_after_it_is_a_name_not_that_address():
+    """glibc doesn't read "192.168.1.50." as that address (AI_NUMERICHOST
+    fails): it asks DNS for the name, which may answer anything. It read as
+    local, so plain http and the key went to wherever DNS said (DA Vibe
+    Manager's netpolicy)."""
+    from sealedlore.models.config import is_loopback_host
+
+    for host in ("192.168.1.50.", "127.0.0.1.", "10.0.0.5..", "::1."):
+        assert not is_local_host(host), host
+        assert not is_loopback_host(host), host
+    for url in ("http://192.168.1.50./v1", "http://127.0.0.1.:11434/v1"):
+        assert not is_secure(url), url
+        with pytest.raises(ValueError, match="must use https"):
+            require_https(url)
+    assert is_local_host("192.168.1.50") and is_loopback_host("127.0.0.1")
+    assert is_local_host("localhost.") and is_loopback_host("localhost.")
+    assert is_local_host("studio.local.")
+
+
 def test_the_address_a_server_listens_on_says_which_to_use():
     with pytest.raises(ValueError, match="127.0.0.1"):
         require_https("http://0.0.0.0:11434/v1")
