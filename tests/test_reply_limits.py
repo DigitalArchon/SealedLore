@@ -138,3 +138,21 @@ def test_every_client_the_app_builds_is_this_one():
     """`make_client` is the one place (providers/http.py); test_beta_review
     holds src/ to it."""
     assert isinstance(make_client("https://example.test"), http_module._Client)
+
+
+def test_a_refusals_body_is_read_to_64_kb_its_start_kept_and_the_rest_unread():
+    """An error body at most 64 KB, read only that far (the DA apps'
+    standard): what the endpoint said, never however much it sent."""
+    from sealedlore.providers.http import ERROR_BODY_BYTES
+
+    words = b'{"error": {"message": "no such model"}}'
+    body = Pieces(words + b" " * MB, *[bytes(MB)] * 40)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, headers={"content-length": str(41 * MB)}, stream=body)
+
+    client = make_client("https://example.test", transport=httpx.MockTransport(handler))
+    response = client.get("https://example.test/models")
+    assert response.status_code == 404 and len(response.content) == ERROR_BODY_BYTES
+    assert response.content.startswith(words)
+    assert body.sent <= 2 * MB, "the rest left unread"

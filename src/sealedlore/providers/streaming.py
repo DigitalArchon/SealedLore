@@ -29,7 +29,7 @@ from sealedlore.providers.base import (
     StreamCancelled,
     StreamEvent,
 )
-from sealedlore.providers.http import make_client, traced_socket
+from sealedlore.providers.http import ERROR_BODY_BYTES, make_client, traced_socket
 
 # A rate limit or a momentary outage, before anything has streamed, is waited
 # out rather than failing the turn. Measured on nano-gpt's subscription: a
@@ -45,8 +45,6 @@ RETRY_MAX_SECONDS = 20.0
 # a few kilobytes, a picture sent inline a few megabytes: a longer one is no
 # reply, and reading on would hold memory for as long as the endpoint sent.
 MAX_LINE_CHARS = 32 * 1024 * 1024
-# A refusal's body, as far as it is read: any endpoint's own words fit.
-ERROR_BODY_BYTES = 64 * 1024
 _NEWLINE = re.compile(r"\r\n|\r|\n")
 
 

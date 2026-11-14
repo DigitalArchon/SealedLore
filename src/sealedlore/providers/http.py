@@ -192,6 +192,10 @@ _READ = frozenset({"gzip", "deflate"})
 # time (streaming.read_lines), a picture or a video to its own limit
 # (media_http.MEDIA_MAX_BYTES).
 REPLY_MAX_BYTES = 32 * 1024 * 1024
+# A refusal's body (HTTP 400 and up), as far as it is ever read: any
+# endpoint's own words fit. Read whole, it could be as large as the endpoint
+# liked; the rest is left unread (streaming.read_start reads a stream's so).
+ERROR_BODY_BYTES = 64 * 1024
 
 
 class UnreadEncoding(httpx.DecodingError):
@@ -224,8 +228,9 @@ def refuse_unbounded_encoding(response: httpx.Response) -> None:
 class _Client(httpx.Client):
     """`make_client`'s client: a reply read whole (`get`, `post`, anything
     but `stream`) is read a piece at a time to REPLY_MAX_BYTES, decoded bytes
-    counted, and refused past it, with nothing more read. httpx would read it
-    all into memory first, however large."""
+    counted, and refused past it, with nothing more read; a refusal's body
+    (400 and up) only to ERROR_BODY_BYTES, its start kept and the rest left
+    unread. httpx would read either all into memory first, however large."""
 
     def send(
         self, request: httpx.Request, *, stream: bool = False, **kwargs: Any
@@ -233,10 +238,12 @@ class _Client(httpx.Client):
         response = super().send(request, stream=True, **kwargs)
         if stream:
             return response
+        refused = response.status_code >= 400
         try:
             declared = response.headers.get("content-length", "")
             if (
-                request.method != "HEAD"  # whose length is of a body never sent
+                not refused
+                and request.method != "HEAD"  # whose length is of a body never sent
                 and declared.isascii()
                 and declared.isdigit()
                 and int(declared) > REPLY_MAX_BYTES
@@ -245,11 +252,16 @@ class _Client(httpx.Client):
             body = bytearray()
             for piece in response.iter_bytes():
                 body += piece
+                if refused and len(body) >= ERROR_BODY_BYTES:
+                    del body[ERROR_BODY_BYTES:]
+                    break  # its words as far as they go; the rest unread
                 if len(body) > REPLY_MAX_BYTES:
                     raise ReplyTooLarge(_too_large(request), request=request)
         except BaseException:
             response.close()
             raise
+        if refused:
+            response.close()
         # As httpx's own `read` keeps it: what `content`, `text` and `json`
         # give (tests/test_reply_limits.py holds this to the httpx in use).
         response._content = bytes(body)
