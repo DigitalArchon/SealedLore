@@ -30,6 +30,7 @@ from sealedlore.providers.base import (
     parse_usage,
 )
 from sealedlore.providers.http import reply_json
+from sealedlore.providers.privacy import plain_refusal, privacy_for
 from sealedlore.providers.private_catalog import (
     fetch_private_ids,
     offers_private_mode,
@@ -37,7 +38,6 @@ from sealedlore.providers.private_catalog import (
 )
 from sealedlore.providers.reasoning_defaults import fetch_reasoning_defaults
 from sealedlore.providers.streaming import StreamingHttpProvider, read_lines
-from sealedlore.providers.tee import is_private_mode
 from sealedlore.providers.wire import build_chat_payload, cache_headers
 from sealedlore.storage.atomic import outside_json
 
@@ -119,9 +119,14 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
 
     def _prepare(self, request: ChatRequest) -> tuple[str, dict[str, Any], dict[str, str]]:
         """The URL, body and headers of one request."""
-        if is_private_mode(request.model):
-            # A Private Mode model is only ever sent sealed to its attested
-            # enclave; this client would send it in the clear.
+        # A sealed endpoint first, by its address (`plain_refusal`), then an
+        # end-to-end encrypted model on any other (a `private/` one): either
+        # is only ever sent sealed to its attested enclave, and this client
+        # would send it in the clear (providers/privacy.py).
+        refusal = plain_refusal(self.endpoint, api=self.config.api)
+        if refusal:
+            raise ProviderError(refusal)
+        if privacy_for(request.model, self.config).sealed:
             raise ProviderError(
                 f"{request.model} is end-to-end encrypted and can only be sent through "
                 "the encrypted client; nothing was sent"

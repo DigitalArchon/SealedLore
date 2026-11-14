@@ -36,6 +36,7 @@ import httpx
 from sealedlore.models.config import _same_host, shown
 from sealedlore.providers.base import ProviderError, StreamCancelled, checked_key
 from sealedlore.providers.http import make_client, reply_json, traced_socket
+from sealedlore.providers.privacy import MEDIA_WAY_OUT, plain_refusal
 from sealedlore.providers.streaming import (
     RETRY_ATTEMPTS,
     RETRY_MAX_SECONDS,
@@ -191,6 +192,11 @@ class MediaHttp:
     def _once(self, method: str, url: str, *, authorised: bool, **kwargs: Any) -> httpx.Response:
         if self._cancelled:
             raise StreamCancelled()
+        # Never to an end-to-end encrypted endpoint (providers/privacy.py): a
+        # picture's prompt and references would go to it in the clear.
+        refusal = plain_refusal(url, way_out=MEDIA_WAY_OUT)
+        if refusal:
+            raise ProviderError(refusal)
         headers = kwargs.pop("headers", None)
         if headers is None:
             headers = self.headers() if authorised else {}

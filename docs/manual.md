@@ -526,6 +526,18 @@ picture models are priced by the image token or the megapixel, and for
 those the picture dialog says the price is unknown until the picture is
 made.
 
+**Tinfoil and Chutes: not yet.** End-to-end encrypted models reached through
+Tinfoil's or Chutes' own services are being added (preliminary, and not yet
+tried with an account); this version has no client for either. An endpoint
+whose address is one of theirs (anything on `tinfoil.sh`, such as
+`https://inference.tinfoil.sh/v1`, or on `chutes.ai`, such as
+`https://api.chutes.ai`) therefore sends nothing at all, whatever **Speaks**
+says: an ordinary client would send your text there in the clear, so every
+request and model listing is refused with a note saying so. Pictures, videos
+and embeddings never take the address or key of such an endpoint either. For
+end-to-end encryption now, use NanoGPT's `private/` models (see Private
+scenes).
+
 **Choosing a model.** Every model field has a **Choose** button. It lists the
 models your endpoint offers (where a job has models measured for it,
 **Choose** is a menu: **Browse all models…** first, then those), fetched from the endpoint itself, and the list is

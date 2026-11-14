@@ -251,31 +251,28 @@ def _kind_of(model: str) -> str:
 
 
 def is_tee(model: str) -> bool:
-    """A model that runs in a trusted execution environment: nano-gpt's
-    `TEE/*` (attested and signed) or `private/*` (end-to-end encrypted)."""
+    """NanoGPT's own test, by the id: a model that runs in a trusted execution
+    environment, its `TEE/*` (attested and signed) or `private/*` (end-to-end
+    encrypted). Whether a model is private is the endpoint's to say as well
+    (providers/privacy.py `privacy_of`): decide by that, never by this."""
     return _kind_of(model).startswith(("tee/", "private/"))
 
 
 def is_private_mode(model: str) -> bool:
-    """nano-gpt's Private Mode: end-to-end encrypted to an attested enclave
-    (providers/private_mode.py). Never sent any other way."""
+    """NanoGPT's own test, by the id: its Private Mode, end-to-end encrypted
+    to an attested enclave (providers/private_mode.py), never sent any other
+    way. Decide by providers/privacy.py, never by this."""
     return _kind_of(model).startswith("private/")
 
 
 def move_refusal(current: str, new: str) -> str | None:
-    """Why a chat on `current` may not move to `new`, or None: a TEE chat stays
-    on TEE models, and an end-to-end encrypted one on encrypted models."""
-    if is_private_mode(current) and not is_private_mode(new):
-        return (
-            f"{new} isn't end-to-end encrypted, and this chat is: choose a private/ "
-            "model, or start a new chat."
-        )
-    if is_tee(current) and not is_tee(new):
-        return (
-            f"{new} isn't a TEE model, and this chat is kept to TEE models: choose a "
-            "TEE/ or private/ model, or start a new chat."
-        )
-    return None
+    """Why a chat on `current` may not move to `new`, or None, both judged by
+    their ids alone (providers/privacy.py `move_refusal`, which the app calls
+    with each model's endpoint)."""
+    from sealedlore.providers.privacy import move_refusal as refusal
+    from sealedlore.providers.privacy import privacy_at
+
+    return refusal(current, new, privacy=privacy_at)
 
 
 def what_was_attested(attestation: Attestation) -> str:

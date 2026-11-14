@@ -596,23 +596,71 @@ def key_withheld(
 
 
 # The protocol the chat endpoint speaks: OpenAI's /chat/completions (NanoGPT,
-# OpenRouter, a local server) or Anthropic's own Messages API
-# (providers/anthropic.py). "auto" reads it from the host (`chat_api`).
-ChatApi = Literal["auto", "openai", "anthropic"]
+# OpenRouter, a local server), Anthropic's own Messages API
+# (providers/anthropic.py), or one of the end-to-end encrypted services whose
+# every request is sealed on this computer: Tinfoil's own API and Chutes' E2EE
+# (providers/privacy.py; their clients aren't built yet, so an endpoint
+# speaking either sends nothing). "auto" reads it from the host (`chat_api`).
+ChatApi = Literal["auto", "openai", "anthropic", "tinfoil", "chutes-e2ee"]
+# What Settings → Endpoints → Speaks offers: only protocols with a client.
 CHAT_API_LABELS: dict[str, str] = {
     "auto": "From the address",
     "openai": "OpenAI-compatible",
     "anthropic": "Anthropic",
 }
+# The sealed ones, shown there only for an endpoint already set to one (a
+# config written by hand), so a Save keeps it rather than make it "auto".
+SEALED_API_LABELS: dict[str, str] = {
+    "tinfoil": "Tinfoil, end-to-end encrypted (not built yet)",
+    "chutes-e2ee": "Chutes E2EE, end-to-end encrypted (not built yet)",
+}
 ANTHROPIC_HOST = "api.anthropic.com"
+# The hosts whose chat endpoints take only end-to-end encrypted requests, by
+# domain (any host under it), and the protocol each speaks: Tinfoil's
+# inference.tinfoil.sh and its routers; Chutes' api.chutes.ai, llm.chutes.ai
+# and api.chutes.dev (the chutes-e2ee package's default). Read from the
+# address whatever `api` says (`sealed_service`): a plain request to one
+# would carry the text in the clear.
+SEALED_HOSTS: dict[str, str] = {
+    "tinfoil.sh": "tinfoil",
+    "chutes.ai": "chutes-e2ee",
+    "chutes.dev": "chutes-e2ee",
+}
 _CHAT_HOSTS = {ANTHROPIC_HOST: "anthropic"}
+
+
+def _host_of(base_url: str) -> str:
+    """An address's host as a request would reach it: lowercase, a trailing
+    dot gone ("inference.tinfoil.sh." is the same machine)."""
+    try:
+        return (urlparse(str(base_url or "").strip()).hostname or "").lower().rstrip(".")
+    except ValueError:
+        return ""
+
+
+def sealed_service(base_url: str, api: str = "auto") -> str:
+    """The end-to-end encrypted protocol an endpoint must be spoken in
+    ("tinfoil", "chutes-e2ee"), or "": the one `api` names, else the one its
+    host is known for, whatever `api` says. When in doubt, sealed: an
+    endpoint set to "openai" on Tinfoil's host is still Tinfoil's."""
+    if api in SEALED_API_LABELS:
+        return api
+    host = _host_of(base_url)
+    for domain, name in SEALED_HOSTS.items():
+        if host == domain or host.endswith("." + domain):
+            return name
+    return ""
 
 
 def chat_api(base_url: str, api: str = "auto") -> str:
     """The protocol a chat endpoint speaks: `api` unless "auto", otherwise
-    Anthropic's for its own host and OpenAI's for anything else."""
+    a sealed service's for its host (`sealed_service`), Anthropic's for its
+    own host and OpenAI's for anything else."""
     if api != "auto":
         return api
+    sealed = sealed_service(base_url)
+    if sealed:
+        return sealed
     host = (urlparse(base_url.strip()).hostname or "").lower()
     for known, name in _CHAT_HOSTS.items():
         if host == known or host.endswith("." + known):
@@ -709,8 +757,14 @@ class ProviderConfig(BaseModel):
         return self.model_copy(update={"api_key": "", "key_withheld": why})
 
     def speaks(self) -> str:
-        """The protocol this endpoint speaks, "openai" or "anthropic" (`chat_api`)."""
+        """The protocol this endpoint speaks, "openai", "anthropic", "tinfoil"
+        or "chutes-e2ee" (`chat_api`)."""
         return chat_api(self.base_url, self.api)
+
+    def sealed_service(self) -> str:
+        """The end-to-end encrypted protocol this endpoint must be spoken in,
+        or "" (`sealed_service`: by its `api`, else its host)."""
+        return sealed_service(self.base_url, self.api)
 
 
 # The protocol a picture or video endpoint speaks. "auto" reads it from the
@@ -1486,9 +1540,13 @@ class Config(BaseModel):
     def _chat_to_inherit(self) -> ProviderConfig | None:
         """The chat endpoint, for pictures and embeddings to take a blank
         address or key from; none when it is Anthropic's own API, which
-        makes no pictures and no vectors."""
+        makes no pictures and no vectors, or an end-to-end encrypted one
+        (`sealed_service`): a lore entry's text sent to its /embeddings, or
+        a picture's prompt, would go in the clear."""
         chat = self.active_provider()
-        return None if chat is None or chat.speaks() == "anthropic" else chat
+        if chat is None or chat.speaks() == "anthropic" or chat.sealed_service():
+            return None
+        return chat
 
     def embeddings(self, *, as_confirmed: bool = False) -> EmbeddingProviderConfig | None:
         """The embeddings endpoint with blanks filled from the chat provider

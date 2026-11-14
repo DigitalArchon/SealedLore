@@ -6,9 +6,10 @@ the one it is reached through ("Anthropic::claude-opus-5-5"; a bare id is the
 default endpoint's, models/config.py). The session keeps one `ChatProvider`
 and every side call names its model in its `ChatRequest`, so this is the one
 place that resolves: a real client per endpoint (`make_chat_provider`), made
-on first use, given a copy of the request with the bare id. A `private/`
-model gets its endpoint's sealing client, as it always did, because the
-client is chosen by the model it is first asked for.
+on first use, given a copy of the request with the bare id. An end-to-end
+encrypted model (providers/privacy.py: a `private/` model, or any on a
+sealed endpoint) gets its endpoint's sealing client, as it always did,
+because the client is chosen by the model it is first asked for.
 
 What the session hangs on a provider (`route_watch`, `reasoning_watch`) is
 passed down to each client, wrapped so the session sees the qualified
@@ -32,14 +33,14 @@ from sealedlore.providers.base import (
     StreamCompleted,
     StreamEvent,
 )
-from sealedlore.providers.tee import is_private_mode
+from sealedlore.providers.privacy import privacy_for
 
 Watch = Callable[[ChatRequest, StreamCompleted], None] | None
 # Makes the client for an endpoint, given its settings with the model the
 # first request names (`make_chat_provider` chooses the client by it).
 Make = Callable[[ProviderConfig], ChatProvider]
-# A client is one endpoint's, and a sealing client (a `private/` model's)
-# is kept apart from the plain one on the same endpoint.
+# A client is one endpoint's, and a sealing client (an end-to-end encrypted
+# model's, `privacy_for`) is kept apart from the plain one on the same endpoint.
 Key = tuple[str, bool]
 
 
@@ -156,8 +157,9 @@ class EndpointsProvider(ChatProvider):
 
     def _provider(self, settings: ProviderConfig) -> ChatProvider:
         """The client for `settings` (its model the one asked for now): the
-        plain one, or the sealing one for a `private/` model."""
-        key = (settings.name, is_private_mode(settings.model))
+        plain one, or the sealing one for an end-to-end encrypted model (every
+        model on a sealed endpoint)."""
+        key = (settings.name, privacy_for(settings.model, settings).sealed)
         with self._lock:
             made = self._providers.get(key)
             made_for = self._made_for.get(key)

@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from sealedlore.models.config import key_problem
+from sealedlore.models.config import key_problem, sealed_service
 from sealedlore.providers.http import make_client, reply_json
 
 TIMEOUT_SECONDS = 8.0
@@ -51,6 +51,10 @@ def detect_context(
     """The model's context, or None if no server answered with one."""
     if key_problem(api_key):
         return None  # nothing sent: a header can't carry it (Settings says so first)
+    if sealed_service(base_url):
+        # An end-to-end encrypted endpoint (providers/privacy.py) is sent
+        # nothing in the clear, a key with a listing request included.
+        return None
     http = client or make_client(base_url, timeout=httpx.Timeout(TIMEOUT_SECONDS))
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     try:

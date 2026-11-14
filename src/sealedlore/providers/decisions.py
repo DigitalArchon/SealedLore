@@ -22,6 +22,7 @@ import httpx
 
 from sealedlore.providers.base import ProviderError, checked_key
 from sealedlore.providers.http import make_client, reply_json
+from sealedlore.providers.privacy import plain_refusal
 
 
 @dataclass(frozen=True)
@@ -95,6 +96,11 @@ class DecisionsClient:
     def decide(self, model: str, state: str, questions: Mapping[str, str]) -> Decisions:
         if self.key_withheld:
             raise ProviderError(self.key_withheld)
+        # Never to an end-to-end encrypted endpoint (providers/privacy.py):
+        # the story's state would go to it in the clear.
+        refusal = plain_refusal(self.endpoint, "the story's state")
+        if refusal:
+            raise ProviderError(refusal)
         payload = build_decisions_payload(model, state, questions)
         headers = {"Content-Type": "application/json"}
         if self.api_key:

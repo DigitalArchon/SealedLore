@@ -74,6 +74,7 @@ from sealedlore.models.config import (
     RECOMMENDED_IMAGE_MODELS,
     RECOMMENDED_MODELS,
     RECOMMENDED_TEXT_MODELS,
+    SEALED_API_LABELS,
     Config,
     EmbeddingProviderConfig,
     KeyMove,
@@ -91,6 +92,7 @@ from sealedlore.models.config import (
     recommended_model,
     recommended_models,
     require_https,
+    sealed_service,
     shown,
     split_model,
     without_password,
@@ -109,6 +111,7 @@ from sealedlore.providers.base import ChatProvider
 from sealedlore.providers.context_probe import detect_context
 from sealedlore.providers.endpoints import EndpointsProvider, listing_key
 from sealedlore.providers.images import parse_image_models
+from sealedlore.providers.privacy import not_built, privacy_at
 from sealedlore.providers.tee import move_refusal
 from sealedlore.storage import keychain
 from sealedlore.storage.paths import config_file
@@ -588,6 +591,10 @@ class SettingsDialog(QDialog):
             self.provider_name.setText(copy.name)
             self.base_url.setText(copy.base_url)
             self.api_key.setText(copy.api_key)
+            if self.chat_api.findData(copy.api) < 0 and copy.api in SEALED_API_LABELS:
+                # Not offered until its client exists, but kept: saved as
+                # "From the address", it could become a plain endpoint.
+                self.chat_api.addItem(SEALED_API_LABELS[copy.api], copy.api)
             self.chat_api.setCurrentIndex(max(0, self.chat_api.findData(copy.api)))
         finally:
             self._loading_endpoint = False
@@ -1026,7 +1033,13 @@ class SettingsDialog(QDialog):
 
     def _sync_api_note(self, *_args) -> None:
         """What the key is sent as, and what the choice of protocol means."""
-        if chat_api(self.base_url.text(), self.chat_api.currentData()) == "anthropic":
+        sealed = sealed_service(self.base_url.text(), self.chat_api.currentData())
+        if sealed:
+            self.api_note.setText(
+                not_built(privacy_at("", self.base_url.text(), sealed))
+                or "End-to-end encrypted: every message is sealed on this computer."
+            )
+        elif chat_api(self.base_url.text(), self.chat_api.currentData()) == "anthropic":
             self.api_note.setText(
                 "Anthropic's own Messages API: the key is sent as its x-api-key header. "
                 "Models are Anthropic's own ids (claude-sonnet-4-6); every call is "

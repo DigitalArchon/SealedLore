@@ -22,6 +22,7 @@ from sealedlore.models.config import EmbeddingProviderConfig
 from sealedlore.models.node import Usage
 from sealedlore.providers.base import ProviderError, checked_key
 from sealedlore.providers.http import make_client, reply_json
+from sealedlore.providers.privacy import EMBEDDINGS_WAY_OUT, plain_refusal
 
 
 @dataclass(frozen=True)
@@ -144,6 +145,11 @@ class OpenAICompatibleEmbeddings:
         )
 
     def _post(self, batch: Sequence[str]) -> dict[str, Any]:
+        # Never to an end-to-end encrypted endpoint (providers/privacy.py):
+        # the text to embed would go to it in the clear.
+        refusal = plain_refusal(self.endpoint, "the text to embed", way_out=EMBEDDINGS_WAY_OUT)
+        if refusal:
+            raise ProviderError(refusal)
         payload = build_embedding_payload(batch, self.config)
         try:
             response = self._get_client().post(self.endpoint, json=payload, headers=self._headers())

@@ -30,6 +30,7 @@ from sealedlore.providers.base import (
     StreamEvent,
 )
 from sealedlore.providers.http import ERROR_BODY_BYTES, make_client, traced_socket
+from sealedlore.providers.privacy import plain_refusal
 
 # A rate limit or a momentary outage, before anything has streamed, is waited
 # out rather than failing the turn. Measured on nano-gpt's subscription: a
@@ -204,6 +205,12 @@ class StreamingHttpProvider(ChatProvider):
         return detached
 
     def _get_client(self) -> httpx.Client:
+        # Judged by the address, whatever the model: a plain client never
+        # reaches an end-to-end encrypted endpoint, not even with a listing
+        # (it carries the key). A sealing client has a client of its own.
+        refusal = plain_refusal(self.endpoint, api=self.config.api)
+        if refusal:
+            raise ProviderError(refusal)
         if self._client is None:
             self._client = make_client(
                 self.config.base_url,

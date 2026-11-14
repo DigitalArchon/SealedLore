@@ -5,6 +5,10 @@ prices or context lengths. Each is the same model nano-gpt sells as `TEE/…`
 (its billing model), plus a Private Mode markup, so a `private/` entry is
 made from its `TEE/` counterpart's: the id with dots as dashes
 (`TEE/glm-5.3` ↔ `private/glm-5-3`), its prices times `MARKUP`.
+
+NanoGPT's code only: the twins are its names for one model, read from the
+prefixes. Whether a model is private at all is decided on its endpoint
+(providers/privacy.py), and only then are its NanoGPT twins looked for.
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ import httpx
 
 from sealedlore.models.config import split_model, without_password
 from sealedlore.providers.http import make_client, reply_json
+from sealedlore.providers.privacy import privacy_at
 from sealedlore.providers.tee import is_private_mode, is_tee
 
 RELAY_MODELS_PATH = "/api/v1/private/tinfoil/models"
@@ -152,22 +157,8 @@ def private_alternatives(model_id: str, ids) -> list[str]:
     return sorted(dict.fromkeys(same), key=lambda i: (_kind(i) != "private", i))
 
 
-E2EE_NOTE = (
-    "End-to-end encrypted: every message is sealed on this machine to a key only the "
-    "model's attested enclave holds. nano-gpt relays ciphertext; it sees your account, "
-    "the model, timing, sizes and cost, never the text."
-)
-TEE_NOTE = (
-    "TEE: the model runs in an attested enclave and its replies are signed, but the text "
-    "passes nano-gpt's gateway in the clear."
-)
-
-
 def privacy_label(model_id: str) -> tuple[str, str]:
-    """(short label, explanation) for a model's privacy, or ("", "")."""
-    kind = _kind(model_id)
-    if kind == "private":
-        return "🔐 End-to-end encrypted", E2EE_NOTE
-    if kind == "TEE":
-        return "TEE", TEE_NOTE
-    return "", ""
+    """(short label, explanation) for a model's privacy judged by its id
+    alone, or ("", ""). The app labels a model on its endpoint
+    (providers/privacy.py `Privacy.label`)."""
+    return privacy_at(model_id).label()
