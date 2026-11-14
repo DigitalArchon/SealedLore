@@ -173,7 +173,10 @@ def test_the_captured_bundle_binds_the_tls_key_the_pin_checks():
 def sdk(monkeypatch):
     """Tinfoil's real SDK on the captured bundle: nothing but Sigstore's
     release check stood in for, and every way to the network shut."""
-    import requests
+    import socket as sockets
+    import types
+
+    import tinfoil.attestation.bundle
     import tinfoil.client
     import tinfoil.github
 
@@ -202,7 +205,14 @@ def sdk(monkeypatch):
     class Release:
         tag, digest = RELEASE["tag_name"], BUNDLE["digest"]
 
-    monkeypatch.setattr(requests, "get", get)
+    # The name the SDK's bundle fetch reads at call time (once the guard has run
+    # in this process it is the guard's stand-in for requests, not requests).
+    monkeypatch.setattr(
+        tinfoil.attestation.bundle, "requests", types.SimpleNamespace(get=get, post=nowhere)
+    )
+    # And nothing else gets out: no socket connects during the test.
+    monkeypatch.setattr(sockets.socket, "connect", nowhere)
+    monkeypatch.setattr(sockets, "create_connection", nowhere)
     monkeypatch.setattr(tinfoil.client, "get_router_address", nowhere)
     monkeypatch.setattr("urllib.request.urlopen", nowhere)
     monkeypatch.setattr(
