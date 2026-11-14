@@ -3274,6 +3274,9 @@ Detect before they send anything). With No, or an address changed in
 `config.json` by hand, or `sealedlore configure --base-url` given without
 `--api-key`, the key is kept but sent nowhere else, and whatever would have
 used it says why; entering the key again for the new address sends it there.
+A No is remembered for that address, so later saves don't ask again: under
+**Keys held back** on Settings → Endpoints, each such key says where it is
+for and where it isn't sent, with **Ask again…** to be asked once more.
 The folder and everything the app writes in it are readable by your user only.
 Each story keeps every request and reply in its `api_log.jsonl`, so a story
 backup (Story → Export → Story backup…) carries every prompt sent for it; a

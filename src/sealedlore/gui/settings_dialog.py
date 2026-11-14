@@ -84,6 +84,7 @@ from sealedlore.models.config import (
     credentials,
     is_local_host,
     is_loopback_host,
+    key_origin,
     key_problem,
     on_nanogpt,
     qualify,
@@ -282,6 +283,20 @@ _KEY_SLOTS_SAID = {
     "embeddings": "Embeddings (Lore)",
     "private": "Private scenes",
 }
+
+
+def _key_said(slot: str) -> str:
+    return _KEY_SLOTS_SAID.get(slot, slot.removeprefix("provider:"))
+
+
+def _held_back_words(move: KeyMove) -> str:
+    """A held-back key, as the Endpoints page says it (`_held_back_box`)."""
+    host = move.now.split("://", 1)[-1]
+    asked = " You said No to sending it there." if move.declined else ""
+    return (
+        f"The saved key for {_key_said(move.slot)} is for {move.saved_for}, not sent to "
+        f"{move.now}.{asked} To use a key at {host}, enter it in that key's field, or ask again."
+    )
 
 
 # What each page is for, under its name.
@@ -866,6 +881,9 @@ class SettingsDialog(QDialog):
         intro.setObjectName("hintLabel")
         intro.setWordWrap(True)
         form.addRow(intro)
+        held = self._held_back_box()
+        if held is not None:
+            form.addRow(held)
 
         self.endpoint_list = QListWidget()
         self.endpoint_list.setObjectName("endpointList")
@@ -2379,48 +2397,125 @@ class SettingsDialog(QDialog):
         except ValueError:
             return True  # an address that can't be used: nothing will be sent to it
         moves = rebind_keys(self.config, typed, self._renamed())
-        allowed = self._ask_moving_keys(moves, NOTHING_SENT)
+        # Asked even about a place said No to at an earlier Save: this sends
+        # the key now, and nothing else would say why nothing was sent.
+        allowed = self._ask_moving_keys(moves, NOTHING_SENT, ask_declined=True)
         for settings, as_typed in zip(self._endpoints, typed.providers, strict=True):
             settings.key_saved_for = as_typed.key_saved_for
         return allowed
 
-    def _ask_moving_keys(self, moves: list[KeyMove], after_no: str) -> bool:
+    def _ask_moving_keys(
+        self, moves: list[KeyMove], after_no: str, *, ask_declined: bool = False
+    ) -> bool:
         """A saved key whose address was edited to another place goes there
         only once the author says so: every such key at once, No the
         default, each answer kept for the dialog's life. A Yes moves them
         (`KeyMove.allow`); with No the keys stay for the place they were
-        saved for, and are sent nowhere else. True unless No."""
-        unasked = [move for move in moves if (move.slot, move.now) not in self._moves_answered]
+        saved for, are sent nowhere else, and the No is remembered for that
+        place (`KeyMove.decline`): a later Save doesn't ask again (asked at
+        every Save, the question is soon answered Yes unread), unless
+        `ask_declined` (Browse… and the tests send the key there now) or
+        Ask again… on the Endpoints page. True unless No."""
+        unasked = [
+            move
+            for move in moves
+            if (move.slot, move.now) not in self._moves_answered
+            and (ask_declined or not move.declined)
+        ]
         if unasked:
-            one = len(unasked) == 1
-            listed = "\n".join(
-                f"•  {_KEY_SLOTS_SAID.get(move.slot, move.slot.removeprefix('provider:'))}: "
-                f"saved for {move.saved_for}, its address now {move.now}"
-                for move in unasked
-            )
-            first = unasked[0].now.split("://", 1)[-1]
-            opening = (
-                "This key was saved for one place, and its address now names"
-                if one
-                else "These keys were saved for one place each, and their addresses now name"
-            )
-            answer = QMessageBox.question(
-                self,
-                f"Use the saved key with {first}?" if one else "Use the saved keys there?",
-                f"{opening} another:\n\n{listed}\n\nSend {'it' if one else 'them'} there? "
-                f"Whoever runs that place would have {'it' if one else 'them'}. No keeps "
-                f"{'it' if one else 'them'} for where {'it was' if one else 'they were'} saved, "
-                "sent nowhere else: enter a key for the new address to use one there. "
-                f"{after_no}",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No,
-            )
-            for move in unasked:
-                self._moves_answered[(move.slot, move.now)] = answer == QMessageBox.Yes
+            self._ask_about(unasked, after_no)
         for move in moves:
-            if self._moves_answered.get((move.slot, move.now)):
+            answer = self._moves_answered.get((move.slot, move.now))
+            if answer:
                 move.allow()
+            elif answer is False or move.declined:
+                move.decline()
         return all(self._moves_answered.get((move.slot, move.now)) for move in moves)
+
+    def _ask_about(self, unasked: list[KeyMove], after_no: str) -> bool:
+        """The question about `unasked`, every key at once, No the default;
+        the answer kept for each (`_moves_answered`). True on Yes."""
+        one = len(unasked) == 1
+        listed = "\n".join(
+            f"•  {_key_said(move.slot)}: saved for {move.saved_for}, its address now {move.now}"
+            for move in unasked
+        )
+        first = unasked[0].now.split("://", 1)[-1]
+        opening = (
+            "This key was saved for one place, and its address now names"
+            if one
+            else "These keys were saved for one place each, and their addresses now name"
+        )
+        it, they = ("it", "it was") if one else ("them", "they were")
+        answer = QMessageBox.question(
+            self,
+            f"Use the saved key with {first}?" if one else "Use the saved keys there?",
+            f"{opening} another:\n\n{listed}\n\nSend {it} there? Whoever runs that place "
+            f"would have {it}. No keeps {it} for where {they} saved, sent nowhere else, and "
+            "isn't asked again: the Endpoints page shows the key held back, with Ask again…, "
+            f"and a key entered for the new address is used there. {after_no}",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        for move in unasked:
+            self._moves_answered[(move.slot, move.now)] = answer == QMessageBox.Yes
+        return answer == QMessageBox.Yes
+
+    def _held_back(self) -> list[KeyMove]:
+        """The saved keys held back from the place their address names, as
+        Settings opened: each for where it was saved, and whether the author
+        said No to the new place (`KeyMove.declined`). For saying so only:
+        never allowed or declined on the saved config itself."""
+        held: list[KeyMove] = []
+        for slot, holder, address in self.config.key_holders():
+            now = key_origin(address)
+            if holder.api_key and holder.key_saved_for and now and now != holder.key_saved_for:
+                declined = holder.key_declined_for == now
+                held.append(KeyMove(slot, holder, holder.key_saved_for, now, declined))
+        return held
+
+    def _held_back_box(self) -> QWidget | None:
+        """On the Endpoints page, each saved key held back from its address's
+        new place: where it is for, where it isn't sent, and Ask again…, or a
+        key typed into its field for the new address. None when none is."""
+        held = self._held_back()
+        self.held_back_notes: list[QLabel] = []
+        if not held:
+            return None
+        box = QWidget()
+        box.setObjectName("heldBackKeys")
+        rows = QVBoxLayout(box)
+        rows.setContentsMargins(0, 0, 0, 0)
+        heading = QLabel("Keys held back")
+        heading.setObjectName("peopleSection")
+        rows.addWidget(heading)
+        for move in held:
+            row = QHBoxLayout()
+            note = _note_label()
+            note.setText(_held_back_words(move))
+            ask = QPushButton("Ask again…")
+            ask.setToolTip(
+                f"Asks whether to send the saved key to {move.now} from now on; Save keeps the "
+                "answer."
+            )
+            ask.clicked.connect(lambda _checked=False, m=move, n=note: self._ask_again(m, n))
+            row.addWidget(note, 1)
+            row.addWidget(ask)
+            rows.addLayout(row)
+            self.held_back_notes.append(note)
+        return box
+
+    def _ask_again(self, move: KeyMove, note: QLabel) -> None:
+        """Ask again… beside a held-back key: the question now, its answer
+        kept for Save (which moves the key, or keeps it held back)."""
+        self._moves_answered.pop((move.slot, move.now), None)
+        if self._ask_about([move], "Save keeps your answer."):
+            note.setText(
+                f"The saved key for {_key_said(move.slot)} will be sent to {move.now} once you "
+                "Save."
+            )
+        else:
+            note.setText(_held_back_words(move))
 
     def _not_asked(self, sent: list[SentPlain]) -> list[SentPlain]:
         """Those of `sent` not going there when Settings opened, nor said Yes

@@ -185,6 +185,39 @@ def test_a_key_typed_anew_is_for_its_address_and_a_kept_one_stays_for_its_own():
     assert typed.video_endpoint.key_saved_for == "https://api.wavespeed.ai"
 
 
+def test_a_no_is_remembered_for_its_place_and_written_with_the_settings(
+    tmp_path: Path, memory_keychain
+):
+    """`KeyMove.decline` keeps the No in config.json (no secret in it), so a
+    later Save knows it was said; a new key, or the address back where the
+    key was saved for, lets it go. Never a key deleted."""
+    before = nano()
+    before.providers[0].key_saved_for = "https://nano-gpt.com"
+    after = before.model_copy(deep=True)
+    after.providers[0].base_url = ELSEWHERE
+    [move] = rebind_keys(before, after)
+    assert not move.declined
+    move.decline()
+    save_config(after, root=tmp_path)
+    loaded, _note = load_config_or_recover(root=tmp_path)
+    provider = loaded.providers[0]
+    assert provider.key_declined_for == "https://api.elsewhere.example"
+    assert provider.api_key == KEY and provider.sendable().api_key == ""
+
+    again = loaded.model_copy(deep=True)
+    [move] = rebind_keys(loaded, again)
+    assert move.declined and again.providers[0].key_declined_for == move.now
+    move.allow()
+    assert again.providers[0].key_declined_for == "" and again.providers[0].sendable().api_key
+
+    typed = loaded.model_copy(deep=True)
+    typed.providers[0].api_key = "sk-elsewhere"
+    assert rebind_keys(loaded, typed) == [] and typed.providers[0].key_declined_for == ""
+    home = loaded.model_copy(deep=True)
+    home.providers[0].base_url = NANO
+    assert rebind_keys(loaded, home) == [] and home.providers[0].key_declined_for == ""
+
+
 # --- Settings ----------------------------------------------------------------------------
 
 pytest.importorskip("PySide6")
@@ -234,13 +267,106 @@ def test_settings_asks_before_a_saved_key_goes_to_an_edited_address(app, monkeyp
     )
     dialog.deleteLater()
 
+    # The No is remembered for that place: a later Save doesn't ask again (a
+    # question asked at every Save is soon answered Yes unread; the DA apps'
+    # standard), and the Endpoints page says the key is held back.
+    assert provider.key_declined_for == "https://api.elsewhere.example"
+    again = SettingsDialog(config, None)
+    questions = answering(monkeypatch, QMessageBox.Yes)
+    again._save()
+    assert questions == [], "not asked again at the next Save"
+    assert config.active_provider().sendable().api_key == ""
+    assert config.active_provider().key_saved_for == "https://nano-gpt.com"
+    again.deleteLater()
+
+    shown = SettingsDialog(config, None)
+    [note] = shown.held_back_notes
+    assert "is for https://nano-gpt.com, not sent to https://api.elsewhere.example" in note.text()
+    assert "You said No" in note.text() and KEY not in note.text()
+    shown.deleteLater()
+
+
+def test_ask_again_puts_the_question_once_more_and_save_keeps_the_answer(app, monkeypatch):
+    config = saved_for_nano()
+    answering(monkeypatch, QMessageBox.No)
+    first = SettingsDialog(config, None)
+    first.base_url.setText(ELSEWHERE)
+    first._save()
+    first.deleteLater()
+
+    still = SettingsDialog(config, None)
+    questions = answering(monkeypatch, QMessageBox.No)
+    [move] = still._held_back()
+    still._ask_again(move, still.held_back_notes[0])
+    assert len(questions) == 1 and questions[0][2] == QMessageBox.No
+    still._save()
+    assert config.active_provider().sendable().api_key == "", "No again: still held back"
+    still.deleteLater()
+
     yes = SettingsDialog(config, None)
     questions = answering(monkeypatch, QMessageBox.Yes)
+    [move] = yes._held_back()
+    yes._ask_again(move, yes.held_back_notes[0])
+    assert "will be sent to https://api.elsewhere.example once you Save" in (
+        yes.held_back_notes[0].text()
+    )
+    assert config.active_provider().sendable().api_key == "", "nothing moves before Save"
     yes._save()
-    assert len(questions) == 1, "withheld keys are asked about at each Save"
-    assert config.active_provider().sendable().api_key == KEY
-    assert config.active_provider().key_saved_for == "https://api.elsewhere.example"
-    yes.deleteLater()
+    assert len(questions) == 1, "Save keeps the answer it was given"
+    provider = config.active_provider()
+    assert provider.sendable().api_key == KEY
+    assert (provider.key_saved_for, provider.key_declined_for) == (
+        "https://api.elsewhere.example",
+        "",
+    )
+    assert SettingsDialog(config, None).held_back_notes == []
+
+
+def test_a_no_is_for_the_place_it_was_said_of(app, monkeypatch):
+    """Another place again is a new question; back where the key was saved
+    for, there is nothing to ask and the No is let go."""
+    config = saved_for_nano()
+    answering(monkeypatch, QMessageBox.No)
+    dialog = SettingsDialog(config, None)
+    dialog.base_url.setText(ELSEWHERE)
+    dialog._save()
+    dialog.deleteLater()
+
+    third = SettingsDialog(config, None)
+    questions = answering(monkeypatch, QMessageBox.No)
+    third.base_url.setText("https://third.example/v1")
+    third._save()
+    assert len(questions) == 1 and "third.example" in questions[0][0]
+    assert config.active_provider().key_declined_for == "https://third.example"
+    third.deleteLater()
+
+    home = SettingsDialog(config, None)
+    questions = answering(monkeypatch, QMessageBox.No)
+    home.base_url.setText(NANO)
+    home._save()
+    assert questions == []
+    provider = config.active_provider()
+    assert provider.sendable().api_key == KEY and provider.key_declined_for == ""
+    home.deleteLater()
+
+
+def test_a_key_sent_before_save_is_asked_about_even_after_a_no(app, monkeypatch):
+    """Browse…, Test speed…, Test attestation and Detect send the key now:
+    nothing else would say why nothing was sent, so a place said No to at an
+    earlier Save is asked about there (once a dialog), No sending nothing."""
+    config = saved_for_nano()
+    answering(monkeypatch, QMessageBox.No)
+    dialog = SettingsDialog(config, None)
+    dialog.base_url.setText(ELSEWHERE)
+    dialog._save()
+    dialog.deleteLater()
+
+    later = SettingsDialog(config, None)
+    questions = answering(monkeypatch, QMessageBox.No)
+    assert later._may_send([]) is False
+    assert later._may_send([]) is False
+    assert len(questions) == 1, "once a dialog"
+    later.deleteLater()
 
 
 def test_settings_asks_nothing_for_a_key_typed_for_the_new_address(app, monkeypatch):

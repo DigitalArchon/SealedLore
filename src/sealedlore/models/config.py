@@ -642,6 +642,10 @@ class ProviderConfig(BaseModel):
     # Where `api_key` was saved for (`key_origin`): it is sent nowhere else
     # (`sendable`). "" until a key is saved.
     key_saved_for: str = ""
+    # The place its address names that the author said No to sending the
+    # saved key to (`KeyMove.decline`): not asked about again at each Save,
+    # and Settings says the key is held back there. "" when none.
+    key_declined_for: str = ""
     # Why this copy carries no key (`sendable`): its requests refuse in these
     # words rather than go without it. Never written.
     key_withheld: str = Field(default="", exclude=True)
@@ -708,6 +712,10 @@ class MediaEndpoint(BaseModel):
     api: MediaApi = "auto"
     # Where `api_key` was saved for (`ProviderConfig.key_saved_for`).
     key_saved_for: str = ""
+    # The place its address names that the author said No to sending the
+    # saved key to (`ProviderConfig.key_declined_for`): not asked about again at each Save,
+    # and Settings says the key is held back there. "" when none.
+    key_declined_for: str = ""
 
     @field_validator("base_url")
     @classmethod
@@ -755,6 +763,10 @@ class EmbeddingProviderConfig(BaseModel):
     # a resolved copy carries none (`Config.embeddings`; never written).
     key_saved_for: str = ""
     key_withheld: str = Field(default="", exclude=True)
+    # The place its address names that the author said No to sending the
+    # saved key to (`ProviderConfig.key_declined_for`): not asked about again at each Save,
+    # and Settings says the key is held back there. "" when none.
+    key_declined_for: str = ""
 
     @field_validator("base_url")
     @classmethod
@@ -775,10 +787,19 @@ class KeyMove(NamedTuple):
     holder: KeyHolder
     saved_for: str  # the place it was saved for (a `key_origin`)
     now: str  # the place its address names now
+    # The author said No to this place before (`decline`): Save doesn't ask
+    # again (a question asked at every Save is soon answered Yes unread).
+    declined: bool = False
 
     def allow(self) -> None:
         """Send the saved key to its new place from now on."""
         self.holder.key_saved_for = self.now
+        self.holder.key_declined_for = ""
+
+    def decline(self) -> None:
+        """Keep the key for where it was saved, and remember the No for this
+        place, so it isn't asked again (Settings can ask again)."""
+        self.holder.key_declined_for = self.now
 
 
 def bind_unbound_keys(config: Config) -> None:
@@ -798,7 +819,9 @@ def rebind_keys(
     key kept from `before` stays for the place it was saved for. Those whose
     address now names another place are returned, still bound to the old
     one: the key isn't sent until `KeyMove.allow` (Settings asks; the
-    command line says so). A blank key keeps its record: it may be one the
+    command line says so), each `declined` when the author said No to that
+    place before (`KeyMove.decline`, kept in `key_declined_for`). A blank key
+    keeps its record: it may be one the
     keychain couldn't give back, never lost. `renamed`: an endpoint's name in
     `after` → its name in `before`."""
     renamed = renamed or {}
@@ -814,19 +837,27 @@ def rebind_keys(
         if not key:
             if was is not None and not was[0].api_key:
                 holder.key_saved_for = was[0].key_saved_for  # out of reach, never lost
+                holder.key_declined_for = was[0].key_declined_for
             continue
         now = key_origin(address)
         if was is None or was[0].api_key != key:
             holder.key_saved_for = now  # entered for this address
+            holder.key_declined_for = ""
             continue
         old_holder, old_address = was
         saved_for = old_holder.key_saved_for or key_origin(old_address)
         # As it was (a key not yet recorded stays so: `bind_unbound_keys`
         # records it as it is saved), so an unchanged Save changes nothing.
         holder.key_saved_for = old_holder.key_saved_for
+        # A No is for the place it was said of: back where the key was saved
+        # for, or at yet another place, nothing was said yet.
+        holder.key_declined_for = ""
         if saved_for != now:
             holder.key_saved_for = saved_for
-            moves.append(KeyMove(slot, holder, saved_for, now))
+            declined = old_holder.key_declined_for == now
+            if declined:
+                holder.key_declined_for = now
+            moves.append(KeyMove(slot, holder, saved_for, now, declined))
     return moves
 
 
