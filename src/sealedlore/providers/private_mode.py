@@ -537,7 +537,9 @@ class PrivateModeProvider(OpenAICompatibleProvider):
         the model's words (an instruction to the reader in it, say). Said as
         the relay's, on one line, without control or invisible characters
         (`relay_said`), and short; the words themselves are kept only for
-        `_missing_seal`."""
+        `_missing_seal`, with whether the refusal came back the enclave's way."""
+        from ehbp.protocol import RESPONSE_NONCE_HEADER
+
         error = super()._http_error(url, response)
         written = error.body or ""
         said = relay_said(written, RELAY_SAID_CHARS)
@@ -547,6 +549,7 @@ class PrivateModeProvider(OpenAICompatibleProvider):
         )
         labelled.retry_after = error.retry_after
         labelled.relay_body = written
+        labelled.through_enclave = RESPONSE_NONCE_HEADER in response.headers
         return labelled
 
     def _finish(self, finish_reason: str | None, saw_done: bool) -> None:
@@ -580,7 +583,11 @@ class PrivateModeProvider(OpenAICompatibleProvider):
 
 def _missing_seal(error: ProviderError) -> bool:
     """nano-gpt refused the request as unsealed before sending it anywhere: the
-    proxy's one safe retry (after attesting again)."""
+    proxy's one safe retry (after attesting again). Not when the refusal carries
+    the enclave's nonce: it came back the encrypted way, so the request may have
+    been run (and paid for) already (the proxy's isMissingEncryptedBodyHeaderResponse)."""
+    if getattr(error, "through_enclave", False):
+        return False
     written = getattr(error, "relay_body", None) or error.body or ""
     return error.status_code == 400 and "missing_encrypted_body_header" in written
 

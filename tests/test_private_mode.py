@@ -290,6 +290,54 @@ def test_a_changed_key_is_attested_again_once(fake, setup):
         list(provider.stream(request()))
 
 
+def refuse_unsealed(fake: FakeEnclave, *, nonce: bool) -> list[httpx.Request]:
+    """The relay's refusal of a request as unsealed, once, then the enclave."""
+    answer = fake.handler
+    refused: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if refused:
+            return answer(request)
+        request.read()
+        refused.append(request)
+        said = json.dumps({"error": {"code": "missing_encrypted_body_header"}}).encode()
+        if not nonce:
+            return httpx.Response(400, content=said)
+        # Sealed, as the enclave would: EHBP opens any reply with a nonce.
+        enc = bytes.fromhex(request.headers[ENCAPSULATED_KEY_HEADER])
+        context = SUITE.create_recipient_context(
+            enc, KEMKey.from_pyca_cryptography_key(fake.key), info=HPKE_REQUEST_INFO
+        )
+        sealed = os.urandom(32)
+        keys = derive_response_keys(context.export(EXPORT_LABEL, EXPORT_LENGTH), enc, sealed)
+        return httpx.Response(
+            400,
+            headers={RESPONSE_NONCE_HEADER: sealed.hex()},
+            content=frame_chunk(encrypt_chunk(keys, 0, said)),
+        )
+
+    fake.handler = handler
+    return refused
+
+
+def test_a_request_refused_as_unsealed_is_attested_again_and_sent_once_more(fake, setup):
+    provider, attested, _pre, _clock = setup
+    refused = refuse_unsealed(fake, nonce=False)
+    events = list(provider.stream(request()))
+    assert isinstance(events[-1], StreamCompleted)
+    assert len(refused) == 1 and len(attested) == 2 and len(fake.requests) == 1
+
+
+def test_a_refusal_that_came_back_the_enclaves_way_is_never_sent_again(fake, setup):
+    """With the enclave's nonce on it, the request may already have been run
+    and paid for: the proxy never resends it, nor do we."""
+    provider, attested, _pre, _clock = setup
+    refused = refuse_unsealed(fake, nonce=True)
+    with pytest.raises(ProviderError, match="400"):
+        list(provider.stream(request()))
+    assert len(refused) == 1 and len(attested) == 1 and fake.requests == []
+
+
 def test_an_attestation_is_redone_once_it_has_aged(fake, setup):
     provider, attested, _pre, clock = setup
     list(provider.stream(request()))
