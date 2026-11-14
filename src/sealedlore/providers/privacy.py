@@ -43,9 +43,11 @@ from urllib.parse import urlparse
 from sealedlore.models.config import (
     Config,
     ProviderConfig,
+    key_origin,
     sealed_service,
     shown,
 )
+from sealedlore.models.private import PrivacyRecord
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError, StreamEvent
 from sealedlore.providers.tee import is_private_mode, is_tee
 
@@ -174,6 +176,83 @@ def privacy_of(ref: str, config: Config) -> Privacy:
 
 
 Judge = Callable[[str], Privacy]
+
+# --- what a chat or a scene was made, and must stay -------------------------------
+
+_RANK = {"": 0, "tee": 1, "sealed": 2}
+
+
+def rank(privacy: Privacy) -> int:
+    """How private: 2 end-to-end encrypted, 1 TEE, 0 neither."""
+    return _RANK.get(privacy.kind, 0)
+
+
+def more_private(one: Privacy, other: Privacy) -> Privacy:
+    """The more private of two (sealed over TEE over neither); `one` when
+    they are as private."""
+    return one if rank(one) >= rank(other) else other
+
+
+def held(record: PrivacyRecord | None) -> Privacy:
+    """The privacy a chat or a scene was recorded with (models/private.py
+    `PrivacyRecord`), or NONE."""
+    if record is None or record.kind not in _RANK:
+        return NONE
+    return Privacy(record.kind, record.service)
+
+
+def record_of(privacy: Privacy, base_url: str = "") -> PrivacyRecord:
+    """`privacy` as a chat or a scene keeps it, with the origin its calls go to."""
+    return PrivacyRecord(kind=privacy.kind, service=privacy.service, origin=key_origin(base_url))
+
+
+def holds(kept: Privacy, found: Privacy) -> bool:
+    """Whether `found`, where a call would go now, keeps what `kept`
+    promised: at least as private, and an end-to-end encrypted one sealed by
+    the same service, whose own client alone seals to it. An explicit move to
+    another service's sealed model (D8) records the new one first."""
+    if rank(found) < rank(kept):
+        return False
+    return not (kept.sealed and found.service != kept.service)
+
+
+def held_judge(judge: Judge, model: str, kept: Privacy) -> Judge:
+    """`judge`, with `model` (a chat's or a scene's own) judged at least as
+    private as it was recorded: a move check must never let an endpoint
+    edited under the chat (one Save) approve a move out of its privacy."""
+
+    def judged(other: str) -> Privacy:
+        found = judge(other)
+        return more_private(found, kept) if other == model else found
+
+    return judged
+
+
+def held_back(
+    kept: Privacy,
+    found: Privacy,
+    model: str,
+    *,
+    origin: str = "",
+    now: str = "",
+    what: str = "This chat",
+    way_out: str = "",
+) -> str | None:
+    """Why nothing of a chat or a scene recorded as `kept` goes where its
+    `model` would go now (`found`, at the address `now`, "" for an endpoint
+    that isn't set up), or None when that keeps its privacy (`holds`)."""
+    if holds(kept, found):
+        return None
+    name = SERVICE_NAMES.get(kept.service, kept.service)
+    began = f"end-to-end encrypted through {name}" if kept.sealed else f"on {name}"
+    if origin:
+        began += f" ({urlparse(origin).hostname or origin})"
+    if now:
+        host = urlparse(shown(now)).hostname or shown(now)
+        goes = f"its model {model} now goes to {host}, {service_words(found)}"
+    else:
+        goes = f"its model {model} names an endpoint that isn't set up any more"
+    return f"{what} began {began}, and {goes}, so nothing was sent. {way_out}".rstrip()
 
 
 def service_words(privacy: Privacy) -> str:

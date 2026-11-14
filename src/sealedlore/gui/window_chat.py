@@ -235,7 +235,8 @@ class ChatWindow:
             return {}
         session = self.session
         current = session.model
-        privacy = session.privacy(current)
+        judge = session.chat_move_judge()
+        privacy = judge(current)
         if privacy.service == NANOGPT_PRIVATE:
             note = "this chat is end-to-end encrypted: private/ models only"
         elif privacy.sealed:
@@ -243,14 +244,21 @@ class ChatWindow:
         else:
             note = "this chat is kept to TEE and end-to-end encrypted models"
         return {
-            "allowed": lambda model: move_refusal(current, model, privacy=session.privacy) is None,
+            "allowed": lambda model: move_refusal(current, model, privacy=judge) is None,
             "allowed_note": note,
         }
 
     def _attest_chat(self) -> None:
         """A TEE chat is attested each time it opens, and after its model
         changes, as a private scene is when it begins."""
-        if self.session is None or not self.session.tee_chat or self.use_mock:
+        if self.session is None or not self.session.tee_chat:
+            return
+        held = self.session.privacy_held()
+        if held:
+            # Its endpoint no longer keeps the privacy it was made with: nothing goes.
+            self._say_privacy_held(held, for_chat=True)
+            return
+        if self.use_mock:
             return
         # The endpoint the chat's model names, sent the bare id (models/config.py).
         settings = self.config.endpoint_for(self.session.model)
@@ -268,6 +276,8 @@ class ChatWindow:
             return
         if before and self.session.note_model_move(before, self.session.model):
             self.reload_transcript()
+        # Moved on purpose, and checked first: the chat is recorded where it is.
+        self.session.adopt_chat_privacy()
         old, self.session.private_tee = self.session.private_tee, None
         if old is not None:
             old.close()

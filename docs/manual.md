@@ -3034,7 +3034,13 @@ story is (Settings → Context), with a plain summariser.
   "Private scenes"), and the chat can move only to another end-to-end
   encrypted model, NanoGPT's, Tinfoil's or Chutes'. A move to another service is noted
   under the chat's latest message ("The chat moved from … to …"), kept as the
-  chat is (an in-memory chat's in memory).
+  chat is (an in-memory chat's in memory). The chat stays as private as it
+  was made: if its endpoint is later edited to another address, or removed,
+  it sends nothing (its summaries and picture prompts included) and says so
+  until the endpoint is set back or the chat is closed, and Settings asks
+  before saving such a change. A private scene kept on disk is held the same
+  way when it is opened again with Settings → Private pointing elsewhere: it
+  sends nothing until it moves to a model as private, or ends.
 - **Where a chat is kept** is asked when it starts, on any model: **On
   disk**, like any story, or **In memory only**. Nothing of an in-memory
   chat is written on this computer, not even its log, and it teaches the

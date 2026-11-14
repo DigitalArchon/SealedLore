@@ -152,6 +152,13 @@ class ChatProvider(ABC):
     # on the thread the reply came back on, before the caller has it.
     tee_watch: Callable[[ChatRequest, StreamCompleted], None] | None = None
 
+    # Asked by the routing client (providers/endpoints.py) before a request
+    # goes: given its model and how private it would be where it goes
+    # (providers/privacy.py `Privacy`), why it mustn't, or None. The session's
+    # chat recorded as end-to-end encrypted goes nowhere less private, nor to
+    # another service (engine/session_private.py `_privacy_lock`).
+    privacy_lock: Callable[[str, Any], str | None] | None = None
+
     def _report_tee(self, request: ChatRequest, completed: StreamCompleted) -> None:
         watch = self.tee_watch
         if watch is None:

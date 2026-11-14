@@ -115,7 +115,11 @@ from sealedlore.providers.context_probe import detect_context
 from sealedlore.providers.endpoints import EndpointsProvider, listing_key
 from sealedlore.providers.images import parse_image_models
 from sealedlore.providers.privacy import (
+    SERVICE_NAMES,
     Privacy,
+    held,
+    held_back,
+    held_judge,
     move_refusal,
     not_built,
     privacy_at,
@@ -2849,6 +2853,47 @@ class SettingsDialog(QDialog):
             "address, leave its key blank if it needs none, or Save again and choose Yes.",
         )
 
+    def _ask_before_unsealing_chat(self, typed: Config) -> None:
+        """The open chat recorded end-to-end encrypted (or TEE) whose model,
+        with the endpoints as typed, would go somewhere less private or to
+        another service (an endpoint edited or removed): Save doesn't move
+        it, and the chat sends nothing until it is put back. Asked first, No
+        the default, which goes back to the Endpoints page."""
+        story = self.story
+        if story is None or not story.chat or story.chat_privacy is None:
+            return
+        kept = held(story.chat_privacy)
+        model = story.defaults.main_model or ""
+        if not kept.private or not model:
+            return
+        endpoint = typed.endpoint_for(model)
+        reason = held_back(
+            kept,
+            privacy_of(model, typed),
+            model,
+            origin=story.chat_privacy.origin,
+            now=endpoint.base_url if endpoint is not None else "",
+            way_out="",
+        )
+        if reason is None:
+            return
+        name = SERVICE_NAMES.get(kept.service, kept.service)
+        answer = QMessageBox.question(
+            self,
+            "The chat would send nothing",
+            reason.replace("so nothing was sent.", "so nothing would be sent.")
+            + f"\n\nSaving doesn't move the chat: it will send nothing until its endpoint is "
+            f"set back to {name}'s address. Save anyway?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            raise SettingsProblem(
+                "Endpoints",
+                f"not saved: the open chat's endpoint would no longer be {name}'s. Set it back "
+                "to its address, or Save again and choose Yes.",
+            )
+
     def _check_addresses(self, endpoints: list[ProviderConfig], embed_url: str) -> None:
         """Raises ValueError naming a bad endpoint or address, and its page."""
         self._check_endpoints(endpoints)
@@ -2900,6 +2945,7 @@ class SettingsDialog(QDialog):
             moves = rebind_keys(self.config, typed, self._renamed())
             self._ask_moving_keys(moves, "Save goes on either way.")
             self._ask_before_plain(typed)
+            self._ask_before_unsealing_chat(typed)
             self._record_cleared(typed)
         except ValueError as exc:
             # Said where it is, and that page shown: a bad address on another
@@ -3020,8 +3066,16 @@ class SettingsDialog(QDialog):
             )
             if self.story.chat and provider.model and provider.model != self._model_at_open:
                 current = self.story.defaults.main_model or ""
+                # Its own model judged as private as it was recorded: one Save
+                # that also edits the endpoint under it must not approve the move.
                 refusal = move_refusal(
-                    current, provider.model, privacy=lambda m: privacy_of(m, self.config)
+                    current,
+                    provider.model,
+                    privacy=held_judge(
+                        lambda m: privacy_of(m, self.config),
+                        current,
+                        held(self.story.chat_privacy),
+                    ),
                 )
                 if refusal:
                     # A TEE chat never moves to a model that can't be attested

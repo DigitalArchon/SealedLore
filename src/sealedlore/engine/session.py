@@ -541,6 +541,17 @@ def _weak_watch(
     return watch
 
 
+def _weak_lock(method: Callable[[str, Any], str | None]) -> Callable[[str, Any], str | None]:
+    """`method` held weakly, as `_weak_watch`: answers None once it is gone."""
+    ref = weakref.WeakMethod(method)
+
+    def lock(model: str, found: Any) -> str | None:
+        method = ref()
+        return method(model, found) if method is not None else None
+
+    return lock
+
+
 @dataclass
 class _SceneRead:
     """A scene read that has been prepared but not yet answered."""
@@ -645,6 +656,9 @@ class StorySession(
         self.rng = random.Random()
         # A memory-only private scene the app closed in the middle of is gone.
         self.recover_private_spans()
+        # A chat's privacy as it is now, if it has none recorded yet: made
+        # just now, or before Nov 14 2026.
+        self.settle_chat_privacy()
         self._sync_scene()
 
     @classmethod
@@ -819,6 +833,9 @@ class StorySession(
         provider.route_watch = _weak_watch(self._watch_route)
         provider.reasoning_watch = _weak_watch(self._watch_reasoning)
         provider.tee_watch = _weak_watch(self._watch_tee)
+        # The routing client sends the chat's model only where it keeps the
+        # privacy the chat was made with (`_privacy_lock`).
+        provider.privacy_lock = _weak_lock(self._privacy_lock)
 
     def _watch_route(self, request: ChatRequest, completed: StreamCompleted) -> None:
         """On whichever thread the reply came back: record what its bill says."""
@@ -972,10 +989,11 @@ class StorySession(
 
     @property
     def tee_chat(self) -> bool:
-        """A chat on a TEE or end-to-end encrypted model (`privacy`):
-        attested, its replies' signatures checked, and every call it makes
-        on that model."""
-        return self.story.chat and self.privacy(self.model).private
+        """A chat on a TEE or end-to-end encrypted model (`privacy`), or one
+        recorded as one (`Story.chat_privacy`) whose endpoint has since been
+        edited or removed: attested, its replies' signatures checked, and
+        every call it makes on that model (where, held back, nothing goes)."""
+        return self.story.chat and (self.privacy(self.model).private or self.chat_held().private)
 
     def note_model_move(self, before: str, after: str) -> str | None:
         """A chat moved from `before` to `after` on another service (D8: a
@@ -985,7 +1003,7 @@ class StorySession(
         memory-only chat's in memory). None when the service is the same."""
         if not self.story.chat or not before or before == after:
             return None
-        was, now = self.privacy(before), self.privacy(after)
+        was, now = self.chat_move_judge()(before), self.privacy(after)
         if was.service == now.service:
             return None
         text = (
@@ -1001,8 +1019,14 @@ class StorySession(
     def check_chat_model(self, model: str) -> None:
         """A TEE chat moves only to another TEE model: it must never hand the
         conversation to one that can't be attested, and an end-to-end
-        encrypted one never to one whose gateway reads it."""
-        reason = move_refusal(self.model, model, privacy=self.privacy) if self.story.chat else None
+        encrypted one never to one whose gateway reads it. Its own model is
+        judged as private as it was recorded (`chat_move_judge`), whatever
+        its endpoint says now."""
+        reason = (
+            move_refusal(self.model, model, privacy=self.chat_move_judge())
+            if self.story.chat
+            else None
+        )
         if reason:
             raise ValueError(reason)
 

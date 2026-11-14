@@ -1076,8 +1076,8 @@ def cmd_chat(args: argparse.Namespace) -> int:
         print(f"{args.story_id}: {exc}", file=sys.stderr)
         return 1
     story = session.story
-    refusal = None
-    if session.tee_chat and session.privacy(session.model).kind == "tee":
+    refusal = session.privacy_held()
+    if refusal is None and session.tee_chat and session.privacy(session.model).kind == "tee":
         # The app attests a TEE chat each time it opens; the terminal can't.
         refusal = "a TEE chat is attested by the app each time it opens: play it there"
     if refusal is not None:

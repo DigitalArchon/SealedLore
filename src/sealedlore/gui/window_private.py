@@ -568,6 +568,8 @@ class PrivateWindow:
         if attestation is not None:
             if for_chat:
                 self.session.story.chat_attestation = attestation
+                # Attested: the chat is recorded as private as it proved.
+                self.session.settle_chat_privacy()
             else:
                 span.attestation = attestation
             if tee is not None:
@@ -670,6 +672,10 @@ class PrivateWindow:
         """Before anything is sent to a TEE/ model: wait out its attestation,
         and say so when it was refused (the session refuses regardless).
         `ending`: the scene's summary is what would be sent."""
+        held = self.session.privacy_held() if self.session is not None else None
+        if held:
+            self._say_privacy_held(held, for_chat=self.session.open_span is None, ending=ending)
+            return False
         block = self.session.tee_block if self.session is not None else None
         if not block:
             return True
@@ -684,6 +690,58 @@ class PrivateWindow:
         else:
             self._offer_reattest(block, for_chat=for_chat)
         return False
+
+    def _say_privacy_held(self, reason: str, *, for_chat: bool, ending: bool = False) -> None:
+        """A chat or a scene recorded as more private than where its model
+        would go now (`StorySession.privacy_held`): nothing goes, and the way
+        out is said. A scene offers what a retired model's does: another model
+        as private (Settings → Private's, when it is), or to end it."""
+        self._tee_state = "⚠ held back"
+        self._refresh_model_button()
+        if for_chat:
+            QMessageBox.warning(self, "Not sent: the chat's endpoint changed", reason)
+            return
+        session = self.session
+        span = session.open_span
+        written = bool(session.span_nodes(span))
+        summarise = ending and written
+        settings = self._private_settings()
+        judge = session.scene_move_judge()
+        offered = [settings.model] if settings is not None and settings.model else []
+        choices = [
+            model
+            for model in offered
+            if model != span.model and move_refusal(span.model, model, privacy=judge) is None
+        ]
+        box = QMessageBox(
+            QMessageBox.Warning,
+            self._say("Not sent: the private scene's endpoint changed"),
+            self._say(reason),
+            QMessageBox.NoButton,
+            self,
+        )
+        another = (
+            box.addButton(
+                "Summarise with another model…" if summarise else "Use another model…",
+                QMessageBox.AcceptRole,
+            )
+            if choices
+            else None
+        )
+        leave = box.addButton(
+            "End without a summary…" if written else self._say("End the scene"),
+            QMessageBox.DestructiveRole,
+        )
+        box.setDefaultButton(box.addButton("Keep it open", QMessageBox.RejectRole))
+        box.exec()
+        clicked = box.clickedButton()
+        box.deleteLater()
+        if self._busy:
+            return
+        if another is not None and clicked is another:
+            self._choose_scene_model(span.model, choices, summarise=summarise)
+        elif clicked is leave:
+            self._end_without_model()
 
     def _on_model_retired(self, model: str, for_chat: bool, offered: list[str]) -> None:
         """nano-gpt has retired the private/ model: nothing can be sent to it
@@ -769,12 +827,11 @@ class PrivateWindow:
         span = self.session.open_span if self.session is not None else None
         if span is None:
             return []
-        endpoint = self.session.private_endpoint()
+        judge = self.session.scene_move_judge()
         return [
             model
             for model in self._offered_instead
-            if model != retired
-            and move_refusal(span.model, model, privacy=lambda m: privacy_for(m, endpoint)) is None
+            if model != retired and move_refusal(span.model, model, privacy=judge) is None
         ]
 
     def _choose_scene_model(self, retired: str, choices: list[str], *, summarise: bool) -> None:
@@ -1088,6 +1145,12 @@ class PrivateWindow:
             # Private names for new scenes now.
             settings = settings.model_copy(update={"model": span.model})
             session.resume_private(self._make_private_provider(settings))
+            held = session.privacy_held()
+            if held:
+                # Begun more private than Settings → Private is now: nothing goes.
+                self._sync_private_ui()
+                self._say_privacy_held(held, for_chat=False)
+                return
             self._attest_or_say_not(settings)
         else:
             self.statusBar().showMessage(

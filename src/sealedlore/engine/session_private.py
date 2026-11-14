@@ -62,10 +62,20 @@ from sealedlore.models.summary import Summary
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError, why_not_whole
 from sealedlore.providers.privacy import (
     NANOGPT_PRIVATE,
+    NONE,
+    SERVICE_NAMES,
+    Judge,
+    NotBuiltProvider,
     Privacy,
+    held,
+    held_back,
+    held_judge,
+    holds,
     move_refusal,
     privacy_for,
     privacy_of,
+    rank,
+    record_of,
 )
 
 # Fewer than this many recent messages left in a private prompt, and the
@@ -169,7 +179,21 @@ class PrivateRuntime:
     # reason it was refused: every call that would reach that model refuses
     # before sending (_tee_guard). None when there's nothing to wait for.
     # The session sets it too while it attests the model again (_attest_again).
-    tee_block: str | None = None
+    _tee_block: str | None = None
+
+    @property
+    def tee_block(self) -> str | None:
+        """Why nothing goes to the chat's or the scene's model now: what the
+        window or the session set (its attestation out or refused), or a chat
+        or scene whose endpoint no longer keeps the privacy it was made with
+        (`privacy_held`), which no attestation clears. Every check of it (the
+        guard, the background chapters, merges and rebuilds) sees both."""
+        return self._tee_block or self.privacy_held()
+
+    @tee_block.setter
+    def tee_block(self, value: str | None) -> None:
+        self._tee_block = value
+
     # True while the session attests a TEE/ model again.
     tee_attesting: bool = False
     # What that last found, for the window once the job is done
@@ -186,6 +210,8 @@ class PrivateRuntime:
         its job's thread."""
         from sealedlore.providers.tee import TeeClient, TeeRefused
 
+        if reason := self.privacy_held():
+            raise ProviderError(reason)
         if self.tee_block:
             raise TeeRefused(f"{self.tee_block}; nothing was sent")
         tee = self.private_tee
@@ -224,6 +250,7 @@ class PrivateRuntime:
             span.attestation = attestation
         else:
             self.story.chat_attestation = attestation
+            self.settle_chat_privacy()
         self._reattested = ("attested", attestation)
         self.tee_block = None
 
@@ -383,12 +410,147 @@ class PrivateRuntime:
         )
         self.story.private_spans.append(span)
         self.private_provider = provider
+        span.privacy = record_of(self.privacy(model), self._span_origin(base_url))
         self.save()
         return span
 
     def resume_private(self, provider: ChatProvider) -> None:
-        """Back into a scene kept on disk, after the app was closed in it."""
+        """Back into a scene kept on disk, after the app was closed in it, on
+        `provider` (built from Settings → Private as it is now). A scene that
+        began more private than that, or end-to-end encrypted by another
+        service (`privacy_held`), gets a client that sends nothing, saying
+        why, until it moves to a model as private or ends: a Tinfoil or
+        Chutes model's id carries no prefix, so the scene would otherwise go
+        on wherever Settings → Private points now. A scene from before the
+        record is taken as it is now."""
         self.private_provider = provider
+        span = self.open_span
+        if span is None:
+            return
+        if span.privacy is None:
+            span.privacy = record_of(self.privacy(span.model), self._span_origin())
+        reason = self.privacy_held()
+        if reason:
+            endpoint = self.private_endpoint() or ProviderConfig(name="Private", base_url="")
+            close = getattr(provider, "close", None)
+            if callable(close):
+                close()
+            self.private_provider = NotBuiltProvider(endpoint, reason)
+
+    def _span_origin(self, base_url: str = "") -> str:
+        endpoint = self.private_endpoint()
+        return endpoint.base_url if endpoint is not None else base_url
+
+    # --- what the chat or the scene was made, and must stay ------------------------
+
+    def chat_held(self) -> Privacy:
+        """How private the chat was recorded (`Story.chat_privacy`); NONE for
+        a story, or a chat with none recorded."""
+        return held(self.story.chat_privacy) if self.story.chat else NONE
+
+    def settle_chat_privacy(self) -> None:
+        """Record the chat's privacy where it is now when it has none (made
+        just now, or before Nov 14 2026), or where it is now more private
+        (attested, moved up): never less private, never another service."""
+        if not self.story.chat:
+            return
+        found = self.privacy(self.model)
+        record = self.story.chat_privacy
+        if record is None or rank(found) > rank(held(record)):
+            self.story.chat_privacy = record_of(found, self._chat_origin())
+
+    def adopt_chat_privacy(self) -> None:
+        """After the chat's model was moved on purpose (its model button,
+        Settings, Setup), each move checked first (`check_chat_model`): the
+        record follows it where it is at least as private, a sealed chat's
+        move to another service's sealed model (D8) among them."""
+        if not self.story.chat:
+            return
+        found = self.privacy(self.model)
+        record = self.story.chat_privacy
+        if record is None or rank(found) >= rank(held(record)):
+            self.story.chat_privacy = record_of(found, self._chat_origin())
+
+    def _chat_origin(self) -> str:
+        endpoint = self.config.endpoint_for(self.model)
+        return endpoint.base_url if endpoint is not None else ""
+
+    def chat_move_judge(self) -> Judge:
+        """How a move of the chat's model is judged: the chat's own model at
+        least as private as it was recorded, whatever its endpoint says now."""
+        return held_judge(self.privacy, self.model, self.chat_held())
+
+    def scene_move_judge(self) -> Judge:
+        """The same for the open scene's model, on the scene's own endpoint."""
+        span = self.open_span
+        endpoint = self.private_endpoint()
+
+        def judge(model: str) -> Privacy:
+            return privacy_for(model, endpoint)
+
+        if span is None:
+            return judge
+        return held_judge(judge, span.model, held(span.privacy))
+
+    def privacy_held(self) -> str | None:
+        """Why nothing of the chat, or of the open scene, may be sent where its
+        model's calls would go now, or None: recorded end-to-end encrypted by
+        one service (or TEE), its endpoint edited or removed since so that it
+        is less private there, or another service's. Every call it would
+        make refuses in these words (`tee_block`, `_tee_guard`, and the
+        routing client's lock, `_privacy_lock`)."""
+        span = self.open_span
+        if span is not None:
+            if span.privacy is None:
+                return None
+            kept = held(span.privacy)
+            endpoint = self.private_endpoint()
+            name = SERVICE_NAMES.get(kept.service, kept.service)
+            return held_back(
+                kept,
+                self.privacy(span.model),
+                span.model,
+                origin=span.privacy.origin,
+                now=endpoint.base_url if endpoint is not None else "",
+                what="This private scene",
+                way_out=(
+                    "Carry it on with another model as private, or end the scene; to go on "
+                    f"with it on {name}, close the story, set Settings → Private back to "
+                    f"{name}'s address, and open the story again."
+                ),
+            )
+        if not self.story.chat or self.story.chat_privacy is None:
+            return None
+        kept = held(self.story.chat_privacy)
+        if not kept.private:
+            return None
+        return self._chat_held_back(kept, self.privacy(self.model))
+
+    def _chat_held_back(self, kept: Privacy, found: Privacy) -> str | None:
+        endpoint = self.config.endpoint_for(self.model)
+        name = SERVICE_NAMES.get(kept.service, kept.service)
+        return held_back(
+            kept,
+            found,
+            self.model,
+            origin=self.story.chat_privacy.origin if self.story.chat_privacy else "",
+            now=endpoint.base_url if endpoint is not None else "",
+            way_out=(
+                f"Set its endpoint back to {name}'s address under Settings → Endpoints, or "
+                "close the chat (File → Close story)."
+            ),
+        )
+
+    def _privacy_lock(self, model: str, found: Privacy) -> str | None:
+        """For the routing client (providers/endpoints.py): why a request for
+        `model`, about to go where it is `found`, must not, or None. Only the
+        chat's own model is held: a chat's every call is its model's."""
+        if not self.story.chat or self.story.chat_privacy is None or model != self.model:
+            return None
+        kept = held(self.story.chat_privacy)
+        if not kept.private or holds(kept, found):
+            return None
+        return self._chat_held_back(kept, found)
 
     def switch_private_model(self, *, provider: ChatProvider, model: str) -> None:
         """Carry the open scene on, and write its summary, with another model:
@@ -400,8 +562,7 @@ class PrivateRuntime:
         span = self.open_span
         if span is None:
             raise ValueError("no private scene is open")
-        endpoint = self.private_endpoint()
-        if move_refusal(span.model, model, privacy=lambda m: privacy_for(m, endpoint)):
+        if move_refusal(span.model, model, privacy=self.scene_move_judge()):
             raise ValueError(f"{model} isn't as private as {span.model}, the scene's model")
         old, old_tee = self.private_provider, self.private_tee
         for client in (old, old_tee):
@@ -415,6 +576,12 @@ class PrivateRuntime:
         # The old model's enclave proved nothing about the new one's.
         span.attestation = None
         self.private_provider = provider
+        # Moved on purpose, to a model as private (checked above): the record
+        # follows it, another service's sealed model among them (D8); never
+        # less private, whatever the new client's endpoint says.
+        found = self.privacy(model)
+        if span.privacy is None or rank(found) >= rank(held(span.privacy)):
+            span.privacy = record_of(found, self._span_origin())
         self.private_tee = None
         self.tee_block = None
         self.save()

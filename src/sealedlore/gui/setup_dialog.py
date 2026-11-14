@@ -56,7 +56,7 @@ from sealedlore.models.config import RECOMMENDED_TEXT_MODELS, Config
 from sealedlore.models.node import DIRECTOR_SPEAKER_ID, Node
 from sealedlore.models.scene import SceneState
 from sealedlore.models.story import STORY_MODEL_FIELDS, Story
-from sealedlore.providers.privacy import privacy_of
+from sealedlore.providers.privacy import held, privacy_of
 
 # How full the map's rooms are (models/area.py `Density`).
 DENSITY_LABELS = {
@@ -171,7 +171,11 @@ class SetupDialog(QDialog):
             self.tabs.addTab(self._chat_prompt_tab(), "System prompt")
             # A TEE chat's every call is its own model's, moved by its button.
             main = story.defaults.main_model or ""
-            if models is not None and not privacy_of(main, models.config).private:
+            if (
+                models is not None
+                and not privacy_of(main, models.config).private
+                and not held(story.chat_privacy).private
+            ):
                 self.tabs.addTab(self._models_tab(models), "Models")
             self._add_buttons()
             return

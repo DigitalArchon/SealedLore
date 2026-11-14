@@ -36,6 +36,9 @@ from sealedlore.providers.base import (
 from sealedlore.providers.privacy import privacy_for
 
 Watch = Callable[[ChatRequest, StreamCompleted], None] | None
+# Why a request for a model, about to go where it is this private, mustn't
+# (`ChatProvider.privacy_lock`).
+Lock = Callable[[str, Any], str | None] | None
 # Makes the client for an endpoint, given its settings with the model the
 # first request names (`make_chat_provider` chooses the client by it).
 Make = Callable[[ProviderConfig], ChatProvider]
@@ -75,6 +78,7 @@ class EndpointsProvider(ChatProvider):
         self._route_watch: Watch = None
         self._reasoning_watch: Watch = None
         self._tee_watch: Watch = None
+        self._privacy_lock: Lock = None
         # Why an endpoint's listing couldn't be fetched, by name, after a
         # fetch (`fetch_model_prices`): the others' models are still listed.
         self.listing_problems: dict[str, str] = {}
@@ -113,6 +117,14 @@ class EndpointsProvider(ChatProvider):
         with self._lock:
             for (name, _sealed), provider in self._providers.items():
                 provider.tee_watch = self._wrapped(name, watch)
+
+    @property
+    def privacy_lock(self) -> Lock:  # type: ignore[override]
+        return self._privacy_lock
+
+    @privacy_lock.setter
+    def privacy_lock(self, lock: Lock) -> None:
+        self._privacy_lock = lock
 
     def _wrapped(self, endpoint: str, watch: Watch) -> Watch:
         """The watch as a client calls it, with its request's model put back
@@ -177,9 +189,22 @@ class EndpointsProvider(ChatProvider):
                 provider.cancel()  # a Stop pressed before any client existed still holds
         return provider
 
-    def _forwarded(self, request: ChatRequest) -> tuple[ChatProvider, ChatRequest]:
-        provider = self.provider_for(request.model)
-        return provider, replace(request, model=split_model(request.model)[1])
+    def _forwarded(
+        self, request: ChatRequest, *, sending: bool = False
+    ) -> tuple[ChatProvider, ChatRequest]:
+        """The client for `request`'s model and the request it is given. One
+        about to be sent (`sending`) is first held to the session's lock: a
+        chat recorded as end-to-end encrypted is never handed to a client
+        less private, nor to another service's, whatever its endpoint now
+        says (`privacy_lock`)."""
+        settings, bare = self.resolve(request.model)
+        lock = self._privacy_lock
+        if sending and lock is not None:
+            refusal = lock(request.model, privacy_for(bare, settings))
+            if refusal:
+                raise ProviderError(refusal)
+        provider = self._provider(settings.model_copy(update={"model": bare}))
+        return provider, replace(request, model=bare)
 
     # --- ChatProvider -------------------------------------------------------------
 
@@ -191,14 +216,14 @@ class EndpointsProvider(ChatProvider):
         with self._lock:
             if self._cancelled:
                 raise StreamCancelled()
-        provider, inner = self._forwarded(request)
+        provider, inner = self._forwarded(request, sending=True)
         yield from provider.stream(inner)
 
     def complete(self, request: ChatRequest) -> tuple[str, StreamCompleted]:
         with self._lock:
             if self._cancelled:
                 raise StreamCancelled()
-        provider, inner = self._forwarded(request)
+        provider, inner = self._forwarded(request, sending=True)
         return provider.complete(inner)
 
     def cancel(self) -> None:
@@ -239,6 +264,7 @@ class EndpointsProvider(ChatProvider):
         self._sibling.route_watch = self._route_watch
         self._sibling.reasoning_watch = self._reasoning_watch
         self._sibling.tee_watch = self._tee_watch
+        self._sibling.privacy_lock = self._privacy_lock
         return self._sibling
 
     def detached(self) -> EndpointsProvider:
@@ -249,6 +275,7 @@ class EndpointsProvider(ChatProvider):
         detached.route_watch = self._route_watch
         detached.reasoning_watch = self._reasoning_watch
         detached.tee_watch = self._tee_watch
+        detached.privacy_lock = self._privacy_lock
         return detached
 
     def _make_sibling(self, settings: ProviderConfig) -> ChatProvider:

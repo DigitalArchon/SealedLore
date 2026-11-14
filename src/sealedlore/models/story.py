@@ -16,7 +16,7 @@ from sealedlore.models.character import Character
 from sealedlore.models.image import ImageRef
 from sealedlore.models.node import AgencyMode, NpcScope, ResponseStyle
 from sealedlore.models.plot import Plot
-from sealedlore.models.private import Attestation, PrivatePrompt, PrivateSpan
+from sealedlore.models.private import Attestation, PrivacyRecord, PrivatePrompt, PrivateSpan
 from sealedlore.models.prompt_edit import PromptEdit
 from sealedlore.models.route import ModelRoute
 from sealedlore.models.scene import SceneLogEntry, SceneState
@@ -263,6 +263,11 @@ class Story(BaseModel):
     chat_keep: ChatKeep = "disk"
     # What the TEE check found when the chat was last opened.
     chat_attestation: Attestation | None = None
+    # How private the chat was made, or last moved on purpose (its model
+    # button, Settings): an endpoint edited or removed under it never makes
+    # it less private, nor another service's (providers/privacy.py `holds`).
+    # None for a chat from before Nov 14 2026, taken from what it is on load.
+    chat_privacy: PrivacyRecord | None = None
     # A chat's own reference pictures, added from disk (a story's are on its
     # cards and lore entries).
     reference_images: list[ImageRef] = Field(default_factory=list)

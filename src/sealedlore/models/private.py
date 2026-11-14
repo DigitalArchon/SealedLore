@@ -87,6 +87,20 @@ class Attestation(BaseModel):
     hpke_key_sha256: str = ""
 
 
+class PrivacyRecord(BaseModel):
+    """How private a chat or a private scene was where it began, or where it
+    was last moved on purpose (providers/privacy.py `Privacy`, `holds`). Kept
+    so that it never becomes less private, nor goes to another service,
+    because an endpoint was edited or removed under it: a Tinfoil or Chutes
+    model's id carries no prefix, so without this it was private only while
+    its endpoint's address said so."""
+
+    kind: Literal["", "tee", "sealed"] = ""
+    service: str = ""
+    # Where its calls went (scheme://host[:port]), for the words that say so.
+    origin: str = ""
+
+
 class PrivateSpan(BaseModel):
     id: str = Field(default_factory=new_id)
     # The node the scene hangs from (the story's leaf when it began).
@@ -104,6 +118,11 @@ class PrivateSpan(BaseModel):
     handoff: str | None = None
     handoff_through: str | None = None
     attestation: Attestation | None = None
+    # How private the scene was when it began (or moved to another model):
+    # resumed in a later run on a client less private than this, or another
+    # service's, nothing is sent. None for a scene from before Nov 14 2026,
+    # taken from what it is when resumed.
+    privacy: PrivacyRecord | None = None
     # A TEE model's summary, the one reply that joins the story: "verified",
     # "signed", "failed" or "unchecked", like `NodeMeta.tee` for the scene's
     # passages ("encrypted" on a private/ model).
