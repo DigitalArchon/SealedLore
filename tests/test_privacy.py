@@ -48,6 +48,7 @@ from sealedlore.providers.privacy import (
     privacy_of,
 )
 from sealedlore.providers.private_mode import PrivateModeProvider
+from sealedlore.providers.tinfoil_direct import TinfoilDirect
 from sealedlore.storage.repository import StoryBundle
 
 NANO = "https://nano-gpt.com/api/v1"
@@ -188,27 +189,29 @@ def test_a_sealed_chat_moves_to_any_sealed_model_and_a_tee_chat_up_to_one():
 
 
 def test_a_sealed_endpoint_without_its_client_sends_nothing_and_says_what_to_do():
-    provider = make_chat_provider(tinfoil(model="glm-5-3"))
+    """Chutes E2EE's client isn't built yet (Tinfoil's is: tests/test_tinfoil_direct.py)."""
+    provider = make_chat_provider(chutes(model="moonshotai/Kimi-K3-TEE"))
     assert isinstance(provider, NotBuiltProvider)
     with pytest.raises(ProviderError) as refused:
-        list(provider.stream(request("glm-5-3")))
+        list(provider.stream(request("moonshotai/Kimi-K3-TEE")))
     words = str(refused.value)
     assert "isn't built into this version" in words and "nothing was sent" in words
     assert "private/" in words and "Settings" in words, "a way out, not a dead end"
     with pytest.raises(ProviderError, match="isn't built"):
         provider.fetch_model_prices()
-    chutes_provider = make_chat_provider(chutes(model="moonshotai/Kimi-K3-TEE"))
-    assert isinstance(chutes_provider, NotBuiltProvider)
-    assert "Chutes E2EE" in chutes_provider.reason
+    assert "Chutes E2EE" in provider.reason
+    assert isinstance(make_chat_provider(tinfoil(model="glm-5-3")), TinfoilDirect)
 
 
 def test_the_routing_provider_gives_a_sealed_endpoint_no_plain_client():
-    cfg = endpoints(tinfoil())
+    cfg = endpoints(chutes(), tinfoil())
     routing = EndpointsProvider(cfg)
-    assert isinstance(routing.provider_for("Tinfoil::glm-5-3"), NotBuiltProvider)
-    assert isinstance(routing._plain(tinfoil()), NotBuiltProvider), "nor for its listing"
+    assert isinstance(routing.provider_for("Chutes::m-TEE"), NotBuiltProvider)
+    assert isinstance(routing._plain(chutes()), NotBuiltProvider), "nor for its listing"
     with pytest.raises(ProviderError, match="isn't built"):
-        list(routing.stream(request("Tinfoil::glm-5-3")))
+        list(routing.stream(request("Chutes::m-TEE")))
+    # Tinfoil's sealing client lists its models itself, without the key.
+    assert isinstance(routing._plain(tinfoil()), TinfoilDirect)
     routing.close()
 
 

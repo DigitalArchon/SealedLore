@@ -598,20 +598,25 @@ def key_withheld(
 # The protocol the chat endpoint speaks: OpenAI's /chat/completions (NanoGPT,
 # OpenRouter, a local server), Anthropic's own Messages API
 # (providers/anthropic.py), or one of the end-to-end encrypted services whose
-# every request is sealed on this computer: Tinfoil's own API and Chutes' E2EE
-# (providers/privacy.py; their clients aren't built yet, so an endpoint
-# speaking either sends nothing). "auto" reads it from the host (`chat_api`).
+# every request is sealed on this computer: Tinfoil's own API
+# (providers/tinfoil_direct.py) and Chutes' E2EE (providers/privacy.py: its
+# client isn't built yet, so an endpoint speaking it sends nothing). "auto"
+# reads it from the host (`chat_api`).
 ChatApi = Literal["auto", "openai", "anthropic", "tinfoil", "chutes-e2ee"]
+# The end-to-end encrypted protocols: an endpoint speaking one seals every
+# request (`sealed_service`).
+SEALED_APIS = frozenset({"tinfoil", "chutes-e2ee"})
 # What Settings → Endpoints → Speaks offers: only protocols with a client.
 CHAT_API_LABELS: dict[str, str] = {
     "auto": "From the address",
     "openai": "OpenAI-compatible",
     "anthropic": "Anthropic",
+    "tinfoil": "Tinfoil, end-to-end encrypted",
 }
-# The sealed ones, shown there only for an endpoint already set to one (a
-# config written by hand), so a Save keeps it rather than make it "auto".
-SEALED_API_LABELS: dict[str, str] = {
-    "tinfoil": "Tinfoil, end-to-end encrypted (not built yet)",
+# The sealed ones with no client yet, shown there only for an endpoint already
+# set to one (a config written by hand), so a Save keeps it rather than make
+# it "auto".
+UNBUILT_API_LABELS: dict[str, str] = {
     "chutes-e2ee": "Chutes E2EE, end-to-end encrypted (not built yet)",
 }
 ANTHROPIC_HOST = "api.anthropic.com"
@@ -643,7 +648,7 @@ def sealed_service(base_url: str, api: str = "auto") -> str:
     ("tinfoil", "chutes-e2ee"), or "": the one `api` names, else the one its
     host is known for, whatever `api` says. When in doubt, sealed: an
     endpoint set to "openai" on Tinfoil's host is still Tinfoil's."""
-    if api in SEALED_API_LABELS:
+    if api in SEALED_APIS:
         return api
     host = _host_of(base_url)
     for domain, name in SEALED_HOSTS.items():

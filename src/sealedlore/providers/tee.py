@@ -315,6 +315,23 @@ def what_was_attested(attestation: Attestation) -> str:
             "Attested: the enclave whose key signs this model's replies. Whether that "
             "machine runs the model itself or passes requests on isn't shown." + clear
         )
+    if attestation.attested == "router" and attestation.service == "tinfoil":
+        release = attestation.release_tag or f"release {attestation.release_digest[:12]}"
+        measured = attestation.hardware or "its hardware"
+        older = (
+            f" (an older release than the latest, {attestation.latest_release})"
+            if attestation.latest_release
+            else ""
+        )
+        return (
+            f"Attested: Tinfoil's router enclave at {attestation.enclave}, running "
+            f"tinfoilsh/confidential-model-router {release}{older}, a Sigstore-attested "
+            f"build of its public source, measured by {measured}. Your text is sealed on "
+            "this computer to that enclave's key, over a connection pinned to its "
+            "attested TLS key. Tinfoil sees your account, the model, timing, sizes and "
+            "cost, never the text. That the router hands your request only to attested "
+            "model enclaves is the router's published code, not checked by this app."
+        )
     return ""
 
 

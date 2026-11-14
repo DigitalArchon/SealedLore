@@ -1,0 +1,77 @@
+{
+ "reviewed_on": "2026-11-14",
+ "sdk": {
+  "package": "tinfoil",
+  "version": "0.15.0",
+  "ehbp_version": "0.4.1"
+ },
+ "router_repo": "tinfoilsh/confidential-model-router",
+ "router_release": "v0.0.176",
+ "atc": "https://atc.tinfoil.sh",
+ "base_url": "https://inference.tinfoil.sh/v1",
+ "paths": {
+  "attestation": "/attestation",
+  "chat": "/v1/chat/completions",
+  "models": "/v1/models"
+ },
+ "chat_type": "chat",
+ "listing_fields": [
+  "context_window",
+  "created",
+  "description",
+  "endpoints",
+  "experimental",
+  "id",
+  "intelligence",
+  "multimodal",
+  "name",
+  "object",
+  "owned_by",
+  "pricing",
+  "reasoning",
+  "reasoning_params",
+  "supported_efforts",
+  "tool_calling",
+  "type"
+ ],
+ "pricing_fields": [
+  "cachedInputTokenPricePer1M",
+  "inputTokenPricePer1M",
+  "outputTokenPricePer1M",
+  "requestPrice"
+ ],
+ "supported_efforts_seen": [
+  "high",
+  "low",
+  "max",
+  "medium",
+  "minimal",
+  "none",
+  "xhigh"
+ ],
+ "body_fields": [
+  "frequency_penalty",
+  "logit_bias",
+  "max_tokens",
+  "messages",
+  "model",
+  "presence_penalty",
+  "reasoning_effort",
+  "response_format",
+  "seed",
+  "stop",
+  "stream",
+  "stream_options",
+  "temperature",
+  "top_p",
+  "user"
+ ],
+ "cache_secret_field": "user_cache_secret",
+ "verification_steps": [
+  "verifyCode",
+  "verifyEnclave",
+  "compareMeasurements"
+ ],
+ "tls_key_field": "tlsPublicKey",
+ "reply_nonce_header": "Ehbp-Response-Nonce"
+}

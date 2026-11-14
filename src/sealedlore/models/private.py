@@ -65,8 +65,13 @@ class Attestation(BaseModel):
     # What the TEE/ check attested (providers/tee.py `what_was_attested`):
     # "gateway", RedPill's gateway, which passes the model's requests on;
     # "instances", each instance the provider listed; "enclave", the one
-    # whose key signs the replies, not shown to be either. "" before Nov 2026.
-    attested: Literal["gateway", "instances", "enclave", ""] = ""
+    # whose key signs the replies, not shown to be either; "router", Tinfoil's
+    # router enclave an end-to-end encrypted model is sealed to. "" before
+    # Nov 2026.
+    attested: Literal["gateway", "instances", "enclave", "router", ""] = ""
+    # Who sealed or attested it (providers/privacy.py: "nanogpt-private",
+    # "tinfoil", …); "" for a TEE/ model's and before Nov 14 2026.
+    service: str = ""
     # End-to-end encrypted models only.
     encrypted: bool = False
     enclave: str = ""

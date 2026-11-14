@@ -65,7 +65,7 @@ SERVICE_NAMES = {
 }
 # The services whose client this version has. A sealed endpoint of any other
 # sends nothing (`NotBuiltProvider`): a plain client would send it in the clear.
-BUILT_SERVICES = frozenset({NANOGPT_PRIVATE, NANOGPT_TEE})
+BUILT_SERVICES = frozenset({NANOGPT_PRIVATE, NANOGPT_TEE, TINFOIL})
 
 
 @dataclass(frozen=True)
@@ -95,6 +95,8 @@ class Privacy:
         line, or ("", "")."""
         if self.service == NANOGPT_PRIVATE:
             return "🔐 End-to-end encrypted", E2EE_NOTE
+        if self.service == TINFOIL:
+            return "🔐 End-to-end encrypted (Tinfoil)", TINFOIL_NOTE
         if self.sealed:
             name = SERVICE_NAMES.get(self.service, self.service)
             return "🔐 End-to-end encrypted", (
@@ -113,6 +115,12 @@ E2EE_NOTE = (
     "End-to-end encrypted: every message is sealed on this machine to a key only the "
     "model's attested enclave holds. nano-gpt relays ciphertext; it sees your account, "
     "the model, timing, sizes and cost, never the text."
+)
+TINFOIL_NOTE = (
+    "End-to-end encrypted, straight to Tinfoil (preliminary): every message is sealed on this "
+    "machine to a key only Tinfoil's attested router enclave holds, over a connection "
+    "pinned to the enclave's attested TLS key. Tinfoil sees your account, the model, "
+    "timing, sizes and cost, never the text."
 )
 TEE_NOTE = (
     "TEE: the model runs in an attested enclave and its replies are signed, but the text "

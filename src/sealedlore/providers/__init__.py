@@ -13,7 +13,13 @@ from sealedlore.providers.base import (
 from sealedlore.providers.endpoints import EndpointsProvider
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
-from sealedlore.providers.privacy import NANOGPT_PRIVATE, NotBuiltProvider, not_built, privacy_for
+from sealedlore.providers.privacy import (
+    NANOGPT_PRIVATE,
+    TINFOIL,
+    NotBuiltProvider,
+    not_built,
+    privacy_for,
+)
 from sealedlore.providers.wire import should_use_cache_control, to_wire_messages
 
 
@@ -39,6 +45,10 @@ def make_chat_provider(settings: ProviderConfig) -> ChatProvider:
         from sealedlore.providers.private_mode import PrivateModeProvider
 
         return PrivateModeProvider(settings)
+    if privacy.service == TINFOIL:
+        from sealedlore.providers.tinfoil_direct import TinfoilDirect
+
+        return TinfoilDirect(settings)
     if privacy.sealed:
         return NotBuiltProvider(
             settings,

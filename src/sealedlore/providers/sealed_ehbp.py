@@ -55,6 +55,7 @@ from sealedlore.providers.base import ChatRequest, ProviderError, StreamEvent, r
 from sealedlore.providers.dcap import since_boot
 from sealedlore.providers.http import environment_proxy, make_client
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
+from sealedlore.providers.privacy import NANOGPT_PRIVATE
 
 ROUTER_REPO = "tinfoilsh/confidential-model-router"
 MAX_AGE_SECONDS = 5 * 60
@@ -73,11 +74,19 @@ class ModelRetired(ProviderError):
     whatever the model), so without this a retired model attested fine and
     its first message came back as a bare refusal."""
 
-    def __init__(self, model: str, offered: Sequence[str] = (), **kwargs: Any) -> None:
+    def __init__(
+        self,
+        model: str,
+        offered: Sequence[str] = (),
+        *,
+        service: str = "NanoGPT's Private Mode",
+        **kwargs: Any,
+    ) -> None:
         super().__init__(
-            f"{model} is no longer offered by NanoGPT's Private Mode; choose another private model",
+            f"{model} is no longer offered by {service}; choose another private model",
             **kwargs,
         )
+        self.service = service
         self.model = model
         # What the service's list does offer: what a scene may move to.
         self.offered = list(offered)
@@ -90,6 +99,9 @@ class Verified:
     hpke_public_key: str
     enclave: str
     attestation: Attestation
+    # The sha256 of the enclave's TLS key (its SubjectPublicKeyInfo, DER, in
+    # hex), as the attestation binds it: what a direct connection pins to.
+    tls_public_key: str = ""
 
 
 def origin_of(base_url: str) -> str:
@@ -137,6 +149,7 @@ def sdk_verify(
     cache_secret: str,
     *,
     base_url: str | None = None,
+    service: str = NANOGPT_PRIVATE,
 ) -> Verified:
     """Attest Tinfoil's router from the attestation bundle `bundle_url`
     serves (network; worker thread): NanoGPT's relay, or Tinfoil's own
@@ -190,9 +203,12 @@ def sdk_verify(
             latest = release.tag
     except Exception:  # noqa: BLE001 - reported, never fatal
         pass
+    # The TLS key the report binds, as the SDK read it ("tlsPublicKey").
+    tls = str(document.get("tlsPublicKey") or getattr(truth, "public_key", "") or "")
     return Verified(
         hpke_public_key=truth.hpke_public_key,
         enclave=client.enclave,
+        tls_public_key=tls.strip().lower(),
         attestation=attestation_record(
             enclave=client.enclave,
             hardware=_hardware(document),
@@ -202,6 +218,7 @@ def sdk_verify(
             latest_release=latest,
             latest_checked=checked,
             hpke_public_key=truth.hpke_public_key,
+            service=service,
         ),
     )
 
@@ -216,6 +233,7 @@ def attestation_record(
     latest_release: str,
     latest_checked: bool,
     hpke_public_key: str,
+    service: str = NANOGPT_PRIVATE,
 ) -> Attestation:
     release = release_tag or f"release {release_digest[:12]}"
     if latest_release:
@@ -229,6 +247,8 @@ def attestation_record(
     return Attestation(
         verified=True,
         encrypted=True,
+        attested="router",
+        service=service,
         enclave=enclave,
         hardware=hardware,
         measurement=measurement,

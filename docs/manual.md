@@ -526,17 +526,23 @@ picture models are priced by the image token or the megapixel, and for
 those the picture dialog says the price is unknown until the picture is
 made.
 
-**Tinfoil and Chutes: not yet.** End-to-end encrypted models reached through
-Tinfoil's or Chutes' own services are being added (preliminary, and not yet
-tried with an account); this version has no client for either. An endpoint
-whose address is one of theirs (anything on `tinfoil.sh`, such as
-`https://inference.tinfoil.sh/v1`, or on `chutes.ai`, such as
-`https://api.chutes.ai`) therefore sends nothing at all, whatever **Speaks**
-says: an ordinary client would send your text there in the clear, so every
-request and model listing is refused with a note saying so. Pictures, videos
-and embeddings never take the address or key of such an endpoint either. For
-end-to-end encryption now, use NanoGPT's `private/` models (see Private
-scenes).
+**Tinfoil's own API (preliminary).** Tinfoil serves end-to-end encrypted
+models of its own: the same router as NanoGPT's `private/` models, reached
+with no relay in between. Add an endpoint with the address
+`https://inference.tinfoil.sh/v1` and your Tinfoil key; **Speaks** reads
+**Tinfoil, end-to-end encrypted** from the address (or choose it outright).
+Every model on it is end-to-end encrypted (see "Private scenes"): this is
+built and tested against Tinfoil's public listing and attestation, but not
+yet run with an account.
+
+**Chutes: not yet.** Chutes' end-to-end encryption is being added, and this
+version has no client for it. An endpoint whose address is on `chutes.ai`
+(such as `https://api.chutes.ai`) therefore sends nothing at all, whatever
+**Speaks** says: an ordinary client would send your text there in the clear,
+so every request and model listing is refused with a note saying so. The
+same holds for anything on `tinfoil.sh` reached any way but Tinfoil's own
+client. Pictures, videos and embeddings never take the address or key of an
+end-to-end encrypted endpoint.
 
 **Choosing a model.** Every model field has a **Choose** button. It lists the
 models your endpoint offers (where a job has models measured for it,
@@ -2878,6 +2884,32 @@ Nothing else of it is written: the library would cache what it fetches
 (the release's record, the processor's certificate, which names the chip,
 and Intel's collateral) in `~/.cache/tinfoil`, and the app keeps it from
 writing there.
+
+**Tinfoil's own API (preliminary, not yet run with an account).** An
+endpoint on `https://inference.tinfoil.sh/v1` that speaks **Tinfoil** (see
+"Running the app") reaches the same router with nothing in between:
+- the attestation comes from Tinfoil's own bundle service
+  (`https://atc.tinfoil.sh`), checked by the same verifier under the same
+  rules, and must be for the endpoint's own host, or nothing is sent;
+- the connection is **pinned** to the router's attested TLS key: as the
+  handshake completes, before a byte of the request leaves, the
+  certificate's key must be the one the attestation binds, behind a proxy
+  too. If it isn't, nothing is sent ("Tinfoil's TLS key isn't the attested
+  one") and the router is attested again before the next try. So your key
+  and the request's headers reach only the attested enclave;
+- the request carries your key, sealed text and nothing else of yours;
+- the model list (`/v1/models`) is read without your key, the one request
+  that isn't sealed, and gives each model's prices, context and the
+  reasoning efforts it takes. Only an effort the model lists is sent;
+- Tinfoil reports no cost in a stream, so each reply's cost is estimated
+  from the listed prices (shown with "~").
+
+Replies are marked "end-to-end encrypted", and the model button and Test
+attestation say what was attested. What Tinfoil sees: your account, which
+model, when, how large the request and reply are, and the cost, never the
+text. What the app doesn't prove: that the router passes your request only to
+attested model enclaves (that is the router's published code, whose
+attested build the app checks, not something it checks itself).
 
 ## Simple chat
 

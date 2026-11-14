@@ -74,7 +74,7 @@ from sealedlore.models.config import (
     RECOMMENDED_IMAGE_MODELS,
     RECOMMENDED_MODELS,
     RECOMMENDED_TEXT_MODELS,
-    SEALED_API_LABELS,
+    UNBUILT_API_LABELS,
     Config,
     EmbeddingProviderConfig,
     KeyMove,
@@ -599,10 +599,10 @@ class SettingsDialog(QDialog):
             self.provider_name.setText(copy.name)
             self.base_url.setText(copy.base_url)
             self.api_key.setText(copy.api_key)
-            if self.chat_api.findData(copy.api) < 0 and copy.api in SEALED_API_LABELS:
+            if self.chat_api.findData(copy.api) < 0 and copy.api in UNBUILT_API_LABELS:
                 # Not offered until its client exists, but kept: saved as
                 # "From the address", it could become a plain endpoint.
-                self.chat_api.addItem(SEALED_API_LABELS[copy.api], copy.api)
+                self.chat_api.addItem(UNBUILT_API_LABELS[copy.api], copy.api)
             self.chat_api.setCurrentIndex(max(0, self.chat_api.findData(copy.api)))
         finally:
             self._loading_endpoint = False
@@ -1045,7 +1045,13 @@ class SettingsDialog(QDialog):
         if sealed:
             self.api_note.setText(
                 not_built(privacy_at("", self.base_url.text(), sealed))
-                or "End-to-end encrypted: every message is sealed on this computer."
+                or (
+                    "Tinfoil's own API, end-to-end encrypted (preliminary, not yet run with an "
+                    "account): every message is sealed on this computer to Tinfoil's attested "
+                    "router enclave, over a connection pinned to its attested TLS key. The key "
+                    "goes to this address only, as a Bearer token; the model list is read "
+                    "without it. Pictures, videos and embeddings need endpoints of their own."
+                )
             )
         elif chat_api(self.base_url.text(), self.chat_api.currentData()) == "anthropic":
             self.api_note.setText(
