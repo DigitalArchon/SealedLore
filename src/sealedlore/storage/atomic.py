@@ -59,6 +59,34 @@ def nests_deeper(data: Any, limit: int = MAX_NESTING) -> bool:
     return False
 
 
+class NestedTooDeep(json.JSONDecodeError):
+    """JSON from outside nested past `MAX_NESTING` (`outside_json`): a
+    JSONDecodeError, so every reader's own handling of JSON it can't read
+    takes it, and a reader with words of its own for it can catch it first."""
+
+    def __init__(self, limit: int) -> None:
+        super().__init__(f"nested deeper than {limit} levels", "", 0)
+
+
+def outside_json(data: str | bytes | bytearray, limit: int = MAX_NESTING) -> Any:
+    """JSON that came from outside the app (an endpoint's reply, a stream's
+    event, a file someone else made, a phone's request), parsed and held to
+    `limit` levels. Past them, or too deep for Python's parser to read at all
+    (3.11 gives up at about 1,000 levels with a RecursionError, where 3.12
+    reads on), it is `NestedTooDeep`: what was read could otherwise be
+    walked, copied or saved into a RecursionError later, far from here, and
+    crash whatever thread met it. Bytes are read as json.loads reads them
+    (UTF-8, -16 or -32 by their first bytes). (The DA apps' standard: depth
+    at most 200, never a crash.)"""
+    try:
+        value = json.loads(data)
+    except RecursionError:
+        raise NestedTooDeep(limit) from None
+    if nests_deeper(value, limit):
+        raise NestedTooDeep(limit)
+    return value
+
+
 def read_json(path: Path, default: Any = None) -> Any:
     try:
         with open(path, "rb") as handle:

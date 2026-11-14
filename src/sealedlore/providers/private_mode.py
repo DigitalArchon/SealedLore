@@ -64,7 +64,7 @@ from sealedlore.models.config import ProviderConfig, is_local_host, shown, witho
 from sealedlore.models.private import Attestation
 from sealedlore.providers.base import ChatRequest, ProviderError, StreamEvent, relay_said
 from sealedlore.providers.dcap import since_boot
-from sealedlore.providers.http import environment_proxy, make_client
+from sealedlore.providers.http import environment_proxy, make_client, reply_json
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
 from sealedlore.providers.private_catalog import fetch_private_ids, offered, offers_private_mode
 from sealedlore.providers.tee import is_private_mode
@@ -533,7 +533,7 @@ class PrivateModeProvider(OpenAICompatibleProvider):
                 status_code=response.status_code,
             )
         try:
-            data = response.json()
+            data = reply_json(response)
         except ValueError as exc:
             raise ProviderError("nano-gpt's Private Mode check wasn't JSON") from exc
         scope = str(data.get("cacheScope") or "").strip()

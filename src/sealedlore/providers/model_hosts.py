@@ -21,7 +21,7 @@ from urllib.parse import quote, urlparse
 import httpx
 
 from sealedlore.providers.base import ProviderError
-from sealedlore.providers.http import make_client
+from sealedlore.providers.http import make_client, reply_json
 
 # Bits per weight, for the "FP8 or better" floor. NanoGPT's own floor leaves
 # out a host whose precision it doesn't know, so this does too.
@@ -153,7 +153,7 @@ def fetch_model_hosts(base_url: str, model: str, *, timeout: float = 30.0) -> Mo
         with make_client(url, timeout=timeout) as client:
             response = client.get(url)
             response.raise_for_status()
-            data = response.json()
+            data = reply_json(response)
     except (httpx.HTTPError, ValueError) as exc:
         raise ProviderError(f"couldn't list the hosts for {model}: {exc}") from exc
     if not isinstance(data, Mapping):

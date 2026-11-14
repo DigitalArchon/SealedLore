@@ -20,6 +20,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QLabel, QToolButton, QVBoxLayout, QWidget
 
 from sealedlore.gui.sizing import GrowingText
+from sealedlore.storage.atomic import NestedTooDeep, outside_json
 
 
 def as_text(value: Any) -> str:
@@ -85,7 +86,10 @@ class JsonField(QWidget):
             self._say("Empty (write {} to clear it): kept as it last was.")
             return
         try:
-            value = json.loads(source)
+            value = outside_json(source)
+        except NestedTooDeep:
+            self._say("Nested deeper than a card's JSON can be: kept as it last was.")
+            return
         except json.JSONDecodeError as exc:
             self._say(
                 f"Not JSON yet (line {exc.lineno}, column {exc.colno}: {exc.msg}): kept as "

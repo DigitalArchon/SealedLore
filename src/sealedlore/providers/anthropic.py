@@ -45,8 +45,10 @@ from sealedlore.providers.base import (
     checked_key,
     parse_usage,
 )
+from sealedlore.providers.http import reply_json
 from sealedlore.providers.streaming import StreamingHttpProvider, read_lines
 from sealedlore.providers.wire import cache_marker
+from sealedlore.storage.atomic import outside_json
 
 API_VERSION = "2023-06-01"
 # A one-hour cache marker (`Config.cache_ttl`) needs this beta header on the
@@ -257,7 +259,7 @@ class AnthropicProvider(StreamingHttpProvider):
                 if not data:
                     continue
                 try:
-                    event = json.loads(data)
+                    event = outside_json(data)
                 except (json.JSONDecodeError, RecursionError) as exc:
                     raise ProviderError(f"malformed stream event: {data[:200]!r}") from exc
                 if not isinstance(event, dict):
@@ -349,7 +351,7 @@ class AnthropicProvider(StreamingHttpProvider):
             if response.status_code >= 400:
                 raise self._http_error(url, response)
             try:
-                data = response.json()
+                data = reply_json(response)
             except ValueError as exc:
                 raise ProviderError("the models list wasn't JSON") from exc
             items = data.get("data") if isinstance(data, dict) else None
@@ -377,7 +379,7 @@ def _error_message(body: str | None) -> str:
     if not body:
         return ""
     try:
-        data = json.loads(body)
+        data = outside_json(body)
     except ValueError:
         return ""
     error = data.get("error") if isinstance(data, dict) else None

@@ -29,6 +29,7 @@ from sealedlore.providers.base import (
     checked_key,
     parse_usage,
 )
+from sealedlore.providers.http import reply_json
 from sealedlore.providers.private_catalog import (
     fetch_private_ids,
     offers_private_mode,
@@ -38,6 +39,7 @@ from sealedlore.providers.reasoning_defaults import fetch_reasoning_defaults
 from sealedlore.providers.streaming import StreamingHttpProvider, read_lines
 from sealedlore.providers.tee import is_private_mode
 from sealedlore.providers.wire import build_chat_payload, cache_headers
+from sealedlore.storage.atomic import outside_json
 
 SSE_DATA_PREFIX = "data:"
 SSE_DONE = "[DONE]"
@@ -80,7 +82,7 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
                 f"{url} returned HTTP {response.status_code}", status_code=response.status_code
             )
         try:
-            data = response.json()
+            data = reply_json(response)
         except ValueError as exc:
             raise ProviderError("the models list wasn't JSON") from exc
         items = data.get("data", []) if isinstance(data, dict) else data
@@ -184,7 +186,7 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
                     continue
 
                 try:
-                    chunk = json.loads(data)
+                    chunk = outside_json(data)
                 except (json.JSONDecodeError, RecursionError) as exc:
                     raise _malformed(data) from exc
                 if not isinstance(chunk, dict):

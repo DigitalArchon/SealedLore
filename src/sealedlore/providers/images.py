@@ -32,7 +32,7 @@ import httpx
 from sealedlore.models.config import media_api
 from sealedlore.providers import wavespeed
 from sealedlore.providers.base import ProviderError
-from sealedlore.providers.http import make_client
+from sealedlore.providers.http import make_client, reply_json
 from sealedlore.providers.media_http import MediaHttp, MediaTimedOut
 
 # How long a picture is waited for. NanoGPT's endpoint is synchronous and
@@ -294,7 +294,7 @@ class ImageClient:
             return self._wavespeed(payload)
         response = self.http.request("POST", self.endpoint, json=payload, makes=True)
         try:
-            body = response.json()
+            body = reply_json(response)
         except ValueError as exc:
             raise ProviderError(f"{self.endpoint} returned a non-JSON body") from exc
         if not isinstance(body, dict):
@@ -392,18 +392,18 @@ def list_image_models(
     try:
         if api == "nanogpt":
             response = http.get(f"{root}/image-models", params={"detailed": "true"})
-            return parse_image_models(response.json()) if response.status_code < 400 else []
+            return parse_image_models(reply_json(response)) if response.status_code < 400 else []
         if api == "openrouter":
             response = http.get(f"{root}/images/models")
             if response.status_code >= 400:
                 return []
-            body = response.json()
+            body = reply_json(response)
             items = body.get("data") if isinstance(body, dict) else body
             for item in items if isinstance(items, list) else ():
                 if isinstance(item, dict) and item.get("id") == wanted:
                     priced = http.get(f"{root}/images/models/{wanted}/endpoints")
-                    if priced.status_code < 400 and isinstance(priced.json(), dict):
-                        item["endpoints"] = priced.json().get("endpoints") or []
+                    if priced.status_code < 400 and isinstance(reply_json(priced), dict):
+                        item["endpoints"] = reply_json(priced).get("endpoints") or []
             return parse_openrouter_image_models(items)
         if api == "wavespeed":
             media = MediaHttp(base_url, api_key, timeout_seconds=timeout_seconds, client=http)

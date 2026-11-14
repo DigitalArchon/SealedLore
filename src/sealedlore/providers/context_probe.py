@@ -22,7 +22,7 @@ from urllib.parse import urlparse
 import httpx
 
 from sealedlore.models.config import key_problem
-from sealedlore.providers.http import make_client
+from sealedlore.providers.http import make_client, reply_json
 
 TIMEOUT_SECONDS = 8.0
 
@@ -71,7 +71,7 @@ def _get(http: httpx.Client, url: str, headers: dict, **kwargs) -> Any:
     response = http.get(url, headers=headers, **kwargs)
     if response.status_code >= 400:
         return None
-    return response.json()
+    return reply_json(response)
 
 
 def _listing(http, base_url, headers, model) -> ContextSize | None:
@@ -97,7 +97,7 @@ def _ollama(http, base_url, headers, model) -> ContextSize | None:
     response = http.post(root + "/api/show", json={"model": model}, headers=headers)
     if response.status_code >= 400:
         return None
-    show = response.json()
+    show = reply_json(response)
     for line in str(show.get("parameters") or "").splitlines():
         parts = line.split()
         if len(parts) == 2 and parts[0] == "num_ctx" and parts[1].isdigit():

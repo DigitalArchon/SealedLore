@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from http import HTTPStatus
 from urllib.parse import parse_qsl
 
+from sealedlore.storage.atomic import outside_json
+
 MAX_HEADER_BYTES = 8 * 1024
 MAX_BODY_BYTES = 64 * 1024
 
@@ -70,7 +72,8 @@ class Request:
         if self.headers.get("content-type", "").split(";")[0].strip().lower() != "application/json":
             raise HttpError(415, "send application/json")
         try:
-            return json.loads(self.body.decode("utf-8")) if self.body else {}
+            # A phone's body, held to the depth limit (`outside_json`).
+            return outside_json(self.body.decode("utf-8")) if self.body else {}
         except (UnicodeDecodeError, ValueError) as exc:
             raise HttpError(400, "the body isn't JSON") from exc
 

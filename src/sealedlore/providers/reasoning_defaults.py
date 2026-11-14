@@ -22,7 +22,7 @@ from urllib.parse import urlparse
 import httpx
 
 from sealedlore.providers.base import ProviderError
-from sealedlore.providers.http import make_client
+from sealedlore.providers.http import make_client, reply_json
 
 # The fields engine/reasoning.default_reasoning reads; the listing is ~2 MB
 # and nothing else of it is kept.
@@ -55,7 +55,7 @@ def fetch_reasoning_defaults(base_url: str, *, timeout: float = 60.0) -> dict[st
         with make_client(url, timeout=timeout) as client:
             response = client.get(url)
             response.raise_for_status()
-            data = response.json()
+            data = reply_json(response)
     except (httpx.HTTPError, ValueError) as exc:
         raise ProviderError(f"couldn't read the models' default reasoning: {exc}") from exc
     models = data.get("models") if isinstance(data, Mapping) else None

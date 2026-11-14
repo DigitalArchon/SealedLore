@@ -21,7 +21,7 @@ from typing import Any
 import httpx
 
 from sealedlore.providers.base import ProviderError, checked_key
-from sealedlore.providers.http import make_client
+from sealedlore.providers.http import make_client, reply_json
 
 
 @dataclass(frozen=True)
@@ -110,7 +110,7 @@ class DecisionsClient:
                 body=response.text,
             )
         try:
-            body = response.json()
+            body = reply_json(response)
         except ValueError as exc:
             raise ProviderError(f"{self.endpoint} returned a non-JSON body") from exc
         if not isinstance(body, dict):

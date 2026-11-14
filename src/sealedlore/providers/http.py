@@ -32,6 +32,7 @@ import httpx
 
 from sealedlore.models.config import is_local_host
 from sealedlore.providers.base import ProviderError
+from sealedlore.storage.atomic import outside_json
 
 # The httpcore trace events that complete with the stream a request will be
 # read from, whatever opened it: "connection." for a direct connection,
@@ -161,6 +162,13 @@ def refuse_insecure_redirect(response: httpx.Response) -> None:
             f"{response.request.url.host} redirected to {target[:120]!r}, a server on this "
             "computer or your local network; refused"
         )
+
+
+def reply_json(response: httpx.Response) -> Any:
+    """A reply's body as JSON, held to the depth limit (`outside_json`), in
+    place of `response.json()`, which reads any depth: past it, a
+    `json.JSONDecodeError` like any body that isn't JSON."""
+    return outside_json(response.content)
 
 
 def make_client(base_url: str, **kwargs: Any) -> httpx.Client:

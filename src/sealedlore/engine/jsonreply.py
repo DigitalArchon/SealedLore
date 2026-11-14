@@ -26,6 +26,8 @@ import json
 import re
 from typing import Any
 
+from sealedlore.storage.atomic import MAX_NESTING, outside_json
+
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
 _CLOSER = {"{": "}", "[": "]"}
 # The most closers a reply may have left off its end for `_balanced` to add
@@ -42,6 +44,10 @@ def extract_json(text: str, kind: type[dict] | type[list], what: str) -> Any:
     """
     opener, closer = ("{", "}") if kind is dict else ("[", "]")
     cleaned = _FENCE.sub("", text.strip())
+    if _nests_past(cleaned, MAX_NESTING):
+        # Before any of the repairs below parses it: one reads its last whole
+        # value with a decoder of its own, which reads any depth.
+        raise ValueError(f"the {what} was nested deeper than {MAX_NESTING} levels")
     start, end = cleaned.find(opener), cleaned.rfind(closer)
     if start < 0:
         raise ValueError(f"the reply held no {what}")
@@ -52,7 +58,7 @@ def extract_json(text: str, kind: type[dict] | type[list], what: str) -> Any:
         return data
     span = cleaned[start : end + 1]
     try:
-        data = json.loads(span)
+        data = outside_json(span)
     except json.JSONDecodeError as exc:
         data = _repaired(span)
         if data is None:
@@ -66,6 +72,30 @@ def extract_json(text: str, kind: type[dict] | type[list], what: str) -> Any:
     return data
 
 
+def _nests_past(text: str, limit: int) -> bool:
+    """Whether brackets outside strings nest past `limit` anywhere in the
+    text: read once, as the model wrote it, before anything parses it."""
+    depth = 0
+    in_string = escaped = False
+    for char in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+        elif char in "{[":
+            depth += 1
+            if depth > limit:
+                return True
+        elif char in "}]":
+            depth = max(depth - 1, 0)
+    return False
+
+
 def _repaired(span: str) -> Any:
     """The span parsed after the repairs that keep it one value, or None."""
     for fixed in (
@@ -74,7 +104,7 @@ def _repaired(span: str) -> Any:
         _without_trailing_commas(_escape_inner_quotes(span)),
     ):
         try:
-            return json.loads(fixed)
+            return outside_json(fixed)
         except json.JSONDecodeError:
             continue
     return None
@@ -92,7 +122,7 @@ def _closed(text: str) -> Any:
 
 def _parses(text: str) -> Any:
     try:
-        return json.loads(text)
+        return outside_json(text)
     except json.JSONDecodeError:
         return None
 

@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 import httpx
 
 from sealedlore.models.config import split_model, without_password
-from sealedlore.providers.http import make_client
+from sealedlore.providers.http import make_client, reply_json
 from sealedlore.providers.tee import is_private_mode, is_tee
 
 RELAY_MODELS_PATH = "/api/v1/private/tinfoil/models"
@@ -105,7 +105,7 @@ def fetch_private_ids(
     client = client or make_client(url)
     try:
         response = client.get(url, timeout=timeout)
-        data = response.json() if response.status_code < 400 else {}
+        data = reply_json(response) if response.status_code < 400 else {}
     except (httpx.HTTPError, ValueError):
         return []
     finally:

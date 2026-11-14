@@ -41,6 +41,7 @@ import httpx
 from sealedlore.models.config import require_https
 from sealedlore.providers.base import ProviderError
 from sealedlore.providers.http import make_client
+from sealedlore.storage.atomic import outside_json
 
 # As a card file chosen on disk (storage/tavern_cards.py): read whole, a PNG
 # or JSON; read in place, a CHARX, which may carry a set of expression
@@ -340,7 +341,7 @@ class _Getter:
     def json(self, url: str, site: str) -> Any:
         data, _type = self.bytes(url, site, accept="application/json")
         try:
-            return json.loads(data)
+            return outside_json(data)
         except (UnicodeDecodeError, json.JSONDecodeError):
             raise LinkError(f"{site} sent an answer that can't be read.") from None
 
@@ -427,7 +428,7 @@ def _refusal(response: httpx.Response, site: str) -> str:
         return BOT_CHECK.format(host=response.request.url.host)
     said = ""
     try:
-        answer = json.loads(body)
+        answer = outside_json(body)
     except (UnicodeDecodeError, json.JSONDecodeError):
         answer = None
     if isinstance(answer, dict):

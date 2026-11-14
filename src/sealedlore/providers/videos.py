@@ -40,7 +40,7 @@ import httpx
 from sealedlore.models.config import _same_host, media_api
 from sealedlore.providers import wavespeed
 from sealedlore.providers.base import ProviderError
-from sealedlore.providers.http import make_client
+from sealedlore.providers.http import make_client, reply_json
 from sealedlore.providers.media_http import MediaHttp
 
 # A single request (a submit, a status, a download of tens of megabytes).
@@ -438,11 +438,17 @@ def list_video_models(
     try:
         if api == "nanogpt":
             response = http.get(f"{root}/video-models", params={"detailed": "true"})
-            return parse_nanogpt_video_models(response.json()) if response.status_code < 400 else []
+            return (
+                parse_nanogpt_video_models(reply_json(response))
+                if response.status_code < 400
+                else []
+            )
         if api in ("openrouter", "openai"):
             response = http.get(f"{root}/videos/models")
             return (
-                parse_openrouter_video_models(response.json()) if response.status_code < 400 else []
+                parse_openrouter_video_models(reply_json(response))
+                if response.status_code < 400
+                else []
             )
         if api == "wavespeed":
             media = MediaHttp(base_url, api_key, timeout_seconds=timeout_seconds, client=http)

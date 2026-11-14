@@ -35,7 +35,7 @@ import httpx
 
 from sealedlore.models.config import _same_host, shown
 from sealedlore.providers.base import ProviderError, StreamCancelled, checked_key
-from sealedlore.providers.http import make_client, traced_socket
+from sealedlore.providers.http import make_client, reply_json, traced_socket
 from sealedlore.providers.streaming import (
     RETRY_ATTEMPTS,
     RETRY_MAX_SECONDS,
@@ -260,7 +260,7 @@ class MediaHttp:
     def json(self, method: str, url: str, **kwargs: Any) -> Any:
         response = self.request(method, url, **kwargs)
         try:
-            return response.json()
+            return reply_json(response)
         except ValueError as exc:
             raise ProviderError(
                 f"{_where(url)} returned a non-JSON body", body=response.text[:2000]

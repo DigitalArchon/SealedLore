@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from sealedlore.models.lore import LoreEntry
-from sealedlore.storage.atomic import atomic_write_json
+from sealedlore.storage.atomic import NestedTooDeep, atomic_write_json, outside_json
 from sealedlore.storage.image_meta import PNG_SIGNATURE
 from sealedlore.storage.png_text import PngTextError, text_chunks
 
@@ -45,6 +45,11 @@ _DECORATORS = ("@@activate", "@@dont_activate")
 
 class LorebookError(ValueError):
     """A file that isn't a lorebook this version can read, in plain words."""
+
+
+class NestedLorebook(LorebookError):
+    """JSON nested past the limit (`outside_json`): a card reader says so in
+    its own words."""
 
 
 class UnconvertibleLorebook(LorebookError):
@@ -1213,9 +1218,12 @@ def json_of(data: bytes, name: str) -> Any:
     if len(data) > MAX_BYTES:
         raise LorebookError(f"{name} is too large to read.")
     try:
-        return json.loads(data.decode("utf-8-sig"))
+        return outside_json(data.decode("utf-8-sig"))
     except UnicodeDecodeError as exc:
         raise LorebookError(f"{name} isn't a text file.") from exc
+    except NestedTooDeep as exc:
+        # Kept, it would be nested in the story past what its backup reads.
+        raise NestedLorebook(f"{name} is nested deeper than any lorebook.") from exc
     except json.JSONDecodeError as exc:
         raise LorebookError(f"{name} isn't valid JSON (line {exc.lineno}).") from exc
 

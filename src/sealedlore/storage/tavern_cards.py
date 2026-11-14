@@ -47,7 +47,7 @@ from sealedlore.models.scenario import Scenario
 from sealedlore.models.scene import SceneState
 from sealedlore.models.story import OpeningPicture, StyleDirectives
 from sealedlore.models.tavern import CardAsset, TavernFields
-from sealedlore.storage.atomic import atomic_write_json
+from sealedlore.storage.atomic import NestedTooDeep, atomic_write_json, outside_json
 from sealedlore.storage.card_files import GreetingPictures, background_of, greeting_pictures
 from sealedlore.storage.image_meta import (
     MetadataError,
@@ -61,6 +61,7 @@ from sealedlore.storage.png_text import PngTextError, text_chunks, with_text
 from sealedlore.storage.tavern_lore import (
     LorebookError,
     LoreImport,
+    NestedLorebook,
     character_book_from_lore,
     json_of,
     looks_like_lorebook,
@@ -344,7 +345,9 @@ def _mended(data: Any, name: str) -> Any:
 
 def _decoded(text: str, name: str) -> Any:
     try:
-        return json.loads(base64.b64decode(text.strip(), validate=False).decode("utf-8"))
+        return outside_json(base64.b64decode(text.strip(), validate=False).decode("utf-8"))
+    except NestedTooDeep as exc:
+        raise _too_deep(name) from exc
     except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise CardError(f"{name}'s card data can't be read.") from exc
     except RecursionError as exc:
@@ -406,7 +409,9 @@ def _charx_card(source: BinaryIO, name: str) -> TavernCard:
         if card is None:
             raise CardError(f"{name} has no card.json in it.")
         try:
-            parsed = json.loads(card.decode("utf-8-sig"))
+            parsed = outside_json(card.decode("utf-8-sig"))
+        except NestedTooDeep as exc:
+            raise _too_deep(name) from exc
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise CardError(f"{name}'s card.json isn't valid JSON.") from exc
         except RecursionError as exc:
@@ -662,6 +667,8 @@ def read_card(path: Path) -> TavernCard:
     if suffix == ".json":
         try:
             parsed = read_json(path)
+        except NestedLorebook as exc:
+            raise _too_deep(path.name) from exc
         except LorebookError as exc:
             raise CardError(str(exc)) from exc
         except RecursionError as exc:
@@ -719,6 +726,8 @@ def tavern_from_file(
             return _mended(found, name)
     try:
         parsed = json_of(data, name)
+    except NestedLorebook as exc:
+        raise _too_deep(name) from exc
     except LorebookError as exc:
         raise CardError(f"{name} is neither a character card nor a lorebook: {exc}") from exc
     except RecursionError as exc:

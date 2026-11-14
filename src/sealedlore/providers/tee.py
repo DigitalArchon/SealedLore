@@ -77,7 +77,8 @@ from sealedlore.models.private import Attestation, TeeUpstream
 from sealedlore.providers import dcap, nras
 from sealedlore.providers.base import ProviderError, checked_key, relay_said
 from sealedlore.providers.ethsig import keccak256, recover_personal
-from sealedlore.providers.http import make_client
+from sealedlore.providers.http import make_client, reply_json
+from sealedlore.storage.atomic import outside_json
 from sealedlore.threads import thread_pool
 
 NRAS_URL = "https://nras.attestation.nvidia.com/v3/attest/gpu"
@@ -212,7 +213,7 @@ def _address_of_public(value: Any) -> str | None:
 def _json(value: Any) -> Any:
     if isinstance(value, str):
         try:
-            return json.loads(value)
+            return outside_json(value)
         except ValueError:
             return None
     return value
@@ -376,7 +377,7 @@ def _session_record(client: httpx.Client, session_id: str) -> _Record:
     except httpx.HTTPError as exc:
         raise ProviderError(f"api.redpill.ai couldn't be reached ({type(exc).__name__})") from exc
     try:
-        record = json.loads(bytes(body))
+        record = outside_json(bytes(body))
     except ValueError as exc:
         raise ProviderError("RedPill's record couldn't be read") from exc
     if not isinstance(record, dict) or hashlib.sha256(_canonical(record)).hexdigest() != (
@@ -417,7 +418,7 @@ def _error_text(response: httpx.Response) -> str:
     what a reader can't see (`relay_said`), as everything of the gateway's
     quoted here is."""
     try:
-        body = response.json()
+        body = reply_json(response)
     except ValueError:
         return relay_said(response.text or "")
     if isinstance(body, dict):
@@ -640,7 +641,7 @@ class TeeClient:
                     body=reason,
                 )
             try:
-                body = response.json()
+                body = reply_json(response)
             except ValueError as exc:
                 raise ProviderError(f"{base}{path} returned a non-JSON body") from exc
             if not isinstance(body, dict):
@@ -1039,7 +1040,7 @@ class TeeClient:
                 f"{self.model}'s instance {name} signed with a key its TDX quote doesn't bind"
             )
         try:
-            attested = json.loads(signed)
+            attested = outside_json(signed)
             evidence = attested["evidence"]
         except (ValueError, KeyError, TypeError) as exc:
             raise TeeRefused(f"{self.model}'s instance {name} signed unreadable evidence") from exc
@@ -1123,7 +1124,7 @@ class TeeClient:
                 f"NVIDIA rejected {self.model}'s GPU evidence (HTTP {response.status_code})"
             )
         try:
-            return response.json()
+            return reply_json(response)
         except ValueError:
             return None
 
