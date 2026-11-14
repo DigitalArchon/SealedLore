@@ -2941,7 +2941,9 @@ minutes:
   publishes.
 
 An instance that fails is left out and never sealed to, and with none left
-nothing is sent. It is **always "⚠ partial"**, for two reasons said on the
+nothing is sent: one whose GPUs NVIDIA can't vouch for is left out too (it
+offered no GPU evidence, or NVIDIA's service or its signing keys couldn't be
+reached, which is tried again next time), since the model runs on them. It is **always "⚠ partial"**, for two reasons said on the
 model button: the program inside the machine that makes and uses the key is
 admitted by Chutes' signature, not measured (a closed library), so Chutes, as
 its signer, could run one that gives the key away; and the list of images is

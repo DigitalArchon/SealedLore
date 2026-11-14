@@ -663,3 +663,76 @@ def test_the_model_list_is_chutes_confidential_models_priced(fake):
         "unit": "per_million_tokens",
         "input_cache_read": 0.02,
     }
+
+
+# --- GPUs NVIDIA didn't vouch for -----------------------------------------------------------
+
+
+class NoGpuEvidence(FakeInstance):
+    """An instance whose evidence offers nothing for NVIDIA to check."""
+
+    def evidence(self, nonce: str, *, signer=None) -> dict:
+        found = super().evidence(nonce, signer=signer)
+        attested = json.loads(base64.b64decode(found["attested_body"]))
+        attested["evidence"]["nvtrust_evidence"] = "[]"
+        body = json.dumps(attested).encode()
+        signature = (signer or self.tls).sign(body, padding.PKCS1v15(), hashes.SHA256())
+        found.update(
+            attested_body=base64.b64encode(body).decode(),
+            signature=base64.b64encode(signature).decode(),
+            gpu_evidence=[],
+        )
+        return found
+
+
+def test_an_instance_with_no_gpu_evidence_is_left_out_and_never_sealed_to(fake):
+    bad = NoGpuEvidence()
+    fake.instances[1] = bad
+    chutes = provider(fake)
+    for _ in range(10):
+        chutes.complete(ask())
+    assert bad.id not in {i for i, _ in fake.opened}, "never sealed to"
+    attestation = chutes.state.attestations[CHUTE]
+    assert attestation.instances == 2
+    assert f"instance {bad.id[:8]} offered no GPU evidence for NVIDIA to check" in (
+        attestation.detail
+    )
+    assert "no GPU evidence" not in attestation.shortfalls, "not a partial of the rest"
+    # Without a key too: the keyless check leaves it out.
+    public = provider(fake).attest_public(MODEL)
+    assert public.instances == 2
+
+
+def test_with_nvidia_out_of_reach_every_instance_is_left_out_and_chutes_refused(fake):
+    class NvidiaDown(FakeChutes):
+        def handler(self, request: httpx.Request) -> httpx.Response:
+            if str(request.url).startswith(NRAS_URL):
+                self.requests.append(request)
+                return httpx.Response(503)
+            return super().handler(request)
+
+    down = NvidiaDown()
+    chutes = provider(down)
+    with pytest.raises(TeeRefused, match="NVIDIA's attestation service couldn't be reached"):
+        chutes.complete(ask())
+    assert down.opened == [] and down.count("/e2e/invoke") == 0, "nothing sealed or sent"
+
+
+def test_with_nvidias_keys_out_of_reach_every_instance_is_left_out(fake):
+    from sealedlore.providers import nras
+
+    def keys_gone(answer, nonce, session):
+        raise nras.KeysUnavailable("NVIDIA's signing keys couldn't be fetched")
+
+    client = httpx.Client(transport=httpx.MockTransport(fake.handler))
+    chutes = ChutesE2EEProvider(
+        ProviderConfig(name="Chutes", base_url=CHUTES_ORIGIN, api_key="cpk_test"),
+        client=client,
+        listing_client=client,
+        checks_client=client,
+        intel=lambda raw, session: UP_TO_DATE,
+        nvidia=keys_gone,
+    )
+    with pytest.raises(TeeRefused, match="NVIDIA's signing keys couldn't be fetched"):
+        chutes.complete(ask())
+    assert fake.opened == []

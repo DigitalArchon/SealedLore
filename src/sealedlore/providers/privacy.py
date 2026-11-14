@@ -131,7 +131,8 @@ TINFOIL_NOTE = (
 CHUTES_NOTE = (
     "End-to-end encrypted to one Chutes instance (preliminary, always partial): each "
     "message is sealed on this machine to the key of an instance whose Intel TDX quote, "
-    "for our nonce, binds that key, and whose VM image is one Chutes publishes. Not "
+    "for our nonce, binds that key, whose GPUs NVIDIA vouches for, and whose VM image is "
+    "one Chutes publishes. Not "
     "attested: the workload that holds the key, which Chutes signs; and the published "
     "images are Chutes' list. Chutes sees your account, the model, timing, sizes and "
     "cost; the instance's operator, ciphertext. Replies come whole, not streamed."

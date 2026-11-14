@@ -1561,7 +1561,8 @@ SEALED_BY_TIPS = {
     ),
     "chutes": (
         "End-to-end encrypted through Chutes (always partial): sealed on this machine to the "
-        "key of one Chutes instance whose attested hardware binds it, and the reply, sent "
+        "key of one Chutes instance whose attested hardware binds it (its Intel TDX quote, "
+        "and NVIDIA's signed verdict on its GPUs, both for our nonce), and the reply, sent "
         "whole, opened with it. Chutes and the instance's operator carried ciphertext; the "
         "workload holding the key is Chutes' signed program, not measured."
     ),

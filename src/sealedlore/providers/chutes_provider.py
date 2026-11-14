@@ -95,7 +95,10 @@ from sealedlore.providers.streaming import StreamingHttpProvider, read_body, rea
 from sealedlore.providers.tee import (
     ATTEMPT_SECONDS,
     ATTESTATION_TIMEOUT_SECONDS,
+    GPU_SHORTFALLS,
+    GPUS_UNVERIFIED,
     MEASUREMENTS_LISTED,
+    NO_GPU_EVIDENCE,
     REATTEST_SECONDS,
     WORKLOAD_UNMEASURED,
     TeeClient,
@@ -262,6 +265,30 @@ class ChutesState:
             self.pools.clear()
             self.chute_level_at.clear()
             self.attestations.clear()
+
+
+def gpus_unproved(check: _Checks, short: str) -> tuple[str, bool] | None:
+    """Why an instance whose GPUs NVIDIA didn't vouch for (tee.py
+    `GPU_SHORTFALLS`) is left out, and whether only for now (NVIDIA's service
+    or its keys out of reach: tried again next time); None when its verdict
+    held. The model runs on those GPUs and a request is sealed to that
+    instance alone, so a TEE/ model's partial is no instance's here."""
+    found = [what for what in check.shortfalls if what in GPU_SHORTFALLS]
+    if not found:
+        return None
+    if NO_GPU_EVIDENCE in found:
+        return f"instance {short} offered no GPU evidence for NVIDIA to check", False
+    if GPUS_UNVERIFIED in found:
+        return (
+            f"instance {short}'s GPUs couldn't be checked just now: NVIDIA's attestation "
+            "service couldn't be reached",
+            True,
+        )
+    return (
+        f"instance {short}'s GPUs couldn't be checked just now: NVIDIA's signing keys "
+        "couldn't be fetched, so its verdict is unchecked",
+        True,
+    )
 
 
 class ChutesE2EEProvider(StreamingHttpProvider):
@@ -737,6 +764,10 @@ class ChutesE2EEProvider(StreamingHttpProvider):
             if isinstance(exc, TeeRefused):
                 return left_out(failure_words(exc))
             return f"it couldn't be checked just now ({failure_words(exc)})"
+        gpus = gpus_unproved(check, short)
+        if gpus is not None:
+            why, for_now = gpus
+            return why if for_now else left_out(why)
         facts = check.quote
         if facts is None or not key_bound(facts.report_data, nonce, instance.pubkey):
             return left_out(
@@ -830,6 +861,9 @@ class ChutesE2EEProvider(StreamingHttpProvider):
                         if time.monotonic() >= deadline:
                             raise
                         return item["instance_id"], failure_words(exc), ""
+                    gpus = gpus_unproved(found, short)
+                    if gpus is not None:
+                        return item["instance_id"], gpus[0], ""
                     facts = found.quote
                     known = measured(facts.mrtd, facts.rtmrs, sets) if facts is not None else None
                     if known is None:

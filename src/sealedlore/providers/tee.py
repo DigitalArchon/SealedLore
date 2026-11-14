@@ -137,6 +137,15 @@ GATEWAY_UNCHECKED = "RedPill's gateway unchecked"
 # measurements it is held to are Chutes' published list, not rebuilt here.
 WORKLOAD_UNMEASURED = "the workload holding the key unmeasured (Chutes signs it)"
 MEASUREMENTS_LISTED = "measurements from Chutes' own list"
+# The GPUs NVIDIA didn't vouch for (`_check_gpus`): no evidence offered, its
+# attestation service out of reach, or its signing keys. A TEE/ model's
+# attestation is partial for them; a Chutes instance with any is left out
+# (providers/chutes_provider.py): the model runs on those GPUs, and a request
+# is sealed to that instance alone.
+NO_GPU_EVIDENCE = "no GPU evidence"
+GPUS_UNVERIFIED = "GPUs unverified"
+NVIDIA_UNCHECKED = "NVIDIA signature unchecked"
+GPU_SHORTFALLS = frozenset({NO_GPU_EVIDENCE, GPUS_UNVERIFIED, NVIDIA_UNCHECKED})
 # RedPill's public records of its gateway's sessions with the machines that
 # run the models (Settings → Private, "Name the provider behind each TEE
 # reply"; `served_by`). Each receipt's `upstream.verified` names its session
@@ -997,7 +1006,7 @@ class TeeClient:
         (`upstream.verified`), not checked here: so it falls short."""
         check = _Checks(f"{why}: the gateway that answers it is attested instead")
         check.merge(gateway.check)
-        check.fall_short("no GPU evidence")
+        check.fall_short(NO_GPU_EVIDENCE)
         check.fall_short(OWN_ENCLAVE_UNCHECKED)
         check.note(
             "its own enclave isn't attested here: each reply's receipt carries the "
@@ -1315,12 +1324,12 @@ class TeeClient:
         if not (isinstance(payload, dict) and payload.get("evidence_list")):
             # Live, several TEE/ models send an empty evidence list: not a
             # rejection, but nothing for NVIDIA to vouch for either.
-            check.fall_short("no GPU evidence")
+            check.fall_short(NO_GPU_EVIDENCE)
             check.note("no GPU evidence was offered")
             return
         answer = self._nras_answer(payload)
         if answer is None:
-            check.fall_short("GPUs unverified")
+            check.fall_short(GPUS_UNVERIFIED)
             check.note("NVIDIA's attestation service couldn't be reached")
             return
         try:
@@ -1330,7 +1339,7 @@ class TeeClient:
             # to our nonce, its issuer, its time and each GPU's results first,
             # and refused (NrasError) a verdict that says no or was made for
             # another request.
-            check.fall_short("NVIDIA signature unchecked")
+            check.fall_short(NVIDIA_UNCHECKED)
             check.note(f"{exc}, so NVIDIA's verdict is unchecked")
         except nras.NrasError as exc:
             raise TeeRefused(
