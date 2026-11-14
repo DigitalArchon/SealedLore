@@ -293,7 +293,12 @@ class VideosWindow:
         # keeps the address without a password typed into it (engine/videos.py):
         # the video endpoint's own gives it back, only while it is that address.
         address = media.base_url if without_password(media.base_url) == video.base_url else ""
-        return VideoClient(address or video.base_url, media.api_key, api=media.api)
+        return VideoClient(
+            address or video.base_url,
+            media.api_key,
+            api=media.api,
+            key_withheld=media.key_withheld,
+        )
 
     def _resume_videos(self) -> None:
         """Ask after every video of the open story that is still being made

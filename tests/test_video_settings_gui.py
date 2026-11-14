@@ -65,7 +65,9 @@ def test_saving_keeps_each_endpoint_and_key_apart(app):
     dialog.video_key.setText("ws-key")
     dialog._save()
     assert cfg.image_endpoint == MediaEndpoint(
-        base_url="https://openrouter.ai/api/v1", api_key="or-key"
+        base_url="https://openrouter.ai/api/v1",
+        api_key="or-key",
+        key_saved_for="https://openrouter.ai",
     )
     assert cfg.images().api == "openrouter"
     assert cfg.image_models_fetched_at is None, "another endpoint's listing is fetched afresh"

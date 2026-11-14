@@ -68,9 +68,12 @@ class DecisionsClient:
         *,
         timeout_seconds: float = 30.0,
         client: httpx.Client | None = None,
+        key_withheld: str = "",
     ) -> None:
         self.base_url = base_url
         self.api_key = api_key
+        # Why the endpoint's key isn't sent here (`ProviderConfig.sendable`).
+        self.key_withheld = key_withheld
         self.timeout_seconds = timeout_seconds
         self._client = client
         self._owns_client = client is None
@@ -90,6 +93,8 @@ class DecisionsClient:
             self._client = None
 
     def decide(self, model: str, state: str, questions: Mapping[str, str]) -> Decisions:
+        if self.key_withheld:
+            raise ProviderError(self.key_withheld)
         payload = build_decisions_payload(model, state, questions)
         headers = {"Content-Type": "application/json"}
         if self.api_key:

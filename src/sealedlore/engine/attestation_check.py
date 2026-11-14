@@ -42,6 +42,9 @@ def testable(model: str) -> bool:
 
 def check_attestation(settings: ProviderConfig) -> AttestationCheck:
     """Attest `settings.model` on `settings`' endpoint, as entering would."""
+    settings = settings.sendable()
+    if settings.key_withheld:
+        return AttestationCheck("error", f"The check couldn't run: {settings.key_withheld}")
     model = settings.model.strip()
     if is_private_mode(model):
         from sealedlore.providers.private_mode import PrivateModeProvider

@@ -57,14 +57,8 @@ ADDRESS = "address:"
 
 def slots(config: Config) -> Iterator[tuple[str, HasKey]]:
     """Every key the config holds, by slot: the name it has in the keychain."""
-    for provider in config.providers:
-        yield f"provider:{provider.name}", provider
-    if config.embedding_provider is not None:
-        yield "embeddings", config.embedding_provider
-    yield "images", config.image_endpoint
-    yield "videos", config.video_endpoint
-    if config.private_provider is not None:
-        yield "private", config.private_provider
+    for slot, holder, _address in config.key_holders():
+        yield slot, holder
     # Not an API key, but as secret: whoever holds it can be the phones' server.
     yield "phone", config.phone.onion
 

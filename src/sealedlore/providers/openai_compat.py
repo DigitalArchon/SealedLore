@@ -102,6 +102,8 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
         return fetch_reasoning_defaults(self.config.base_url)
 
     def _headers(self) -> dict[str, str]:
+        if self.config.key_withheld:
+            raise ProviderError(self.config.key_withheld)
         headers = {"Content-Type": "application/json"}
         if self.config.api_key:
             key = checked_key(self.config.api_key, self.config.name or "this endpoint")

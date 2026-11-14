@@ -436,7 +436,9 @@ class ImageRuntime:
         media = self.config.videos()
         if media is None:
             return None
-        return VideoClient(media.base_url, media.api_key, api=media.api)
+        return VideoClient(
+            media.base_url, media.api_key, api=media.api, key_withheld=media.key_withheld
+        )
 
     def generated_videos(self) -> list[GeneratedVideo]:
         """Read afresh each time: a job may have changed one since."""
@@ -448,7 +450,9 @@ class ImageRuntime:
         media = self.config.images()
         if media is None:
             return None
-        return ImageClient(media.base_url, media.api_key, api=media.api)
+        return ImageClient(
+            media.base_url, media.api_key, api=media.api, key_withheld=media.key_withheld
+        )
 
     def clean_stored_images(self) -> None:
         """Once per story: remove the hidden data from pictures saved before

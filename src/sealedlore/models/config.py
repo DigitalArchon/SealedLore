@@ -9,8 +9,9 @@ local server (§7).
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from ipaddress import ip_address, ip_network
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -520,6 +521,50 @@ def _same_host(first: str, second: str) -> bool:
     )
 
 
+_DEFAULT_PORTS = {"https": 443, "http": 80}
+
+
+def key_origin(url: str) -> str:
+    """Where a key typed beside `url` is for: its scheme, host and port
+    ("https://nano-gpt.com", "http://192.168.1.10:11434"), a port the
+    scheme's own left out, never a password written into it. "" for an
+    address that names no host."""
+    try:
+        parsed = urlparse(without_password(str(url or "").strip()))
+        host = (parsed.hostname or "").lower()
+        port = parsed.port
+    except ValueError:
+        return ""
+    if not parsed.scheme or not host:
+        return ""
+    if ":" in host:
+        host = f"[{host}]"
+    scheme = parsed.scheme.lower()
+    if port is not None and port != _DEFAULT_PORTS.get(scheme):
+        host = f"{host}:{port}"
+    return f"{scheme}://{host}"
+
+
+def key_withheld(key: str, saved_for: str, address: str, whose: str) -> str | None:
+    """Why `key` isn't sent to `address`, or None when it may be: a key goes
+    only to the place it was saved for (`saved_for`, a `key_origin`), so one
+    never follows an address edited to another host, by hand in config.json
+    or in Settings with No to "Use the saved key with …?". An unrecorded
+    place ("", a key not saved yet) holds nothing back. Never the key itself
+    in the words. (The DA apps' design, Nov 2026.)"""
+    if not key or not saved_for:
+        return None
+    now = key_origin(address)
+    if now == saved_for:
+        return None
+    return (
+        f"The key for {whose} was saved for {saved_for}, and its address is now "
+        f"{now or shown(address)}, so the key isn't sent there. To send it there, open "
+        "Settings, Save, and answer Yes to using the saved key there; or enter the key for "
+        "that address (`sealedlore configure --api-key …` from the command line)."
+    )
+
+
 # The protocol the chat endpoint speaks: OpenAI's /chat/completions (NanoGPT,
 # OpenRouter, a local server) or Anthropic's own Messages API
 # (providers/anthropic.py). "auto" reads it from the host (`chat_api`).
@@ -594,11 +639,26 @@ class ProviderConfig(BaseModel):
     # What the endpoint speaks (Settings → Endpoints → Speaks); "auto" reads
     # it from the address.
     api: ChatApi = "auto"
+    # Where `api_key` was saved for (`key_origin`): it is sent nowhere else
+    # (`sendable`). "" until a key is saved.
+    key_saved_for: str = ""
+    # Why this copy carries no key (`sendable`): its requests refuse in these
+    # words rather than go without it. Never written.
+    key_withheld: str = Field(default="", exclude=True)
 
     @field_validator("base_url")
     @classmethod
     def _check_scheme(cls, value: str) -> str:
         return require_https(value)
+
+    def sendable(self) -> ProviderConfig:
+        """This endpoint as its requests are made: itself, or, when its key
+        was saved for another place than its address now names
+        (`key_withheld`), a copy without the key that says so."""
+        why = key_withheld(self.api_key, self.key_saved_for, self.base_url, self.name or "it")
+        if why is None:
+            return self
+        return self.model_copy(update={"api_key": "", "key_withheld": why})
 
     def speaks(self) -> str:
         """The protocol this endpoint speaks, "openai" or "anthropic" (`chat_api`)."""
@@ -646,6 +706,8 @@ class MediaEndpoint(BaseModel):
     base_url: str = ""
     api_key: str = ""
     api: MediaApi = "auto"
+    # Where `api_key` was saved for (`ProviderConfig.key_saved_for`).
+    key_saved_for: str = ""
 
     @field_validator("base_url")
     @classmethod
@@ -661,6 +723,9 @@ class ResolvedMedia(BaseModel):
     api: str
     # The video key is the chat's or the pictures' too: every video warns.
     shared_key: bool = False
+    # Why no key is sent (`key_withheld`): a request that would carry it
+    # refuses in these words.
+    key_withheld: str = ""
 
 
 DEFAULT_EMBEDDING_MODEL = "BAAI/bge-m3"
@@ -686,11 +751,81 @@ class EmbeddingProviderConfig(BaseModel):
     query_prefix: str = ""
     document_prefix: str = ""
     batch_size: int = 32
+    # Where `api_key` was saved for (`ProviderConfig.key_saved_for`), and why
+    # a resolved copy carries none (`Config.embeddings`; never written).
+    key_saved_for: str = ""
+    key_withheld: str = Field(default="", exclude=True)
 
     @field_validator("base_url")
     @classmethod
     def _check_scheme(cls, value: str) -> str:
         return require_https(value) if value else value
+
+
+# What holds a key typed in Settings: a chat endpoint, the picture or video
+# endpoint, the embeddings endpoint (`Config.key_holders`).
+KeyHolder = ProviderConfig | MediaEndpoint | EmbeddingProviderConfig
+
+
+class KeyMove(NamedTuple):
+    """A saved key whose address now names another place than the one it
+    was saved for (`rebind_keys`): sent there only once the author says so."""
+
+    slot: str  # its keychain slot ("provider:NanoGPT", "images"…)
+    holder: KeyHolder
+    saved_for: str  # the place it was saved for (a `key_origin`)
+    now: str  # the place its address names now
+
+    def allow(self) -> None:
+        """Send the saved key to its new place from now on."""
+        self.holder.key_saved_for = self.now
+
+
+def bind_unbound_keys(config: Config) -> None:
+    """Each key with no place recorded takes the place its address names now,
+    with no question: a key saved before places were recorded, the first
+    time it is loaded (and one saved by code that recorded none)."""
+    for _slot, holder, address in config.key_holders():
+        if holder.api_key and not holder.key_saved_for:
+            holder.key_saved_for = key_origin(address)
+
+
+def rebind_keys(
+    before: Config, after: Config, renamed: dict[str, str] | None = None
+) -> list[KeyMove]:
+    """Record in `after` where each of its keys is for, against `before`, the
+    config as saved: a key typed anew is for the place its address names; a
+    key kept from `before` stays for the place it was saved for. Those whose
+    address now names another place are returned, still bound to the old
+    one: the key isn't sent until `KeyMove.allow` (Settings asks; the
+    command line says so). A blank key keeps its record: it may be one the
+    keychain couldn't give back, never lost. `renamed`: an endpoint's name in
+    `after` → its name in `before`."""
+    renamed = renamed or {}
+    saved: dict[str, tuple[KeyHolder, str]] = {
+        slot: (holder, address) for slot, holder, address in before.key_holders()
+    }
+    moves: list[KeyMove] = []
+    for slot, holder, address in after.key_holders():
+        key = holder.api_key
+        if not key:
+            continue
+        name = slot.removeprefix("provider:")
+        renamed_from = renamed.get(name) if slot.startswith("provider:") else None
+        was = saved.get(f"provider:{renamed_from}" if renamed_from else slot)
+        now = key_origin(address)
+        if was is None or was[0].api_key != key:
+            holder.key_saved_for = now  # entered for this address
+            continue
+        old_holder, old_address = was
+        saved_for = old_holder.key_saved_for or key_origin(old_address)
+        # As it was (a key not yet recorded stays so: `bind_unbound_keys`
+        # records it as it is saved), so an unchanged Save changes nothing.
+        holder.key_saved_for = old_holder.key_saved_for
+        if saved_for != now:
+            holder.key_saved_for = saved_for
+            moves.append(KeyMove(slot, holder, saved_for, now))
+    return moves
 
 
 class ModelPrice(BaseModel):
@@ -1154,7 +1289,10 @@ class Config(BaseModel):
             return settings
         chat = self.active_provider()
         if chat is not None and _same_host(settings.base_url, chat.base_url):
-            return settings.model_copy(update={"api_key": chat.api_key})
+            # Where the chat's key was saved for goes with it (`sendable`).
+            return settings.model_copy(
+                update={"api_key": chat.api_key, "key_saved_for": chat.key_saved_for}
+            )
         return settings
 
     def images(self) -> ResolvedMedia | None:
@@ -1165,11 +1303,17 @@ class Config(BaseModel):
         base_url = settings.base_url or (chat.base_url if chat is not None else "")
         if not base_url:
             return None
-        key = settings.api_key
+        key, saved_for = settings.api_key, settings.key_saved_for
         # The chat key only goes to the chat provider's own host.
         if not key and chat is not None and _same_host(base_url, chat.base_url):
-            key = chat.api_key
-        return ResolvedMedia(base_url=base_url, api_key=key, api=media_api(base_url, settings.api))
+            key, saved_for = chat.api_key, chat.key_saved_for
+        withheld = key_withheld(key, saved_for, base_url, "pictures") or ""
+        return ResolvedMedia(
+            base_url=base_url,
+            api_key="" if withheld else key,
+            api=media_api(base_url, settings.api),
+            key_withheld=withheld,
+        )
 
     def videos(self) -> ResolvedMedia | None:
         """Where videos are made. None until a video key is entered: nothing
@@ -1186,11 +1330,15 @@ class Config(BaseModel):
         for holder in (self.embedding_provider, self.private_provider):
             if holder is not None:
                 others.add(holder.api_key)
+        withheld = (
+            key_withheld(settings.api_key, settings.key_saved_for, settings.base_url, "video") or ""
+        )
         return ResolvedMedia(
             base_url=settings.base_url,
-            api_key=settings.api_key,
+            api_key="" if withheld else settings.api_key,
             api=media_api(settings.base_url, settings.api),
             shared_key=settings.api_key in (others - {""}),
+            key_withheld=withheld,
         )
 
     def cast_cap(self, budget: int) -> int:
@@ -1255,4 +1403,26 @@ class Config(BaseModel):
             and _same_host(resolved.base_url, chat.base_url)
         ):
             resolved.api_key = chat.api_key
+            resolved.key_saved_for = chat.key_saved_for
+        withheld = key_withheld(
+            resolved.api_key, resolved.key_saved_for, resolved.base_url, "embeddings"
+        )
+        if withheld:
+            resolved.api_key, resolved.key_withheld = "", withheld
         return resolved
+
+    def key_holders(self) -> Iterator[tuple[str, KeyHolder, str]]:
+        """Every API key the config holds, by the slot the keychain keeps it
+        under (storage/keychain.py), with the address it is sent to: a blank
+        picture or embeddings address is the chat endpoint's."""
+        chat = self._chat_to_inherit()
+        inherited = chat.base_url if chat is not None else ""
+        for provider in self.providers:
+            yield f"provider:{provider.name}", provider, provider.base_url
+        if self.embedding_provider is not None:
+            embeddings = self.embedding_provider
+            yield "embeddings", embeddings, embeddings.base_url or inherited
+        yield "images", self.image_endpoint, self.image_endpoint.base_url or inherited
+        yield "videos", self.video_endpoint, self.video_endpoint.base_url
+        if self.private_provider is not None:
+            yield "private", self.private_provider, self.private_provider.base_url

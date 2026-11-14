@@ -3256,8 +3256,15 @@ until you enter it again in Settings; for an endpoint that needs no key any
 more, save Settings with the field left blank and it stops asking. A key
 with a space, a line break or another character no API key has in it (picked
 up where it was copied from, perhaps) is refused when you save it, and before
-anything would be sent with it, saying so without showing the key. The
-folder and everything the app writes in it are readable by your user only.
+anything would be sent with it, saying so without showing the key. A key is
+sent only to the place (scheme, host and port) it was saved for: change an
+endpoint's address to another server and Save asks "Use the saved key with
+…?" (No is the default; so do Browse…, Test speed…, Test attestation and
+Detect before they send anything). With No, or an address changed in
+`config.json` by hand, or `sealedlore configure --base-url` given without
+`--api-key`, the key is kept but sent nowhere else, and whatever would have
+used it says why; entering the key again for the new address sends it there.
+The folder and everything the app writes in it are readable by your user only.
 Each story keeps every request and reply in its `api_log.jsonl`, so a story
 backup (Story → Export → Story backup…) carries every prompt sent for it; a
 scenario export carries only the setup. If the app ever crashes outright,

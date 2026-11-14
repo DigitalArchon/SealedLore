@@ -1310,7 +1310,10 @@ class StorySession(
         if provider is None:
             return None
         if self._decisions_client is None:
-            self._decisions_client = DecisionsClient(provider.base_url, provider.api_key)
+            sent = provider.sendable()
+            self._decisions_client = DecisionsClient(
+                sent.base_url, sent.api_key, key_withheld=sent.key_withheld
+            )
         return self._decisions_client
 
     def _present_names(self) -> list[str]:

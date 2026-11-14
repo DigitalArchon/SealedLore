@@ -88,9 +88,13 @@ class MediaHttp:
         *,
         timeout_seconds: float,
         client: httpx.Client | None = None,
+        key_withheld: str = "",
     ) -> None:
         self.base_url = base_url
         self.api_key = api_key
+        # Why the endpoint's key isn't sent (`ResolvedMedia.key_withheld`): a
+        # request that would carry it refuses in these words.
+        self.key_withheld = key_withheld
         self.timeout_seconds = timeout_seconds
         self._client = client
         self._owns_client = client is None
@@ -116,6 +120,8 @@ class MediaHttp:
         return self._client
 
     def headers(self, extra: dict[str, str] | None = None) -> dict[str, str]:
+        if self.key_withheld:
+            raise ProviderError(self.key_withheld)
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             whose = urlparse(self.base_url).hostname or "this endpoint"

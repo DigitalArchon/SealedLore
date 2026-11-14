@@ -22,7 +22,7 @@ from sealedlore.ids import new_id, utc_now_iso
 from sealedlore.models.aside import Aside
 from sealedlore.models.authoring import ReviewRecord
 from sealedlore.models.character import Character
-from sealedlore.models.config import Config, without_password
+from sealedlore.models.config import Config, bind_unbound_keys, key_withheld, without_password
 from sealedlore.models.embedding import EmbeddingCacheEntry
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.node import Node
@@ -124,6 +124,8 @@ def _copy_of(config: Config) -> Config:
 
 
 def _as_written(config: Config, root: Path | None) -> dict[str, Any]:
+    # A key saved with no place recorded is for the address saved beside it.
+    bind_unbound_keys(config)
     reachable = keychain.problem() is None
     use = config.key_storage == "keychain" and reachable
     listed = set(config.keychain_slots)
@@ -195,15 +197,39 @@ def _as_written(config: Config, root: Path | None) -> dict[str, Any]:
 
 def _fill_keys(config: Config, root: Path | None) -> str | None:
     """Each key the keychain holds, put back, and each address's password;
-    what went wrong, if anything."""
+    what went wrong, if anything. A key saved before the place it is for
+    was recorded takes its address's now (`bind_unbound_keys`), and one whose
+    address was since edited to another place is said, never sent there."""
     try:
         notes = [_fill_api_keys(config, root), _fill_addresses(config, root)]
     except keychain.KeychainError as exc:
-        return (
+        notes = [
             f"Your API keys are kept in {keychain.where()}, which couldn't be read "
             f"({exc}). Unlock it and restart, or enter the keys again in Settings."
-        )
+        ]
+    bind_unbound_keys(config)
+    notes.append(_withheld_note(config))
     return " ".join(note for note in notes if note) or None
+
+
+def _withheld_note(config: Config) -> str | None:
+    """What is said of each key that isn't sent because its address names
+    another place than it was saved for (config.json edited by hand, or No
+    in Settings): once, at start, beside the refusal each request makes."""
+    said = [
+        why
+        for slot, holder, address in config.key_holders()
+        if (why := key_withheld(holder.api_key, holder.key_saved_for, address, _whose(slot)))
+    ]
+    return " ".join(said) or None
+
+
+_SLOTS_SAID = {"images": "pictures", "videos": "video", "private": "private scenes"}
+
+
+def _whose(slot: str) -> str:
+    """A key's slot as said: an endpoint by its name, else what it is for."""
+    return _SLOTS_SAID.get(slot, slot.removeprefix("provider:"))
 
 
 def _fill_api_keys(config: Config, root: Path | None) -> str | None:

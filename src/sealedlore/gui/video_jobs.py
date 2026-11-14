@@ -182,7 +182,12 @@ class VideoCatalog(QObject):
         self._price_asking, self._price_next = asked, None
 
         def job() -> list[Any]:
-            http = MediaHttp(media.base_url, media.api_key, timeout_seconds=30.0)
+            http = MediaHttp(
+                media.base_url,
+                media.api_key,
+                timeout_seconds=30.0,
+                key_withheld=media.key_withheld,
+            )
             try:
                 return [wavespeed.price(http, model_id, inputs), WAVESPEED_QUOTE]
             except Exception as exc:  # shown in the dialog, never lost

@@ -539,10 +539,17 @@ class VideoClient:
         api: str | None = None,
         timeout_seconds: float = VIDEO_REQUEST_TIMEOUT,
         client: httpx.Client | None = None,
+        key_withheld: str = "",
     ) -> None:
         self.base_url = base_url
         self.api = api or media_api(base_url)
-        self.http = MediaHttp(base_url, api_key, timeout_seconds=timeout_seconds, client=client)
+        self.http = MediaHttp(
+            base_url,
+            api_key,
+            timeout_seconds=timeout_seconds,
+            client=client,
+            key_withheld=key_withheld,
+        )
 
     def cancel(self) -> None:
         """Stop waiting. A video already accepted is still made and billed."""

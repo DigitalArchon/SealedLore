@@ -77,16 +77,19 @@ def test_configure_warns_of_a_password_in_the_address_with_no_key(tmp_path: Path
 
 
 def test_configure_says_so_when_it_keeps_a_key_for_another_machine(tmp_path: Path, capsys):
-    """Changing only the address keeps the key saved for the old one: a
-    NanoGPT key would go, unencrypted, to a server on the network."""
+    """Changing only the address used to send the key saved for the old one,
+    a NanoGPT key, unencrypted, to a server on the network. It is kept, never
+    deleted, but sent nowhere but where it was saved for, and said."""
     data = ["--data-dir", str(tmp_path)]
     cli_main([*data, "configure", "--base-url", NANO, "--api-key", "nano-key"])
     capsys.readouterr()
     cli_main([*data, "configure", "--base-url", LAN])
     err = capsys.readouterr().err
-    assert "the API key already saved for 'default' is kept" in err and LAN in err
-    assert '--api-key ""' in err
-    assert load_config(root=tmp_path).active_provider().api_key == "nano-key", "said, not changed"
+    assert "was saved for https://nano-gpt.com, so it isn't sent to http://192.168.1.5:11434" in err
+    assert '--api-key ""' in err and "goes unencrypted" not in err
+    config = load_config(root=tmp_path)
+    assert config.active_provider().api_key == "nano-key", "said, not changed"
+    assert config.active_provider().sendable().api_key == ""
     cli_main([*data, "configure", "--base-url", LAN, "--api-key", ""])
     assert capsys.readouterr().err == ""
 
@@ -240,6 +243,8 @@ def test_a_key_taken_from_the_chat_endpoint_is_counted_where_it_goes(app, monkey
     moved = SettingsDialog(cfg, None)
     moved.embed_base_url.setText("")
     moved.base_url.setText(LAN)
+    # The saved key sent to the new address: asked first (gui `_ask_moving_keys`), Yes here.
+    moved._moves_answered[("provider:NanoGPT", "http://192.168.1.5:11434")] = True
     moved._save()
     assert len(questions) == 1
     title, text, _default = questions[0]

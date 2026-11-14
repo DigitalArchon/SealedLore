@@ -112,6 +112,8 @@ class OpenAICompatibleEmbeddings:
         return self.config.base_url.rstrip("/") + "/embeddings"
 
     def _headers(self) -> dict[str, str]:
+        if self.config.key_withheld:
+            raise ProviderError(self.config.key_withheld)
         headers = {"Content-Type": "application/json"}
         if self.config.api_key:
             headers["Authorization"] = f"Bearer {checked_key(self.config.api_key, 'embeddings')}"

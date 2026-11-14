@@ -76,6 +76,7 @@ from sealedlore.models.config import (
     RECOMMENDED_TEXT_MODELS,
     Config,
     EmbeddingProviderConfig,
+    KeyMove,
     MediaEndpoint,
     ProviderConfig,
     _same_host,
@@ -86,6 +87,7 @@ from sealedlore.models.config import (
     key_problem,
     on_nanogpt,
     qualify,
+    rebind_keys,
     recommended_model,
     recommended_models,
     require_https,
@@ -218,8 +220,9 @@ def keys_in_the_clear(config: Config) -> list[SentPlain]:
     chat endpoint's own, then the embeddings', pictures', video's and
     private scenes', a blank key filled as Config fills it (the chat
     endpoint's, on its own host only), so a key taken from the chat
-    endpoint is counted where it goes."""
-    sent = endpoint_keys(config.providers)
+    endpoint is counted where it goes. A key kept for the place it was saved
+    for, its address now another's, goes nowhere (`ProviderConfig.sendable`)."""
+    sent = endpoint_keys([p.sendable() for p in config.providers])
     embeddings = config.embeddings()
     if embeddings is not None:
         sent.append(SentPlain("Lore", "Embeddings (Lore)", embeddings.base_url, embeddings.api_key))
@@ -231,6 +234,7 @@ def keys_in_the_clear(config: Config) -> list[SentPlain]:
             sent.append(SentPlain(page, whose, media.base_url, media.api_key))
     private = config.private()
     if private is not None:
+        private = private.sendable()
         sent.append(SentPlain("Private", "Private scenes", private.base_url, private.api_key))
     return _plain(sent)
 
@@ -270,6 +274,14 @@ def _plain(sent: list[SentPlain]) -> list[SentPlain]:
 # Said by a question asked before Browse…, Test speed…, Test attestation or
 # Detect sends a key as typed (`SettingsDialog._may_send`).
 NOTHING_SENT = "No sends nothing."
+
+# A key's keychain slot as a question names it (an endpoint by its own name).
+_KEY_SLOTS_SAID = {
+    "images": "Pictures (Images)",
+    "videos": "Video",
+    "embeddings": "Embeddings (Lore)",
+    "private": "Private scenes",
+}
 
 
 # What each page is for, under its name.
@@ -342,6 +354,9 @@ class SettingsDialog(QDialog):
         # speed…, Test attestation and Detect send the keys as typed, before
         # Save, so they ask too, and Save doesn't ask again (`_may_send`).
         self._plain_allowed: list[SentPlain] = []
+        # The saved keys a Yes was given for, to go to an address edited to
+        # another place (`_ask_moving_keys`), and those a No: (slot, place).
+        self._moves_answered: dict[tuple[str, str], bool] = {}
         self.story = story
         self._catalog = catalog
         # Browse… lists the models of the endpoint typed here, saved or not.
@@ -2337,11 +2352,72 @@ class SettingsDialog(QDialog):
 
     def _may_send(self, sent: list[SentPlain]) -> bool:
         """Before Browse…, Test speed…, Test attestation or Detect sends a key
-        as typed, over plain http to another machine: asked as Save asks
-        (`_ask_before_plain`), No first, and a Yes stands for Save too.
-        False: No, and nothing is sent."""
+        as typed: a saved key whose address was edited to another place is
+        asked about as Save asks (`_ask_moving_keys`), and one over plain
+        http to another machine (`_ask_before_plain`), No first, and a Yes
+        stands for Save too. False: No, and nothing is sent."""
+        if not self._may_move_keys():
+            return False
         new = self._not_asked(sent)
         return not new or self._ask_plain(new, NOTHING_SENT)
+
+    def _renamed(self) -> dict[str, str]:
+        """Each endpoint renamed in the dialog: its name now → its saved name."""
+        return {
+            settings.name: origin
+            for origin, settings in zip(self._origins, self._endpoints_as_typed(), strict=True)
+            if origin is not None and origin != settings.name
+        }
+
+    def _may_move_keys(self) -> bool:
+        """Before a key goes anywhere as typed: each saved key whose address
+        now names another place is asked about (once a dialog), and where
+        each endpoint's key is for is written into its working copy, so a
+        Yes sends it there and a No sends it nowhere. False: No."""
+        try:
+            typed = self._as_typed(self._endpoints_as_typed(), self.embed_base_url.text().strip())
+        except ValueError:
+            return True  # an address that can't be used: nothing will be sent to it
+        moves = rebind_keys(self.config, typed, self._renamed())
+        allowed = self._ask_moving_keys(moves, NOTHING_SENT)
+        for settings, as_typed in zip(self._endpoints, typed.providers, strict=True):
+            settings.key_saved_for = as_typed.key_saved_for
+        return allowed
+
+    def _ask_moving_keys(self, moves: list[KeyMove], after_no: str) -> bool:
+        """A saved key whose address was edited to another place goes there
+        only once the author says so: every such key at once, No the
+        default, each answer kept for the dialog's life. A Yes moves them
+        (`KeyMove.allow`); with No the keys stay for the place they were
+        saved for, and are sent nowhere else. True unless No."""
+        unasked = [move for move in moves if (move.slot, move.now) not in self._moves_answered]
+        if unasked:
+            one = len(unasked) == 1
+            listed = "\n".join(
+                f"•  {_KEY_SLOTS_SAID.get(move.slot, move.slot.removeprefix('provider:'))}: "
+                f"saved for {move.saved_for}, its address now {move.now}"
+                for move in unasked
+            )
+            first = unasked[0].now.split("://", 1)[-1]
+            answer = QMessageBox.question(
+                self,
+                f"Use the saved key with {first}?" if one else "Use the saved keys there?",
+                f"{'This key was' if one else 'These keys were'} saved for one address, and "
+                f"{'its address' if one else 'their addresses'} now name another place:"
+                f"\n\n{listed}\n\nSend {'it' if one else 'them'} there? Whoever runs that "
+                f"place would have {'it' if one else 'them'}. No keeps "
+                f"{'it' if one else 'them'} for where {'it was' if one else 'they were'} saved, "
+                "and sends nothing there with it: enter the key for the new address to use "
+                f"one there. {after_no}",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            for move in unasked:
+                self._moves_answered[(move.slot, move.now)] = answer == QMessageBox.Yes
+        for move in moves:
+            if self._moves_answered.get((move.slot, move.now)):
+                move.allow()
+        return all(self._moves_answered.get((move.slot, move.now)) for move in moves)
 
     def _not_asked(self, sent: list[SentPlain]) -> list[SentPlain]:
         """Those of `sent` not going there when Settings opened, nor said Yes
@@ -2455,6 +2531,11 @@ class SettingsDialog(QDialog):
             self._carry_keys(endpoints)
             typed = self._as_typed(endpoints, embed_url)
             self._check_keys(typed)
+            # Where each key is for, and a saved key's move to an edited
+            # address asked about, before asking what goes unencrypted: a key
+            # kept for its old place goes nowhere new.
+            moves = rebind_keys(self.config, typed, self._renamed())
+            self._ask_moving_keys(moves, "Save goes on either way.")
             self._ask_before_plain(typed)
         except ValueError as exc:
             # Said where it is, and that page shown: a bad address on another

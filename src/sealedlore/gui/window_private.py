@@ -21,7 +21,7 @@ from sealedlore.gui.winprivacy import exclude_from_capture
 from sealedlore.gui.workers import run_detached
 from sealedlore.models.config import ProviderConfig
 from sealedlore.providers import make_chat_provider
-from sealedlore.providers.base import ChatProvider
+from sealedlore.providers.base import ChatProvider, ProviderError
 from sealedlore.providers.private_mode import ModelRetired, PrivateModeProvider
 from sealedlore.providers.tee import (
     GPUS_LOOSE,
@@ -424,8 +424,16 @@ class PrivateWindow:
                 sealed.check_offered(settings.model)
                 return sealed.attest()
         else:
-            tee = TeeClient(settings.base_url, settings.api_key, settings.model)
-            attest = tee.attest
+            # A key saved for another place than this address goes nowhere:
+            # the attestation refuses, saying why (`ProviderConfig.sendable`).
+            sent = settings.sendable()
+            tee = TeeClient(sent.base_url, sent.api_key, settings.model)
+
+            def attest():
+                if sent.key_withheld:
+                    raise ProviderError(sent.key_withheld)
+                return tee.attest()
+
             # Nothing reaches the model until this comes back and holds.
             self.session.tee_block = f"{settings.model}'s enclave is still being attested"
 

@@ -37,6 +37,7 @@ def test_the_choice_round_trips_and_the_note_says_how_the_key_is_sent(app):
     assert "Bearer" in dialog.api_note.text()
 
     dialog.base_url.setText("https://api.anthropic.com")
+    dialog.api_key.setText("anthropic-key")  # a key of its own: none moves
     assert "x-api-key" in dialog.api_note.text(), "read from the address"
     dialog.chat_api.setCurrentIndex(dialog.chat_api.findData("anthropic"))
     dialog._save()

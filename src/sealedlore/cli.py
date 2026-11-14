@@ -39,6 +39,7 @@ from sealedlore.models.config import (
     is_local_host,
     is_loopback_host,
     key_problem,
+    rebind_keys,
     recommended_models,
     require_https,
     shown,
@@ -167,8 +168,10 @@ def cmd_configure(args: argparse.Namespace) -> int:
     if args.api_key is not None and (problem := key_problem(args.api_key, name)):
         raise SystemExit(problem)
     existing = next((p for p in config.providers if p.name == name), None)
-    # Where each saved key goes before this changes any (`warn_if_plain`).
+    # Where each saved key goes before this changes any (`warn_if_plain`),
+    # and the config as saved, for where each key is for (`rebind_keys`).
     before = [(p.base_url, p.api_key) for p in config.providers]
+    saved = config.model_copy(deep=True)
     provider = existing or ProviderConfig(
         name=name, base_url=args.base_url, model=DEFAULT_STORY_MODEL
     )
@@ -192,6 +195,9 @@ def cmd_configure(args: argparse.Namespace) -> int:
         config.active_provider_name = name
     if args.key_storage is not None:
         config.key_storage = args.key_storage
+    # A key given now is for this address; one kept from before stays for the
+    # place it was saved for, and goes nowhere else (no question here).
+    moves = rebind_keys(saved, config)
     save_config(config, root=root)
     default = " (the default endpoint)" if config.active_provider_name == name else ""
     print(
@@ -202,7 +208,20 @@ def cmd_configure(args: argparse.Namespace) -> int:
         print(f"Its models are named {name}::<model id> in Settings and stories.")
     if provider.api_key:
         print(f"API key: {key_place(config, f'provider:{name}', root)}")
-    warn_if_plain(provider, before, kept=existing is not None and args.api_key is None)
+    for move in moves:
+        mine = move.slot == f"provider:{name}"
+        print(
+            f"The API key saved for {move.slot.removeprefix('provider:')} was saved for "
+            f"{move.saved_for}, so it isn't sent to {move.now}. "
+            + (
+                'Give it again with --api-key to use it there, or --api-key "" if that '
+                "server needs none."
+                if mine
+                else "Enter its key for the new address in Settings to use one there."
+            ),
+            file=sys.stderr,
+        )
+    warn_if_plain(provider.sendable(), before, kept=existing is not None and args.api_key is None)
     return 0
 
 

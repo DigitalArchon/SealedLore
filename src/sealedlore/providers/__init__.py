@@ -24,8 +24,11 @@ def make_chat_provider(settings: ProviderConfig) -> ChatProvider:
     An end-to-end encrypted model (nano-gpt's `private/*`) is never sent in
     the clear, whatever the endpoint; Anthropic's own API gets its native
     client (Settings → Endpoints → Speaks, or read from the address); anything
-    else speaks OpenAI's /chat/completions.
+    else speaks OpenAI's /chat/completions. A key saved for another place
+    than the endpoint's address now names goes nowhere: its client refuses,
+    saying why (`ProviderConfig.sendable`).
     """
+    settings = settings.sendable()
     if is_private_mode(settings.model):
         # Imported here: the attestation code behind it is nothing the
         # other clients need.

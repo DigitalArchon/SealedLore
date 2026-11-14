@@ -194,6 +194,8 @@ class AnthropicProvider(StreamingHttpProvider):
         return origin(self.config.base_url) + "/v1/messages"
 
     def _headers(self) -> dict[str, str]:
+        if self.config.key_withheld:
+            raise ProviderError(self.config.key_withheld)
         headers = {"content-type": "application/json", "anthropic-version": API_VERSION}
         if self.config.api_key:
             headers["x-api-key"] = checked_key(self.config.api_key, self.config.name or "Anthropic")
