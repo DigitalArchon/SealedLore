@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import ipaddress
 import os
+import socket
 
 import pytest
 
@@ -273,6 +275,69 @@ def _the_test_process_stays_dumpable(monkeypatch):
 
     monkeypatch.setattr(cli, "no_core_dumps", lambda: None)
     yield
+
+
+class NetworkInTest(OSError):
+    """What a test that reaches past this computer meets (`_no_network`)."""
+
+
+# Every outside connection and name lookup a test tries, for `_no_network`
+# to fail the test with: one refused inside code that falls back quietly
+# (a listing whose ProviderError is caught) would otherwise pass unseen.
+_REACHED: list[str] = []
+
+
+def _local_address(address) -> bool:
+    if not isinstance(address, tuple):
+        return True  # a unix socket's path
+    host = str(address[0])
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host.split("%", 1)[0]).is_loopback
+    except ValueError:
+        return False
+
+
+def _refused(what: str) -> NetworkInTest:
+    _REACHED.append(what)
+    return NetworkInTest(f"a test tried to reach {what}: tests never use the network")
+
+
+def _guarded_connect(original):
+    def connect(self, address):
+        if self.family in (socket.AF_INET, socket.AF_INET6) and not _local_address(address):
+            raise _refused(repr(address))
+        return original(self, address)
+
+    return connect
+
+
+def _guarded_lookup(original):
+    def getaddrinfo(host, *args, **kwargs):
+        if host is not None and not _local_address((host,)):
+            raise _refused(f"the name {host!r}")
+        return original(host, *args, **kwargs)
+
+    return getaddrinfo
+
+
+# Installed when the tests are collected, so session fixtures and imports
+# are held too; programs a test starts in a process of their own are not.
+socket.socket.connect = _guarded_connect(socket.socket.connect)
+socket.socket.connect_ex = _guarded_connect(socket.socket.connect_ex)
+socket.getaddrinfo = _guarded_lookup(socket.getaddrinfo)
+
+
+@pytest.fixture(autouse=True)
+def _no_network():
+    """Tests never use the network (the project's rule, held here rather than
+    by review): a test that tried, even where the code under it caught the
+    refusal and went on, fails naming where it tried to go."""
+    _REACHED.clear()
+    yield
+    reached, _REACHED[:] = list(_REACHED), []
+    assert not reached, "this test tried to use the network: " + ", ".join(reached)
 
 
 @pytest.fixture(autouse=True)

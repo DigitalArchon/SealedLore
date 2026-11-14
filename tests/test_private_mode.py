@@ -585,7 +585,9 @@ def test_an_encrypted_passage_stopped_at_its_end_still_says_it_was_encrypted(fak
     assert reply.content.endswith("And then nothing.") and reply.meta.tee == "encrypted"
 
 
-def test_a_memory_only_encrypted_chat_leaves_no_trace_and_marks_each_reply(fake, tmp_path):
+def test_a_memory_only_encrypted_chat_leaves_no_trace_and_marks_each_reply(
+    fake, tmp_path, monkeypatch
+):
     from sealedlore.engine.prompt import TurnRequest
     from sealedlore.engine.session import StorySession
     from sealedlore.engine.tokens import TokenEstimator, fallback_counter
@@ -596,6 +598,10 @@ def test_a_memory_only_encrypted_chat_leaves_no_trace_and_marks_each_reply(fake,
 
     story = Story(title="Sealed", mode="chat", chat_prompt="Be brief.", chat_keep="memory")
     story.defaults.main_model = "private/glm-5-3"
+    # The session reads the endpoint's public model listings once (prices,
+    # reasoning defaults): fetched from nano-gpt.com, so given here.
+    monkeypatch.setattr(PrivateModeProvider, "fetch_model_prices", lambda self: {})
+    monkeypatch.setattr(PrivateModeProvider, "fetch_reasoning_defaults", lambda self: {})
     before = listing(tmp_path)
     session = StorySession(
         StoryBundle(story=story),

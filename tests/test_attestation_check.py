@@ -122,6 +122,8 @@ def test_an_encrypted_models_check_is_its_own_attestation(monkeypatch):
         hpke_public_key="aa",
     )
     monkeypatch.setattr(PrivateModeProvider, "attest", lambda self: record)
+    # The relay's list of models it offers is a public fetch from nano-gpt.com.
+    monkeypatch.setattr(PrivateModeProvider, "still_offered", lambda self, model: True)
     result = check_attestation(settings("private/glm-5-3"))
     assert result.outcome == "encrypted" and "older enclave release" in result.headline
 
