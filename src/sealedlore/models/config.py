@@ -452,17 +452,50 @@ def addresses_shown(text: str) -> str:
     return _USERINFO.sub(r"\1…@", str(text))
 
 
+# What no address has in it, and Python's parser and httpx's may read apart:
+# whitespace, control characters, a backslash (DA Assistant's netguard.UNSAFE).
+_NOT_IN_AN_ADDRESS = re.compile(r"[\\\s\x00-\x1f\x7f]")
+
+
+def _address_problem(text: str) -> str | None:
+    """Why `text` (stripped) can't be read as one address, whatever its
+    scheme, or None: a character no address has, a port no address can
+    have, or a "%" escape in its host, which a parser may decode into
+    another name ("nano%2dgpt.com"). Only an IPv6 address has a "%" of its
+    own, its zone ("[fe80::1%25eth0]"). (DA Assistant's and DA Media
+    Browser's netguard, Nov 2026.)"""
+    if _NOT_IN_AN_ADDRESS.search(text):
+        return (
+            f"{shown(text)!r} isn't a web address: an address has no spaces, backslashes or "
+            "control characters in it"
+        )
+    try:
+        parsed = urlparse(text)
+        host = parsed.hostname or ""
+        _ = parsed.port  # raises on a port no address can have
+    except ValueError:  # "https://[fd00::5", half typed; a port past 65535
+        return f"{shown(text)!r} isn't a web address (check its host and port)"
+    if parsed.netloc and not host:
+        return f"{shown(text)!r} isn't a web address: it names no host"
+    if "%" in host and ":" not in host.split("%", 1)[0]:
+        return f"{shown(text)!r} isn't a web address: a host has no % escapes in it"
+    return None
+
+
 def require_https(url: str) -> str:
     """`url` when it is https, or http to this computer or the local network;
     refused in words a person can act on otherwise (the address as `shown`:
     never a password typed into it)."""
-    parsed = urlparse(url)
-    if parsed.scheme == "https":
+    if not url.strip():
+        raise ValueError("needs an address (https://…)")
+    problem = _address_problem(url.strip())
+    if problem:
+        raise ValueError(problem)
+    parsed = urlparse(url.strip())
+    if parsed.scheme == "https" and parsed.hostname:
         return url
     if parsed.scheme == "http" and is_local_host(parsed.hostname or ""):
         return url
-    if not url.strip():
-        raise ValueError("needs an address (https://…)")
     if not parsed.scheme or not parsed.netloc:
         raise ValueError(f"{shown(url)!r} needs to begin with https://")
     if (parsed.hostname or "") in ("0.0.0.0", "::"):

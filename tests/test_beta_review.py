@@ -14,7 +14,7 @@ import httpx
 import pytest
 
 from sealedlore.engine.images import ImageRequest, run_image_request
-from sealedlore.models.config import Config, is_local_host, require_https
+from sealedlore.models.config import Config, ProviderConfig, is_local_host, require_https
 from sealedlore.models.generation import GenerationParams
 from sealedlore.providers.base import (
     ChatRequest,
@@ -98,6 +98,56 @@ def test_an_address_with_a_dot_after_it_is_a_name_not_that_address():
     assert is_local_host("192.168.1.50") and is_loopback_host("127.0.0.1")
     assert is_local_host("localhost.") and is_loopback_host("localhost.")
     assert is_local_host("studio.local.")
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://nano-gpt.com /api/v1",
+        "https://nano-gpt.com\\@evil.example/v1",
+        "https://nano-gpt.com\t/api/v1",
+        "https://nano-gpt.com\x00.evil.example/v1",
+        "https://nano-gpt.com\u3000/v1",
+        "https://nano%2dgpt.com/api/v1",
+        "https://127.0.0.1%2e.evil.example/v1",
+        "https://nano-gpt.com:99999/api/v1",
+        "https://nano-gpt.com:443x/api/v1",
+        "https://[fd00::5/v1",
+        "https://:443/v1",
+        "https://",
+    ],
+)
+def test_an_address_that_cant_be_read_one_way_is_refused(url):
+    """A backslash, whitespace or a control character, a port no address can
+    have and a "%" escape in the host were let through: Python's parser and
+    httpx's (or the resolver) may read such an address apart, and the key
+    went where the reading the app didn't check said (DA Assistant's and DA
+    Media Browser's netguard)."""
+    with pytest.raises(ValueError) as refused:
+        require_https(url)
+    assert "s3cret" not in str(refused.value)
+    with pytest.raises(ValueError):
+        ProviderConfig(name="x", base_url=url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://nano-gpt.com:8443/api/v1",
+        "  https://nano-gpt.com/api/v1  ",
+        "http://[fe80::1%25eth0]:11434/v1",
+        "https://bücher.example/v1",
+        "https://alice:s3cret@nano-gpt.com/api/v1",
+    ],
+)
+def test_an_address_read_one_way_is_kept_as_it_was(url):
+    assert require_https(url) == url
+
+
+def test_a_refused_address_never_shows_its_password():
+    with pytest.raises(ValueError) as refused:
+        require_https("https://alice:s3cret@nano-gpt.com /api/v1")
+    assert "s3cret" not in str(refused.value) and "…@" in str(refused.value)
 
 
 def test_the_address_a_server_listens_on_says_which_to_use():
