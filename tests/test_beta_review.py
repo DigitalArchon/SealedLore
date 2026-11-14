@@ -175,37 +175,96 @@ def test_a_redirect_off_https_is_refused_before_the_body_is_sent_again():
     assert seen == ["https://api.test/v1/images/generations"]
 
 
-def test_a_redirect_that_stays_on_https_is_followed():
+@pytest.mark.parametrize("code", [301, 302, 303, 307, 308])
+def test_a_pictures_request_is_never_sent_on_by_a_redirect_even_on_https(code):
+    """A 307/308 re-sends the body: the prompt and every reference picture went
+    to whatever https host the endpoint named (DA Media Browser's
+    follows_redirects). Now it is said, and where it pointed."""
     seen: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(str(request.url))
-        if len(seen) == 1:
-            return httpx.Response(308, headers={"location": "https://api.test/v2/images"})
-        return httpx.Response(
-            200, json={"data": [{"b64_json": base64.b64encode(PNG).decode()}], "cost": 0.01}
-        )
+        return httpx.Response(code, headers={"location": "https://elsewhere.test/v2/images?s=1"})
 
-    reply = _image_client(handler).generate({"model": "m", "prompt": "p"})
-    assert len(seen) == 2 and reply.images == [PNG]
+    with pytest.raises(ProviderError, match="redirected") as refused:
+        _image_client(handler).generate({"model": "m", "prompt": "the whole scene"})
+    assert seen == ["https://api.test/v1/images/generations"]
+    said = str(refused.value)
+    assert f"(HTTP {code}) to https://elsewhere.test/v2/images." in said
+    assert "Nothing was sent there" in said and "s=1" not in said
 
 
-def test_a_relative_redirect_is_followed():
-    """httpx runs response hooks before it resolves `Location`: read raw, a
-    relative one ("/v2/images") had no scheme and every one was refused."""
-    seen: list[str] = []
+def test_a_request_carrying_the_key_follows_no_redirect():
+    from sealedlore.providers.media_http import MediaHttp
+
+    seen: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        seen.append(str(request.url))
-        if len(seen) == 1:
-            return httpx.Response(308, headers={"location": "/v2/images"})
-        return httpx.Response(
-            200, json={"data": [{"b64_json": base64.b64encode(PNG).decode()}], "cost": 0.01}
-        )
+        seen.append(request)
+        return httpx.Response(302, headers={"location": "https://api.test/v1/moved"})
+
+    http = MediaHttp(
+        "https://api.test/v1",
+        "k",
+        timeout_seconds=30,
+        client=make_client("https://api.test/v1", transport=httpx.MockTransport(handler)),
+    )
+    with pytest.raises(ProviderError, match=r"redirected \(HTTP 302\) to https://api.test"):
+        http.request("GET", "https://api.test/v1/videos/1")
+    assert len(seen) == 1
+
+
+def test_a_download_without_the_key_follows_a_relative_redirect():
+    """A signed link's storage may redirect: a keyless GET still follows it,
+    under make_client's guard. httpx runs response hooks before it resolves
+    `Location`: read raw, a relative one ("/signed/p.png") had no scheme and
+    every one was refused."""
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.url.host == "api.test":
+            return httpx.Response(200, json={"data": [{"url": "https://cdn.test/p.png"}]})
+        if request.url.path == "/p.png":
+            return httpx.Response(302, headers={"location": "/signed/p.png"})
+        return httpx.Response(200, content=PNG)
 
     reply = _image_client(handler).generate({"model": "m", "prompt": "p"})
-    assert seen == ["https://api.test/v1/images/generations", "https://api.test/v2/images"]
+    assert [str(r.url) for r in seen] == [
+        "https://api.test/v1/images/generations",
+        "https://cdn.test/p.png",
+        "https://cdn.test/signed/p.png",
+    ]
+    assert all("authorization" not in r.headers for r in seen[1:])
     assert reply.images == [PNG]
+
+
+def test_a_paid_video_request_is_never_sent_on_by_a_redirect():
+    from sealedlore.providers.videos import VideoClient
+
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return httpx.Response(308, headers={"location": "https://collector.test/generate-video"})
+
+    videos = VideoClient(
+        "https://nano-gpt.com/api/v1",
+        "video-key",
+        client=make_client("https://nano-gpt.com/api/v1", transport=httpx.MockTransport(handler)),
+    )
+    with pytest.raises(ProviderError, match="Nothing was sent there"):
+        videos.submit({"model": "m", "prompt": "the whole scene"})
+    assert seen == ["https://nano-gpt.com/api/generate-video"]
+
+
+def test_an_upload_follows_no_redirect():
+    from sealedlore.providers.media_http import follows_redirects
+
+    assert not follows_redirects({}, {"files": {"file": ("a.png", b"x", "image/png")}})
+    assert not follows_redirects({}, {"json": {}})
+    assert not follows_redirects({"X-API-Key": "k"}, {})
+    assert follows_redirects({}, {"params": {"a": "1"}})
 
 
 @pytest.mark.parametrize(
@@ -231,14 +290,12 @@ def test_a_local_server_may_redirect_on_the_local_network():
         seen.append(str(request.url))
         if len(seen) == 1:
             return httpx.Response(307, headers={"location": "http://192.168.1.20:7860/v1/x"})
-        return httpx.Response(
-            200, json={"data": [{"b64_json": base64.b64encode(PNG).decode()}], "cost": 0.0}
-        )
+        return httpx.Response(200, content=PNG)
 
     client = make_client(
         "http://192.168.1.10:7860/v1", transport=httpx.MockTransport(handler), follow_redirects=True
     )
-    ImageClient("http://192.168.1.10:7860/v1", "", client=client).generate({"model": "m"})
+    assert client.get("http://192.168.1.10:7860/v1/file").content == PNG
     assert seen[-1] == "http://192.168.1.20:7860/v1/x"
 
 

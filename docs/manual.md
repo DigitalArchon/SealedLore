@@ -3184,7 +3184,10 @@ crash reporting.
   chose, and the picture comes back and is saved with the story (a reply that
   names a download link is fetched from that link, which may be a content
   network, without the key). WaveSpeed takes pictures as links, so the
-  reference pictures are uploaded to it first. In a private scene the prompt
+  reference pictures are uploaded to it first. A redirect of a request that
+  carries the key, the prompt or a picture is never followed (it would send
+  them on to wherever it points): it is said, and where it pointed; only a
+  download without the key follows one. In a private scene the prompt
   is written by the private model but still sent there, with a warning in
   the dialog.
 - **The video endpoint** (Settings → Video, off until it has a key) gets the

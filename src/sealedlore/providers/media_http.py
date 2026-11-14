@@ -14,6 +14,14 @@ a video sent twice is paid for twice. A 429 that says to wait longer than
 `RETRY_MAX_SECONDS` is a spending cap (nano-gpt's per-key daily limit
 answers 429 with Retry-After until midnight UTC), so it is not waited out:
 it is `SpendingCapReached`, and the author is told.
+
+Redirects: only a request that carries neither the key nor a body (a
+download from a signed storage link) follows one, under `make_client`'s
+guard. A 307 or 308 re-sends a request's body, and for a picture or a video
+that is the prompt and every reference picture: followed, any https host the
+endpoint named got them. One that isn't followed is said, and where it
+pointed, never taken for a reply with nothing in it (DA Media Browser's
+`follows_redirects`, Nov 2026).
 """
 
 from __future__ import annotations
@@ -25,7 +33,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from sealedlore.models.config import _same_host
+from sealedlore.models.config import _same_host, shown
 from sealedlore.providers.base import ProviderError, StreamCancelled, checked_key
 from sealedlore.providers.http import make_client, traced_socket
 from sealedlore.providers.streaming import (
@@ -102,9 +110,8 @@ class MediaHttp:
                 timeout=httpx.Timeout(self.timeout_seconds, connect=30.0),
                 # A fresh connection per request, so cancel() can find its socket.
                 limits=httpx.Limits(max_keepalive_connections=0),
-                # A signed download URL may redirect; the guard in make_client
-                # refuses one that would leave https.
-                follow_redirects=True,
+                # Each request says whether it follows one (`follows_redirects`).
+                follow_redirects=False,
             )
         return self._client
 
@@ -190,9 +197,15 @@ class MediaHttp:
             raise ProviderError(
                 f"{_where(url)} isn't this endpoint's own address, so the key wasn't sent there"
             )
+        follow = follows_redirects(headers, kwargs)
         try:
             with self._get_client().stream(
-                method, url, headers=headers, extensions={"trace": self._trace}, **kwargs
+                method,
+                url,
+                headers=headers,
+                extensions={"trace": self._trace},
+                follow_redirects=follow,
+                **kwargs,
             ) as streamed:
                 # Read a piece at a time, and only so far: read whole, a reply
                 # (or a refusal) could be as large as the other end liked.
@@ -226,6 +239,8 @@ class MediaHttp:
             raise ProviderError(f"{_where(url)} failed: {exc or type(exc).__name__}") from exc
         if self._cancelled:
             raise StreamCancelled()
+        if 300 <= response.status_code < 400:
+            raise _redirected(url, response, followed=follow)
         if response.status_code >= 400:
             error = ProviderError(
                 f"{_where(url)} returned HTTP {response.status_code}: {response.text[:300]}",
@@ -244,6 +259,42 @@ class MediaHttp:
             raise ProviderError(
                 f"{_where(url)} returned a non-JSON body", body=response.text[:2000]
             ) from exc
+
+
+# What a request carries that a redirect would hand on to wherever it points.
+_KEY_HEADERS = frozenset({"authorization", "x-api-key"})
+_BODY_FIELDS = ("json", "content", "data", "files")
+
+
+def follows_redirects(headers: dict[str, str], kwargs: dict[str, Any]) -> bool:
+    """Whether a redirect of this request may be followed at all: not if it
+    carries the key or a body. A keyless download may (a signed link's
+    storage often redirects), where `make_client`'s guard lets it."""
+    if any(kwargs.get(field) is not None for field in _BODY_FIELDS):
+        return False
+    return not any(name.lower() in _KEY_HEADERS for name in headers)
+
+
+def _redirected(url: str, response: httpx.Response, *, followed: bool) -> ProviderError:
+    """A 3xx at the end of a request, as the error to raise: a redirect not
+    followed, and where it pointed, or one with nowhere to go."""
+    code = response.status_code
+    location = response.headers.get("location")
+    if followed or not location:
+        return ProviderError(
+            f"{_where(url)} answered HTTP {code} with nothing in it", status_code=code
+        )
+    try:
+        target = str(response.request.url.join(location))
+    except httpx.InvalidURL:
+        target = location
+    return ProviderError(
+        f"{_where(url)} redirected (HTTP {code}) to {shown(_where(target))[:200]}. Nothing "
+        "was sent there: a request that carries the key, the prompt or a picture is never "
+        "sent on to another address. If the endpoint has moved, put its new address in "
+        "Settings.",
+        status_code=code,
+    )
 
 
 def _minutes(seconds: float) -> str:
