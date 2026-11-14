@@ -326,12 +326,15 @@ def test_a_redirect_is_held_to_the_whole_rule_for_an_address(network, target, sa
 
 
 def test_and_to_the_apps_own_rule_for_an_address(network, monkeypatch):
-    """The app's rule (`check`, raising ValueError) is asked too, and attesting
-    passes SealedLore's (require_https)."""
+    """The app's rule (`check`) is asked too, and whatever it raises for an address is a
+    refusal (DA Media Browser's raises a URLError); attesting passes SealedLore's
+    (require_https)."""
 
     def refusing(url: str) -> str:
         if "objects.example" in url:
             raise ValueError("not an address of ours")
+        if "files.example" in url:
+            raise OSError("<urlopen error not one of ours either>")
         return url
 
     sdk_guard.guard(is_local_host, check=refusing)
@@ -341,6 +344,10 @@ def test_and_to_the_apps_own_rule_for_an_address(network, monkeypatch):
     ):
         module("github").fetch_latest_release("owner/repo")
     assert network.sent == [RELEASE]
+    network.answers[RELEASE] = "https://files.example/release"
+    with pytest.raises(sdk_guard.RedirectNotFollowed, match="not one of ours either"):
+        module("github").fetch_latest_release("owner/repo")
+    assert network.sent == [RELEASE, RELEASE]
     passed = []
     monkeypatch.setattr(sdk_guard, "guard", lambda *a, **k: passed.append(k.get("check")) or [])
     with pytest.raises(requests.RequestException):

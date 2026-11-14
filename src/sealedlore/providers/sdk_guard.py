@@ -148,7 +148,8 @@ def redirect_problem(
     check: Callable[[str], Any] | None = None,
 ) -> str | None:
     """Why the SDK may not follow a redirect from `source` to `target`, or None. `check` is the
-    app's own rule for an address: it raises ValueError for one the app wouldn't send to."""
+    app's own rule for an address: whatever it raises for one (a ValueError, a URLError) is a
+    refusal."""
     shown = str(target)[:120]
     unreadable = _unreadable(str(target))
     if unreadable:
@@ -166,7 +167,7 @@ def redirect_problem(
     if check is not None:
         try:
             check(target)
-        except ValueError as e:
+        except Exception as e:  # the app's rule refused it, whatever it raises
             return f"the attestation was sent on to {shown!r}, an address refused ({str(e)[:200]}); not followed"
     if is_local(aimed.hostname or "") and not is_local(came_host):
         return (
@@ -317,8 +318,8 @@ def guard(
     can't be guarded.
 
     `is_local` is the app's reading of "this computer or its network", `check` its rule for an
-    address it uses (SealedLore's require_https, the other apps' netguard.check): it raises
-    ValueError for one the app wouldn't send to, and a redirect there isn't followed.
+    address it uses (SealedLore's require_https, the other apps' netguard.check): it raises for
+    one the app wouldn't send to, and a redirect there isn't followed.
 
     Call it after importing the SDK and before it fetches anything (before attesting). Every
     module of the package is loaded first; one that can't be loaded is left, as the SDK could
