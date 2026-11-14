@@ -3280,6 +3280,16 @@ used it says why; entering the key again for the new address sends it there.
 A No is remembered for that address, so later saves don't ask again: under
 **Keys held back** on Settings → Endpoints, each such key says where it is
 for and where it isn't sent, with **Ask again…** to be asked once more.
+A key (or a password written into the address) that would go over plain http
+to another machine on your network, where anyone on that network can read it,
+is sent only once you have confirmed it for that machine: Save asks when you
+enter one (No is the default; Browse… and the tests ask too), and a key that
+was already going there before this version is held back until you confirm
+it, listed under **Keys held back** with **Confirm…**, and whatever would have
+used it says so. From the command line, giving the key again with
+`sealedlore configure --base-url … --api-key …` confirms it. A key sent to
+this computer itself (localhost, 127.0.0.1) never leaves it and is never asked
+about.
 The folder and everything the app writes in it are readable by your user only.
 Each story keeps every request and reply in its `api_log.jsonl`, so a story
 backup (Story → Export → Story backup…) carries every prompt sent for it; a

@@ -160,7 +160,8 @@ fun to play. This app will remain focused on text based roleplay.
   A story made from a card's own scenario stays linked to the card. Ctrl+R
   regenerates the latest passage and Ctrl+Shift+Enter continues it, and a key
   that would go over plain http to another machine on your network is asked
-  about before it is sent.
+  about before it is sent (one already going there is held back until you
+  confirm it).
 
 ### New in version 2
 

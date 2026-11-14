@@ -82,8 +82,7 @@ from sealedlore.models.config import (
     _same_host,
     chat_api,
     credentials,
-    is_local_host,
-    is_loopback_host,
+    in_the_clear,
     key_origin,
     key_problem,
     on_nanogpt,
@@ -207,37 +206,43 @@ class SentPlain(NamedTuple):
         return f"•  {self.whose}: {shown(self.address)}{what}"
 
 
-def _in_the_clear(url: str) -> bool:
-    """Plain http to another machine on the local network: allowed
-    (`require_https`), but anyone on that network can read what goes, a
-    café's or a hotel's Wi-Fi included. To this computer it never leaves."""
-    parsed = urlparse(url.strip())
-    host = parsed.hostname or ""
-    return parsed.scheme == "http" and is_local_host(host) and not is_loopback_host(host)
-
-
 def keys_in_the_clear(config: Config) -> list[SentPlain]:
-    """Every key `config` sends over plain http to another machine: each
-    chat endpoint's own, then the embeddings', pictures', video's and
-    private scenes', a blank key filled as Config fills it (the chat
-    endpoint's, on its own host only), so a key taken from the chat
-    endpoint is counted where it goes. A key kept for the place it was saved
-    for, its address now another's, goes nowhere (`ProviderConfig.sendable`)."""
-    sent = endpoint_keys([p.sendable() for p in config.providers])
-    embeddings = config.embeddings()
+    """Every key `config` would send over plain http to another machine,
+    confirmed for it or not: each chat endpoint's own, then the
+    embeddings', pictures', video's and private scenes', a blank key filled
+    as Config fills it (the chat endpoint's, on its own host only), so a key
+    taken from the chat endpoint is counted where it goes. A key kept for
+    the place it was saved for, its address now another's, goes nowhere
+    (`ProviderConfig.sendable`)."""
+    sent = endpoint_keys([p.sendable(as_confirmed=True) for p in config.providers])
+    embeddings = config.embeddings(as_confirmed=True)
     if embeddings is not None:
         sent.append(SentPlain("Lore", "Embeddings (Lore)", embeddings.base_url, embeddings.api_key))
     for page, whose, media in (
-        ("Images", "Pictures (Images)", config.images()),
-        ("Video", "Video", config.videos()),
+        ("Images", "Pictures (Images)", config.images(as_confirmed=True)),
+        ("Video", "Video", config.videos(as_confirmed=True)),
     ):
         if media is not None:
             sent.append(SentPlain(page, whose, media.base_url, media.api_key))
     private = config.private()
     if private is not None:
-        private = private.sendable()
+        private = private.sendable(as_confirmed=True)
         sent.append(SentPlain("Private", "Private scenes", private.base_url, private.api_key))
     return _plain(sent)
+
+
+def confirmed_in_clear(config: Config, entry: SentPlain) -> bool:
+    """`entry`'s key, and the password in its address, were confirmed for
+    plain http to that machine (`key_in_clear_for`): by the holder that has
+    that key for that host, a blank one taking the chat endpoint's."""
+    place = key_origin(entry.address)
+    return any(
+        holder.api_key == entry.key
+        and _same_host(address, entry.address)
+        and credentials(address) == credentials(entry.address)
+        and holder.key_in_clear_for == place
+        for _slot, holder, address in config.key_holders()
+    )
 
 
 def endpoint_keys(providers: list[ProviderConfig]) -> list[SentPlain]:
@@ -268,7 +273,7 @@ def _plain(sent: list[SentPlain]) -> list[SentPlain]:
     return [
         entry
         for entry in sent
-        if (entry.key.strip() or credentials(entry.address)) and _in_the_clear(entry.address)
+        if (entry.key.strip() or credentials(entry.address)) and in_the_clear(entry.address)
     ]
 
 
@@ -362,9 +367,16 @@ class SettingsDialog(QDialog):
         self.setMinimumWidth(860)
         size_to_screen(self, 0.55, 0.86, at_least=QSize(900, 680))
         self.config = config
-        # The keys already going over plain http to another machine: Save
-        # asks only about the rest (`_ask_before_plain`).
+        # The keys set to go over plain http to another machine as Settings
+        # opened: those confirmed for it are sent, the rest are held back
+        # until confirmed (nothing is taken as confirmed: the author, Nov 14
+        # 2026), listed on the Endpoints page with Confirm…. Save asks about
+        # neither again (`_ask_before_plain`); Browse… and the tests, which
+        # send a key at once, ask about one held back.
         self._plain_at_open = keys_in_the_clear(config)
+        self._plain_confirmed = [
+            entry for entry in self._plain_at_open if confirmed_in_clear(config, entry)
+        ]
         # Those a Yes was given for while the dialog is open: Browse…, Test
         # speed…, Test attestation and Detect send the keys as typed, before
         # Save, so they ask too, and Save doesn't ask again (`_may_send`).
@@ -1350,6 +1362,9 @@ class SettingsDialog(QDialog):
             return
         if not self._may_send(self._keys_sent_by(targets)):
             return
+        # Again, as the endpoints now stand: a key just confirmed for plain
+        # http goes with the copies the test sends (`_may_send`).
+        targets = self.speed_targets()
         dialog = SpeedTestDialog(targets, self, prices=self.config.model_prices)
         dialog.exec()
         dialog.deleteLater()
@@ -1741,7 +1756,12 @@ class SettingsDialog(QDialog):
             raise ValueError("Set the private endpoint's base URL first.")
         require_https(url)
         provider = make_chat_provider(
-            ProviderConfig(name="private-browse", base_url=url, api_key=key)
+            ProviderConfig(
+                name="private-browse",
+                base_url=url,
+                api_key=key,
+                key_in_clear_for=self._cleared(url, key),
+            )
         )
         return provider, url, True
 
@@ -1758,12 +1778,11 @@ class SettingsDialog(QDialog):
         """Test attestation's endpoint and model, its key asked about first
         when it would go unencrypted. ValueError, said under the button: No."""
         settings = self._private_test_settings()
-        if (
-            settings is not None
-            and testable(settings.model)
-            and not self._may_send(self._private_keys())
-        ):
-            raise ValueError("Not checked: its key would have gone unencrypted.")
+        if settings is not None and testable(settings.model):
+            if not self._may_send(self._private_keys()):
+                raise ValueError("Not checked: its key would have gone unencrypted.")
+            # As it now stands: a key just confirmed for plain http goes with it.
+            settings = self._private_test_settings()
         return settings
 
     def _phone_tab(self) -> QWidget:
@@ -2376,8 +2395,22 @@ class SettingsDialog(QDialog):
         stands for Save too. False: No, and nothing is sent."""
         if not self._may_move_keys():
             return False
-        new = self._not_asked(sent)
-        return not new or self._ask_plain(new, NOTHING_SENT)
+        new = self._not_asked(sent, held_too=True)
+        if new and not self._ask_plain(new, NOTHING_SENT):
+            return False
+        # What is sent now is sent as the working copies stand: a Yes given
+        # here is theirs (`key_in_clear_for`), or they would refuse it.
+        for settings in self._endpoints:
+            settings.key_in_clear_for = self._cleared(settings.base_url, settings.api_key)
+        return True
+
+    def _cleared(self, address: str, key: str) -> str:
+        """The place `key` at `address` may go in the clear to (its
+        `key_origin`), confirmed before or said Yes to here; else ""."""
+        entry = SentPlain("", "", address.strip(), key)
+        if entry.already_among(self._plain_confirmed + self._plain_allowed):
+            return key_origin(address)
+        return ""
 
     def _renamed(self) -> dict[str, str]:
         """Each endpoint renamed in the dialog: its name now → its saved name."""
@@ -2479,8 +2512,9 @@ class SettingsDialog(QDialog):
         new place: where it is for, where it isn't sent, and Ask again…, or a
         key typed into its field for the new address. None when none is."""
         held = self._held_back()
+        in_clear = self._held_in_clear()
         self.held_back_notes: list[QLabel] = []
-        if not held:
+        if not held and not in_clear:
             return None
         box = QWidget()
         box.setObjectName("heldBackKeys")
@@ -2503,6 +2537,27 @@ class SettingsDialog(QDialog):
             row.addWidget(ask)
             rows.addLayout(row)
             self.held_back_notes.append(note)
+        for entry in in_clear:
+            row = QHBoxLayout()
+            note = _note_label()
+            what = "its key" if entry.key.strip() else "the password in its address"
+            note.setText(
+                f"{entry.whose}: {what} would go over plain http, unencrypted, to "
+                f"{key_origin(entry.address)}, another machine on your network, so it isn't "
+                "sent until you confirm it (or use the server's https:// address)."
+            )
+            confirm = QPushButton("Confirm…")
+            confirm.setToolTip(
+                "Asks whether to send it there unencrypted from now on (No is the default); "
+                "Save keeps the answer."
+            )
+            confirm.clicked.connect(
+                lambda _checked=False, e=entry, n=note: self._confirm_in_clear(e, n)
+            )
+            row.addWidget(note, 1)
+            row.addWidget(confirm)
+            rows.addLayout(row)
+            self.held_back_notes.append(note)
         return box
 
     def _ask_again(self, move: KeyMove, note: QLabel) -> None:
@@ -2517,15 +2572,48 @@ class SettingsDialog(QDialog):
         else:
             note.setText(_held_back_words(move))
 
-    def _not_asked(self, sent: list[SentPlain]) -> list[SentPlain]:
-        """Those of `sent` not going there when Settings opened, nor said Yes
-        to since. Once each: pictures taking the chat endpoint's key send it
-        where the chat endpoint does."""
+    def _not_asked(self, sent: list[SentPlain], *, held_too: bool = False) -> list[SentPlain]:
+        """Those of `sent` neither confirmed for plain http there nor said
+        Yes to since Settings opened, and (unless `held_too`) not already set
+        to go there as it opened: those are held back, listed with Confirm…,
+        and Save doesn't ask about them again. Once each: pictures taking the
+        chat endpoint's key send it where the chat endpoint does."""
+        known = self._plain_confirmed + self._plain_allowed
+        if not held_too:
+            known = known + self._plain_at_open
         new: list[SentPlain] = []
         for entry in sent:
-            if not entry.already_among(self._plain_at_open + self._plain_allowed + new):
+            if not entry.already_among(known + new):
                 new.append(entry)
         return new
+
+    def _held_in_clear(self) -> list[SentPlain]:
+        """The keys set to go over plain http to another machine as Settings
+        opened and not confirmed for it: held back, nothing sent. Each once:
+        pictures taking the chat endpoint's key are held back with it."""
+        held: list[SentPlain] = []
+        for entry in self._plain_at_open:
+            if entry not in self._plain_confirmed and not entry.already_among(held):
+                held.append(entry)
+        return held
+
+    def _confirm_in_clear(self, entry: SentPlain, note: QLabel) -> None:
+        """Confirm… beside a key held back from plain http: the question now,
+        No the default; a Yes is kept for Save, which records it."""
+        if self._ask_plain([entry], "Save keeps your answer."):
+            note.setText(
+                f"{entry.whose}: its key will be sent over plain http to "
+                f"{key_origin(entry.address)} once you Save."
+            )
+
+    def _record_cleared(self, typed: Config) -> None:
+        """Each key `typed` sends over plain http to another machine that a
+        Yes was given for here, recorded as confirmed for that place."""
+        for _slot, holder, address in typed.key_holders():
+            if (holder.api_key or credentials(address)) and in_the_clear(address):
+                entry = SentPlain("", "", address.strip(), holder.api_key)
+                if entry.already_among(self._plain_allowed):
+                    holder.key_in_clear_for = key_origin(address)
 
     def _ask_plain(self, new: list[SentPlain], after_no: str) -> bool:
         """The question, every key in `new` at once; True on Yes, which is
@@ -2635,6 +2723,7 @@ class SettingsDialog(QDialog):
             moves = rebind_keys(self.config, typed, self._renamed())
             self._ask_moving_keys(moves, "Save goes on either way.")
             self._ask_before_plain(typed)
+            self._record_cleared(typed)
         except ValueError as exc:
             # Said where it is, and that page shown: a bad address on another
             # page used to leave the author looking at the one they were on.

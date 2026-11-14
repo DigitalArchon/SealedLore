@@ -13,7 +13,6 @@ import json
 import sys
 from collections.abc import Sequence
 from pathlib import Path
-from urllib.parse import urlparse
 
 from sealedlore import __version__
 from sealedlore.core_dumps import no_core_dumps
@@ -37,8 +36,8 @@ from sealedlore.models.config import (
     ProviderConfig,
     _same_host,
     credentials,
-    is_local_host,
-    is_loopback_host,
+    in_the_clear,
+    key_origin,
     key_problem,
     rebind_keys,
     recommended_models,
@@ -199,6 +198,12 @@ def cmd_configure(args: argparse.Namespace) -> int:
     # A key given now is for this address; one kept from before stays for the
     # place it was saved for, and goes nowhere else (no question here).
     moves = rebind_keys(saved, config)
+    # A key, or a password in the address, given now beside a plain http
+    # address on another machine is confirmed for it (`warn_if_plain` says
+    # so); one kept from before is sent there only once confirmed.
+    typed = args.api_key is not None or bool(credentials(args.base_url))
+    if typed and in_the_clear(provider.base_url):
+        provider.key_in_clear_for = key_origin(provider.base_url)
     save_config(config, root=root)
     default = " (the default endpoint)" if config.active_provider_name == name else ""
     print(
@@ -222,25 +227,28 @@ def cmd_configure(args: argparse.Namespace) -> int:
             ),
             file=sys.stderr,
         )
-    warn_if_plain(provider.sendable(), before, kept=existing is not None and args.api_key is None)
+    warn_if_plain(provider, before, typed=typed)
     return 0
 
 
-def warn_if_plain(provider: ProviderConfig, before: list[tuple[str, str]], *, kept: bool) -> None:
-    """Said when the endpoint's key now goes over plain http to another
-    machine on the local network, and didn't before: anyone on that network
-    can read it (Settings asks before it saves one). `kept`: the key was
-    saved before and not given now, so it goes to an address it wasn't
-    meant for. This endpoint is the one place configure can send a key
-    somewhere new: pictures, embeddings and private scenes take the chat
-    endpoint's key only to its own host (Config.images() and the rest)."""
-    parsed = urlparse(provider.base_url)
-    host = parsed.hostname or ""
-    plain = parsed.scheme == "http" and is_local_host(host) and not is_loopback_host(host)
-    # A password written into the address goes with every request (Basic
-    # credentials, in the clear over http): it counts as a key here.
+def warn_if_plain(provider: ProviderConfig, before: list[tuple[str, str]], *, typed: bool) -> None:
+    """Said when the endpoint's key would go over plain http to another
+    machine on the local network, where anyone on that network can read it.
+    `typed`: the key, or the password in the address, was given now, beside
+    the address: that confirms it for there (`key_in_clear_for`), and the
+    warning says so, once (not again for what went there already). Kept from
+    before and never confirmed: it is held back, nothing sent, and said with
+    the way out (nothing is taken as confirmed: the author, Nov 14 2026).
+    This endpoint is the one place configure can send a key somewhere new:
+    pictures, embeddings and private scenes take the chat endpoint's key
+    only to its own host (Config.images() and the rest)."""
     password = credentials(provider.base_url)
-    if not plain or not (provider.api_key.strip() or password):
+    if not in_the_clear(provider.base_url) or not (provider.api_key.strip() or password):
+        return
+    if not typed:
+        held = provider.sendable().key_withheld
+        if held:
+            print(held, file=sys.stderr)
         return
     if any(
         key == provider.api_key
@@ -248,31 +256,19 @@ def warn_if_plain(provider: ProviderConfig, before: list[tuple[str, str]], *, ke
         and _same_host(url, provider.base_url)
         for url, key in before
     ):
-        return  # going there already
-    if not provider.api_key.strip():
-        print(
-            f"Warning: {shown(provider.base_url)} is plain http to another machine on your "
-            "network: the password written into the address goes unencrypted, and anyone on "
-            "that network can read it (a café's or a hotel's Wi-Fi too). Use the server's "
-            "https:// address if it has one.",
-            file=sys.stderr,
-        )
-        return
-    if kept:
-        print(
-            f"Warning: the API key already saved for {provider.name!r} is kept, and now goes "
-            f"unencrypted to {shown(provider.base_url)}, another machine on your network, where "
-            "anyone on that network can read it (a café's or a hotel's Wi-Fi too). Give "
-            '--api-key "" if this server needs no key, or its own key with --api-key.',
-            file=sys.stderr,
-        )
-    else:
-        print(
-            f"Warning: {shown(provider.base_url)} is plain http to another machine on your "
-            "network: the API key goes unencrypted, and anyone on that network can read it (a "
-            "café's or a hotel's Wi-Fi too). Use the server's https:// address if it has one.",
-            file=sys.stderr,
-        )
+        return  # said when it was first given
+    what = (
+        "the API key goes"
+        if provider.api_key.strip()
+        else ("the password written into the address goes")
+    )
+    print(
+        f"Warning: {shown(provider.base_url)} is plain http to another machine on your "
+        f"network: {what} unencrypted, and anyone on that network can read it (a café's or a "
+        "hotel's Wi-Fi too). Given here, it is sent there; use the server's https:// address "
+        "if it has one.",
+        file=sys.stderr,
+    )
 
 
 def key_place(config: Config, slot: str, root: Path | None) -> str:

@@ -215,11 +215,21 @@ def _fill_keys(config: Config, root: Path | None) -> str | None:
 def _withheld_note(config: Config) -> str | None:
     """What is said of each key that isn't sent because its address names
     another place than it was saved for (config.json edited by hand, or No
-    in Settings): once, at start, beside the refusal each request makes."""
+    in Settings), or would go over plain http to another machine and hasn't
+    been confirmed for it: once, at start, beside the refusal each request
+    makes."""
     said = [
         why
         for slot, holder, address in config.key_holders()
-        if (why := key_withheld(holder.api_key, holder.key_saved_for, address, _whose(slot)))
+        if (
+            why := key_withheld(
+                holder.api_key,
+                holder.key_saved_for,
+                address,
+                _whose(slot),
+                holder.key_in_clear_for,
+            )
+        )
     ]
     return " ".join(said) or None
 

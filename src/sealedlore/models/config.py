@@ -363,6 +363,18 @@ def is_loopback_host(host: str) -> bool:
     return (mapped or address).is_loopback
 
 
+def in_the_clear(url: str) -> bool:
+    """`url` is plain http to another machine on the local network: allowed
+    (`require_https`), but anyone on that network can read what goes, a
+    café's or a hotel's Wi-Fi included. To this computer it never leaves."""
+    try:
+        parsed = urlparse(str(url or "").strip())
+        host = parsed.hostname or ""
+    except ValueError:
+        return False
+    return parsed.scheme.lower() == "http" and is_local_host(host) and not is_loopback_host(host)
+
+
 # Everything of a text up to its last "@" before a query or a fragment, the
 # scheme and "//" aside: where an address that can't be read as one may have
 # a user name and password.
@@ -545,23 +557,41 @@ def key_origin(url: str) -> str:
     return f"{scheme}://{host}"
 
 
-def key_withheld(key: str, saved_for: str, address: str, whose: str) -> str | None:
+def key_withheld(
+    key: str, saved_for: str, address: str, whose: str, clear_for: str | None = ""
+) -> str | None:
     """Why `key` isn't sent to `address`, or None when it may be: a key goes
     only to the place it was saved for (`saved_for`, a `key_origin`), so one
     never follows an address edited to another host, by hand in config.json
     or in Settings with No to "Use the saved key with …?". An unrecorded
-    place ("", a key not saved yet) holds nothing back. Never the key itself
-    in the words. (The DA apps' design, Nov 2026.)"""
-    if not key or not saved_for:
-        return None
+    place ("", a key not saved yet) holds nothing back. And a key, or a
+    password written into the address, that would go over plain http to
+    another machine (`in_the_clear`) goes only once that place was confirmed
+    (`clear_for`, a `key_origin`: Settings' Yes, or the key typed beside the
+    address in `sealedlore configure`): nothing is taken as confirmed, a key
+    already going there before this was asked included (the author, Nov 14
+    2026). `clear_for` None: that isn't asked (what Settings asks about).
+    Never the key itself in the words. (The DA apps' design, Nov 2026.)"""
     now = key_origin(address)
-    if now == saved_for:
+    if key and saved_for and now != saved_for:
+        return (
+            f"The key for {whose} was saved for {saved_for}, and its address is now "
+            f"{now or shown(address)}, so the key isn't sent there. To send it there, open "
+            "Settings, Save, and answer Yes to using the saved key there; or enter the key for "
+            "that address (`sealedlore configure --api-key …` from the command line)."
+        )
+    password = credentials(address)
+    if clear_for is None or not (key or password) or not in_the_clear(address):
         return None
+    if now == clear_for:
+        return None
+    what = f"The key for {whose}" if key else f"The password in the address for {whose}"
     return (
-        f"The key for {whose} was saved for {saved_for}, and its address is now "
-        f"{now or shown(address)}, so the key isn't sent there. To send it there, open "
-        "Settings, Save, and answer Yes to using the saved key there; or enter the key for "
-        "that address (`sealedlore configure --api-key …` from the command line)."
+        f"{what} would go over plain http, unencrypted, to {now}, another machine on your "
+        "network, where anyone on the network can read it, so it isn't sent until you "
+        "confirm that once: in Settings → Endpoints, under Keys held back, Confirm…; or "
+        "use the server's https:// address. From the command line, give the key again "
+        "(`sealedlore configure --base-url … --api-key …`)."
     )
 
 
@@ -646,6 +676,11 @@ class ProviderConfig(BaseModel):
     # saved key to (`KeyMove.decline`): not asked about again at each Save,
     # and Settings says the key is held back there. "" when none.
     key_declined_for: str = ""
+    # The place (a `key_origin`) confirmed for sending this key, and any
+    # password in the address, over plain http to another machine on the
+    # network (Settings' Confirm… or Yes; `sealedlore configure` given the
+    # key there): elsewhere in the clear it isn't sent (`key_withheld`).
+    key_in_clear_for: str = ""
     # Why this copy carries no key (`sendable`): its requests refuse in these
     # words rather than go without it. Never written.
     key_withheld: str = Field(default="", exclude=True)
@@ -655,11 +690,20 @@ class ProviderConfig(BaseModel):
     def _check_scheme(cls, value: str) -> str:
         return require_https(value)
 
-    def sendable(self) -> ProviderConfig:
+    def sendable(self, *, as_confirmed: bool = False) -> ProviderConfig:
         """This endpoint as its requests are made: itself, or, when its key
-        was saved for another place than its address now names
-        (`key_withheld`), a copy without the key that says so."""
-        why = key_withheld(self.api_key, self.key_saved_for, self.base_url, self.name or "it")
+        was saved for another place than its address now names, or would go
+        over plain http to another machine not yet confirmed
+        (`key_withheld`), a copy without the key that says so (its requests
+        refuse in those words). `as_confirmed`: as though plain http there
+        were confirmed (what Settings asks about)."""
+        why = key_withheld(
+            self.api_key,
+            self.key_saved_for,
+            self.base_url,
+            self.name or "it",
+            None if as_confirmed else self.key_in_clear_for,
+        )
         if why is None:
             return self
         return self.model_copy(update={"api_key": "", "key_withheld": why})
@@ -716,6 +760,8 @@ class MediaEndpoint(BaseModel):
     # saved key to (`ProviderConfig.key_declined_for`): not asked about again at each Save,
     # and Settings says the key is held back there. "" when none.
     key_declined_for: str = ""
+    # Confirmed for plain http to another machine (`ProviderConfig.key_in_clear_for`).
+    key_in_clear_for: str = ""
 
     @field_validator("base_url")
     @classmethod
@@ -767,6 +813,8 @@ class EmbeddingProviderConfig(BaseModel):
     # saved key to (`ProviderConfig.key_declined_for`): not asked about again at each Save,
     # and Settings says the key is held back there. "" when none.
     key_declined_for: str = ""
+    # Confirmed for plain http to another machine (`ProviderConfig.key_in_clear_for`).
+    key_in_clear_for: str = ""
 
     @field_validator("base_url")
     @classmethod
@@ -834,6 +882,16 @@ def rebind_keys(
         renamed_from = renamed.get(name) if slot.startswith("provider:") else None
         was = saved.get(f"provider:{renamed_from}" if renamed_from else slot)
         key = holder.api_key
+        # What was confirmed for plain http to another machine stays with the
+        # key and the password in the address it was confirmed for: either
+        # typed anew is asked about anew.
+        holder.key_in_clear_for = ""
+        if (
+            was is not None
+            and was[0].api_key == key
+            and credentials(was[1]) == credentials(address)
+        ):
+            holder.key_in_clear_for = was[0].key_in_clear_for
         if not key:
             if was is not None and not was[0].api_key:
                 holder.key_saved_for = was[0].key_saved_for  # out of reach, never lost
@@ -1324,23 +1382,35 @@ class Config(BaseModel):
         if chat is not None and _same_host(settings.base_url, chat.base_url):
             # Where the chat's key was saved for goes with it (`sendable`).
             return settings.model_copy(
-                update={"api_key": chat.api_key, "key_saved_for": chat.key_saved_for}
+                update={
+                    "api_key": chat.api_key,
+                    "key_saved_for": chat.key_saved_for,
+                    "key_in_clear_for": chat.key_in_clear_for,
+                }
             )
         return settings
 
-    def images(self) -> ResolvedMedia | None:
+    def images(self, *, as_confirmed: bool = False) -> ResolvedMedia | None:
         """Where pictures are made, blanks filled from the chat endpoint.
-        None when there is nowhere to send them."""
+        None when there is nowhere to send them. `as_confirmed`: as
+        `ProviderConfig.sendable`."""
         settings = self.image_endpoint
         chat = self._chat_to_inherit()
         base_url = settings.base_url or (chat.base_url if chat is not None else "")
         if not base_url:
             return None
-        key, saved_for = settings.api_key, settings.key_saved_for
+        key, saved_for, clear_for = (
+            settings.api_key,
+            settings.key_saved_for,
+            settings.key_in_clear_for,
+        )
         # The chat key only goes to the chat provider's own host.
         if not key and chat is not None and _same_host(base_url, chat.base_url):
-            key, saved_for = chat.api_key, chat.key_saved_for
-        withheld = key_withheld(key, saved_for, base_url, "pictures") or ""
+            key, saved_for, clear_for = chat.api_key, chat.key_saved_for, chat.key_in_clear_for
+        withheld = (
+            key_withheld(key, saved_for, base_url, "pictures", None if as_confirmed else clear_for)
+            or ""
+        )
         return ResolvedMedia(
             base_url=base_url,
             api_key="" if withheld else key,
@@ -1348,10 +1418,10 @@ class Config(BaseModel):
             key_withheld=withheld,
         )
 
-    def videos(self) -> ResolvedMedia | None:
+    def videos(self, *, as_confirmed: bool = False) -> ResolvedMedia | None:
         """Where videos are made. None until a video key is entered: nothing
         is inherited, so video spend is never on a key that wasn't meant
-        for it."""
+        for it. `as_confirmed`: as `ProviderConfig.sendable`."""
         settings = self.video_endpoint
         if not settings.base_url or not settings.api_key.strip():
             return None
@@ -1364,7 +1434,14 @@ class Config(BaseModel):
             if holder is not None:
                 others.add(holder.api_key)
         withheld = (
-            key_withheld(settings.api_key, settings.key_saved_for, settings.base_url, "video") or ""
+            key_withheld(
+                settings.api_key,
+                settings.key_saved_for,
+                settings.base_url,
+                "video",
+                None if as_confirmed else settings.key_in_clear_for,
+            )
+            or ""
         )
         return ResolvedMedia(
             base_url=settings.base_url,
@@ -1413,8 +1490,9 @@ class Config(BaseModel):
         chat = self.active_provider()
         return None if chat is None or chat.speaks() == "anthropic" else chat
 
-    def embeddings(self) -> EmbeddingProviderConfig | None:
-        """The embeddings endpoint with blanks filled from the chat provider.
+    def embeddings(self, *, as_confirmed: bool = False) -> EmbeddingProviderConfig | None:
+        """The embeddings endpoint with blanks filled from the chat provider
+        (`as_confirmed`: as `ProviderConfig.sendable`).
 
         Returns None when embeddings aren't configured at all, which is the
         signal to fall back to keyword matching (§7).
@@ -1437,8 +1515,13 @@ class Config(BaseModel):
         ):
             resolved.api_key = chat.api_key
             resolved.key_saved_for = chat.key_saved_for
+            resolved.key_in_clear_for = chat.key_in_clear_for
         withheld = key_withheld(
-            resolved.api_key, resolved.key_saved_for, resolved.base_url, "embeddings"
+            resolved.api_key,
+            resolved.key_saved_for,
+            resolved.base_url,
+            "embeddings",
+            None if as_confirmed else resolved.key_in_clear_for,
         )
         if withheld:
             resolved.api_key, resolved.key_withheld = "", withheld
