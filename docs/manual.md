@@ -2801,8 +2801,11 @@ Replies are marked "end-to-end encrypted", and the attestation is redone
 every five minutes (time the computer spends asleep counts). Tinfoil's
 verifier, and the Sigstore library it checks the release with (Sigstore's
 public trust root included), follow no redirect off https, nor one from the
-internet into your own network, and Sigstore's trust root at most five: one
-they may not follow fails the attestation, and nothing is sent. Should a
+internet into your own network, nor one to an address SealedLore wouldn't use
+itself, and Sigstore's trust root at most five: one they may not follow fails
+the attestation, says where it pointed, and nothing is sent. What the
+verifier fetches asks for gzip or deflate only, and is read to 32 MB at most
+(an error's or a redirect's text to 64 KB). Should a
 version of that software not let the app hold its fetches to this, the
 attestation is refused, saying why, rather than made without it. A model written with a capital or a stray space
 (`Private/glm-5-3`) is still end-to-end encrypted, never sent the plain way.

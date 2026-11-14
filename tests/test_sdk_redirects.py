@@ -86,16 +86,46 @@ RELEASE = "https://github-proxy.example/repos/owner/repo"
 SIGSTORE_SKIPPED = ("sigstore.__main__", "sigstore._cli")
 
 
+class Body(io.BytesIO):
+    """A reply's body on the wire: how far it was read is kept when it is closed."""
+
+    at = 0
+
+    def close(self) -> None:
+        if not self.closed:
+            self.at = self.tell()
+        super().close()
+
+    def read_so_far(self) -> int:
+        return self.at if self.closed else self.tell()
+
+
 class Network:
-    """Each URL answered as `answers` says (a redirect to another, or 200), and
-    every request that reached it recorded."""
+    """Each URL answered as `answers` says (a redirect to another, or 200), or as
+    `replies` says (a status, a body and headers, as an adapter builds a response
+    from the wire: read only as far as it is read), and every request that reached
+    it recorded, with its headers."""
 
     def __init__(self) -> None:
         self.sent: list[str] = []
+        self.headers: list[dict] = []
         self.answers: dict[str, str] = {}
+        self.replies: dict[str, tuple[int, Body, dict]] = {}
 
     def send(self, request):
         self.sent.append(request.url)
+        self.headers.append(dict(request.headers))
+        if request.url in self.replies:
+            status, body, headers = self.replies[request.url]
+            raw = urllib3.HTTPResponse(
+                body=body,
+                status=status,
+                headers=headers,
+                preload_content=False,
+                decode_content=True,
+                request_method=request.method,
+            )
+            return requests.adapters.HTTPAdapter().build_response(request, raw)
         response = requests.Response()
         response.url, response.request = request.url, request
         target = self.answers.get(request.url)
@@ -249,6 +279,148 @@ def test_attesting_guards_the_sdk_first(network):
 def test_without_the_sdk_there_is_nothing_to_guard(network):
     del sys.modules["tinfoil"]
     assert guard() == []
+
+
+def test_a_refused_redirect_is_named_as_one(network):
+    """What a refused redirect raises says so (`redirect_refused`, RedirectNotFollowed):
+    the app finds it among the causes of what the SDK raised (not_followed), where
+    sigstore says only "Failed to refresh TUF metadata" (DA Assistant's original)."""
+    guard()
+    network.answers[RELEASE] = "http://evil.example/release"
+    with pytest.raises(requests.exceptions.InvalidURL) as refused:
+        module("github").fetch_latest_release("owner/repo")
+    assert isinstance(refused.value, sdk_guard.RedirectNotFollowed)
+    assert refused.value.redirect_refused is True
+    try:
+        try:
+            raise refused.value
+        except requests.RequestException as e:
+            raise RuntimeError("Failed to refresh TUF metadata") from e
+    except RuntimeError as wrapped:
+        assert sdk_guard.not_followed(wrapped) == str(refused.value)
+    assert sdk_guard.not_followed(RuntimeError("anything else")) == ""
+    assert sdk_guard.not_followed(None) == ""
+
+
+@pytest.mark.parametrize(
+    "target, said",
+    [
+        ("https://exa mple.com/release", "no spaces, backslashes or control characters"),
+        ("https://objects.example\\@evil.example/", "no spaces, backslashes or control characters"),
+        ("https://objects.example:99999/release", "host or port can't be read"),
+        ("https://[fd00::5/release", "host or port can't be read"),
+        ("https://127.0.0.1%2eevil.example/release", "no % escapes"),
+        ("https://0.0.0.0/release", "the address a server listens on"),
+        ("https://[::]:8443/release", "the address a server listens on"),
+    ],
+)
+def test_a_redirect_is_held_to_the_whole_rule_for_an_address(network, target, said):
+    """Not to its scheme alone (DA Assistant's original held it to netguard's whole
+    rule): an address that can't be read one way, or 0.0.0.0, which reaches this
+    computer, is not followed, and nothing is sent there."""
+    guard()
+    network.answers[RELEASE] = target
+    with pytest.raises(sdk_guard.RedirectNotFollowed, match=said):
+        module("github").fetch_latest_release("owner/repo")
+    assert network.sent == [RELEASE]
+
+
+def test_and_to_the_apps_own_rule_for_an_address(network, monkeypatch):
+    """The app's rule (`check`, raising ValueError) is asked too, and attesting
+    passes SealedLore's (require_https)."""
+
+    def refusing(url: str) -> str:
+        if "objects.example" in url:
+            raise ValueError("not an address of ours")
+        return url
+
+    sdk_guard.guard(is_local_host, check=refusing)
+    network.answers[RELEASE] = "https://objects.example/release"
+    with pytest.raises(
+        sdk_guard.RedirectNotFollowed, match="an address refused .not an address of ours"
+    ):
+        module("github").fetch_latest_release("owner/repo")
+    assert network.sent == [RELEASE]
+    passed = []
+    monkeypatch.setattr(sdk_guard, "guard", lambda *a, **k: passed.append(k.get("check")) or [])
+    with pytest.raises(requests.RequestException):
+        private_mode.tinfoil_verify("https://nano-gpt.com/api/v1/private/tinfoil", "s" * 64)
+    assert passed == [private_mode.require_https]
+
+
+def test_every_request_asks_for_gzip_or_deflate_alone(network):
+    """requests asks for br and zstd too where brotli or zstandard is installed, whose
+    ratios are unbounded per chunk: the SDK's requests never do, whatever they say."""
+    guard()
+    module("github").fetch_latest_release("owner/repo")
+    module("byname").requests.get(RELEASE, headers={"Accept-Encoding": "br, zstd"}, timeout=5)
+    assert [h["Accept-Encoding"] for h in network.headers] == ["gzip, deflate"] * 2
+    assert sdk_guard.ACCEPT_ENCODING == "gzip, deflate"
+
+
+@pytest.mark.parametrize("coding", ["br", "zstd", "gzip, gzip", "compress"])
+def test_a_reply_in_any_other_coding_is_refused_unread(network, coding):
+    guard()
+    body = Body(b"x" * 1000)
+    network.replies[RELEASE] = (200, body, {"Content-Encoding": coding})
+    with pytest.raises(requests.exceptions.ContentDecodingError, match="a coding not asked for"):
+        module("github").fetch_latest_release("owner/repo")
+    assert body.read_so_far() == 0
+
+
+def test_a_whole_reply_is_read_to_32_mb_decoded(network, monkeypatch):
+    """Counted as decoded: a gzip reply that unpacks past the limit is refused, having
+    read little more than the limit of it; one declaring more is refused unread."""
+    import gzip
+
+    guard()
+    monkeypatch.setattr(sdk_guard, "REPLY_MAX_BYTES", 1024 * 1024)
+    assert module("github").fetch_latest_release("owner/repo") == "fine"
+    packed = gzip.compress(b"\0" * (8 * 1024 * 1024))
+    body = Body(packed)
+    network.replies[RELEASE] = (200, body, {"Content-Encoding": "gzip"})
+    with pytest.raises(requests.RequestException, match="more than 1 MB; not read on"):
+        module("github").fetch_latest_release("owner/repo")
+    assert len(packed) < 1024 * 1024  # so the limit was met by what it unpacked to
+    body = Body(b"x" * 100)
+    network.replies[RELEASE] = (200, body, {"Content-Length": str(2 * 1024 * 1024)})
+    with pytest.raises(requests.RequestException, match="more than 1 MB; not read"):
+        module("github").fetch_latest_release("owner/repo")
+    assert body.read_so_far() == 0
+    whole = io.BytesIO(b"y" * (1024 * 1024))
+    network.replies[RELEASE] = (200, whole, {})
+    assert module("github").fetch_latest_release("owner/repo") == "y" * (1024 * 1024)
+    assert sdk_guard.REPLY_MAX_BYTES == 1024 * 1024
+    monkeypatch.undo()
+    assert sdk_guard.REPLY_MAX_BYTES == 32 * 1024 * 1024
+
+
+def test_an_errors_or_a_redirects_body_is_read_to_64_kb(network):
+    """Its start kept, the rest unread: requests reads a redirect's body whole before
+    following it, and an error's whenever its text is asked for."""
+    guard()
+    error = Body(b"e" * (1024 * 1024))
+    network.replies[RELEASE] = (500, error, {})
+    with pytest.raises(requests.HTTPError) as failed:
+        module("github").fetch_latest_release("owner/repo")
+    assert len(failed.value.response.content) == sdk_guard.ERROR_BODY_BYTES == 64 * 1024
+    assert error.read_so_far() == 64 * 1024 + 1
+    moved = Body(b"r" * (1024 * 1024))
+    network.replies[RELEASE] = (302, moved, {"Location": "https://objects.example/release"})
+    response = module("byname").requests.get(RELEASE, timeout=5)
+    assert response.text == "fine"
+    assert len(response.history[0].content) == 64 * 1024
+    assert moved.read_so_far() == 64 * 1024 + 1
+    assert network.sent[-2:] == [RELEASE, "https://objects.example/release"]
+
+
+def test_a_streamed_reply_is_the_callers_to_read(network):
+    guard()
+    body = Body(b"s" * 1000)
+    network.replies[RELEASE] = (200, body, {})
+    response = module("byname").requests.get(RELEASE, stream=True, timeout=5)
+    assert body.read_so_far() == 0
+    assert response.content == b"s" * 1000
 
 
 def test_the_real_sdk_is_guarded_where_it_fetches():
@@ -457,6 +629,122 @@ def test_the_guarded_fetchers_failures_are_tufs_own(wire):
         fetched(guarded_fetcher())
 
 
+def test_the_trust_roots_refused_redirect_is_named_as_one_and_held_to_the_whole_rule(wire):
+    """As the SDK's requests (DA Assistant's original): a TUF download error that says it
+    is a refused redirect, for an address that can't be read or 0.0.0.0 as for plain http,
+    and for one sent on too many times; the app's own rule asked too."""
+    from tuf.api import exceptions
+
+    for target in (
+        "http://evil.example/14.root.json",
+        "https://exa mple.com/14.root.json",
+        "https://127.0.0.1%2eevil.example/14.root.json",
+        "https://0.0.0.0/14.root.json",
+        "https://cdn.example:99999/14.root.json",
+    ):
+        wire.sent.clear()
+        wire.answers[TUF_URL] = target
+        with pytest.raises(exceptions.DownloadError) as refused:
+            fetched(guarded_fetcher())
+        assert isinstance(refused.value, sdk_guard.RedirectNotFollowed), target
+        assert not isinstance(refused.value, exceptions.DownloadHTTPError)
+        assert wire.sent == [TUF_URL], target
+    hops = [TUF_URL] + [f"https://hop{n}.example/14.root.json" for n in range(10)]
+    wire.answers.update(zip(hops, hops[1:], strict=False))
+    with pytest.raises(sdk_guard.RedirectNotFollowed, match="more than 5 times"):
+        fetched(guarded_fetcher())
+
+    def refusing(url: str) -> str:
+        raise ValueError("not an address of ours")
+
+    wire.answers = {TUF_URL: "https://cdn.example/14.root.json"}
+    wire.sent.clear()
+    with pytest.raises(sdk_guard.RedirectNotFollowed, match="not an address of ours"):
+        fetched(
+            sdk_guard._fetcher_class(is_local_host, refusing)(
+                app_user_agent="sigstore-python/4.5.0"
+            )
+        )
+    assert wire.sent == [TUF_URL]
+
+
+def test_the_guarded_fetcher_goes_through_the_environments_proxy_and_holds_it_there(
+    wire, monkeypatch
+):
+    """TUF's own proxy handling (its ProxyEnvironment, from HTTPS_PROXY), as DA
+    Assistant's original was tested through a SOCKS proxy: the guarded fetcher's requests
+    go through the proxy's manager, and a redirect off https is refused there too."""
+    from tuf.api import exceptions
+    from tuf.ngclient._internal import proxy as tuf_proxy
+
+    made = []
+
+    class Manager(urllib3.PoolManager):
+        def __init__(self, proxy_url, **kwargs):
+            super().__init__(**kwargs)
+            self.proxy_url, self.through = proxy_url, []
+            made.append(self)
+
+        def urlopen(self, method, url, redirect=True, **kwargs):
+            self.through.append(url)
+            return super().urlopen(method, url, redirect=redirect, **kwargs)
+
+    monkeypatch.setattr(tuf_proxy, "ProxyManager", Manager)
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.example:3128")
+    fetcher = guarded_fetcher()
+    wire.answers[TUF_URL] = "https://cdn.example/14.root.json"
+    assert fetched(fetcher) == b"fine"
+    assert [manager.proxy_url for manager in made] == ["http://proxy.example:3128"]
+    assert made[0].through == [TUF_URL, "https://cdn.example/14.root.json"]
+    wire.sent.clear()
+    wire.answers[TUF_URL] = "http://evil.example/14.root.json"
+    with pytest.raises(exceptions.DownloadError, match="isn't https"):
+        fetched(fetcher)
+    assert made[0].through[-1] == TUF_URL and wire.sent == [TUF_URL]
+
+
+def test_a_fetcher_given_as_none_in_its_place_is_the_guarded_one_too(
+    sigstore_unguarded, tmp_path: Path
+):
+    """By name or in its place (DA Assistant's original guarded both): None is no fetcher,
+    and TUF's own would fetch unguarded."""
+    from sigstore._internal import tuf as sigstore_tuf
+    from sigstore._utils import read_embedded
+
+    sdk_guard.guard_sigstore(is_local_host)
+    root = read_embedded("root.json", SIGSTORE_TUF)
+    placed = sigstore_tuf.Updater(
+        str(tmp_path / "m"), SIGSTORE_TUF, None, None, None, bootstrap=root
+    )
+    assert type(placed._fetcher).__name__ == "GuardedFetcher"
+    named = sigstore_tuf.Updater(str(tmp_path / "n"), SIGSTORE_TUF, fetcher=None, bootstrap=root)
+    assert type(named._fetcher).__name__ == "GuardedFetcher"
+    mine = guarded_fetcher()
+    kept = sigstore_tuf.Updater(str(tmp_path / "k"), SIGSTORE_TUF, None, None, mine, bootstrap=root)
+    assert kept._fetcher is mine
+
+
+def test_the_enclave_says_which_redirect_was_refused(wire, sigstore_unguarded):
+    """sigstore says only "Failed to refresh TUF metadata": the refusal, its cause, is
+    said too (DA Assistant's original), and nothing is fetched where it pointed."""
+    from sigstore._internal import tuf as sigstore_tuf
+
+    wire.everywhere["tuf-repo-cdn.sigstore.dev"] = "http://evil.example/root.json"
+    sdk_guard.guard_sigstore(is_local_host)
+
+    def verifier(_relay, _secret):
+        sigstore_tuf.TrustUpdater(SIGSTORE_TUF)
+
+    enclave = private_mode.Enclave("https://nano-gpt.com/api/v1/private/tinfoil", verifier=verifier)
+    with pytest.raises(ProviderError) as refused:
+        enclave.current()
+    assert (
+        "couldn't be attested: Failed to refresh TUF metadata (the attestation was sent on to "
+        "'http://evil.example/root.json', which isn't https; not followed"
+    ) in str(refused.value)
+    assert wire.sent and all(url.startswith(SIGSTORE_TUF + "/") for url in wire.sent)
+
+
 def test_sigstores_trust_root_is_refreshed_through_the_guarded_fetcher(
     wire, sigstore_unguarded, tmp_path: Path
 ):
@@ -550,6 +838,10 @@ def test_what_the_guard_rests_on_is_where_it_expects(sigstore_unguarded):
         "config",
     ]
     assert isinstance(Urllib3Fetcher()._proxy_env, ProxyEnvironment)
+    # the guarded fetcher's requests go through ProxyEnvironment, which makes a proxy's
+    # manager by that name
+    assert "ProxyManager(" in inspect.getsource(ProxyEnvironment.get_pool_manager)
+    assert "get_pool_manager(" in inspect.getsource(ProxyEnvironment.request)
     assert callable(Urllib3Fetcher._chunks)
     assert issubclass(exceptions.DownloadHTTPError, exceptions.DownloadError)
     users = sorted(

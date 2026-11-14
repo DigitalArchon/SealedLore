@@ -60,7 +60,13 @@ from urllib.parse import urlparse
 
 import httpx
 
-from sealedlore.models.config import ProviderConfig, is_local_host, shown, without_password
+from sealedlore.models.config import (
+    ProviderConfig,
+    is_local_host,
+    require_https,
+    shown,
+    without_password,
+)
 from sealedlore.models.private import Attestation
 from sealedlore.providers.base import ChatRequest, ProviderError, StreamEvent, relay_said
 from sealedlore.providers.dcap import since_boot
@@ -203,10 +209,12 @@ def tinfoil_verify(relay: str, cache_secret: str) -> Verified:
     from sealedlore.providers import sdk_guard
 
     # Before it fetches anything: its requests, and Sigstore's TUF client,
-    # follow a redirect anywhere, https to plain http included. guard raises
-    # Unguarded where Sigstore's or TUF's internals aren't as it expects:
-    # the attestation is refused, saying why (providers/sdk_guard.py).
-    sdk_guard.guard(is_local_host)
+    # follow a redirect anywhere, https to plain http included, and read a
+    # reply whole. guard holds a redirect's target to the rule for any
+    # address (require_https) and raises Unguarded where Sigstore's or TUF's
+    # internals aren't as it expects: the attestation is refused, saying why
+    # (providers/sdk_guard.py).
+    sdk_guard.guard(is_local_host, check=require_https)
     windows_roots()
 
     # The secret is passed explicitly, or the SDK would create one in
@@ -336,9 +344,19 @@ class Enclave:
                     raise
                 except Exception as exc:  # noqa: BLE001 - the SDK's own errors
                     # They can quote the bundle, which came through the relay.
+                    # A redirect the guard refused says why, where sigstore
+                    # says only "Failed to refresh TUF metadata".
+                    from sealedlore.providers.sdk_guard import not_followed
+
+                    refused = not_followed(exc)
+                    why = (
+                        f" ({relay_said(refused, 500)})"
+                        if refused and refused not in str(exc)
+                        else ""
+                    )
                     raise ProviderError(
                         "the private model's enclave couldn't be attested: "
-                        f"{relay_said(str(exc), 500)}; nothing was sent"
+                        f"{relay_said(str(exc), 500)}{why}; nothing was sent"
                     ) from exc
                 self._at = self._clock()
             return self._verified
