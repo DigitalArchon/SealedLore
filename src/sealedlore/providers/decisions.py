@@ -70,9 +70,13 @@ class DecisionsClient:
         timeout_seconds: float = 30.0,
         client: httpx.Client | None = None,
         key_withheld: str = "",
+        api: str = "auto",
     ) -> None:
         self.base_url = base_url
         self.api_key = api_key
+        # What the endpoint speaks: one sealed by it alone, on a host no list
+        # names, is refused as a sealed host is (`plain_refusal`).
+        self.api = api
         # Why the endpoint's key isn't sent here (`ProviderConfig.sendable`).
         self.key_withheld = key_withheld
         self.timeout_seconds = timeout_seconds
@@ -98,7 +102,7 @@ class DecisionsClient:
             raise ProviderError(self.key_withheld)
         # Never to an end-to-end encrypted endpoint (providers/privacy.py):
         # the story's state would go to it in the clear.
-        refusal = plain_refusal(self.endpoint, "the story's state")
+        refusal = plain_refusal(self.endpoint, "the story's state", api=self.api)
         if refusal:
             raise ProviderError(refusal)
         payload = build_decisions_payload(model, state, questions)

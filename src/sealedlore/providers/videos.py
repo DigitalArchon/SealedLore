@@ -549,6 +549,7 @@ class VideoClient:
         timeout_seconds: float = VIDEO_REQUEST_TIMEOUT,
         client: httpx.Client | None = None,
         key_withheld: str = "",
+        sealed_api: str = "auto",
     ) -> None:
         self.base_url = base_url
         self.api = api or media_api(base_url)
@@ -558,6 +559,7 @@ class VideoClient:
             timeout_seconds=timeout_seconds,
             client=client,
             key_withheld=key_withheld,
+            sealed_api=sealed_api,
         )
 
     def cancel(self) -> None:

@@ -290,6 +290,53 @@ def test_jev_and_the_context_probe_send_nothing_to_a_sealed_host():
     assert sent == []
 
 
+def test_an_endpoint_sealed_by_what_it_speaks_alone_is_refused_by_every_plain_client(tmp_path):
+    """An endpoint set to speak Tinfoil's protocol on a host no list names:
+    the embeddings, picture, video and decision clients and the context probe
+    have no `api` of their own, and sent there in the clear."""
+    from sealedlore.models.config import MediaEndpoint
+    from sealedlore.providers.context_probe import detect_context
+
+    unlisted = "https://llm.example.org/v1"
+    mine = ProviderConfig(name="Mine", base_url=unlisted, api="tinfoil", api_key="k")
+    cfg = endpoints(mine)
+    assert cfg.sealed_api_at("https://llm.example.org/embeddings") == "tinfoil"
+    assert cfg.sealed_api_at("https://other.example.org/v1") == "auto"
+    client, sent = recording()
+
+    cfg.embedding_provider = EmbeddingProviderConfig(base_url=unlisted, api_key="e", model="m")
+    resolved = cfg.embeddings()
+    assert resolved.sealed_api == "tinfoil"
+    assert "sealed_api" not in resolved.model_dump(), "never saved"
+    with pytest.raises(ProviderError, match="the text to embed would go to it in the clear"):
+        OpenAICompatibleEmbeddings(resolved, client=client).embed(["The Hidden Caves."])
+
+    cfg.image_endpoint = MediaEndpoint(base_url=unlisted, api_key="i")
+    media = cfg.images()
+    assert media.sealed_api == "tinfoil"
+    http = MediaHttp(
+        media.base_url, media.api_key, timeout_seconds=5, client=client, sealed_api=media.sealed_api
+    )
+    with pytest.raises(ProviderError, match="end-to-end encrypted endpoint"):
+        http.request("POST", unlisted + "/images/generations", json={"prompt": "a farmhouse"})
+    cfg.video_endpoint = MediaEndpoint(base_url=unlisted, api_key="v")
+    assert cfg.videos().sealed_api == "tinfoil"
+
+    with pytest.raises(ProviderError, match="story's state"):
+        DecisionsClient(unlisted, "k", api="tinfoil", client=client).decide("jev", "s", {"q": "?"})
+    assert detect_context(unlisted, "k", "m", api="tinfoil", client=client) is None
+    assert sent == [], "nothing reached the host"
+
+    # The session hands each client what the endpoint speaks.
+    cfg.lore_decision_model = "Mine::jev"
+    session = StorySession(
+        StoryBundle(story=Story(title="T")), cfg, MockChatProvider(), root=tmp_path
+    )
+    assert session._decisions().api == "tinfoil"
+    assert session.image_client().http.sealed_api == "tinfoil"
+    assert session.video_client().http.sealed_api == "tinfoil"
+
+
 # --- the rest that follows the endpoint -----------------------------------------------
 
 

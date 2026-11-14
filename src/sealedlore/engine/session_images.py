@@ -436,7 +436,11 @@ class ImageRuntime:
         if media is None:
             return None
         return VideoClient(
-            media.base_url, media.api_key, api=media.api, key_withheld=media.key_withheld
+            media.base_url,
+            media.api_key,
+            api=media.api,
+            key_withheld=media.key_withheld,
+            sealed_api=media.sealed_api,
         )
 
     def generated_videos(self) -> list[GeneratedVideo]:
@@ -450,7 +454,11 @@ class ImageRuntime:
         if media is None:
             return None
         return ImageClient(
-            media.base_url, media.api_key, api=media.api, key_withheld=media.key_withheld
+            media.base_url,
+            media.api_key,
+            api=media.api,
+            key_withheld=media.key_withheld,
+            sealed_api=media.sealed_api,
         )
 
     def clean_stored_images(self) -> None:

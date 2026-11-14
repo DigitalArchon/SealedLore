@@ -2149,7 +2149,7 @@ class SettingsDialog(QDialog):
         elif service == "chutes":
             found = chutes_context(model)
         else:
-            found = detect_context(url, key, model)
+            found = detect_context(url, key, model, api=self._private_api())
         self.detect_button.setEnabled(True)
         if found is None:
             self.detect_note.setText(

@@ -358,7 +358,7 @@ def test_test_attestation_and_detect_ask_before_they_send_the_private_key(app, m
 
     detected: list[str] = []
     monkeypatch.setattr(
-        module, "detect_context", lambda url, key, model: detected.append(key) or None
+        module, "detect_context", lambda url, key, model, **_: detected.append(key) or None
     )
     dialog = SettingsDialog(nano(), None)
     # After the button has connected to the real one's results.
@@ -388,7 +388,7 @@ def test_detect_sends_the_key_save_would_keep(app, monkeypatch):
 
     detected: list[str] = []
     monkeypatch.setattr(
-        module, "detect_context", lambda url, key, model: detected.append(key) or None
+        module, "detect_context", lambda url, key, model, **_: detected.append(key) or None
     )
     dialog = SettingsDialog(nano(), None)
     dialog._add_endpoint()

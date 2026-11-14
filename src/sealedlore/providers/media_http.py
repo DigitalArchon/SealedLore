@@ -90,12 +90,16 @@ class MediaHttp:
         timeout_seconds: float,
         client: httpx.Client | None = None,
         key_withheld: str = "",
+        sealed_api: str = "auto",
     ) -> None:
         self.base_url = base_url
         self.api_key = api_key
         # Why the endpoint's key isn't sent (`ResolvedMedia.key_withheld`): a
         # request that would carry it refuses in these words.
         self.key_withheld = key_withheld
+        # The sealed protocol an endpoint at this address speaks
+        # (`ResolvedMedia.sealed_api`): nothing goes there in the clear.
+        self.sealed_api = sealed_api
         self.timeout_seconds = timeout_seconds
         self._client = client
         self._owns_client = client is None
@@ -194,7 +198,7 @@ class MediaHttp:
             raise StreamCancelled()
         # Never to an end-to-end encrypted endpoint (providers/privacy.py): a
         # picture's prompt and references would go to it in the clear.
-        refusal = plain_refusal(url, way_out=MEDIA_WAY_OUT)
+        refusal = plain_refusal(url, api=self.sealed_api, way_out=MEDIA_WAY_OUT)
         if refusal:
             raise ProviderError(refusal)
         headers = kwargs.pop("headers", None)

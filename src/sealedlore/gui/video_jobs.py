@@ -187,6 +187,7 @@ class VideoCatalog(QObject):
                 media.api_key,
                 timeout_seconds=30.0,
                 key_withheld=media.key_withheld,
+                sealed_api=media.sealed_api,
             )
             try:
                 return [wavespeed.price(http, model_id, inputs), WAVESPEED_QUOTE]

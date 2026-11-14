@@ -46,12 +46,18 @@ def _int(value: Any) -> int | None:
 
 
 def detect_context(
-    base_url: str, api_key: str, model: str, *, client: httpx.Client | None = None
+    base_url: str,
+    api_key: str,
+    model: str,
+    *,
+    api: str = "auto",
+    client: httpx.Client | None = None,
 ) -> ContextSize | None:
-    """The model's context, or None if no server answered with one."""
+    """The model's context, or None if no server answered with one. `api`:
+    what the endpoint speaks, which alone may make it a sealed one."""
     if key_problem(api_key):
         return None  # nothing sent: a header can't carry it (Settings says so first)
-    if sealed_service(base_url):
+    if sealed_service(base_url, api):
         # An end-to-end encrypted endpoint (providers/privacy.py) is sent
         # nothing in the clear, a key with a listing request included.
         return None

@@ -299,6 +299,7 @@ class VideosWindow:
             media.api_key,
             api=media.api,
             key_withheld=media.key_withheld,
+            sealed_api=media.sealed_api,
         )
 
     def _resume_videos(self) -> None:

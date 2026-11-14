@@ -1358,7 +1358,7 @@ class StorySession(
         if self._decisions_client is None:
             sent = provider.sendable()
             self._decisions_client = DecisionsClient(
-                sent.base_url, sent.api_key, key_withheld=sent.key_withheld
+                sent.base_url, sent.api_key, key_withheld=sent.key_withheld, api=sent.api
             )
         return self._decisions_client
 

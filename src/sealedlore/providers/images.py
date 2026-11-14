@@ -284,6 +284,7 @@ class ImageClient:
         timeout_seconds: float = IMAGE_TIMEOUT_SECONDS,
         client: httpx.Client | None = None,
         key_withheld: str = "",
+        sealed_api: str = "auto",
     ) -> None:
         self.base_url = base_url
         self.api_key = api_key
@@ -294,6 +295,7 @@ class ImageClient:
             timeout_seconds=timeout_seconds,
             client=client,
             key_withheld=key_withheld,
+            sealed_api=sealed_api,
         )
         self._wake = self.http._wake
 

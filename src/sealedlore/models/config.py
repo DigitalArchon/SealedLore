@@ -832,6 +832,9 @@ class ResolvedMedia(BaseModel):
     base_url: str
     api_key: str
     api: str
+    # The end-to-end encrypted protocol a chat or private endpoint at this
+    # address speaks (`Config.sealed_api_at`): a plain request there is refused.
+    sealed_api: str = "auto"
     # The video key is the chat's or the pictures' too: every video warns.
     shared_key: bool = False
     # Why no key is sent (`key_withheld`): a request that would carry it
@@ -866,6 +869,10 @@ class EmbeddingProviderConfig(BaseModel):
     # a resolved copy carries none (`Config.embeddings`; never written).
     key_saved_for: str = ""
     key_withheld: str = Field(default="", exclude=True)
+    # The end-to-end encrypted protocol a chat or private endpoint at this
+    # address speaks (`Config.sealed_api_at`), for the embeddings client's
+    # refusal; never saved.
+    sealed_api: str = Field(default="auto", exclude=True)
     # The place its address names that the author said No to sending the
     # saved key to (`ProviderConfig.key_declined_for`): not asked about again at each Save,
     # and Settings says the key is held back there. "" when none.
@@ -1473,6 +1480,7 @@ class Config(BaseModel):
             api_key="" if withheld else key,
             api=media_api(base_url, settings.api),
             key_withheld=withheld,
+            sealed_api=self.sealed_api_at(base_url),
         )
 
     def videos(self, *, as_confirmed: bool = False) -> ResolvedMedia | None:
@@ -1504,6 +1512,7 @@ class Config(BaseModel):
             base_url=settings.base_url,
             api_key="" if withheld else settings.api_key,
             api=media_api(settings.base_url, settings.api),
+            sealed_api=self.sealed_api_at(settings.base_url),
             shared_key=settings.api_key in (others - {""}),
             key_withheld=withheld,
         )
@@ -1586,7 +1595,25 @@ class Config(BaseModel):
         )
         if withheld:
             resolved.api_key, resolved.key_withheld = "", withheld
+        resolved.sealed_api = self.sealed_api_at(resolved.base_url)
         return resolved
+
+    def sealed_api_at(self, url: str) -> str:
+        """The end-to-end encrypted protocol (`SEALED_APIS`) a chat endpoint
+        or the private endpoint at `url`'s address speaks, else "auto": an
+        endpoint sealed by what it speaks alone, on a host no list names, is
+        sealed for the embeddings, picture, video and decision clients too,
+        which have no `api` of their own and send in the clear."""
+        origin = key_origin(url)
+        if not origin:
+            return "auto"
+        holders = [*self.providers]
+        if self.private_provider is not None:
+            holders.append(self.private_provider)
+        for endpoint in holders:
+            if key_origin(endpoint.base_url) == origin and endpoint.sealed_service():
+                return endpoint.sealed_service()
+        return "auto"
 
     def key_holders(self) -> Iterator[tuple[str, KeyHolder, str]]:
         """Every API key the config holds, by the slot the keychain keeps it
