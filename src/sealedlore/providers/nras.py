@@ -46,6 +46,9 @@ ISSUER = "https://nras.attestation.nvidia.com"
 TIMEOUT_SECONDS = 30
 KEYS_TTL = 3600
 LEEWAY_SECONDS = 300
+# The deepest JSON of NVIDIA's that is read (the DA apps' security standard, Nov 2026): a token's
+# header and claims, and the key set, are a few levels deep; one nested past this is refused.
+MAX_NESTING = 200
 
 
 class NrasError(Exception):
@@ -60,17 +63,66 @@ def _b64(part: str) -> bytes:
     return base64.urlsafe_b64decode(part + "=" * (-len(part) % 4))
 
 
+def _nesting(text: str) -> int:
+    """How deep `text`'s JSON nests, strings aside, counted up to one past MAX_NESTING."""
+    depth = deepest = 0
+    in_string = escaped = False
+    for char in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+        elif char in "[{":
+            depth += 1
+            if depth > deepest:
+                deepest = depth
+                if deepest > MAX_NESTING:
+                    break
+        elif char in "]}":
+            depth -= 1
+    return deepest
+
+
+def _loads(data: bytes | str) -> Any:
+    """NVIDIA's JSON, read: nested past MAX_NESTING (or past Python's own reach) it is refused as
+    evidence that can't be read. Raises ValueError for one that isn't JSON."""
+    text = data.decode("utf-8") if isinstance(data, bytes) else data
+    if _nesting(text) > MAX_NESTING:
+        raise NrasError(f"NVIDIA's answer is nested deeper than {MAX_NESTING} levels, and wasn't read")
+    try:
+        return json.loads(text)
+    except RecursionError:
+        raise NrasError("NVIDIA's answer is nested too deep to be read") from None
+
+
+def _within(deadline: float | None) -> float:
+    """How long a fetch of NVIDIA's keys may wait: TIMEOUT_SECONDS, or what is left before `deadline`
+    (time.monotonic, the attestation's own) when that is less. Refused, in words, once none is left."""
+    if deadline is None:
+        return TIMEOUT_SECONDS
+    left = deadline - time.monotonic()
+    if left <= 0:
+        raise NrasError("the attestation's time ran out before NVIDIA's signing keys could be fetched")
+    return min(TIMEOUT_SECONDS, left)
+
+
 _keys: dict[str, Any] = {"at": 0.0, "keys": {}}
 _keys_lock = threading.Lock()
 
 
-def _jwks(session: httpx.Client, refresh: bool = False) -> dict[str, dict[str, Any]]:
+def _jwks(session: httpx.Client, refresh: bool = False, deadline: float | None = None) -> dict[str, dict[str, Any]]:
     with _keys_lock:
         if not refresh and _keys["keys"] and since_boot() - _keys["at"] < KEYS_TTL:
             return _keys["keys"]
+    timeout = _within(deadline)
     try:
-        response = session.get(JWKS_URL, timeout=TIMEOUT_SECONDS)
-        body = response.json() if response.status_code == 200 else None
+        response = session.get(JWKS_URL, timeout=timeout)
+        body = _loads(response.content) if response.status_code == 200 else None
     except (httpx.HTTPError, ValueError) as e:
         body, error = None, f"NVIDIA's signing keys could not be fetched ({e})"
     else:
@@ -96,9 +148,12 @@ def _public_key(jwk: dict[str, Any]) -> Any:
     ).public_key()
 
 
-def verify_token(token: str, session: httpx.Client, nonce: str, now: float, signed: bool = True) -> dict[str, Any]:
+def verify_token(
+    token: str, session: httpx.Client, nonce: str, now: float, signed: bool = True, deadline: float | None = None
+) -> dict[str, Any]:
     """The claims of one NRAS token, once its signature, issuer, time and nonce hold (`signed`: False,
-    when NVIDIA's keys can't be had, all but its signature)."""
+    when NVIDIA's keys can't be had, all but its signature). NVIDIA's keys are fetched within
+    `deadline` (time.monotonic), if one is given."""
     from cryptography.exceptions import InvalidSignature
     from cryptography.hazmat.primitives import hashes
     from cryptography.hazmat.primitives.asymmetric import ec
@@ -106,8 +161,8 @@ def verify_token(token: str, session: httpx.Client, nonce: str, now: float, sign
 
     try:
         header_part, claims_part, signature_part = token.split(".")
-        header = json.loads(_b64(header_part))
-        claims = json.loads(_b64(claims_part))
+        header = _loads(_b64(header_part))
+        claims = _loads(_b64(claims_part))
         signature = _b64(signature_part)
     except (ValueError, AttributeError):
         raise NrasError("NVIDIA's answer held a malformed token") from None
@@ -117,9 +172,9 @@ def verify_token(token: str, session: httpx.Client, nonce: str, now: float, sign
         raise NrasError(f"a token is signed with {header.get('alg')}, not ES384")
     if not signed:
         return _claims_hold(claims, nonce, now)
-    keys = _jwks(session)
+    keys = _jwks(session, deadline=deadline)
     if header.get("kid") not in keys:
-        keys = _jwks(session, refresh=True)
+        keys = _jwks(session, refresh=True, deadline=deadline)
     jwk = keys.get(header.get("kid"))
     if jwk is None:
         raise NrasError(f"a token names a key NVIDIA does not publish ({header.get('kid')})")
@@ -150,10 +205,13 @@ def _claims_hold(claims: dict[str, Any], nonce: str, now: float) -> dict[str, An
 
 
 def verify(
-    answer: Any, nonce: str, session: httpx.Client | None = None, now: float | None = None
+    answer: Any, nonce: str, session: httpx.Client | None = None, now: float | None = None,
+    deadline: float | None = None,
 ) -> int:
     """Check NRAS's answer. Returns the number of GPUs vouched for, or raises NrasError
-    (refuse), KeysUnavailable (unchecked), or ImportError (no cryptography)."""
+    (refuse), KeysUnavailable (unchecked), or ImportError (no cryptography). `deadline`
+    (time.monotonic): when the attestation this is part of must be over; NVIDIA's keys are
+    fetched within it, and once it has passed the answer is refused, saying so."""
     import cryptography  # noqa: F401  - ImportError here, before anything is claimed
 
     own = session is None
@@ -161,7 +219,7 @@ def verify(
     now = now if now is not None else time.time()
     try:
         try:
-            return _verify(answer, nonce, session, now)
+            return _verify(answer, nonce, session, now, deadline=deadline)
         except KeysUnavailable:
             # what holds without NVIDIA's keys must hold all the same (evidence made for another nonce,
             # a GPU failing, is refused), and only the signature is left unchecked
@@ -179,7 +237,9 @@ def verify(
             session.close()
 
 
-def _verify(answer: Any, nonce: str, session: httpx.Client, now: float, signed: bool = True) -> int:
+def _verify(
+    answer: Any, nonce: str, session: httpx.Client, now: float, signed: bool = True, deadline: float | None = None
+) -> int:
     try:
         label, overall = answer[0]
         tokens = answer[1] if len(answer) > 1 else {}
@@ -188,7 +248,7 @@ def _verify(answer: Any, nonce: str, session: httpx.Client, now: float, signed: 
     if label != "JWT" or not isinstance(tokens, dict):
         raise NrasError("NVIDIA's answer was not in the expected shape")
 
-    claims = verify_token(overall, session, nonce, now, signed)
+    claims = verify_token(overall, session, nonce, now, signed, deadline)
     if claims.get("x-nvidia-overall-att-result") is not True:
         raise NrasError("NVIDIA rejected the GPU evidence")
     listed = claims.get("submods")
@@ -201,7 +261,7 @@ def _verify(answer: Any, nonce: str, session: httpx.Client, now: float, signed: 
             raise NrasError(f"NVIDIA's verdict gives no digest for {gpu}") from None
         if hashlib.sha256(token.encode("ascii")).hexdigest() != digest:
             raise NrasError(f"{gpu}'s token is not the one NVIDIA's verdict lists")
-        gpu_claims = verify_token(token, session, nonce, now, signed)
+        gpu_claims = verify_token(token, session, nonce, now, signed, deadline)
         failed = [
             name
             for name, ok in (

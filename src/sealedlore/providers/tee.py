@@ -599,9 +599,17 @@ class TeeClient:
         self.keyset: dict[str, Any] | None = None
         self.keyset_digest: str | None = None
         self._base: str | None = None
-        # The two verifiers, replaceable so tests can stand in for Intel and NVIDIA.
-        self._intel = intel or dcap.verify
-        self._nvidia = nvidia or nras.verify
+        # The two verifiers, replaceable so tests can stand in for Intel and NVIDIA. Intel's
+        # and NVIDIA's own fetches are given what is left of the attestation's time
+        # (`_deadline`), so none outlasts its ATTEMPT_SECONDS.
+        self._intel = intel or (
+            lambda raw, session: dcap.verify(raw, session, deadline=self._deadline)
+        )
+        self._nvidia = nvidia or (
+            lambda answer, nonce, session: nras.verify(
+                answer, nonce, session, deadline=self._deadline
+            )
+        )
         # When the attestation in force began, on `clock`; None until one holds.
         self._clock = clock
         self.attested_at: float | None = None

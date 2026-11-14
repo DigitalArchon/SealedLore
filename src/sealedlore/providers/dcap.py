@@ -95,6 +95,9 @@ PCK_CRL_URL = PCS + "/sgx/certification/v4/pckcrl"
 ROOT_CRL_URL = "https://certificates.trustedservices.intel.com/IntelSGXRootCA.der"
 TIMEOUT_SECONDS = 30
 COLLATERAL_TTL = 3600
+# The deepest JSON of Intel's that is read (the DA apps' security standard, Nov 2026): Intel's is a few
+# levels deep, and one nested past this is refused, never parsed into a RecursionError.
+MAX_NESTING = 200
 
 INTEL_QE_VENDOR_ID = bytes.fromhex("939a7233f79c4ca9940a0db3957f0607")
 TDX_TEE_TYPE = 0x81
@@ -396,18 +399,67 @@ _cache: dict[tuple, tuple[float, bytes, dict[str, str]]] = {}
 _cache_lock = threading.Lock()
 
 
+def _within(deadline: float | None, what: str) -> float:
+    """How long a fetch may wait: TIMEOUT_SECONDS, or what is left before `deadline` (time.monotonic, the
+    attestation's own: its ATTEMPT_SECONDS) when that is less. Refused, in words, once none is left."""
+    if deadline is None:
+        return TIMEOUT_SECONDS
+    left = deadline - time.monotonic()
+    if left <= 0:
+        raise DcapError(f"the attestation's time ran out before {what} could be fetched")
+    return min(TIMEOUT_SECONDS, left)
+
+
+def _nesting(text: str) -> int:
+    """How deep `text`'s JSON nests, strings aside, counted up to one past MAX_NESTING."""
+    depth = deepest = 0
+    in_string = escaped = False
+    for char in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+        elif char in "[{":
+            depth += 1
+            if depth > deepest:
+                deepest = depth
+                if deepest > MAX_NESTING:
+                    break
+        elif char in "]}":
+            depth -= 1
+    return deepest
+
+
+def _loads(text: str) -> Any:
+    """Intel's JSON, read: nested past MAX_NESTING (or past Python's own reach) it is refused as
+    collateral that can't be read."""
+    if _nesting(text) > MAX_NESTING:
+        raise DcapError(f"Intel's collateral is nested deeper than {MAX_NESTING} levels, and wasn't read")
+    try:
+        return json.loads(text)
+    except RecursionError:
+        raise DcapError("Intel's collateral is nested too deep to be read") from None
+
+
 def _fetch(
     session: httpx.Client,
     url: str,
     params: dict[str, str] | None = None,
     unread: dict[tuple, tuple[bytes, dict[str, str]]] | None = None,
+    deadline: float | None = None,
 ) -> tuple[bytes, dict[str, str]]:
     """(body bytes, headers) of Intel's collateral, cached for COLLATERAL_TTL.
 
     With `unread` (a quote's verification: `_verify`), what is fetched is put there and not in
     the cache: `_keep` caches it once all of it has been read and its signatures checked. Cached
     as it arrived, an answer that couldn't be read (a proxy's or a portal's page with a 200)
-    refused every quote for the hour, long after Intel's service answered again."""
+    refused every quote for the hour, long after Intel's service answered again. A fetch waits
+    no longer than the attestation's `deadline` leaves (`_within`)."""
     key = (url, tuple(sorted((params or {}).items())))
     if unread is not None and key in unread:
         return unread[key]
@@ -415,8 +467,9 @@ def _fetch(
         hit = _cache.get(key)
         if hit is not None and since_boot() - hit[0] < COLLATERAL_TTL:
             return hit[1], hit[2]
+    timeout = _within(deadline, "Intel's collateral")
     try:
-        response = session.get(url, params=params, timeout=TIMEOUT_SECONDS)
+        response = session.get(url, params=params, timeout=timeout)
     except httpx.HTTPError as e:
         raise CollateralUnavailable(f"{url}: {e}") from e
     if response.status_code != 200:
@@ -496,7 +549,7 @@ def _signed_json(
             if depth == 0:
                 break
     raw = text[start : end + 1]
-    document = json.loads(text)
+    document = _loads(text)
     signer = x509.load_pem_x509_certificates(chain_pem.encode())
     leaf = signer[:-1] if len(signer) > 1 else signer
     # Intel's TCB signing certificate, issued by the root itself: not just any certificate under the root
@@ -508,7 +561,7 @@ def _signed_json(
         signer[0].public_key(), bytes.fromhex(document["signature"]), raw.encode("utf-8")
     ):
         raise DcapError(f"Intel's signature on its {key} does not verify")
-    return json.loads(raw), signer[0]
+    return _loads(raw), signer[0]
 
 
 def _stale(document: dict[str, Any], now: datetime) -> bool:
@@ -639,8 +692,13 @@ class Result:
     notes: list[str] = field(default_factory=list)
 
 
-def verify(raw: bytes, session: httpx.Client | None = None, now: datetime | None = None) -> Result:
+def verify(
+    raw: bytes, session: httpx.Client | None = None, now: datetime | None = None, deadline: float | None = None
+) -> Result:
     """Verify a TDX quote (bytes). Returns a Result, or raises DcapError.
+
+    `deadline` (time.monotonic): when the attestation this is part of must be over; no fetch of
+    Intel's waits past it, and once it has passed the quote is refused, saying so.
 
     Raises ImportError when the `cryptography` package is not available: nothing can
     be verified then, and the caller must say so rather than pass it.
@@ -650,7 +708,7 @@ def verify(raw: bytes, session: httpx.Client | None = None, now: datetime | None
     session = session or make_client(ROOT_CRL_URL, timeout=httpx.Timeout(TIMEOUT_SECONDS))
     now = now or datetime.now(UTC)
     try:
-        return _verify(raw, session, now)
+        return _verify(raw, session, now, deadline)
     except (DcapError, ProviderError, ImportError):
         raise
     except Exception as e:  # noqa: BLE001
@@ -663,7 +721,7 @@ def verify(raw: bytes, session: httpx.Client | None = None, now: datetime | None
             session.close()
 
 
-def _verify(raw: bytes, session: httpx.Client, now: datetime) -> Result:
+def _verify(raw: bytes, session: httpx.Client, now: datetime, deadline: float | None = None) -> Result:
     x509 = _crypto()[0]
     quote = parse_quote(raw)
 
@@ -699,21 +757,21 @@ def _verify(raw: bytes, session: httpx.Client, now: datetime) -> Result:
     unread: dict[tuple, tuple[bytes, dict[str, str]]] = {}
     try:
         stale = False
-        content, _headers = _fetch(session, ROOT_CRL_URL, unread=unread)
+        content, _headers = _fetch(session, ROOT_CRL_URL, unread=unread, deadline=deadline)
         stale |= _check_crl(_load_crl(content), root, now, ca)
         kind = "processor" if "Processor" in _common_name(ca) else "platform"
-        content, _headers = _fetch(session, PCK_CRL_URL, {"ca": kind, "encoding": "der"}, unread)
+        content, _headers = _fetch(session, PCK_CRL_URL, {"ca": kind, "encoding": "der"}, unread, deadline)
         stale |= _check_crl(_load_crl(content), ca, now, pck)
 
-        content, headers = _fetch(session, TCB_INFO_URL, {"fmspc": sgx["fmspc"]}, unread)
+        content, headers = _fetch(session, TCB_INFO_URL, {"fmspc": sgx["fmspc"]}, unread, deadline)
         tcb_info, signer = _signed_json(
             content, "tcbInfo", _header(headers, "TCB-Info-Issuer-Chain"), root, now
         )
-        content, _root_headers = _fetch(session, ROOT_CRL_URL, unread=unread)
+        content, _root_headers = _fetch(session, ROOT_CRL_URL, unread=unread, deadline=deadline)
         _check_crl(_load_crl(content), root, now, signer)
         if tcb_info.get("id") != "TDX" or tcb_info.get("fmspc", "").lower() != sgx["fmspc"]:
             raise DcapError("Intel's TCB info is not for this platform")
-        content, headers = _fetch(session, QE_IDENTITY_URL, unread=unread)
+        content, headers = _fetch(session, QE_IDENTITY_URL, unread=unread, deadline=deadline)
         identity, _signer = _signed_json(
             content,
             "enclaveIdentity",

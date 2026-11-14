@@ -1571,7 +1571,7 @@ def test_a_quote_whose_certificates_cant_be_read_is_one_intel_doesnt_vouch_for(m
     with pytest.raises(dcap.DcapError, match="PCK chain could not be read"):
         dcap.verify(bytes.fromhex(fake_quote(bytes(64))), session)
 
-    def unreadable(raw, session, now):
+    def unreadable(raw, session, now, deadline=None):
         raise IndexError("index out of range")  # an extension cut short, say
 
     monkeypatch.setattr(dcap, "_verify", unreadable)
