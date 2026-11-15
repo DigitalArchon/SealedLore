@@ -25,6 +25,7 @@ import tempfile
 import textwrap
 import time
 from pathlib import Path
+from urllib.parse import unquote
 
 import pytest
 from PySide6.QtCore import SIGNAL, QEventLoop, Qt, QTimer, Signal
@@ -675,3 +676,65 @@ class TestGtksOwnDialog:
             assert 'bookmark:application name="python"' in seen[when]
         assert seen["mode"] == 0o600
         assert seen["put_back"] == 0
+
+
+QT_SETTINGS_CHILD = textwrap.dedent(
+    """
+    import os, sys
+    import shiboken6
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import QApplication, QFileDialog
+    from {package}.gui import file_dialogs
+
+    aside = file_dialogs.settings_aside() if sys.argv[1] == "aside" else None
+    print("ASIDE", aside or "", flush=True)
+    app = QApplication(sys.argv)
+    dialog = QFileDialog(None, "Open", sys.argv[2])
+    dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+    QTimer.singleShot(200, dialog.reject)
+    dialog.exec()
+    shiboken6.delete(dialog)        # Qt's widget dialog writes its folders as it is deleted
+    """
+)
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only")
+@pytest.mark.parametrize("aside", [True, False])
+def test_qts_own_settings_are_kept_out_of_the_users_and_removed_after(tmp_path, aside):
+    """With the settings set aside the user's QtProject.conf is byte for byte as it was
+    and the folder set aside is gone once the process ends; without, Qt writes the folders
+    the dialog visited into it (proving the test sees it)."""
+    config, run, visited = tmp_path / "config", tmp_path / "run", tmp_path / "Private notes"
+    for folder in (config, run, visited):
+        folder.mkdir()
+    run.chmod(0o700)
+    users = config / "QtProject.conf"
+    users.write_text("[FileDialog]\nlastVisited=file:///somewhere/of/the/users\n")
+    before = users.read_bytes()
+    env = {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "HOME": str(tmp_path),
+        "XDG_CONFIG_HOME": str(config),
+        "XDG_RUNTIME_DIR": str(run),
+        "QT_QPA_PLATFORM": "offscreen",
+        "PYTHONPATH": os.pathsep.join(sys.path),
+    }
+    package = file_dialogs.__name__.split(".")[0]
+    script = QT_SETTINGS_CHILD.format(package=package)
+    done = subprocess.run(
+        [sys.executable, "-c", script, "aside" if aside else "plain", str(visited)],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert done.returncode == 0, done.stderr
+    set_aside = next(
+        line.split(" ", 1)[1] for line in done.stdout.splitlines() if line.startswith("ASIDE")
+    )
+    if aside:
+        assert users.read_bytes() == before
+        assert set_aside.startswith(str(run)) and not os.path.exists(set_aside)
+    else:
+        assert set_aside == ""
+        assert users.read_bytes() != before and str(visited) in unquote(users.read_text())

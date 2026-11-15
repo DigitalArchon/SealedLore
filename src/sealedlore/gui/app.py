@@ -18,7 +18,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 
 from sealedlore import __version__
 from sealedlore.core_dumps import no_core_dumps
-from sealedlore.gui import plain_text, theme, x11_check
+from sealedlore.gui import file_dialogs, plain_text, theme, x11_check
 from sealedlore.gui.collector import install_collector_pause
 from sealedlore.gui.fields import install_wheel_guard
 from sealedlore.gui.main_window import MainWindow
@@ -80,6 +80,8 @@ def build_app(argv: Sequence[str], env: Mapping[str, str] | None = None) -> QApp
     # Drives the Wayland app_id and the X11 WM_CLASS.
     QApplication.setDesktopFileName(APP_ID)
     own_dialogs_in_firejail(os.environ if env is None else env)
+    # Qt's settings (the folders a file dialog visits) in a folder of the run's own.
+    file_dialogs.settings_aside()
 
     app = QApplication(list(argv))
     # Before any widget and before the stylesheet (fields.install_wheel_guard);

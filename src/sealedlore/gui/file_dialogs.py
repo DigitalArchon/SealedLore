@@ -37,16 +37,26 @@ desktop that offers Qt no native dialog) writes no recent files, and nothing is 
 On Windows and macOS the dialogs are shown as they are, nothing kept. All of it runs on the
 GUI thread.
 
+Qt's own settings are a second trace (`settings_aside`): every QFileDialog, GTK's and Qt's
+own alike, writes the folders it visited (history, lastVisited, the sidebar's places; never
+a file's name) to $XDG_CONFIG_HOME/QtProject.conf as it is deleted, a file every Qt program
+the user runs reads. The app keeps no QSettings of its own, so on Linux Qt's user settings
+go to a folder of the process's own in $XDG_RUNTIME_DIR (memory), removed as the app quits:
+the user's file is neither read nor written, and the dialogs remember folders for the run.
+
 The Qt DA apps' copies (SealedLore's gui/file_dialogs.py, the canonical one, and DA Media
 Browser's) are the same file, but for the licence header DA Media Browser puts on every file.
 """
 
 from __future__ import annotations
 
+import atexit
 import math
 import os
 import re
+import shutil
 import sys
+import tempfile
 from datetime import datetime
 from html import unescape
 from urllib.parse import quote, unquote, urlsplit
@@ -57,6 +67,7 @@ from PySide6.QtCore import (
     QFileInfo,
     QFileSystemWatcher,
     QObject,
+    QSettings,
     Qt,
     QTimer,
     QUrl,
@@ -82,6 +93,31 @@ def _say(text: str) -> None:
 def keeps_the_list() -> bool:
     """Whether the dialogs keep GTK's recent files list as it was: on Linux."""
     return sys.platform.startswith("linux")
+
+
+def _remove_aside(folder: str) -> None:
+    shutil.rmtree(folder, ignore_errors=True)
+
+
+def settings_aside() -> str | None:
+    """On Linux, Qt's user settings (QtProject.conf, where a dialog keeps the folders it
+    visited) go to a new 0700 folder in $XDG_RUNTIME_DIR, else in the system's temporary
+    folder, removed as the process ends; its path, or None where nothing was set aside.
+    Before the first dialog (gui/app.py build_app). Never where the app keeps QSettings of
+    its own: they would go there too."""
+    if not keeps_the_list():
+        return None
+    runtime = os.environ.get("XDG_RUNTIME_DIR", "")
+    base = runtime if runtime and os.path.isdir(runtime) else None
+    try:
+        folder = tempfile.mkdtemp(prefix="qt-settings-", dir=base)
+    except OSError as error:
+        _say(f"Qt's settings were left where they are: {error}")
+        return None
+    for kind in (QSettings.Format.NativeFormat, QSettings.Format.IniFormat):
+        QSettings.setPath(kind, QSettings.Scope.UserScope, folder)
+    atexit.register(_remove_aside, folder)
+    return folder
 
 
 def _uri(path: str) -> str:
