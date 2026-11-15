@@ -44,7 +44,6 @@ from PySide6.QtGui import QAction, QFont, QKeySequence
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
-    QFileDialog,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -84,7 +83,7 @@ from sealedlore.engine.plot_file import (
 )
 from sealedlore.engine.plot_md import PLOT_SUFFIX
 from sealedlore.engine.story_plot import PictureReader, document_from_story
-from sealedlore.gui import theme
+from sealedlore.gui import file_dialogs, theme
 from sealedlore.gui.guides import (
     FORMAT_LABEL,
     PLOT_FORMAT_GUIDE,
@@ -1011,7 +1010,7 @@ class PlotEditorWindow(QMainWindow):
         if not self._confirm_discard():
             return
         start = str(self.path.parent if self.path else Path.home())
-        chosen, _ = QFileDialog.getOpenFileName(
+        chosen, _ = file_dialogs.open_file_name(
             self, "Open plot file", start, f"Plot files (*{PLOT_SUFFIX});;All files (*)"
         )
         if chosen:
@@ -1050,7 +1049,7 @@ class PlotEditorWindow(QMainWindow):
         """A plot file. For a story, a copy of it all as a file, its pictures
         beside it, and the editor stays on the story."""
         start = str(self.path) if self.path else str(Path.home() / self._suggested_name())
-        chosen, _ = QFileDialog.getSaveFileName(
+        chosen, _ = file_dialogs.save_file_name(
             self, "Save plot file", start, f"Plot files (*{PLOT_SUFFIX});;All files (*)"
         )
         if not chosen:

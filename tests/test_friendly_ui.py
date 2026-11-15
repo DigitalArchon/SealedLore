@@ -808,7 +808,7 @@ def test_a_sillytavern_expression_pack_joins_a_character(app, window, monkeypatc
         archive.writestr("joy.png", _picture(0x55AA55))
         archive.writestr("anger-2.png", _picture(0xAA5555))
     monkeypatch.setattr(
-        "sealedlore.gui.window_tavern.QFileDialog.getOpenFileName",
+        "sealedlore.gui.file_dialogs.open_file_name",
         lambda *args, **kwargs: (str(pack), ""),
     )
     window.cast_panel.expressions_requested.emit("char-maela")

@@ -20,12 +20,13 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from PySide6.QtCore import QFile, Qt, QTimer
-from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QInputDialog, QMessageBox
 
 from sealedlore.engine.look_sheet import keep_order, label_key
 from sealedlore.engine.looks import look_words
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.usage import usage_report
+from sealedlore.gui import file_dialogs
 from sealedlore.gui.card_files_form import TYPES, link_problem
 from sealedlore.gui.collection_page import (
     ADD_TO_STORY,
@@ -328,7 +329,7 @@ class CollectionWindow:
         if not session.cast:
             return
         self._flush_collection()
-        chosen, _ = QFileDialog.getSaveFileName(
+        chosen, _ = file_dialogs.save_file_name(
             self._dialog_parent(),
             "Back up all your characters",
             str(Path.home() / f"Your characters{BACKUP_SUFFIX}"),
@@ -363,7 +364,7 @@ class CollectionWindow:
         or File → Import… of one): those not here come back under their own
         ids; those here already are kept, or replaced, as the author says."""
         if path is None:
-            chosen, _ = QFileDialog.getOpenFileName(
+            chosen, _ = file_dialogs.open_file_name(
                 self._dialog_parent(),
                 "Restore your characters",
                 str(Path.home()),
@@ -724,7 +725,7 @@ class CollectionWindow:
     def _import_to_collection(self, paths: list[str] | None = None) -> None:
         """Cards chosen in a file dialog, or dropped on the page."""
         if paths is None:
-            paths, _ = QFileDialog.getOpenFileNames(
+            paths, _ = file_dialogs.open_file_names(
                 self._dialog_parent(), "Import character cards", str(Path.home()), CARD_FILTER
             )
         if not paths or self._collection_unwritable():
@@ -950,7 +951,7 @@ class CollectionWindow:
     def _export_chosen(self, cards: list[Character], kind: str) -> None:
         """Each card, versions too, into a folder chosen, as Export writes one;
         a name used twice gets a number. What couldn't go is said."""
-        chosen = QFileDialog.getExistingDirectory(
+        chosen = file_dialogs.existing_directory(
             self._dialog_parent(), f"Export {len(cards)} cards into a folder", str(Path.home())
         )
         if not chosen:
@@ -1058,7 +1059,7 @@ class CollectionWindow:
             "charx": f"CHARX card, with {_everything(card)} (*.charx)",
             "json": "JSON card (*.json)",
         }
-        chosen, _ = QFileDialog.getSaveFileName(
+        chosen, _ = file_dialogs.save_file_name(
             self._dialog_parent(),
             f"Export {card.name}",
             str(Path.home() / f"{_safe(card.name)}.{kind}"),
@@ -1128,7 +1129,7 @@ class CollectionWindow:
         elif what == "export":
             book = tavern.character_book or {}
             count = len(entries_of(book))
-            chosen, _ = QFileDialog.getSaveFileName(
+            chosen, _ = file_dialogs.save_file_name(
                 self._dialog_parent(),
                 f"Export {card.name}'s lorebook",
                 str(Path.home() / f"{_safe(card.name)} lorebook.json"),
@@ -1148,7 +1149,7 @@ class CollectionWindow:
             self.statusBar().showMessage(f"Saved {count} entries to {path.name}.", 8000)
             return
         else:
-            chosen, _ = QFileDialog.getOpenFileName(
+            chosen, _ = file_dialogs.open_file_name(
                 self._dialog_parent(),
                 f"A lorebook for {card.name}",
                 str(Path.home()),
@@ -1253,7 +1254,7 @@ class CollectionWindow:
             name = _safe(asset.name or asset.type)
             if not name.lower().endswith(f".{asset.ext}"):
                 name = f"{name}.{asset.ext}"
-            chosen, _ = QFileDialog.getSaveFileName(
+            chosen, _ = file_dialogs.save_file_name(
                 self._dialog_parent(), f"Save {asset.name or asset.type}", str(Path.home() / name)
             )
             if not chosen:
@@ -1306,7 +1307,7 @@ class CollectionWindow:
         if card is None:
             return
         if chosen is None:
-            chosen, _ = QFileDialog.getOpenFileNames(
+            chosen, _ = file_dialogs.open_file_names(
                 self._dialog_parent(), f"Files for {card.name}'s card", str(Path.home())
             )
         chosen = [name for name in chosen if Path(name).is_file()]
@@ -1363,7 +1364,7 @@ class CollectionWindow:
         its name, kind and place on the card kept, so the greetings that show
         it still do."""
         asset = card.tavern.assets[index]
-        chosen, _ = QFileDialog.getOpenFileName(
+        chosen, _ = file_dialogs.open_file_name(
             self._dialog_parent(), f"Replace {asset.name or asset.type}", str(Path.home())
         )
         if not chosen:
@@ -1430,7 +1431,7 @@ class CollectionWindow:
         if card is None:
             self.statusBar().showMessage("Choose a character first.", 6000)
             return
-        chosen, _ = QFileDialog.getOpenFileName(
+        chosen, _ = file_dialogs.open_file_name(
             self._dialog_parent(),
             f"Expression pictures for {card.name}",
             str(Path.home()),
@@ -1533,7 +1534,7 @@ class CollectionWindow:
         from sealedlore.gui.crop_dialog import cropped_picture
 
         if paths is None:
-            paths, _ = QFileDialog.getOpenFileNames(
+            paths, _ = file_dialogs.open_file_names(
                 self, f"Pictures of {card.name}", str(Path.home()), PICTURE_FILTER
             )
         store = self._collection_store()

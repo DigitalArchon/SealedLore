@@ -18,8 +18,9 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from PySide6.QtCore import QEventLoop, Qt
-from PySide6.QtWidgets import QFileDialog, QMessageBox, QProgressDialog, QWidget
+from PySide6.QtWidgets import QMessageBox, QProgressDialog, QWidget
 
+from sealedlore.gui import file_dialogs
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.ref_images import PICTURE_FILTER
 from sealedlore.gui.worker import GenerationWorker
@@ -42,7 +43,7 @@ def describe_style(
     writer sees pictures before anything is sent."""
     if session is None:
         return None
-    chosen, _ = QFileDialog.getOpenFileName(
+    chosen, _ = file_dialogs.open_file_name(
         parent, "A picture whose style to take", str(Path.home()), PICTURE_FILTER
     )
     if not chosen:

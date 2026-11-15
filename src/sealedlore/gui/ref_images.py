@@ -27,7 +27,6 @@ from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QSize, Qt, Signal
 from PySide6.QtGui import QIcon, QImage, QImageReader, QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QFileDialog,
     QInputDialog,
     QLabel,
     QListWidget,
@@ -41,6 +40,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.looks import look_words
 from sealedlore.engine.plot_md import ParsedPlotFile, PlotProblem
+from sealedlore.gui import file_dialogs
 from sealedlore.gui.image_codec import HEAD_BYTES, encoded, raster_format, read_image
 from sealedlore.gui.picture_words import AGAIN_LABEL, EDIT_LABEL
 from sealedlore.gui.wrap_row import WrapRow
@@ -502,7 +502,7 @@ class RefImageStrip(QWidget):
             return
         from sealedlore.gui.crop_dialog import cropped_picture
 
-        paths, _ = QFileDialog.getOpenFileNames(
+        paths, _ = file_dialogs.open_file_names(
             self, "Add reference pictures", str(Path.home()), PICTURE_FILTER
         )
         self._before()
@@ -587,7 +587,7 @@ class RefImageStrip(QWidget):
             return False
         from sealedlore.gui.crop_dialog import cropped_picture
 
-        path, _ = QFileDialog.getOpenFileName(
+        path, _ = file_dialogs.open_file_name(
             self, "Choose a portrait", str(Path.home()), PICTURE_FILTER
         )
         if not path:

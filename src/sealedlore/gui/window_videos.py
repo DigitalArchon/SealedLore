@@ -17,8 +17,9 @@ from pathlib import Path
 
 from PySide6.QtCore import QUrl
 from PySide6.QtGui import QAction, QDesktopServices
-from PySide6.QtWidgets import QFileDialog, QMessageBox
+from PySide6.QtWidgets import QMessageBox
 
+from sealedlore.gui import file_dialogs
 from sealedlore.gui.video_dialog import VideoDialog
 from sealedlore.gui.video_jobs import VideoCatalog, VideoJobs
 from sealedlore.gui.video_view import FrameGrabber, VideoItem, multimedia_available, stop_playback
@@ -419,7 +420,7 @@ class VideosWindow:
             data = store.read(video.file) if video.file else None
             if data is None:
                 return
-            target, _ = QFileDialog.getSaveFileName(
+            target, _ = file_dialogs.save_file_name(
                 self, "Save video", str(Path.home() / file_name(video.file)), "Videos (*.mp4)"
             )
             if target:

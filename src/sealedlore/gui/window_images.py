@@ -16,7 +16,6 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
-    QFileDialog,
     QMessageBox,
     QToolButton,
 )
@@ -24,6 +23,7 @@ from PySide6.QtWidgets import (
 from sealedlore.engine.picture_shapes import BACKGROUND
 from sealedlore.engine.picture_use import KEEP_DRAW
 from sealedlore.engine.places import newest_picture
+from sealedlore.gui import file_dialogs
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.expression_set import ask_expression_set
 from sealedlore.gui.image_dialog import (
@@ -881,7 +881,7 @@ class ImagesWindow:
             cards.append((ref.file, f"added-{number}{Path(ref.file).suffix}"))
         if not images and not videos and not cards:
             return
-        chosen = QFileDialog.getExistingDirectory(self, "Save all pictures", str(Path.home()))
+        chosen = file_dialogs.existing_directory(self, "Save all pictures", str(Path.home()))
         if not chosen:
             return
         folder = Path(chosen)
@@ -1049,7 +1049,7 @@ class ImagesWindow:
         if self._busy:  # asked before the picture is chosen and cropped, not after
             self.statusBar().showMessage("Wait for the story's current job to finish.", 6000)
             return
-        path, _ = QFileDialog.getOpenFileName(
+        path, _ = file_dialogs.open_file_name(
             self, "Background picture", str(Path.home()), PICTURE_FILTER
         )
         if path:

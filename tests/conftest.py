@@ -15,7 +15,23 @@ from sealedlore.tree import link_child
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _wheel_guard_style_first():
+def _qts_settings_of_their_own(tmp_path_factory):
+    """A QFileDialog keeps its folders in Qt's own settings (QtProject.conf) as it is
+    deleted, the widgets' dialog and GTK's alike: the run's go to a folder of its own,
+    never into the settings of whoever runs it."""
+    try:
+        from PySide6.QtCore import QSettings
+    except ImportError:
+        yield
+        return
+    folder = str(tmp_path_factory.mktemp("qt-settings"))
+    for kind in (QSettings.Format.NativeFormat, QSettings.Format.IniFormat):
+        QSettings.setPath(kind, QSettings.Scope.UserScope, folder)
+    yield
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _wheel_guard_style_first(_qts_settings_of_their_own):
     """The app installs the wheel guard's style before any widget exists
     (gui/app.build_app); tests do the same, once, at the start of the run.
     Installed by whichever test first made a window, it swapped the app's
@@ -249,6 +265,24 @@ def _unanswered_boxes_fail(monkeypatch):
     for kind in ("question", "information", "warning", "critical"):
         monkeypatch.setattr(QMessageBox, kind, static(kind))
     monkeypatch.setattr(QMessageBox, "exec", exec_)
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _unanswered_file_dialogs_fail(monkeypatch):
+    """Every file dialog of the app is run by gui/file_dialogs.py; one no test answers
+    (by patching file_dialogs.open_file_name and the rest) fails at once, naming it,
+    rather than waiting forever offscreen."""
+    try:
+        from PySide6.QtWidgets import QFileDialog
+    except ImportError:
+        yield
+        return
+
+    def exec_(dialog):
+        raise AssertionError(f"unanswered file dialog: {dialog.windowTitle()!r}")
+
+    monkeypatch.setattr(QFileDialog, "exec", exec_)
     yield
 
 

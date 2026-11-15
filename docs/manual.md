@@ -3303,10 +3303,14 @@ and function names, nothing from your stories); it stays on your machine,
 for you to send along with a bug report if you choose. The app also tells
 the system not to keep a core dump of it (a copy of its memory), the command
 line as well as the window, so a crash never writes a memory-only chat or
-scene anywhere. Swap and hibernation are
-the system's own and outside the app's reach: the system may write the app's
-memory there, a memory-only chat or scene included. An encrypted disk, or
-encrypted swap, covers them. On Linux you can also turn swap off while you
+scene anywhere. On Linux, choosing a file or folder in the app leaves the
+desktop's list of recent files as it was: on GNOME, Cinnamon and the other
+desktops where the app's file dialog is GTK's, that dialog adds everything
+chosen in it to `~/.local/share/recently-used.xbel`, which every program can
+read, and the app puts the list back, byte for byte, a moment later. Swap
+and hibernation are the system's own and outside the app's reach: the system
+may write the app's memory there, a memory-only chat or scene included. An
+encrypted disk, or encrypted swap, covers them. On Linux you can also turn swap off while you
 use the app (`sudo swapoff -a`, then `sudo swapon -a` afterwards); turning it
 off moves what is already in swap back into memory, so it needs enough free
 RAM. The app can't lock its own memory against swapping instead: an ordinary

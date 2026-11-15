@@ -99,10 +99,13 @@ select = ["E", "F", "I", "UP", "B"]
 "src/sealedlore/providers/sdk_guard.py" = ["E501"]
 
 [tool.ruff.format]
+# recentguard.py is DA Assistant's copy byte for byte but for its docstring's last
+# paragraph (tests/test_recent_files.py), formatted as DA Assistant formats it.
 exclude = [
     "src/sealedlore/providers/dcap.py",
     "src/sealedlore/providers/nras.py",
     "src/sealedlore/providers/sdk_guard.py",
+    "src/sealedlore/gui/recentguard.py",
 ]
 
 [tool.pytest.ini_options]

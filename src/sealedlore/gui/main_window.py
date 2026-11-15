@@ -21,7 +21,6 @@ from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QDockWidget,
-    QFileDialog,
     QInputDialog,
     QLabel,
     QLineEdit,
@@ -61,7 +60,7 @@ from sealedlore.engine.session import (
 )
 from sealedlore.engine.tokens import TokenEstimator
 from sealedlore.engine.usage import usage_fields, usage_report
-from sealedlore.gui import crop_dialog, plain_text, start_page, text_size
+from sealedlore.gui import crop_dialog, file_dialogs, plain_text, start_page, text_size
 from sealedlore.gui.bad_hosts import bad_hosts
 from sealedlore.gui.banners import HeldAwayBanner, OverBudgetBanner, StalenessBanner
 from sealedlore.gui.branch_bar import BranchBar, opening_words
@@ -1518,7 +1517,7 @@ class MainWindow(
 
     def _import_path(self, title: str, filters: str) -> None:
         """Ask for a file and import it as whatever it turns out to be."""
-        path, _ = QFileDialog.getOpenFileName(self, title, str(Path.home()), filters)
+        path, _ = file_dialogs.open_file_name(self, title, str(Path.home()), filters)
         if not path:
             return
         suffix = Path(path).suffix.lower()
@@ -1631,7 +1630,7 @@ class MainWindow(
         """Give the open story a plot file's facts and events, and nothing else."""
         if self.session is None or self._busy:
             return
-        path, _ = QFileDialog.getOpenFileName(
+        path, _ = file_dialogs.open_file_name(
             self, "Import plot", str(Path.home()), f"Plot files (*{PLOT_SUFFIX});;All files (*)"
         )
         if not path or (parsed := self._read_plot_file(Path(path))) is None:
@@ -1876,7 +1875,7 @@ class MainWindow(
             return
         story = self.session.story
         safe = "".join(ch if ch.isalnum() or ch in " -_" else "_" for ch in story.title).strip()
-        path, _ = QFileDialog.getSaveFileName(
+        path, _ = file_dialogs.save_file_name(
             self,
             "Export as scenario",
             str(Path.home() / f"{safe or 'story'}{SCENARIO_SUFFIX}"),
@@ -3017,7 +3016,7 @@ class MainWindow(
         assert self.session is not None
         name = self.session.story.title
         safe = "".join(ch if ch.isalnum() or ch in " -_" else "_" for ch in name).strip()
-        chosen, _ = QFileDialog.getSaveFileName(
+        chosen, _ = file_dialogs.save_file_name(
             self, title, str(Path.home() / f"{safe or 'story'}{suffix}"), f"{label} (*{suffix})"
         )
         if not chosen:

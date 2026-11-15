@@ -17,7 +17,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox  # noqa: E402
 
-from sealedlore.gui import window_collection  # noqa: E402
+from sealedlore.gui import file_dialogs, window_collection  # noqa: E402
 from sealedlore.gui.card_chat_dialog import NO_GREETING, CardChatDialog  # noqa: E402
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.gui.tavern_dialog import NO_OPENING, CardImportDialog  # noqa: E402
@@ -91,9 +91,7 @@ def test_the_files_tab_lists_every_file_and_saves_one(app, window, tmp_path, mon
     choose(about, "wind")
     assert about.save_button.isEnabled() and not about.picture_button.isEnabled()
     saved = tmp_path / "wind.mp3"
-    monkeypatch.setattr(
-        window_collection.QFileDialog, "getSaveFileName", lambda *a, **k: (str(saved), "")
-    )
+    monkeypatch.setattr(file_dialogs, "save_file_name", lambda *a, **k: (str(saved), ""))
     about.save_button.click()
     assert saved.read_bytes() == WIND
 
@@ -202,7 +200,7 @@ def test_a_card_with_files_imported_into_a_story_is_kept_whole(app, window, tmp_
     card.parent.mkdir()
     card.write_bytes(risu_charx(tmp_path).read_bytes())
     monkeypatch.setattr(
-        "sealedlore.gui.window_tavern.QFileDialog.getOpenFileName",
+        "sealedlore.gui.file_dialogs.open_file_name",
         lambda *a, **k: (str(card), ""),
     )
     monkeypatch.setattr(window, "_ask_where_card_goes", lambda character, lore: (True, False))

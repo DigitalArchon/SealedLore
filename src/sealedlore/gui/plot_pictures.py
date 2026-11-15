@@ -33,7 +33,6 @@ from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QFileDialog,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -46,6 +45,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.looks import look_words
+from sealedlore.gui import file_dialogs
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.picture_labels import LABELS_LABEL, LABELS_TIP, edit_labels
 from sealedlore.gui.ref_images import PICTURE_FILTER, THUMB, inside, picture_bytes, thumbnail
@@ -171,7 +171,7 @@ def choose_picture(
     target = saved_folder(parent, folder, save_first)
     if target is None:
         return None
-    path, _ = QFileDialog.getOpenFileName(
+    path, _ = file_dialogs.open_file_name(
         parent, "Choose a picture", str(Path.home()), PICTURE_FILTER
     )
     if not path:
@@ -352,7 +352,7 @@ class PlotPictureStrip(QWidget):
         folder = self._saved_folder()
         if folder is None:
             return
-        paths, _ = QFileDialog.getOpenFileNames(
+        paths, _ = file_dialogs.open_file_names(
             self, "Add pictures", str(Path.home()), PICTURE_FILTER
         )
         added, problems = False, []

@@ -368,9 +368,9 @@ def test_restyle_pictures_ticks_those_not_in_the_style_and_each_takes_its_place(
 
 
 def test_a_story_s_style_can_be_taken_from_a_picture(app, window, monkeypatch, tmp_path: Path):
-    from PySide6.QtWidgets import QFileDialog, QMessageBox
+    from PySide6.QtWidgets import QMessageBox
 
-    from sealedlore.gui import style_from_picture
+    from sealedlore.gui import file_dialogs, style_from_picture
 
     field = PictureStyleField("", "", from_picture=lambda: ("woodcut, bold lines", PNG, ".png"))
     taken: list[bool] = []
@@ -391,7 +391,7 @@ def test_a_story_s_style_can_be_taken_from_a_picture(app, window, monkeypatch, t
     session.provider = MockChatProvider(["Woodblock print, flat muted colours."])
     picture = tmp_path / "style.png"
     picture.write_bytes(PNG)
-    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(picture), ""))
+    monkeypatch.setattr(file_dialogs, "open_file_name", lambda *a, **k: (str(picture), ""))
     monkeypatch.setattr(style_from_picture, "cropped_picture", lambda *a, **k: (PNG, ".png"))
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
     found = style_from_picture.describe_style(window, session, {})

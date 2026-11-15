@@ -33,7 +33,6 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
-    QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QHeaderView,
@@ -51,6 +50,7 @@ from sealedlore.engine.picture_styles import DEFAULT_LABEL, picture_words, style
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.video_price import VideoQuote, pictures_worth, quote_video
 from sealedlore.engine.videos import VideoRequest
+from sealedlore.gui import file_dialogs
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.fields import FormScroll
 from sealedlore.gui.model_picker import ModelField, _Row
@@ -485,7 +485,7 @@ class VideoDialog(QDialog):
         self._sync()
 
     def _add_from_disk(self, combo: QComboBox) -> None:
-        path, _ = QFileDialog.getOpenFileName(
+        path, _ = file_dialogs.open_file_name(
             self, "A picture for the video", str(Path.home()), PICTURE_FILTER
         )
         if not path:

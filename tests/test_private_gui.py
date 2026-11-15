@@ -372,8 +372,9 @@ def test_a_memory_scene_is_asked_about_only_once_the_new_story_is_certain(
     cancelled at its first step or a plot file with errors, cost the scene
     for nothing. And the guide saved its story before the question, so a
     No left a story nobody had opened."""
-    from PySide6.QtWidgets import QDialog, QFileDialog
+    from PySide6.QtWidgets import QDialog
 
+    from sealedlore.gui import file_dialogs
     from sealedlore.gui.new_story_guide import NewStoryGuide
     from sealedlore.models.story import Story
     from sealedlore.storage.paths import stories_dir
@@ -389,7 +390,7 @@ def test_a_memory_scene_is_asked_about_only_once_the_new_story_is_certain(
     window.new_story()  # cancelled at its first step
     broken = tmp_path / "broken.sealedlore-plot.md"
     broken.write_text("---\ntitle: Broken\n---\n# Events\n## \n", encoding="utf-8")
-    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(broken), ""))
+    monkeypatch.setattr(file_dialogs, "open_file_name", lambda *a, **k: (str(broken), ""))
     monkeypatch.setattr(QMessageBox, "exec", lambda box: QMessageBox.Ok)  # its errors, read
     window.import_file()
     assert titles == [] and window.session.in_private, "nothing new: nothing asked, nothing lost"
@@ -560,7 +561,7 @@ def test_leaving_the_story_mid_memory_scene_asks_first(app, window: MainWindow, 
     scenario = window.root / f"other{SCENARIO_SUFFIX}"
     write_scenario(scenario, Scenario(title="Another story"))
     monkeypatch.setattr(
-        "sealedlore.gui.main_window.QFileDialog.getOpenFileName",
+        "sealedlore.gui.file_dialogs.open_file_name",
         lambda *a, **k: (str(scenario), ""),
     )
     window.new_story()
@@ -581,7 +582,7 @@ def test_a_card_imported_mid_memory_scene_leaves_the_scene_be(
     send(app, window, f"{MARKER} whispered")
     card = png_card(tmp_path, {"chara": v2()})
     monkeypatch.setattr(
-        "sealedlore.gui.main_window.QFileDialog.getOpenFileName", lambda *a, **k: (str(card), "")
+        "sealedlore.gui.file_dialogs.open_file_name", lambda *a, **k: (str(card), "")
     )
     asked: list = []
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: asked.append(a) or 0)

@@ -178,13 +178,14 @@ def test_a_scene_pictures_references_bring_back_no_words_of_the_scene(app, windo
 
 def test_a_story_can_add_a_picture_from_disk(app, window: MainWindow, tmp_path, monkeypatch):
     from PySide6.QtGui import QColor, QImage
-    from PySide6.QtWidgets import QFileDialog
+
+    from sealedlore.gui import file_dialogs
 
     source = tmp_path / "gate.png"
     image = QImage(64, 48, QImage.Format_RGB32)
     image.fill(QColor("#336699"))
     assert image.save(str(source), "PNG")
-    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(source), ""))
+    monkeypatch.setattr(file_dialogs, "open_file_name", lambda *a, **k: (str(source), ""))
 
     dialog = ImageDialog(window.session, parent=window)
     dialog.model.setText("bytedance/seedream-v5.0-pro")
@@ -424,9 +425,9 @@ def test_a_memory_chat_keeps_its_pictures_in_memory_and_can_save_them(
     only, with a way to export them. Everything a picture touches (a
     reference from disk, the drawn picture, its log, the background) stays
     off the disk; Save all writes only where the author chose."""
-    from PySide6.QtWidgets import QFileDialog, QMessageBox
+    from PySide6.QtWidgets import QMessageBox
 
-    import sealedlore.gui.image_dialog as image_dialog
+    from sealedlore.gui import file_dialogs
     from tests.test_chat_gui import make_chat
 
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
@@ -439,9 +440,7 @@ def test_a_memory_chat_keeps_its_pictures_in_memory_and_can_save_them(
     before = data_listing(tmp_path)
 
     # A reference picture from disk, through the picture dialog.
-    monkeypatch.setattr(
-        image_dialog.QFileDialog, "getOpenFileName", lambda *a, **k: (str(source), "")
-    )
+    monkeypatch.setattr(file_dialogs, "open_file_name", lambda *a, **k: (str(source), ""))
     dialog = ImageDialog(session, parent=window)
     dialog._add_from_disk()
     ref = session.story.reference_images[0]
@@ -479,14 +478,14 @@ def test_a_memory_chat_keeps_its_pictures_in_memory_and_can_save_them(
 
     # Save all writes every picture where the author chose, and nowhere else.
     target = tmp_path_factory.mktemp("saved")
-    monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *a, **k: str(target))
+    monkeypatch.setattr(file_dialogs, "existing_directory", lambda *a, **k: str(target))
     window.save_all_pictures()
     saved = sorted(p.name for p in target.iterdir())
     assert len(saved) == 2 and saved[0].startswith("001-") and saved[1].startswith("added-1")
     assert data_listing(tmp_path) == before
     # And one picture at a time, from the picture's own menu.
     one = tmp_path_factory.mktemp("one") / "picture.png"
-    monkeypatch.setattr(image_dialog.QFileDialog, "getSaveFileName", lambda *a, **k: (str(one), ""))
+    monkeypatch.setattr(file_dialogs, "save_file_name", lambda *a, **k: (str(one), ""))
     window._image_action("save", session.generated_images()[0].id)
     assert one.read_bytes() == session.pictures.read(session.generated_images()[0].file)
     assert data_listing(tmp_path) == before
@@ -764,8 +763,7 @@ def test_save_all_saves_each_picture_once_and_no_hidden_card_s(
     """The review: a picture drawn for a card was saved twice (by its id and
     by its card's name), a card the plot still hides was saved by name, and
     a GIF kept as PNG was saved under .gif."""
-    from PySide6.QtWidgets import QFileDialog
-
+    from sealedlore.gui import file_dialogs
     from sealedlore.gui.image_dialog import named_for
     from sealedlore.models.image import GeneratedImage
 
@@ -791,7 +789,7 @@ def test_save_all_saves_each_picture_once_and_no_hidden_card_s(
     ]
     assert "drawn" not in story_ids  # under its card only
     target = tmp_path_factory.mktemp("saved")
-    monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *a, **k: str(target))
+    monkeypatch.setattr(file_dialogs, "existing_directory", lambda *a, **k: str(target))
     window.save_all_pictures()
     saved = sorted(p.name for p in target.iterdir())
     assert not any(name.startswith("001-") for name in saved)  # not twice

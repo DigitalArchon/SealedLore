@@ -634,7 +634,9 @@ encrypts the whole way.
   an "in memory" chat, on any model, writes nothing at all.
   On Linux the app tells the system to keep no core dump after a crash;
   `crash.log` records only where in the program it happened, never your
-  stories.
+  stories. Its file dialogs leave the desktop's list of recent files
+  (`~/.local/share/recently-used.xbel`, which GTK's dialog adds to) as it
+  was.
 - **Swap and hibernation** belong to the operating system, on Linux and
   Windows alike: it may write the app's memory, a memory-only scene or chat
   included, to swap or a hibernation file (`pagefile.sys` and `hiberfil.sys`

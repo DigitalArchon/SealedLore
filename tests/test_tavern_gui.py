@@ -51,18 +51,18 @@ def window_on(tmp_path: Path, story=None, cast=()) -> MainWindow:
 
 def choose_file(monkeypatch, path: Path) -> None:
     monkeypatch.setattr(
-        "sealedlore.gui.main_window.QFileDialog.getOpenFileName",
+        "sealedlore.gui.file_dialogs.open_file_name",
         lambda *args, **kwargs: (str(path), ""),
     )
     monkeypatch.setattr(
-        "sealedlore.gui.window_tavern.QFileDialog.getOpenFileName",
+        "sealedlore.gui.file_dialogs.open_file_name",
         lambda *args, **kwargs: (str(path), ""),
     )
 
 
 def save_to(monkeypatch, path: Path) -> None:
     monkeypatch.setattr(
-        "sealedlore.gui.window_tavern.QFileDialog.getSaveFileName",
+        "sealedlore.gui.file_dialogs.save_file_name",
         lambda *args, **kwargs: (str(path), ""),
     )
 

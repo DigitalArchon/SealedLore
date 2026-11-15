@@ -23,7 +23,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
-    QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -56,6 +55,7 @@ from sealedlore.engine.portraits import picture_size, portrait_size
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.session_images import DEFAULT_MAX_REFS
 from sealedlore.engine.session_portraits import PORTRAIT_CAPTION
+from sealedlore.gui import file_dialogs
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.image_picker import ImagePickerDialog, pick_image_model
@@ -658,7 +658,7 @@ class ImageDialog(QDialog):
     def _add_from_disk(self) -> None:
         """The story's own reference picture, on no card: copied into the
         story, kept on it (`Story.reference_images`), and attached here."""
-        path, _ = QFileDialog.getOpenFileName(
+        path, _ = file_dialogs.open_file_name(
             self, "Add a reference picture", str(Path.home()), PICTURE_FILTER
         )
         if not path:
@@ -1103,7 +1103,7 @@ def save_picture_as(parent: QWidget, data: bytes | None, name: str) -> None:
         return
     name = named_for(name, data)
     suffix = Path(name).suffix
-    target, _ = QFileDialog.getSaveFileName(
+    target, _ = file_dialogs.save_file_name(
         parent, "Save picture", str(Path.home() / name), f"Pictures (*{suffix})"
     )
     if target:

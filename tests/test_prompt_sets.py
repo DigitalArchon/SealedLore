@@ -89,7 +89,7 @@ def test_export_saves_what_is_in_force_for_the_story(app, tmp_path: Path, monkey
     dialog = PromptEditorDialog(config, story)
     target = tmp_path / f"out{PROMPT_SET_SUFFIX}"
     monkeypatch.setattr(
-        "sealedlore.gui.prompt_editor.QFileDialog.getSaveFileName",
+        "sealedlore.gui.file_dialogs.save_file_name",
         lambda *args, **kwargs: (str(target), ""),
     )
 
@@ -169,7 +169,7 @@ def test_file_import_takes_a_set_into_the_editor(app, tmp_path: Path, story, mon
     path = tmp_path / f"theirs{PROMPT_SET_SUFFIX}"
     write_prompt_set(path, incoming)
     monkeypatch.setattr(
-        "sealedlore.gui.main_window.QFileDialog.getOpenFileName",
+        "sealedlore.gui.file_dialogs.open_file_name",
         lambda *args, **kwargs: (str(path), ""),
     )
     monkeypatch.setattr(PromptEditorDialog, "_ask_how", lambda self, path, edits: "add")

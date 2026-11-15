@@ -17,12 +17,12 @@ from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
-    QFileDialog,
     QInputDialog,
     QMessageBox,
     QProgressDialog,
 )
 
+from sealedlore.gui import file_dialogs
 from sealedlore.gui.image_codec import encoded
 from sealedlore.gui.ref_images import clean_incoming, image_of, store_reference
 from sealedlore.gui.tavern_dialog import CardImportDialog, LinkDialog
@@ -202,7 +202,7 @@ class TavernWindow:
         if session is None or self._busy:
             return
         if path is None:
-            chosen, _ = QFileDialog.getOpenFileName(
+            chosen, _ = file_dialogs.open_file_name(
                 self._dialog_parent(), "Import a character card", str(Path.home()), CARD_FILTER
             )
             if not chosen:
@@ -416,7 +416,7 @@ class TavernWindow:
         if png and count > 1:
             # Every picture, labelled: a PNG card holds one.
             kinds = f"CHARX card, with all {count} pictures (*.charx);;" + kinds
-        chosen, kind = QFileDialog.getSaveFileName(
+        chosen, kind = file_dialogs.save_file_name(
             self._dialog_parent(),
             "Export a character card",
             str(Path.home() / f"{safe.strip() or 'character'}{'.png' if png else '.json'}"),
@@ -495,7 +495,7 @@ class TavernWindow:
         if session is None or self._busy or self.in_chat:
             return
         if path is None:
-            chosen, _ = QFileDialog.getOpenFileName(
+            chosen, _ = file_dialogs.open_file_name(
                 self._dialog_parent(),
                 "Import a lorebook",
                 str(Path.home()),
@@ -552,7 +552,7 @@ class TavernWindow:
             self.statusBar().showMessage("The story has no lore to export.", 6000)
             return
         safe = "".join(ch if ch.isalnum() or ch in " -_" else "_" for ch in session.story.title)
-        chosen, _ = QFileDialog.getSaveFileName(
+        chosen, _ = file_dialogs.save_file_name(
             self._dialog_parent(),
             "Export the lore as a lorebook",
             str(Path.home() / f"{safe.strip() or 'story'} lorebook.json"),
@@ -788,7 +788,7 @@ class TavernWindow:
         if character is None:
             self.statusBar().showMessage("Choose a character first.", 6000)
             return
-        chosen, _ = QFileDialog.getOpenFileName(
+        chosen, _ = file_dialogs.open_file_name(
             self._dialog_parent(),
             f"Expression pictures for {character.name}",
             str(Path.home()),

@@ -711,7 +711,7 @@ def test_one_expression_picture_added_is_said_as_one(app, kept_window, tmp_path,
     with zipfile.ZipFile(pack, "w") as archive:
         archive.writestr("joy.png", tiny_png())
     monkeypatch.setattr(
-        "sealedlore.gui.window_collection.QFileDialog.getOpenFileName",
+        "sealedlore.gui.file_dialogs.open_file_name",
         lambda *args, **kwargs: (str(pack), ""),
     )
     said: list[str] = []

@@ -17,10 +17,11 @@ from pathlib import Path
 
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QFileDialog, QMessageBox
+from PySide6.QtWidgets import QMessageBox
 
 from sealedlore.engine.look_sheet import keep_order, label_key, sheet_for, wanted_along
 from sealedlore.engine.looks import look_words
+from sealedlore.gui import file_dialogs
 from sealedlore.gui.cast_board import BOARD_LABEL, SAVE_LABEL, CastBoard
 from sealedlore.gui.fill_gaps import Waiting, ask_fill_gaps
 from sealedlore.gui.picture_labels import edit_labels
@@ -473,7 +474,7 @@ class CastBoardWindow:
         from sealedlore.gui.crop_dialog import cropped_picture
 
         if paths is None:
-            paths, _ = QFileDialog.getOpenFileNames(
+            paths, _ = file_dialogs.open_file_names(
                 self, f"Pictures of {card.name}", str(Path.home()), PICTURE_FILTER
             )
         keep_order(card)

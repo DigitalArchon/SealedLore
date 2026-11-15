@@ -20,7 +20,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
-    QFileDialog,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -47,6 +46,7 @@ from sealedlore.engine.prompt_edits import (
     unknown_keys,
 )
 from sealedlore.engine.prompt_texts import GROUPS, TEXTS
+from sealedlore.gui import file_dialogs
 from sealedlore.gui.sizing import enter_only_on_buttons, size_to_screen
 from sealedlore.models.config import Config
 from sealedlore.models.prompt_edit import PromptEdit
@@ -491,7 +491,7 @@ class PromptEditorDialog(QDialog):
             )
             return
         name = self.story.title if self.scope_name == "story" and self.story else "SealedLore"
-        path, _ = QFileDialog.getSaveFileName(
+        path, _ = file_dialogs.save_file_name(
             self,
             "Export prompts",
             str(Path.home() / f"{name} prompts{PROMPT_SET_SUFFIX}"),
@@ -509,7 +509,7 @@ class PromptEditorDialog(QDialog):
         self.scope_note.setText(f"Saved {len(edits)} edited texts to {Path(path).name}.")
 
     def _import(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
+        path, _ = file_dialogs.open_file_name(
             self,
             "Import prompts",
             str(Path.home()),

@@ -54,7 +54,7 @@ def no_boxes(monkeypatch) -> list[str]:
 def kept_elena(window: MainWindow, tmp_path: Path, monkeypatch):
     path = png_card(tmp_path, {"chara": v2()})
     monkeypatch.setattr(
-        "sealedlore.gui.window_collection.QFileDialog.getOpenFileNames",
+        "sealedlore.gui.file_dialogs.open_file_names",
         lambda *args, **kwargs: ([str(path)], ""),
     )
     no_boxes(monkeypatch)
@@ -233,7 +233,7 @@ def test_a_kept_card_goes_out_with_every_field(app, window, tmp_path: Path, monk
     elena = kept_elena(window, tmp_path, monkeypatch)
     out = tmp_path / "out.png"
     monkeypatch.setattr(
-        "sealedlore.gui.window_collection.QFileDialog.getSaveFileName",
+        "sealedlore.gui.file_dialogs.save_file_name",
         lambda *args, **kwargs: (str(out), ""),
     )
     window.collection_page.action_requested.emit("export_png", elena.id)
@@ -244,7 +244,7 @@ def test_a_kept_card_goes_out_with_every_field(app, window, tmp_path: Path, monk
 
     out = tmp_path / "out.charx"
     monkeypatch.setattr(
-        "sealedlore.gui.window_collection.QFileDialog.getSaveFileName",
+        "sealedlore.gui.file_dialogs.save_file_name",
         lambda *args, **kwargs: (str(out), ""),
     )
     window.collection_page.action_requested.emit("export_charx", elena.id)
@@ -443,7 +443,7 @@ def test_an_unreadable_folder_gets_no_pictures_and_no_link(app, tmp_path: Path, 
 
 def test_a_cancelled_import_makes_no_folder(app, window, monkeypatch):
     monkeypatch.setattr(
-        "sealedlore.gui.window_collection.QFileDialog.getOpenFileNames",
+        "sealedlore.gui.file_dialogs.open_file_names",
         lambda *args, **kwargs: ([], ""),
     )
     window._import_to_collection()
@@ -605,19 +605,19 @@ def test_all_your_characters_backed_up_come_back_on_another_computer(
 ):
     """One card file each lost their versions and their ids (a story's links
     to them); the backup keeps both, and File → Import… puts it back."""
-    from PySide6.QtWidgets import QFileDialog
+    from sealedlore.gui import file_dialogs
 
     elena = kept_elena(window, tmp_path, monkeypatch)
     page = window.collection_page
     backup = tmp_path / "all.sealedlore-characters.zip"
-    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(backup), ""))
+    monkeypatch.setattr(file_dialogs, "save_file_name", lambda *a, **k: (str(backup), ""))
     page.backup_action.trigger()
     assert backup.exists() and "Backed up 1 character" in window.statusBar().currentMessage()
     portrait = window._collection_store().read(elena.reference_images[0].file)
 
     other = MainWindow(root=tmp_path / "elsewhere", use_mock=True)
     try:
-        monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(backup), ""))
+        monkeypatch.setattr(file_dialogs, "open_file_name", lambda *a, **k: (str(backup), ""))
         other.import_file()
         kept = other._kept()
         assert [c.id for c in kept] == [elena.id], "her id, so a story's link to her holds"
@@ -630,11 +630,11 @@ def test_all_your_characters_backed_up_come_back_on_another_computer(
 def test_restoring_characters_you_have_asks_and_keeps_yours_by_default(
     app, window, tmp_path: Path, monkeypatch
 ):
-    from PySide6.QtWidgets import QFileDialog
+    from sealedlore.gui import file_dialogs
 
     elena = kept_elena(window, tmp_path, monkeypatch)
     backup = tmp_path / "all.sealedlore-characters.zip"
-    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(backup), ""))
+    monkeypatch.setattr(file_dialogs, "save_file_name", lambda *a, **k: (str(backup), ""))
     window.collection_page.backup_action.trigger()
     elena.full_description = "Changed since the backup."
     asked: list = []
@@ -729,12 +729,12 @@ def test_those_chosen_stay_chosen_after_a_tag_while_two_are_listed(
 def test_those_chosen_are_exported_into_a_folder_versions_too(
     app, window, tmp_path: Path, monkeypatch
 ):
-    from PySide6.QtWidgets import QFileDialog
+    from sealedlore.gui import file_dialogs
 
     elena, ben, _older = three_kept(window, tmp_path, monkeypatch)
     folder = tmp_path / "out"
     folder.mkdir()
-    monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *a, **k: str(folder))
+    monkeypatch.setattr(file_dialogs, "existing_directory", lambda *a, **k: str(folder))
     choose(window.collection_page, elena.id, ben.id)
     window.collection_page._chosen("export_charx")
     assert sorted(p.name for p in folder.iterdir()) == [
@@ -797,7 +797,7 @@ def test_a_cards_file_is_replaced_keeping_its_name_kind_and_place(
 ):
     """A greeting shows the file by its name: replaced, the name and the card's
     place for it stay, so it still does."""
-    from PySide6.QtWidgets import QFileDialog
+    from sealedlore.gui import file_dialogs
 
     elena = kept_elena(window, tmp_path, monkeypatch)
     red, blue = tmp_path / "barn.png", tmp_path / "barn-blue.png"
@@ -810,7 +810,7 @@ def test_a_cards_file_is_replaced_keeping_its_name_kind_and_place(
     store = window._collection_store()
 
     def replace_with(path: Path) -> None:
-        monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(path), ""))
+        monkeypatch.setattr(file_dialogs, "open_file_name", lambda *a, **k: (str(path), ""))
         window._collection_file("replace", index, elena.id)
 
     replace_with(blue)

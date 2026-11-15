@@ -16,7 +16,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QPoint, QRect, Qt  # noqa: E402
 from PySide6.QtGui import QImage  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
-from PySide6.QtWidgets import QApplication, QDialog, QFileDialog  # noqa: E402
+from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
 
 from sealedlore.engine.picture_shapes import (  # noqa: E402
     BACKGROUND,
@@ -27,7 +27,7 @@ from sealedlore.engine.picture_shapes import (  # noqa: E402
     picture_shapes,
     size_ratio,
 )
-from sealedlore.gui import crop_dialog  # noqa: E402
+from sealedlore.gui import crop_dialog, file_dialogs  # noqa: E402
 from sealedlore.gui.crop_dialog import (  # noqa: E402
     MIN_SIDE,
     CropDialog,
@@ -259,8 +259,8 @@ def window(app, tmp_path: Path, monkeypatch):
 
 def _pick(monkeypatch, *paths: Path) -> None:
     files = [str(p) for p in paths]
-    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (files[0], ""))
-    monkeypatch.setattr(QFileDialog, "getOpenFileNames", lambda *a, **k: (files, ""))
+    monkeypatch.setattr(file_dialogs, "open_file_name", lambda *a, **k: (files[0], ""))
+    monkeypatch.setattr(file_dialogs, "open_file_names", lambda *a, **k: (files, ""))
 
 
 def _dirty(tmp_path: Path) -> tuple[Path, Path]:

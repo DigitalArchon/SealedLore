@@ -17,7 +17,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtWidgets import QInputDialog, QMessageBox  # noqa: E402
 
-from sealedlore.gui import window_collection  # noqa: E402
+from sealedlore.gui import file_dialogs  # noqa: E402
 from sealedlore.gui.lorebook_form import LorebookForm  # noqa: E402
 from sealedlore.models.character import Character  # noqa: E402
 from sealedlore.models.tavern import TavernFields  # noqa: E402
@@ -319,9 +319,7 @@ def test_your_characters_take_another_apps_lorebook_and_say_what_it_lost(
     form = page.lorebook_form
     path = tmp_path / "doomsville.lorebook"
     path.write_text(json.dumps(NOVEL_BOOK))
-    monkeypatch.setattr(
-        window_collection.QFileDialog, "getOpenFileName", lambda *a, **k: (str(path), "")
-    )
+    monkeypatch.setattr(file_dialogs, "open_file_name", lambda *a, **k: (str(path), ""))
     said = no_boxes(monkeypatch)
     form.import_button.click()
     entries = lore.book_entries(elena.tavern.character_book)
@@ -335,9 +333,7 @@ def test_your_characters_take_another_apps_lorebook_and_say_what_it_lost(
     form.list.setCurrentRow(3)
     form.up_button.click()
     out = tmp_path / "elena lorebook.json"
-    monkeypatch.setattr(
-        window_collection.QFileDialog, "getSaveFileName", lambda *a, **k: (str(out), "")
-    )
+    monkeypatch.setattr(file_dialogs, "save_file_name", lambda *a, **k: (str(out), ""))
     form.export_button.click()
     world = json.loads(out.read_text(encoding="utf-8"))
     assert [e.get("content") for e in lore.entries_of(world)] == [
@@ -363,9 +359,7 @@ def test_your_characters_say_why_another_apps_lorebook_cant_be_taken(
     ):
         path = tmp_path / name
         path.write_text(json.dumps(data))
-        monkeypatch.setattr(
-            window_collection.QFileDialog, "getOpenFileName", lambda *a, p=path, **k: (str(p), "")
-        )
+        monkeypatch.setattr(file_dialogs, "open_file_name", lambda *a, p=path, **k: (str(p), ""))
         page.lorebook_form.import_button.click()
     assert warned == [
         "broken.json is a RisuAI lorebook that SillyTavern can't import either: entry 1's "
@@ -384,8 +378,8 @@ def test_the_files_tab_adds_renames_retypes_links_and_removes(
     song.write_bytes(b"ID3 the theme")
     picture.write_bytes(png_of(90))
     monkeypatch.setattr(
-        window_collection.QFileDialog,
-        "getOpenFileNames",
+        file_dialogs,
+        "open_file_names",
         lambda *a, **k: ([str(song), str(picture)], ""),
     )
     form.add_button.click()
@@ -487,18 +481,14 @@ def test_a_lorebook_goes_out_and_comes_in_with_every_setting(
     elena.tavern.character_book = json.loads(json.dumps(ST_CARD_BOOK))
     page.show_book()
     out = tmp_path / "elena lorebook.json"
-    monkeypatch.setattr(
-        window_collection.QFileDialog, "getSaveFileName", lambda *a, **k: (str(out), "")
-    )
+    monkeypatch.setattr(file_dialogs, "save_file_name", lambda *a, **k: (str(out), ""))
     page.lorebook_form.export_button.click()
     world = json.loads(out.read_text(encoding="utf-8"))
     assert world["originalData"] == ST_CARD_BOOK
     assert world["entries"]["7"]["probability"] == 70 and world["entries"]["7"]["depth"] == 2
     # Back in, onto the card, as SillyTavern would put it there.
     elena.tavern.character_book = None
-    monkeypatch.setattr(
-        window_collection.QFileDialog, "getOpenFileName", lambda *a, **k: (str(out), "")
-    )
+    monkeypatch.setattr(file_dialogs, "open_file_name", lambda *a, **k: (str(out), ""))
     page.lorebook_form.import_button.click()
     entry = lore.book_entries(elena.tavern.character_book)[0]
     assert entry["extensions"]["group"] == "towns" and entry["insertion_order"] == 40

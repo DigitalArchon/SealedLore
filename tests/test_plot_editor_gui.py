@@ -328,8 +328,7 @@ def copied_plot(folder: Path) -> Path:
 
 
 def test_the_editor_shows_adds_and_removes_an_items_pictures(app, tmp_path: Path, monkeypatch):
-    from PySide6.QtWidgets import QFileDialog
-
+    from sealedlore.gui import file_dialogs
     from sealedlore.storage.image_meta import picture_kind
 
     path = copied_plot(tmp_path / "story")
@@ -348,7 +347,7 @@ def test_the_editor_shows_adds_and_removes_an_items_pictures(app, tmp_path: Path
     assert not editor.modified
 
     monkeypatch.setattr(
-        QFileDialog, "getOpenFileNames", lambda *a, **k: ([str(PICTURES / "janes-truck.png")], "")
+        file_dialogs, "open_file_names", lambda *a, **k: ([str(PICTURES / "janes-truck.png")], "")
     )
     strip._add()
     jane = editor.document.characters[0]
@@ -411,7 +410,9 @@ def test_a_characters_pictures_are_labelled_in_the_editor(app, tmp_path: Path, m
 
 
 def test_an_unsaved_plot_is_saved_before_it_takes_a_picture(app, tmp_path: Path, monkeypatch):
-    from PySide6.QtWidgets import QFileDialog, QMessageBox
+    from PySide6.QtWidgets import QMessageBox
+
+    from sealedlore.gui import file_dialogs
 
     editor = PlotEditorWindow()
     editor._select((HEADER, CHARACTER, -1))
@@ -422,9 +423,9 @@ def test_an_unsaved_plot_is_saved_before_it_takes_a_picture(app, tmp_path: Path,
     monkeypatch.setattr(
         QMessageBox, "question", lambda *a, **k: asked.append(a[1]) or QMessageBox.Save
     )
-    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(target), ""))
+    monkeypatch.setattr(file_dialogs, "save_file_name", lambda *a, **k: (str(target), ""))
     monkeypatch.setattr(
-        QFileDialog, "getOpenFileNames", lambda *a, **k: ([str(PICTURES / "jane-moss.png")], "")
+        file_dialogs, "open_file_names", lambda *a, **k: ([str(PICTURES / "jane-moss.png")], "")
     )
     strip._add()
     assert "Save the plot file first" in asked

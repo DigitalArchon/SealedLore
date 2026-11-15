@@ -18,9 +18,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import Qt  # noqa: E402
-from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMessageBox  # noqa: E402
+from PySide6.QtWidgets import QApplication, QInputDialog, QMessageBox  # noqa: E402
 
-from sealedlore.gui import plot_editor_pages  # noqa: E402
+from sealedlore.gui import file_dialogs, plot_editor_pages  # noqa: E402
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.gui.plot_editor import (  # noqa: E402
     CHARACTER,
@@ -336,7 +336,7 @@ def test_start_from_the_editor_saves_the_new_story_and_starts_it(app, window, mo
 def test_a_copy_as_a_plot_file_takes_the_pictures_along(app, window, monkeypatch, tmp_path):
     editor = editor_on_story(window)
     target = tmp_path / "shared" / "sundering.md"
-    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *_a, **_k: (str(target), ""))
+    monkeypatch.setattr(file_dialogs, "save_file_name", lambda *_a, **_k: (str(target), ""))
     assert editor.save_as()
     assert "picture: images/refs/ref-1.png" in target.read_text(encoding="utf-8")
     assert (target.parent / "images" / "refs" / "ref-1.png").read_bytes() == PNG

@@ -1424,12 +1424,11 @@ def test_story_export_as_scenario_writes_a_file_the_import_reads_back(
     """Story → Export ▸ Scenario, through the window (the map mode archived,
     Oct 24 2026: it called a helper that had gone with the map, so the menu
     entry raised instead of writing)."""
-    from PySide6.QtWidgets import QFileDialog
-
+    from sealedlore.gui import file_dialogs
     from sealedlore.storage.scenario import read_scenario
 
     path = tmp_path / "out.sealedlore-scenario.json"
-    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(path), ""))
+    monkeypatch.setattr(file_dialogs, "save_file_name", lambda *a, **k: (str(path), ""))
     window.export_scenario()
     scenario = read_scenario(path)
     assert scenario.title == window.session.story.title
