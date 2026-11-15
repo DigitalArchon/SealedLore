@@ -105,10 +105,14 @@ class Dialog(QWidget):
     filesSelected = Signal(list)
     accepted = Signal()
 
-    def __init__(self, paths, answer=QDialog.DialogCode.Accepted, write=None, at_once=False):
+    def __init__(
+        self, paths, answer=QDialog.DialogCode.Accepted, write=None, at_once=False, first=None
+    ):
         super().__init__()
         self.paths, self.answer, self.write, self.at_once = paths, answer, write, at_once
+        self.first = first  # what happens while it is open, before it answers
         self.options: list = []
+        self.watched_while_open: list = []
 
     def testOption(self, option):  # noqa: N802 - Qt's name
         return option in self.options
@@ -123,6 +127,12 @@ class Dialog(QWidget):
         )
 
     def exec(self):
+        made = file_dialogs._guard
+        if isinstance(made, file_dialogs.Guard):
+            self.watched_while_open = made.watcher.directories()
+        if self.first is not None:
+            self.first()
+            spin(150)  # the watcher sees it, as it would while the user looks at the dialog
         if self.answer == QDialog.DialogCode.Accepted:
             self.filesSelected.emit(list(self.paths))
             self.accepted.emit()
@@ -209,6 +219,56 @@ def test_another_programs_change_before_the_choice_is_kept(listed):
 
 
 @posix
+def test_a_write_of_gtks_landing_before_the_answer_is_put_back_byte_for_byte(listed, tmp_path):
+    """A name typed into a Save dialog reaches the app a quarter of a second after GTK took
+    the file in (GTK holds the default button pressed that long), and a write of GTK's already
+    on its way - another program had just changed the list - lands first, the file in it."""
+    recent, _chosen, seed = listed
+    new = tmp_path / "home" / "new.txt"
+    dialog = Dialog([str(new)], first=lambda: gtk_writes(recent, gtks_list(new)))
+    assert file_dialogs.run(dialog) == QDialog.DialogCode.Accepted
+    guard = file_dialogs.guard()
+    assert dialog.watched_while_open == [str(recent.parent)]
+    assert recent.read_bytes() == seed, "put back as the answer came"
+    assert stat.S_IMODE(os.lstat(recent).st_mode) == 0o644
+    assert not guard.pending, "GTK's write held the file: nothing more is awaited"
+    spin(300)
+    assert recent.read_bytes() == seed
+    assert guard.watcher.files() + guard.watcher.directories() == []
+
+
+@posix
+def test_another_programs_write_while_a_dialog_is_open_stands_when_gtks_comes_first(
+    listed, tmp_path
+):
+    recent, _chosen, seed = listed
+    new = tmp_path / "home" / "new.txt"
+    theirs = seed.replace(b"</xbel>", entry("file:///srv/theirs.odt", now()) + b"</xbel>")
+
+    def first():
+        gtk_writes(recent, theirs)
+        os.chmod(recent, 0o640)
+        spin(150)
+        gtk_writes(recent, gtks_list(new))
+
+    file_dialogs.run(Dialog([str(new)], first=first))
+    settle(file_dialogs.guard())
+    assert recent.read_bytes() == theirs
+    assert stat.S_IMODE(os.lstat(recent).st_mode) == 0o640
+
+
+@posix
+def test_a_dialog_left_open_watches_only_until_it_closes(listed):
+    recent, chosen, _seed = listed
+    dialog = Dialog([str(chosen)], answer=QDialog.DialogCode.Rejected)
+    file_dialogs.run(dialog)
+    guard = file_dialogs.guard()
+    assert dialog.watched_while_open == [str(recent.parent)]
+    assert not guard.pending and not guard.keeper.watching
+    assert guard.watcher.files() + guard.watcher.directories() == []
+
+
+@posix
 def test_a_list_that_was_not_there_is_taken_away_again(listed):
     recent, chosen, _seed = listed
     recent.unlink()
@@ -254,12 +314,31 @@ def test_where_gtk_never_writes_the_wait_ends_and_others_changes_count_again(lis
     assert recent.read_bytes() == b"theirs"
 
 
+class Told:
+    """A guard as run() tells it."""
+
+    def __init__(self):
+        self.told: list = []
+
+    def opened(self):
+        self.told.append("opened")
+
+    def closed(self):
+        self.told.append("closed")
+
+    def chose(self, paths):
+        self.told.append(("chose", list(paths)))
+
+
 @posix
 def test_a_dialog_left_or_qts_own_keeps_nothing(listed, monkeypatch):
     recent, chosen, _seed = listed
+    left = Told()
+    monkeypatch.setattr(file_dialogs, "guard", lambda: left)
+    file_dialogs.run(Dialog([str(chosen)], answer=QDialog.DialogCode.Rejected))
+    assert left.told == ["opened", "closed"]  # watched while open, nothing chosen
     made = []
     monkeypatch.setattr(file_dialogs, "guard", lambda: made.append(1))
-    file_dialogs.run(Dialog([str(chosen)], answer=QDialog.DialogCode.Rejected))
     own = Dialog([str(chosen)])
     own.options.append(QFileDialog.Option.DontUseNativeDialog)
     file_dialogs.run(own)
@@ -284,13 +363,27 @@ def test_on_windows_the_dialog_is_only_shown(monkeypatch):
 
 def test_on_linux_the_choice_is_told_and_nothing_stays_connected(monkeypatch):
     monkeypatch.setattr(sys, "platform", "linux")
-    told = []
-    keeper = type("Keeper", (), {"chose": lambda self, paths: told.append(paths)})()
+    keeper = Told()
     monkeypatch.setattr(file_dialogs, "guard", lambda: keeper)
     dialog = Dialog(["/home/u/a.txt"])
     file_dialogs.run(dialog)
-    assert told == [["/home/u/a.txt"], ["/home/u/a.txt"]]  # filesSelected, then accepted
+    # filesSelected names them, and accepted says the same: told once, between the two
+    assert keeper.told == ["opened", ("chose", ["/home/u/a.txt"]), "closed"]
     assert dialog.told() == 0
+
+
+def test_a_guard_that_fails_as_a_dialog_opens_never_stops_the_dialog(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "platform", "linux")
+
+    class Broken(Told):
+        def opened(self):
+            raise OSError("no inotify")
+
+    keeper = Broken()
+    monkeypatch.setattr(file_dialogs, "guard", lambda: keeper)
+    assert file_dialogs.run(Dialog(["/home/u/a.txt"])) == QDialog.DialogCode.Accepted
+    assert "not watched as it opened" in capsys.readouterr().err
+    assert "closed" not in keeper.told
 
 
 @posix
@@ -301,12 +394,12 @@ def test_what_a_list_holds_is_read_from_gtks_layout():
         entry("file:///home/u/My%20Notes.txt", stamp, "python"),
         entry("file:///home/u/a&amp;b.txt", stamp, "python"),
     )
-    held = file_dialogs.added(data)
+    held = recentguard.added(data)
     assert set(held) == {"/home/u/My Notes.txt", "/home/u/a&b.txt"}
     assert held["/home/u/My Notes.txt"] == 1_794_715_201  # 04:00:00.25 rounded up: GTK stamps
     # a file as it adds it, which can be a moment before the dialog answers
-    assert file_dialogs.added(b'<bookmark href="file:///x" ' * 1000) == {}
-    assert file_dialogs.added(None) == {}
+    assert recentguard.added(b'<bookmark href="file:///x" ' * 1000) == {}
+    assert recentguard.added(None) == {}
 
 
 # Qt's static functions, and what each is given and answers: the helper must make the same
@@ -539,14 +632,36 @@ SCRIPT = textwrap.dedent(
                         widget, gtk.gtk_file_chooser_dialog_get_type())):
                     if how == "save":
                         gtk.gtk_file_chooser_set_filename(widget, chosen.encode())
+                    elif how == "race":
+                        pass                                    # its name is there already
                     elif how == "folder":
                         gtk.gtk_file_chooser_set_current_folder(widget, folder.encode())
                         gtk.gtk_file_chooser_select_filename(widget, chosen.encode())
                     else:
                         gtk.gtk_file_chooser_select_filename(widget, chosen.encode())
-                    if gtk.gtk_file_chooser_get_filename(widget) == chosen.encode():
+                    if how == "race" and "manager" not in seen:
+                        # GTK makes its recent manager, which watches the list, as a chooser
+                        # first adds a file: as an earlier dialog of the run would have
+                        gtk.gtk_recent_manager_get_default.restype = ctypes.c_void_p
+                        seen["manager"] = bool(gtk.gtk_recent_manager_get_default())
+                    elif gtk.gtk_file_chooser_get_filename(widget) == chosen.encode():
                         seen["answered"] = True
-                        gtk.gtk_dialog_response(widget, -5)    # OK: Qt's accept
+                        if how == "race":
+                            # another program writes the list (the same bytes): GTK's monitor
+                            # (up to some 100 ms late: GLib's inotify reads at that pace when
+                            # idle) starts its 250 ms timer, and the Save of a new name,
+                            # answered 200 ms later, reaches Qt only after that timer's write
+                            with open(recent, "rb") as f:
+                                data = f.read()
+                            with open(recent + ".theirs", "wb") as f:
+                                f.write(data)
+                            os.chmod(recent + ".theirs", 0o644)
+                            os.replace(recent + ".theirs", recent)
+                            QTimer.singleShot(
+                                200, app, lambda answering=widget:
+                                gtk.gtk_dialog_response(answering, -5))
+                        else:
+                            gtk.gtk_dialog_response(widget, -5)    # OK: Qt's accept
             node = node.contents.next
         QTimer.singleShot(100, app, answer)
 
@@ -555,7 +670,7 @@ SCRIPT = textwrap.dedent(
         QTimer.singleShot(300, app, answer)
         if how == "open":
             seen["chosen"], _ = file_dialogs.open_file_name(None, "Open", folder, "Text (*.txt)")
-        elif how == "save":
+        elif how in ("save", "race"):
             seen["chosen"], _ = file_dialogs.save_file_name(None, "Save", chosen, "Text (*.txt)")
         else:
             seen["chosen"] = file_dialogs.existing_directory(None, "Folder", folder)
@@ -616,6 +731,8 @@ class TestGtksOwnDialog:
             chosen = os.path.join(env["HOME"], "Projects" if how == "folder" else "notes.txt")
             if how == "folder":
                 os.mkdir(chosen)
+            elif how == "race":
+                chosen = os.path.join(env["HOME"], "new-notes.txt")  # a name typed: not there
             else:
                 Path(chosen).write_text("notes\n", encoding="utf-8")
             seed = xbel(
@@ -670,6 +787,18 @@ class TestGtksOwnDialog:
         assert seen["put_back"] >= 1, "GTK wrote the list, and the guard put it back"
         assert not seen["pending"], "GTK's write held the file chosen: nothing more awaited"
 
+    def test_a_save_to_a_new_name_just_after_another_programs_write_leaves_the_list_as_it_was(
+        self,
+    ):
+        """GTK's write, its timer started by the other program's change, lands before the
+        answer reaches Qt: the list kept while the dialog was open is put back."""
+        seed, seen = self.choose("race", guarded=True)
+        for when in ("after_a_second", "after_the_loop", "after_the_process"):
+            assert seen[when] == seed, when
+        assert seen["put_back"] >= 1, "GTK wrote the list, and the guard put it back"
+        assert not seen["pending"], "GTK's write held the file chosen: nothing more awaited"
+        assert seen["mode"] == 0o644
+
     def test_a_folder_chosen_leaves_the_list_as_it_was(self):
         seed, seen = self.choose("folder", guarded=True)
         for when in ("after_a_second", "after_the_loop", "after_the_process"):
@@ -699,6 +828,7 @@ QT_SETTINGS_CHILD = textwrap.dedent(
 
     aside = file_dialogs.settings_aside() if sys.argv[1] == "aside" else None
     print("ASIDE", aside or "", flush=True)
+    print("PID", os.getpid(), flush=True)
     app = QApplication(sys.argv)
     dialog = QFileDialog(None, "Open", sys.argv[2])
     dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
@@ -743,9 +873,51 @@ def test_qts_own_settings_are_kept_out_of_the_users_and_removed_after(tmp_path, 
     set_aside = next(
         line.split(" ", 1)[1] for line in done.stdout.splitlines() if line.startswith("ASIDE")
     )
+    pid = next(line.split(" ", 1)[1] for line in done.stdout.splitlines() if line.startswith("PID"))
     if aside:
         assert users.read_bytes() == before
         assert set_aside.startswith(str(run)) and not os.path.exists(set_aside)
+        assert os.path.basename(set_aside).startswith(f"qt-settings-{pid}-")
     else:
         assert set_aside == ""
         assert users.read_bytes() != before and str(visited) in unquote(users.read_text())
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only")
+def test_a_crashed_runs_settings_folder_is_removed_as_the_next_run_starts(tmp_path, monkeypatch):
+    """A crash runs no atexit: the folder it set aside stays in $XDG_RUNTIME_DIR, the folders
+    its dialogs visited in it, until a run finds its process gone. Only this user's folders,
+    named as settings_aside names them, whose process is no longer there."""
+    run = tmp_path / "run"
+    run.mkdir(mode=0o700)
+    dead = subprocess.Popen([sys.executable, "-c", "pass"])
+    dead.wait()
+    alive = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        gone = run / f"qt-settings-{dead.pid}-abc_12"
+        gone.mkdir()
+        (gone / "QtProject.conf").write_text("[FileDialog]\nlastVisited=file:///private\n")
+        live = run / f"qt-settings-{alive.pid}-xyz_34"
+        live.mkdir()
+        mine = run / f"qt-settings-{os.getpid()}-own_56"
+        mine.mkdir()
+        unnamed = run / "qt-settings-k2j3h4ab"  # no process id: whose, nobody can tell
+        unnamed.mkdir()
+        other = run / "something-else"
+        other.mkdir()
+        link = run / f"qt-settings-{dead.pid}-lnk_78"
+        link.symlink_to(other)
+        monkeypatch.setenv("XDG_RUNTIME_DIR", str(run))
+        monkeypatch.setattr(sys, "platform", "linux")
+        monkeypatch.setattr(file_dialogs.QSettings, "setPath", lambda *_args: None)
+        monkeypatch.setattr(file_dialogs.atexit, "register", lambda *_args: None)
+        folder = file_dialogs.settings_aside()
+        assert folder is not None
+        assert os.path.basename(folder).startswith(f"qt-settings-{os.getpid()}-")
+        assert not gone.exists()
+        assert live.is_dir() and mine.is_dir() and unnamed.is_dir() and other.is_dir()
+        assert link.is_symlink()
+        assert file_dialogs.clear_left(str(run)) == []
+    finally:
+        alive.kill()
+        alive.wait()

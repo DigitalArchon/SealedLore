@@ -29,6 +29,16 @@ So the list is put back instead (Keeper), whatever GTK's writes in this process 
   - when one of the app's choosers answers with files chosen (run, answer_file_input,
     guard_pywebview: as it answers, for GTK adds them then), the list as it is - its bytes,
     or that there is none - is the clean copy, and a write is pending;
+  - but GTK can have written them already: a file named in a Save dialog's entry (or a
+    place typed into its location bar) is checked asynchronously, and the answer then comes
+    by the dialog's default button, which GTK holds pressed for 250 ms (GtkButton's
+    activate timeout) after adding the file - while a "changed" already on its way (the
+    manager's 250 ms timer, started when another program changed the list, or when the
+    list was put back after a choice of the app's a moment before) writes the list with it.
+    So from the moment a chooser opens until it answers, every list seen is kept (opened,
+    closed: the same three paths), and where the list as the answer comes already holds a
+    file chosen as added since the chooser opened, the clean copy is the last list seen that
+    holds none of them, and the list is put back at once;
   - after each "changed" (connect_after: after GTK's own write), with a write pending a
     list that isn't the clean copy is put back, or removed where there was none; with none
     pending (another program's change, re-read), the list is the new clean copy. A write
@@ -61,18 +71,24 @@ functions here that would import GTK are never called.
 
 from __future__ import annotations
 
+import math
 import os
 import secrets
 import stat
 import sys
 import tempfile
 import time
+from datetime import datetime
+from html import unescape
+from urllib.parse import unquote, urlsplit
 
 RECENT_FILES = "recently-used.xbel"
 # The most of the list read: GTK keeps at most a thousand entries, a few hundred KB.
 MOST = 32 * 1024 * 1024
 # How long a write stays pending after a choice whose files GTK never takes in.
 HOLD_SECONDS = 30
+# The most lists kept while a chooser is open: the one it opened on, and the newest.
+SEEN = 8
 
 ABSENT, FILE, LINK, OTHER = "absent", "file", "link", "other"
 
@@ -230,6 +246,81 @@ def _remove(path):
     _sync_folder(os.path.dirname(path))
 
 
+def file_key(uri):
+    """A file: URI as the path it names (GTK and a chooser may escape one differently),
+    anything else as it is."""
+    try:
+        parts = urlsplit(uri)
+    except ValueError:
+        return uri
+    if parts.scheme != "file":
+        return uri
+    return os.path.normpath(unquote(parts.path, errors="surrogateescape"))
+
+
+def _attribute(tag, name):
+    marker = f' {name}="'
+    start = tag.find(marker)
+    if start < 0:
+        return None
+    start += len(marker)
+    end = tag.find('"', start)
+    return unescape(tag[start:end]) if end >= 0 else None
+
+
+def _seconds(stamp):
+    """GLib's ISO 8601 time ("2026-11-15T04:00:00.123456Z") as whole seconds, rounded up:
+    GTK stamps a file as it adds it, which can be a moment before a chooser answers."""
+    try:
+        return math.ceil(datetime.fromisoformat(stamp).timestamp())
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+
+
+def added(data):
+    """What a recent files list holds: each file (file_key) with the last time any program
+    added it. Read in one pass; anything that isn't GTK's own layout is left out."""
+    found = {}
+    if not data:
+        return found
+    text = data.decode("utf-8", "replace")
+    for piece in text.split("</bookmark>"):
+        start = piece.rfind("<bookmark ")
+        if start < 0:
+            continue
+        piece = piece[start:]
+        end = piece.find(">")
+        href = _attribute(piece[: end + 1], "href") if end >= 0 else None
+        if not href:
+            continue
+        stamps = [0]
+        for tag in piece.split("<bookmark:application ")[1:]:
+            close = tag.find(">")
+            if close >= 0:
+                stamps.append(_seconds(_attribute(" " + tag[: close + 1], "modified")) or 0)
+        if max(stamps):
+            key = file_key(href)
+            found[key] = max(max(stamps), found.get(key, 0))
+    return found
+
+
+def _bytes_of(listing):
+    """The bytes of a list as look() saw it, a link's file's included; None for no file."""
+    if listing[0] == FILE:
+        return listing[1]
+    if listing[0] == LINK and listing[2][0] == FILE:
+        return listing[2][1]
+    return None
+
+
+def holds(listing, uris, since):
+    """Whether the list `listing` (as look() saw it) holds one of `uris` as added, by any
+    program, at `since` or later."""
+    keys = {file_key(uri) for uri in uris}
+    return any(stamp >= since for key, stamp in added(_bytes_of(listing)).items()
+               if key in keys)
+
+
 def _glib_later(seconds, call):
     from gi.repository import GLib
 
@@ -257,21 +348,68 @@ class Keeper:
         self._awaiting = set()
         self._since = 0
         self._cancel = None
+        self._open = 0
+        self._opened_at = 0
+        self._seen = []
         manager.connect_after("changed", self._changed)
+
+    @property
+    def watching(self):
+        """Whether the list's changes matter now: a write is pending, or a chooser is open."""
+        return self.pending or self._open > 0
+
+    def opened(self):
+        """A chooser opened: until it answers (closed), every list seen is kept, so that a
+        write of GTK's landing before the answer is put back too (chose)."""
+        if self._open == 0:
+            self._opened_at = int(self._clock())
+            self._seen = [look(self.path)]
+        self._open += 1
+
+    def closed(self):
+        """A chooser that opened has answered, or is gone."""
+        self._open = max(0, self._open - 1)
+        if self._open == 0:
+            self._seen = []
+
+    def _saw(self, now):
+        if self._open and self._seen[-1] != now:
+            self._seen.append(now)
+            if len(self._seen) > SEEN:
+                del self._seen[1:len(self._seen) - SEEN + 1]
+
+    def _clean_for(self, now, uris):
+        """The clean copy for a choice of `uris`: the list as it is, or - where it holds one
+        of them as added since the chooser opened, GTK's write having come first - the last
+        list seen since then that holds none of them."""
+        if not self._open or not holds(now, uris, self._opened_at):
+            return now
+        for seen in reversed(self._seen):
+            if not holds(seen, uris, self._opened_at):
+                return seen
+        return self._seen[0]
 
     def chose(self, uris):
         """A chooser answered with these files chosen: GTK's write of them is pending."""
         uris = {uri for uri in uris if isinstance(uri, str) and uri}
         if not uris:
             return
+        now = None
         if not self.pending:
-            self.clean = look(self.path)
+            now = look(self.path)
+            self.clean = self._clean_for(now, uris)
             self.pending = True
-            self._since = int(self._clock())
+            # GTK stamps a file as it adds it: since the chooser opened, where one did
+            self._since = self._opened_at if self._open else int(self._clock())
         self._awaiting |= uris
         if self._cancel is not None:
             self._cancel()
         self._cancel = self._later(HOLD_SECONDS, self._held)
+        if now is not None and now != self.clean:
+            # GTK's write came first, the files in it: taken in, and put back now
+            self._awaiting = {uri for uri in self._awaiting
+                              if not holds(now, [uri], self._since)}
+            self._changed()
 
     def _held(self):
         self._cancel = None
@@ -299,6 +437,7 @@ class Keeper:
     def _changed(self, _manager=None):
         try:
             now = look(self.path)
+            self._saw(now)
             if not self.pending:
                 self.clean = now
                 return
@@ -440,9 +579,13 @@ def run(chooser):
         heard = True
     except Exception:  # noqa: BLE001 - a stand-in with no signals: told once it is answered
         heard = False
-    response = chooser.run()
-    if not heard:
-        _answered(guarding, chooser, response)
+    guarding.opened()
+    try:
+        response = chooser.run()
+        if not heard:
+            _answered(guarding, chooser, response)
+    finally:
+        guarding.closed()
     return response
 
 
@@ -478,10 +621,14 @@ def answer_file_input(webview, request):
             request.select_files(native.get_filenames())
         else:
             request.cancel()
+        if guarding is not None:
+            guarding.closed()
         native.destroy()
 
     chooser.connect("response", answered)
     _open.add(chooser)
+    if guarding is not None:
+        guarding.opened()
     chooser.show()
     return True
 
@@ -549,9 +696,11 @@ def _wrap_pywebview_dialogs():
                 _answered(guarding, dialog, response)
 
         unhook = _hook_responses(answered)
+        guarding.opened()
         try:
             return original(self, *args, **kwargs)
         finally:
+            guarding.closed()
             unhook()
 
     create_file_dialog.recentguard = True

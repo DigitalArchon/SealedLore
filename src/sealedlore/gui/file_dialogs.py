@@ -19,18 +19,23 @@ under Xvfb, Nov 15 2026).
 recentguard.py, DA Assistant's canonical copy, puts back what those writes change. Its
 Keeper is told here by Qt, since nothing in the app reaches GTK itself (no PyGObject):
 
-  - as the dialog answers with files chosen (filesSelected and accepted, emitted from GTK's
-    own response, before GTK's write: after a Save over a file GTK asks about, only some
-    10 ms before it, measured, as both wait a quarter of a second and the answer's wait
-    starts first), the list as it is - its bytes, or that there is none - is the clean
-    copy, and a write is pending;
-  - while one is, the list and its folder are watched (QFileSystemWatcher): a list that
-    isn't the clean copy is put back, and the write stops being pending once a list that
-    changed holds every file chosen as added since the choice, under whatever name added
-    it, or HOLD_SECONDS (30 s) after the last choice where none does (the user's recent
-    files switched off);
-  - with none pending nothing is watched or put back: what another program writes before
-    the next choice is the clean copy then.
+  - as a dialog opens and as it closes (opened, closed): while one is open the list and
+    its folder are watched (QFileSystemWatcher), and every list seen is kept, so that a
+    write of GTK's landing before the answer reaches the app - a name typed into a Save
+    dialog, whose answer comes by a button GTK holds pressed for 250 ms after taking the
+    file in, while a write of GTK's was already on its way - is put back too;
+  - as the dialog answers with files chosen (filesSelected, or accepted: the first that
+    names them, once; emitted from GTK's own response, before GTK's write: after a Save
+    over a file GTK asks about, only some 10 ms before it, measured, as both wait a quarter
+    of a second and the answer's wait starts first), the list as it is - its bytes, or that
+    there is none - is the clean copy, or, where it holds a file chosen as added since the
+    dialog opened, the last list seen that holds none, and a write is pending;
+  - while one is, the list and its folder are watched: a list that isn't the clean copy is
+    put back, and the write stops being pending once a list that changed holds every file
+    chosen as added since the dialog opened, under whatever name added it, or HOLD_SECONDS
+    (30 s) after the last choice where none does (the user's recent files switched off);
+  - with no dialog open and none pending nothing is watched or put back: what another
+    program writes before the next dialog is the clean copy then.
 
 Qt's own widget dialog (AA_DontUseNativeDialogs, as under firejail; DontUseNativeDialog; a
 desktop that offers Qt no native dialog) writes no recent files, and nothing is kept for it.
@@ -41,8 +46,9 @@ Qt's own settings are a second trace (`settings_aside`): every QFileDialog, GTK'
 own alike, writes the folders it visited (history, lastVisited, the sidebar's places; never
 a file's name) to $XDG_CONFIG_HOME/QtProject.conf as it is deleted, a file every Qt program
 the user runs reads. The app keeps no QSettings of its own, so on Linux Qt's user settings
-go to a folder of the process's own in $XDG_RUNTIME_DIR (memory), removed as the app quits:
-the user's file is neither read nor written, and the dialogs remember folders for the run.
+go to a folder of the process's own in $XDG_RUNTIME_DIR (memory), named with its process id
+and removed as the app quits - or, after a crash, when the next run starts: the user's file
+is neither read nor written, and the dialogs remember folders for the run.
 
 The Qt DA apps' copies (SealedLore's gui/file_dialogs.py, the canonical one, and DA Media
 Browser's) are the same file, but for the licence header DA Media Browser puts on every file.
@@ -51,15 +57,13 @@ Browser's) are the same file, but for the licence header DA Media Browser puts o
 from __future__ import annotations
 
 import atexit
-import math
 import os
 import re
 import shutil
+import stat
 import sys
 import tempfile
-from datetime import datetime
-from html import unescape
-from urllib.parse import quote, unquote, urlsplit
+from urllib.parse import quote
 
 import shiboken6
 from PySide6.QtCore import (
@@ -95,22 +99,64 @@ def keeps_the_list() -> bool:
     return sys.platform.startswith("linux")
 
 
+SETTINGS_ASIDE = "qt-settings-"
+# A folder set aside: the prefix, the process's id, and mkdtemp's own letters.
+_ASIDE_NAME = re.compile(rf"{SETTINGS_ASIDE}(\d+)-[a-z0-9_]+")
+
+
 def _remove_aside(folder: str) -> None:
     shutil.rmtree(folder, ignore_errors=True)
+
+
+def _gone(pid: int) -> bool:
+    """Whether no process has the id `pid` now."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except OSError:  # another user's: there
+        return False
+    return False
+
+
+def clear_left(base: str) -> list[str]:
+    """The folders a run that is gone set aside in `base` - a crash: its atexit never ran -
+    removed: only this user's own folders, named as settings_aside names them, whose process
+    is no longer there. What was removed."""
+    removed = []
+    try:
+        names = os.listdir(base)
+    except OSError:
+        return removed
+    for name in names:
+        found = _ASIDE_NAME.fullmatch(name)
+        if not found or int(found.group(1)) == os.getpid() or not _gone(int(found.group(1))):
+            continue
+        path = os.path.join(base, name)
+        try:
+            info = os.lstat(path)
+        except OSError:
+            continue
+        if stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid():
+            _remove_aside(path)
+            removed.append(path)
+    return removed
 
 
 def settings_aside() -> str | None:
     """On Linux, Qt's user settings (QtProject.conf, where a dialog keeps the folders it
     visited) go to a new 0700 folder in $XDG_RUNTIME_DIR, else in the system's temporary
-    folder, removed as the process ends; its path, or None where nothing was set aside.
-    Before the first dialog (gui/app.py build_app). Never where the app keeps QSettings of
-    its own: they would go there too."""
+    folder, named with the process's id and removed as the process ends (and those of a run
+    that crashed, as this one starts: clear_left); its path, or None where nothing was set
+    aside. Before the first dialog (gui/app.py build_app). Never where the app keeps
+    QSettings of its own: they would go there too."""
     if not keeps_the_list():
         return None
     runtime = os.environ.get("XDG_RUNTIME_DIR", "")
     base = runtime if runtime and os.path.isdir(runtime) else None
+    clear_left(base or tempfile.gettempdir())
     try:
-        folder = tempfile.mkdtemp(prefix="qt-settings-", dir=base)
+        folder = tempfile.mkdtemp(prefix=f"{SETTINGS_ASIDE}{os.getpid()}-", dir=base)
     except OSError as error:
         _say(f"Qt's settings were left where they are: {error}")
         return None
@@ -122,58 +168,6 @@ def settings_aside() -> str | None:
 
 def _uri(path: str) -> str:
     return "file://" + quote(os.path.abspath(path), errors="surrogateescape")
-
-
-def _path_of(uri: str) -> str:
-    parts = urlsplit(uri)
-    if parts.scheme != "file":
-        return uri
-    return os.path.normpath(unquote(parts.path, errors="surrogateescape"))
-
-
-_ATTRIBUTE = {name: re.compile(rf'\s{name}="([^"]*)"') for name in ("href", "modified")}
-
-
-def _attribute(tag: str, name: str) -> str | None:
-    found = _ATTRIBUTE[name].search(tag)
-    return unescape(found.group(1)) if found else None
-
-
-def _seconds(stamp: str | None) -> int | None:
-    """GLib's ISO 8601 time ("2026-11-15T04:00:00.123456Z"), as whole seconds rounded up:
-    GTK stamps a file as it adds it, which can be a moment before the dialog answers."""
-    try:
-        return math.ceil(datetime.fromisoformat(stamp).timestamp())
-    except (TypeError, ValueError, OverflowError, OSError):
-        return None
-
-
-def added(data: bytes | None) -> dict[str, int]:
-    """What a recent files list holds: each file's path, with the last time any program
-    added it. Read in one pass (a list is at most recentguard.MOST); anything that isn't
-    GTK's own layout is left out, which only keeps a write pending longer."""
-    found: dict[str, int] = {}
-    if not data:
-        return found
-    text = data.decode("utf-8", "replace")
-    for piece in text.split("</bookmark>"):
-        start = piece.rfind("<bookmark ")
-        if start < 0:
-            continue
-        piece = piece[start:]
-        end = piece.find(">")
-        href = _attribute(piece[: end + 1], "href") if end >= 0 else None
-        if not href:
-            continue
-        stamps = [0]
-        for tag in piece.split("<bookmark:application ")[1:]:
-            close = tag.find(">")
-            if close >= 0:
-                stamps.append(_seconds(_attribute(" " + tag[: close + 1], "modified")) or 0)
-        if max(stamps):
-            path = _path_of(href)
-            found[path] = max(max(stamps), found.get(path, 0))
-    return found
 
 
 def _written(now: tuple) -> bytes | None:
@@ -209,13 +203,13 @@ class Written:
         self._handlers.append(handler)
 
     def lookup_item(self, uri: str) -> _Item:
-        stamp = self.held.get(_path_of(uri))
+        stamp = self.held.get(recentguard.file_key(uri))
         if stamp is None:
             raise LookupError(f"not in the list: {uri}")
         return _Item(stamp)
 
     def changed(self, data: bytes | None) -> None:
-        self.held = added(data)
+        self.held = recentguard.added(data)
         for handler in self._handlers:
             handler(self)
 
@@ -240,6 +234,16 @@ class Guard(QObject):
     def pending(self) -> bool:
         return self.keeper.pending
 
+    def opened(self) -> None:
+        """A dialog opened: until it closes, the list is watched and what it was kept."""
+        self.keeper.opened()
+        self._watch()
+
+    def closed(self) -> None:
+        """A dialog that opened has closed."""
+        self.keeper.closed()
+        self._watch()
+
     def chose(self, paths) -> None:
         """A dialog answered with these files chosen (paths): GTK's write of them is pending."""
         self.keeper.chose([_uri(path) for path in paths if isinstance(path, str) and path])
@@ -259,10 +263,11 @@ class Guard(QObject):
             self.look()
 
     def _watch(self) -> None:
-        """The list and its folder watched while a write is pending, nothing otherwise. A
-        list renamed into place (GTK's write, recentguard's) is a new file to watch."""
+        """The list and its folder watched while a dialog is open or a write is pending,
+        nothing otherwise. A list renamed into place (GTK's write, recentguard's) is a new
+        file to watch."""
         try:
-            if not self.keeper.pending:
+            if not self.keeper.watching:
                 watched = self.watcher.files() + self.watcher.directories()
                 if watched:
                     self.watcher.removePaths(watched)
@@ -328,17 +333,33 @@ def qts_own(dialog: QFileDialog) -> bool:
 
 def run(dialog: QFileDialog) -> int:
     """dialog.exec(), the files it chose kept out of GTK's recent files list: its answer. The
-    keeper is told as the dialog answers, not once exec() has returned."""
+    keeper is told as the dialog opens, as it answers - not once exec() has returned - and
+    as it closes."""
     if not keeps_the_list():
         return dialog.exec()
+    keeping = None
+    try:
+        if not qts_own(dialog):
+            keeping = guard()
+            if keeping is not None:
+                keeping.opened()
+    except Exception as e:  # noqa: BLE001 - never a crash: the dialog opens as ever
+        _say(f"a dialog not watched as it opened: {e}")
+        keeping = None
+
+    once: list = []  # a dialog answers once: what filesSelected, then accepted, says
 
     def answered(paths) -> None:
         try:
-            if qts_own(dialog):
+            if qts_own(dialog) or once:
                 return
+            chosen = [path for path in paths if isinstance(path, str) and path]
+            if not chosen:
+                return
+            once.append(chosen)
             keeping = guard()
             if keeping is not None:
-                keeping.chose(list(paths))
+                keeping.chose(chosen)
         except Exception as e:  # noqa: BLE001 - never a crash: the dialog answers as ever
             _say(f"a choice not kept out of the list: {e}")
 
@@ -352,6 +373,11 @@ def run(dialog: QFileDialog) -> int:
         if shiboken6.isValid(dialog):
             for connection in told:
                 QObject.disconnect(connection)
+        if keeping is not None:
+            try:
+                keeping.closed()
+            except Exception as e:  # noqa: BLE001 - never a crash: the answer stands
+                _say(f"a dialog's closing not told: {e}")
 
 
 def _selection(directory: str) -> str:
