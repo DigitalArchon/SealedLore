@@ -68,7 +68,9 @@ its header bar - Cancel, Open, the location bar - was off the screen. While one 
 choosers is open, every Gtk.FileChooserDialog realized (the app's own, or the one GTK makes
 for a Gtk.FileChooserNative) is held to the work area of the monitor it opens on, less a
 margin (geometry hints, which GTK holds its own size to and tells a Wayland compositor), and
-where the app may place it (X11) moved to lie inside that area.
+where the app may place it (X11) moved to lie inside that area. Hyprland centres a dialog on
+its parent and keeps neither on the screen: there the chooser is also held to the room around
+its parent's centre, the parent's place read from Hyprland's own socket.
 
 This is SealedLore's copy (src/sealedlore/gui/recentguard.py) of DA Assistant's
 (assistant/recentguard.py), the canonical one, from which it differs only in this paragraph
@@ -101,6 +103,10 @@ SEEN = 8
 # and height (and at least FIT_MARGIN_MIN pixels) left free on each side.
 FIT_MARGIN = 0.05
 FIT_MARGIN_MIN = 16
+# Where the compositor centres a dialog on its parent and keeps neither on the screen
+# (Hyprland), a chooser is held to the room around its parent's centre as well, but never
+# under this.
+FIT_FLOOR = (480, 360)
 
 ABSENT, FILE, LINK, OTHER = "absent", "file", "link", "other"
 
@@ -585,6 +591,104 @@ def fit_room(width, height):
     return max(1, width - 2 * across), max(1, height - 2 * down)
 
 
+def within_parent(room, parent, floor=FIT_FLOOR):
+    """The room a chooser centred on a parent of size `parent` keeps inside it: the parent's
+    own size, never under `floor` nor over `room`. Where the parent's place is not known."""
+    return tuple(min(space, max(size, least))
+                 for space, size, least in zip(room, parent, floor))
+
+
+def around_centre(room, parent, area, floor=FIT_FLOOR):
+    """The room a chooser centred on `parent` (x, y, width, height, on the screen) keeps
+    inside `area` (the work area): twice the way from the parent's centre to the nearer
+    edge, less FIT_MARGIN_MIN each side, never under `floor` nor over `room`."""
+    x, y, across, down = parent
+    left, top, width, height = area
+    centre_x, centre_y = x + across / 2, y + down / 2
+    free = (2 * min(centre_x - left, left + width - centre_x) - 2 * FIT_MARGIN_MIN,
+            2 * min(centre_y - top, top + height - centre_y) - 2 * FIT_MARGIN_MIN)
+    return tuple(min(space, max(int(each), least))
+                 for space, each, least in zip(room, free, floor))
+
+
+def _deepest(text):
+    """How deep JSON `text` nests (outside its strings)."""
+    depth = deepest = 0
+    quoted = escaped = False
+    for each in text:
+        if quoted:
+            if escaped:
+                escaped = False
+            elif each == "\\":
+                escaped = True
+            elif each == '"':
+                quoted = False
+        elif each == '"':
+            quoted = True
+        elif each in "[{":
+            depth += 1
+            deepest = max(deepest, depth)
+        elif each in "]}":
+            depth -= 1
+    return deepest
+
+
+HYPRLAND_MOST = 4 * 1024 * 1024     # the most of Hyprland's answer read
+
+
+def _hyprland_place(parent):
+    """Where Hyprland has `parent` on the screen, (x, y, width, height), from its own socket
+    ($XDG_RUNTIME_DIR/hypr/<instance>/.socket.sock, "j/clients": this process's window of the
+    parent's title); None where it can't be had. GTK can't say: on Wayland a window has no
+    place it knows, and a tiled one's size is its tile's only where its minimum fits there."""
+    import json
+    import socket
+
+    runtime = os.environ.get("XDG_RUNTIME_DIR") or ""
+    instance = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE") or ""
+    if not os.path.isabs(runtime) or not instance or "/" in instance or instance in (".", ".."):
+        return None
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+            connection.settimeout(0.5)
+            connection.connect(os.path.join(runtime, "hypr", instance, ".socket.sock"))
+            connection.sendall(b"j/clients")
+            answer = b""
+            while len(answer) <= HYPRLAND_MOST:
+                piece = connection.recv(65536)
+                if not piece:
+                    break
+                answer += piece
+        if len(answer) > HYPRLAND_MOST:
+            return None
+        text = answer.decode("utf-8")
+        if _deepest(text) > 32:
+            return None
+        clients = json.loads(text)
+    except (OSError, ValueError, RecursionError):
+        return None
+    title, pid = parent.get_title(), os.getpid()
+    for client in clients if isinstance(clients, list) else ():
+        if not isinstance(client, dict) or client.get("pid") != pid \
+                or client.get("title") != title or client.get("hidden"):
+            continue
+        at, size = client.get("at"), client.get("size")
+        if isinstance(at, list) and isinstance(size, list) and len(at) == len(size) == 2 \
+                and all(isinstance(n, int) and not isinstance(n, bool) for n in at + size):
+            return at[0], at[1], size[0], size[1]
+    return None
+
+
+def _centres_on_parent(window):
+    """Whether the compositor centres `window`, a dialog, on its parent and leaves it there,
+    on the screen or off it: Hyprland (0.56) does, on Wayland; GNOME's and KDE's keep a
+    dialog on the screen themselves, and on X11 the app moves it."""
+    if window.get_display().__gtype__.name != "GdkWaylandDisplay":
+        return False
+    desktop = (os.environ.get("XDG_CURRENT_DESKTOP") or "").lower().split(":")
+    return "hyprland" in desktop or bool(os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"))
+
+
 def placed(x, y, width, height, area):
     """Where a window of `width` x `height` at (x, y) goes to lie inside `area` (x, y,
     width, height): moved in as little as it takes, its top left kept on the area where the
@@ -636,11 +740,22 @@ def fit(window):
     and which Wayland compositors are told), and, where the app may place it (X11), never
     off it. GTK's own size for a chooser comes from the font and what it saved last, and on
     a 1280x800 screen, or under a tiling compositor, its header bar - Cancel and Open - was
-    off the screen."""
+    off the screen. Hyprland centres a dialog on its parent wherever that is, a window tiled
+    to one side of the screen included, and moves neither onto the screen: there a chooser
+    is no larger than its parent either (within_parent), so that centred on a parent that is
+    on the screen, it is too: no wider or taller than twice the way from its parent's centre
+    to the nearer edge (around_centre: the parent's place from Hyprland's own socket), or
+    where that can't be had, than its parent (within_parent).""" 
     try:
         from gi.repository import Gdk
 
-        width, height = fit_room(*_area(window)[2:])
+        area = _area(window)
+        width, height = fit_room(*area[2:])
+        parent = window.get_transient_for()
+        if parent is not None and _centres_on_parent(window):
+            place = _hyprland_place(parent)
+            width, height = (around_centre((width, height), place, area) if place
+                             else within_parent((width, height), parent.get_size()))
         hints = Gdk.Geometry()
         hints.max_width, hints.max_height = width, height
         window.set_geometry_hints(None, hints, Gdk.WindowHints.MAX_SIZE)

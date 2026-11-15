@@ -151,6 +151,10 @@ HELD_OTHERWISE = {
     "storage/template_pictures.py": "the data folder's own list",
     "providers/dcap.py": "DA Toolkit's copy; refused by the TEE client",
     "providers/nras.py": "DA Toolkit's copy; refused by the TEE client",
+    # Hyprland's own answer about its windows, its size capped and its depth
+    # checked first (_deepest); a GTK path SealedLore, using the Keeper alone,
+    # never runs.
+    "gui/recentguard.py": "DA Assistant's copy; Hyprland's answer, held by _deepest",
 }
 
 

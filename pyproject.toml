@@ -97,6 +97,9 @@ select = ["E", "F", "I", "UP", "B"]
 "src/sealedlore/providers/dcap.py" = ["E501"]
 "src/sealedlore/providers/nras.py" = ["E501"]
 "src/sealedlore/providers/sdk_guard.py" = ["E501"]
+# DA Assistant's recentguard.py, byte for byte but for its docstring's last
+# paragraph (tests/test_recent_files.py): its zip()s are DA Assistant's.
+"src/sealedlore/gui/recentguard.py" = ["B905"]
 
 [tool.ruff.format]
 # recentguard.py is DA Assistant's copy byte for byte but for its docstring's last
