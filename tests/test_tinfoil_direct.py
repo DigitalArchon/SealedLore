@@ -22,8 +22,10 @@ import json
 import select
 import socket
 import ssl
+import struct
 import sys
 import threading
+import time
 from pathlib import Path
 
 import httpx
@@ -596,22 +598,27 @@ class ConnectProxy:
             threading.Thread(target=self._tunnel, args=(client,), daemon=True).start()
 
     def _tunnel(self, client: socket.socket) -> None:
-        head = b""
-        while b"\r\n\r\n" not in head:
-            chunk = client.recv(4096)
-            if not chunk:
-                return
-            head += chunk
-        line = head.split(b"\r\n", 1)[0]
-        self.asked.append(line)
-        _method, target, _version = line.split(b" ", 2)
-        host, port = target.decode().rsplit(":", 1)
-        upstream = socket.create_connection(
-            ("127.0.0.1" if host == "localhost" else host, int(port))
-        )
-        client.sendall(b"HTTP/1.1 200 Connection established\r\n\r\n")
-        sockets = [client, upstream]
+        # Either end may drop the connection with a reset rather than a close (the
+        # client does, refusing a TLS key with the server's last bytes unread): that
+        # ends the tunnel, as a close does. Unhandled in this thread it was pytest's
+        # warning now and then, as the timing fell.
+        upstream: socket.socket | None = None
         try:
+            head = b""
+            while b"\r\n\r\n" not in head:
+                chunk = client.recv(4096)
+                if not chunk:
+                    return
+                head += chunk
+            line = head.split(b"\r\n", 1)[0]
+            self.asked.append(line)
+            _method, target, _version = line.split(b" ", 2)
+            host, port = target.decode().rsplit(":", 1)
+            upstream = socket.create_connection(
+                ("127.0.0.1" if host == "localhost" else host, int(port))
+            )
+            client.sendall(b"HTTP/1.1 200 Connection established\r\n\r\n")
+            sockets = [client, upstream]
             while True:
                 ready, _w, _x = select.select(sockets, [], [], 5)
                 if not ready:
@@ -621,9 +628,12 @@ class ConnectProxy:
                     if not data:
                         return
                     (upstream if sock is client else client).sendall(data)
+        except OSError:
+            return
         finally:
             client.close()
-            upstream.close()
+            if upstream is not None:
+                upstream.close()
 
     def close(self) -> None:
         self.listener.close()
@@ -708,6 +718,28 @@ def test_the_pin_holds_through_a_connect_proxy(fake, tls):
         assert server.received[before:] == [b""], "the request never left the tunnel"
     finally:
         proxy.close()
+
+
+def test_a_tunnel_reset_by_either_end_ends_quietly(tls, monkeypatch):
+    """The proxy's tunnel thread, when the client resets the connection (as one refusing a
+    TLS key may, the server's last bytes unread): it ends, raising nothing in its thread.
+    It used to raise ConnectionResetError there now and then."""
+    server, _trusted, _fingerprint = tls
+    raised: list[BaseException] = []
+    monkeypatch.setattr(threading, "excepthook", lambda args: raised.append(args.exc_value))
+    proxy = ConnectProxy()
+    try:
+        for _ in range(5):
+            client = socket.create_connection(("127.0.0.1", proxy.port))
+            client.sendall(f"CONNECT localhost:{server.port} HTTP/1.1\r\n\r\n".encode())
+            assert client.recv(4096).startswith(b"HTTP/1.1 200")
+            # A reset, not a close: SO_LINGER on with no time to linger.
+            client.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+            client.close()
+        time.sleep(1)  # each tunnel reads its reset at once
+    finally:
+        proxy.close()
+    assert raised == [], raised
 
 
 def test_no_request_goes_on_a_connection_whose_key_wasnt_checked():
