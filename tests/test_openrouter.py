@@ -137,3 +137,99 @@ def test_a_stream_from_openrouter_carries_its_cost_and_cache_write():
     assert sent["messages"][0]["content"][1]["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
     assert "extended-cache-ttl-2025-04-11" in seen[0].headers["anthropic-beta"]
     assert seen[0].headers["authorization"] == "Bearer sk-x"
+
+
+# --- pictures ---------------------------------------------------------------------
+
+
+def _image_endpoint() -> httpx.Client:
+    """OpenRouter's picture listing as it was live, served offline."""
+    body = json.loads((DATA / "openrouter_image_models.json").read_text())
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path == "/api/v1/images/models":
+            return httpx.Response(200, json={"data": body["data"]})
+        prefix, suffix = "/api/v1/images/models/", "/endpoints"
+        if path.startswith(prefix) and path.endswith(suffix):
+            record = body["endpoints"].get(path[len(prefix) : -len(suffix)])
+            return httpx.Response(200 if record else 404, json=record or {})
+        return httpx.Response(404)
+
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def _priced(model: str):
+    from sealedlore.providers.images import list_image_models
+
+    found = list_image_models(OPENROUTER_BASE_URL, client=_image_endpoint(), wanted=model)
+    return next(info for info in found if info.id == model)
+
+
+def test_a_picture_is_priced_by_its_resolution_where_openrouter_says_so():
+    klein = _priced("black-forest-labs/flux-3-image-klein")
+    assert klein.per_image == {"768": 0.008, "1K": 0.009, "1.5K": 0.011, "2K": 0.014, "4K": 0.036}
+    assert klein.price("768") == 0.008 and klein.price("4K") == 0.036
+    assert klein.max_inputs == 10 and "1:1" in klein.resolutions and "1K" in klein.resolutions
+    assert _priced("recraft/recraft-v4.1-flash").per_image == {"*": 0.007}
+    # A free reference picture (input_image at $0) is no price of the picture.
+    assert _priced("qwen/qwen-image-2.1-turbo").per_image == {"1K": 0.0184, "2K": 0.0184}
+
+
+def test_a_picture_priced_by_the_token_or_megapixel_has_no_price_rather_than_a_wrong_one():
+    """Gemini 3.1 Flash Lite Image lists $0.00003 an image token; live it
+    charged $0.0336 for a 1:1 picture (1,120 tokens). Read as a picture's
+    price, the dialog said a thousandth of that."""
+    gemini = _priced("google/gemini-3.1-flash-lite-image")
+    assert gemini.per_image == {} and gemini.price("1:1") is None
+    assert gemini.max_inputs > 0
+    assert _priced("black-forest-labs/flux.2-klein-4b").per_image == {}
+    # Priced by quality and tier together ("low_1k"): nothing a size here names.
+    assert _priced("x-ai/grok-imagine-image-2.0").per_image == {}
+
+
+def test_a_picture_and_an_edit_go_as_openrouter_takes_them():
+    """The request and reply shapes of the live picture and edit (Gemini 3.1
+    Flash Lite Image, Nov 15 2026): a JPEG as b64_json with its media type,
+    and the charge in `usage.cost`."""
+    import base64
+
+    from sealedlore.providers.images import ImageClient, build_image_payload, data_url
+
+    jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 32
+    sent: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "created": 0,
+                "data": [{"b64_json": base64.b64encode(jpeg).decode(), "media_type": "image/jpeg"}],
+                "usage": {
+                    "prompt_tokens": 1134,
+                    "completion_tokens": 1120,
+                    "cost": 0.0338835,
+                    "completion_tokens_details": {"image_tokens": 1120},
+                },
+            },
+        )
+
+    client = ImageClient(
+        OPENROUTER_BASE_URL,
+        "sk-x",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    assert client.api == "openrouter"
+    reference = data_url(jpeg, "image/jpeg")
+    payload = build_image_payload(
+        "google/gemini-3.1-flash-lite-image", "Make it blue.", "1:1", 1, [reference], "openrouter"
+    )
+    reply = client.generate(payload)
+    assert reply.images == [jpeg] and reply.cost == 0.0338835
+    request = sent[0]
+    assert str(request.url) == "https://openrouter.ai/api/v1/images"
+    assert request.headers["authorization"] == "Bearer sk-x"
+    body = json.loads(request.content)
+    assert body["aspect_ratio"] == "1:1" and "resolution" not in body
+    assert body["input_references"] == [{"type": "image_url", "image_url": {"url": reference}}]

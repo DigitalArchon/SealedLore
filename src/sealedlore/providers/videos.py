@@ -23,8 +23,11 @@ resolutions, ratios, frame support and `pricing_skus`.
 
 WaveSpeed: see `providers/wavespeed.py`; one model per operation.
 
-OpenRouter and WaveSpeed were built from their documentation (Sept 2026)
-and are not yet checked live.
+OpenRouter and WaveSpeed were built from their documentation (Sept 2026).
+OpenRouter's listing and the quotes were checked live on Nov 15 2026, and a
+request reached it, but no video was made: every model under $0.50 answered
+404 to an account with zero data retention on ("ZDR violation"), so the
+submit, status and download are still as documented, not as seen.
 """
 
 from __future__ import annotations

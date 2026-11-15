@@ -10,20 +10,23 @@ model's sizes, how many pictures it takes and makes, and its price per
 picture by size. Measured Sept 2026 against nano-gpt.
 
 OpenRouter: `POST /images` with `aspect_ratio` or `resolution`, references
-as `input_references` image parts; base64 back, cost in `usage.cost`. Its
-public `/images/models` gives each model's parameters; prices are per
-endpoint (`/images/models/{id}/endpoints`), fetched for the chosen model.
+as `input_references` image parts; base64 back (`b64_json` and its
+`media_type`), cost in `usage.cost`. Its public `/images/models` gives each
+model's parameters; prices are per endpoint (`/images/models/{id}/endpoints`),
+fetched for the chosen model. Run live Nov 15 2026: a picture from words and
+an edit with a reference (Gemini 3.1 Flash Lite Image, $0.034 each). Only an
+endpoint the account's data policy allows serves a model: with zero data
+retention on, most picture models answered 404 ("ZDR violation").
 
 WaveSpeed (`providers/wavespeed.py`): a prediction, polled; references are
-uploaded first and sent as URLs.
-
-OpenRouter and WaveSpeed were built from their documentation (Sept 2026)
-and are not yet checked live.
+uploaded first and sent as URLs. Built from its documentation (Sept 2026)
+and not yet checked live.
 """
 
 from __future__ import annotations
 
 import base64
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -141,9 +144,8 @@ def parse_openrouter_image_models(body: Any) -> list[ImageModelInfo]:
             continue
         params = item.get("supported_parameters")
         params = params if isinstance(params, dict) else {}
-        sizes = [r for r in _enum(params.get("aspect_ratio")) if r != "auto"] + _enum(
-            params.get("resolution")
-        )
+        tiers = _enum(params.get("resolution"))
+        sizes = [r for r in _enum(params.get("aspect_ratio")) if r != "auto"] + tiers
         models.append(
             ImageModelInfo(
                 id=item["id"],
@@ -151,26 +153,45 @@ def parse_openrouter_image_models(body: Any) -> list[ImageModelInfo]:
                 resolutions=tuple(sizes),
                 max_inputs=_range_max(params.get("input_references")),
                 max_outputs=max(1, _range_max(params.get("n"))),
-                per_image=openrouter_image_prices(item),
+                per_image=openrouter_image_prices(item, tiers),
                 description=str(item.get("description") or ""),
             )
         )
     return models
 
 
-def openrouter_image_prices(item: dict) -> dict[str, float]:
-    """A model's price per picture from its endpoints record (the dearest
-    endpoint's, since the router may pick any)."""
-    prices = [
-        float(entry["cost_usd"])
-        for endpoint in item.get("endpoints") or ()
-        if isinstance(endpoint, dict)
-        for entry in endpoint.get("pricing") or ()
-        if isinstance(entry, dict)
-        and entry.get("billable") == "output_image"
-        and isinstance(entry.get("cost_usd"), (int, float))
-    ]
-    return {"*": max(prices)} if prices else {}
+def openrouter_image_prices(item: dict, tiers: Sequence[str] = ()) -> dict[str, float]:
+    """A model's price a picture from its endpoints record (the dearest
+    endpoint's, since the router may pick any), by resolution tier where it
+    is priced by tier. Live (Nov 15 2026) OpenRouter prices a picture by the
+    picture ("image"), by the megapixel or by the image token: only the
+    first is a price a picture, so a model priced otherwise has none (Gemini
+    3.1 Flash Lite Image lists $0.00003 a token and charged $0.0336 for a
+    1:1 picture; read as a picture's price it was a thousand times too low).
+    A tier's price is keyed as the model lists the tier ("1K" for "1k")."""
+    by_name = {tier.lower(): tier for tier in tiers}
+    prices: dict[str, float] = {}
+    for endpoint in item.get("endpoints") or ():
+        if not isinstance(endpoint, dict):
+            continue
+        for entry in endpoint.get("pricing") or ():
+            if not (
+                isinstance(entry, dict)
+                and entry.get("billable") == "output_image"
+                and entry.get("unit", "image") == "image"
+                and isinstance(entry.get("cost_usd"), (int, float))
+                and not isinstance(entry.get("cost_usd"), bool)
+            ):
+                continue
+            variant = entry.get("variant")
+            if variant is None:
+                size = "*"
+            elif isinstance(variant, str) and variant.lower() in by_name:
+                size = by_name[variant.lower()]
+            else:
+                continue  # priced by something no size here names
+            prices[size] = max(prices.get(size, 0.0), float(entry["cost_usd"]))
+    return prices
 
 
 def parse_wavespeed_image_models(items: list[dict]) -> list[ImageModelInfo]:

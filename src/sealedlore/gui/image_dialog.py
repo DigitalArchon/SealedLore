@@ -891,7 +891,11 @@ class ImageDialog(QDialog):
             )
             self.generate_button.setText(f"{self._generate_word()} (~${price * n:.3f})")
         else:
-            self.price.setText("Price unknown: the endpoint doesn't list this model.")
+            self.price.setText(
+                "Price unknown: the endpoint lists no price a picture for this model "
+                "(OpenRouter prices some by the image token or the megapixel). What it "
+                "charges is kept once the picture is made."
+            )
             self.generate_button.setText(self._generate_word())
         sent = self.sent_model()
         if sent and sent != self.model.text().strip():

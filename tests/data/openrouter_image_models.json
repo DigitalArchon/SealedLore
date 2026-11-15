@@ -1,0 +1,487 @@
+{
+ "_note": "OpenRouter's public /api/v1/images/models (six entries) and each one's /endpoints record, trimmed; fetched keyless Nov 15 2026.",
+ "data": [
+  {
+   "id": "black-forest-labs/flux-3-image-klein",
+   "name": "Black Forest Labs: FLUX 3 Image Klein",
+   "description": "FLUX 3 Image Klein is an open-weights image generation and editing model from Bl",
+   "architecture": {
+    "input_modalities": [
+     "text",
+     "image"
+    ],
+    "output_modalities": [
+     "image"
+    ]
+   },
+   "supported_parameters": {
+    "resolution": {
+     "type": "enum",
+     "values": [
+      "768",
+      "1K",
+      "1.5K",
+      "2K",
+      "4K"
+     ]
+    },
+    "aspect_ratio": {
+     "type": "enum",
+     "values": [
+      "21:9",
+      "2:1",
+      "16:9",
+      "3:2",
+      "7:5",
+      "4:3",
+      "5:4",
+      "1:1",
+      "4:5",
+      "3:4",
+      "5:7",
+      "2:3",
+      "9:16",
+      "1:2",
+      "9:21",
+      "auto"
+     ]
+    },
+    "output_format": {
+     "type": "enum",
+     "values": [
+      "jpeg",
+      "png"
+     ]
+    },
+    "n": {
+     "type": "range",
+     "min": 1,
+     "max": 1
+    },
+    "input_references": {
+     "type": "range",
+     "min": 0,
+     "max": 10
+    },
+    "seed": {
+     "type": "boolean"
+    }
+   },
+   "endpoints": "/api/v1/images/models/black-forest-labs/flux-3-image-klein/endpoints"
+  },
+  {
+   "id": "google/gemini-3.1-flash-lite-image",
+   "name": "Google: Nano Banana 2 Lite (Gemini 3.1 Flash Lite Image)",
+   "description": "Nano Banana 2 Lite (Gemini 3.1 Flash Lite Image) is Google's fastest, most cost-",
+   "architecture": {
+    "input_modalities": [
+     "image",
+     "text"
+    ],
+    "output_modalities": [
+     "image",
+     "text"
+    ]
+   },
+   "supported_parameters": {
+    "resolution": {
+     "type": "enum",
+     "values": [
+      "1K"
+     ]
+    },
+    "aspect_ratio": {
+     "type": "enum",
+     "values": [
+      "1:1",
+      "1:4",
+      "1:8",
+      "2:3",
+      "3:2",
+      "3:4",
+      "4:1",
+      "4:3",
+      "4:5",
+      "5:4",
+      "8:1",
+      "9:16",
+      "16:9",
+      "21:9"
+     ]
+    },
+    "n": {
+     "type": "range",
+     "min": 1,
+     "max": 1
+    },
+    "input_references": {
+     "type": "range",
+     "min": 0,
+     "max": 14
+    }
+   },
+   "endpoints": "/api/v1/images/models/google/gemini-3.1-flash-lite-image/endpoints"
+  },
+  {
+   "id": "black-forest-labs/flux.2-klein-4b",
+   "name": "Black Forest Labs: FLUX.2 Klein 4B",
+   "description": "FLUX.2 [klein] 4B is the fastest and most cost-effective model in the FLUX.2 fam",
+   "architecture": {
+    "input_modalities": [
+     "text",
+     "image"
+    ],
+    "output_modalities": [
+     "image"
+    ]
+   },
+   "supported_parameters": {
+    "aspect_ratio": {
+     "type": "enum",
+     "values": [
+      "1:1",
+      "4:3",
+      "3:4",
+      "3:2",
+      "2:3",
+      "16:9",
+      "9:16",
+      "21:9",
+      "auto"
+     ]
+    },
+    "output_format": {
+     "type": "enum",
+     "values": [
+      "png",
+      "jpeg"
+     ]
+    },
+    "n": {
+     "type": "range",
+     "min": 1,
+     "max": 1
+    },
+    "input_references": {
+     "type": "range",
+     "min": 0,
+     "max": 4
+    },
+    "seed": {
+     "type": "boolean"
+    }
+   },
+   "endpoints": "/api/v1/images/models/black-forest-labs/flux.2-klein-4b/endpoints"
+  },
+  {
+   "id": "recraft/recraft-v4.1-flash",
+   "name": "Recraft: Recraft V4.1 Flash",
+   "description": "Recraft V4.1 Flash is a text-to-image model from Recraft, the speed and cost tie",
+   "architecture": {
+    "input_modalities": [
+     "text"
+    ],
+    "output_modalities": [
+     "image"
+    ]
+   },
+   "supported_parameters": {
+    "aspect_ratio": {
+     "type": "enum",
+     "values": [
+      "1:1",
+      "4:3",
+      "3:4",
+      "16:9",
+      "9:16",
+      "auto"
+     ]
+    },
+    "n": {
+     "type": "range",
+     "min": 1,
+     "max": 6
+    }
+   },
+   "endpoints": "/api/v1/images/models/recraft/recraft-v4.1-flash/endpoints"
+  },
+  {
+   "id": "x-ai/grok-imagine-image-2.0",
+   "name": "xAI: Grok Imagine Image 2.0",
+   "description": "Grok Imagine Image 2.0 is an image generation and editing model from xAI. It is ",
+   "architecture": {
+    "input_modalities": [
+     "text",
+     "image"
+    ],
+    "output_modalities": [
+     "image"
+    ]
+   },
+   "supported_parameters": {
+    "resolution": {
+     "type": "enum",
+     "values": [
+      "1K",
+      "2K"
+     ]
+    },
+    "aspect_ratio": {
+     "type": "enum",
+     "values": [
+      "1:1",
+      "3:4",
+      "4:3",
+      "9:16",
+      "16:9",
+      "2:3",
+      "3:2",
+      "9:19.5",
+      "19.5:9",
+      "9:20",
+      "20:9",
+      "1:2",
+      "2:1",
+      "auto"
+     ]
+    },
+    "quality": {
+     "type": "enum",
+     "values": [
+      "low",
+      "medium"
+     ]
+    },
+    "n": {
+     "type": "range",
+     "min": 1,
+     "max": 1
+    },
+    "input_references": {
+     "type": "range",
+     "min": 0,
+     "max": 3
+    }
+   },
+   "endpoints": "/api/v1/images/models/x-ai/grok-imagine-image-2.0/endpoints"
+  },
+  {
+   "id": "qwen/qwen-image-2.1-turbo",
+   "name": "Qwen: Qwen Image 2.1 Turbo",
+   "description": "Qwen Image 2.1 Turbo is the fast, lower-cost tier of the Qwen Image 2.1 series f",
+   "architecture": {
+    "input_modalities": [
+     "text",
+     "image"
+    ],
+    "output_modalities": [
+     "image"
+    ]
+   },
+   "supported_parameters": {
+    "resolution": {
+     "type": "enum",
+     "values": [
+      "1K",
+      "2K"
+     ]
+    },
+    "aspect_ratio": {
+     "type": "enum",
+     "values": [
+      "1:1",
+      "1:2",
+      "1:4",
+      "2:1",
+      "2:3",
+      "3:2",
+      "3:4",
+      "4:1",
+      "4:3",
+      "4:5",
+      "5:4",
+      "9:16",
+      "16:9"
+     ]
+    },
+    "n": {
+     "type": "range",
+     "min": 1,
+     "max": 6
+    },
+    "input_references": {
+     "type": "range",
+     "min": 0,
+     "max": 4
+    },
+    "seed": {
+     "type": "boolean"
+    }
+   },
+   "endpoints": "/api/v1/images/models/qwen/qwen-image-2.1-turbo/endpoints"
+  }
+ ],
+ "endpoints": {
+  "black-forest-labs/flux-3-image-klein": {
+   "id": "black-forest-labs/flux-3-image-klein",
+   "endpoints": [
+    {
+     "provider_name": "Black Forest Labs",
+     "pricing": [
+      {
+       "billable": "output_image",
+       "unit": "image",
+       "cost_usd": 0.008,
+       "variant": "768"
+      },
+      {
+       "billable": "output_image",
+       "unit": "image",
+       "cost_usd": 0.009,
+       "variant": "1k"
+      },
+      {
+       "billable": "output_image",
+       "unit": "image",
+       "cost_usd": 0.011,
+       "variant": "1.5k"
+      },
+      {
+       "billable": "output_image",
+       "unit": "image",
+       "cost_usd": 0.014,
+       "variant": "2k"
+      },
+      {
+       "billable": "output_image",
+       "unit": "image",
+       "cost_usd": 0.036,
+       "variant": "4k"
+      }
+     ]
+    }
+   ]
+  },
+  "google/gemini-3.1-flash-lite-image": {
+   "id": "google/gemini-3.1-flash-lite-image",
+   "endpoints": [
+    {
+     "provider_name": "Google Vertex",
+     "pricing": [
+      {
+       "billable": "output_image",
+       "unit": "token",
+       "cost_usd": 3e-05
+      }
+     ]
+    },
+    {
+     "provider_name": "Google AI Studio",
+     "pricing": [
+      {
+       "billable": "output_image",
+       "unit": "token",
+       "cost_usd": 3e-05
+      }
+     ]
+    }
+   ]
+  },
+  "black-forest-labs/flux.2-klein-4b": {
+   "id": "black-forest-labs/flux.2-klein-4b",
+   "endpoints": [
+    {
+     "provider_name": "Black Forest Labs",
+     "pricing": [
+      {
+       "billable": "output_image",
+       "unit": "megapixel",
+       "cost_usd": 0.014
+      }
+     ]
+    }
+   ]
+  },
+  "recraft/recraft-v4.1-flash": {
+   "id": "recraft/recraft-v4.1-flash",
+   "endpoints": [
+    {
+     "provider_name": "Recraft",
+     "pricing": [
+      {
+       "billable": "output_image",
+       "unit": "image",
+       "cost_usd": 0.007
+      }
+     ]
+    }
+   ]
+  },
+  "x-ai/grok-imagine-image-2.0": {
+   "id": "x-ai/grok-imagine-image-2.0",
+   "endpoints": [
+    {
+     "provider_name": "SpaceXAI",
+     "pricing": [
+      {
+       "billable": "input_image",
+       "unit": "image",
+       "cost_usd": 0.01
+      },
+      {
+       "billable": "output_image",
+       "unit": "image",
+       "cost_usd": 0.04,
+       "variant": "low_1k"
+      },
+      {
+       "billable": "output_image",
+       "unit": "image",
+       "cost_usd": 0.06,
+       "variant": "low_2k"
+      },
+      {
+       "billable": "output_image",
+       "unit": "image",
+       "cost_usd": 0.06,
+       "variant": "medium_1k"
+      },
+      {
+       "billable": "output_image",
+       "unit": "image",
+       "cost_usd": 0.08,
+       "variant": "medium_2k"
+      }
+     ]
+    }
+   ]
+  },
+  "qwen/qwen-image-2.1-turbo": {
+   "id": "qwen/qwen-image-2.1-turbo",
+   "endpoints": [
+    {
+     "provider_name": "Alibaba Cloud Int.",
+     "pricing": [
+      {
+       "billable": "input_image",
+       "unit": "image",
+       "cost_usd": 0
+      },
+      {
+       "billable": "output_image",
+       "unit": "image",
+       "cost_usd": 0.0184,
+       "variant": "1k"
+      },
+      {
+       "billable": "output_image",
+       "unit": "image",
+       "cost_usd": 0.0184,
+       "variant": "2k"
+      }
+     ]
+    }
+   ]
+  }
+ }
+}
