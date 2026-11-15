@@ -69,6 +69,7 @@ from sealedlore.storage.tavern_lore import (
     lorebook_in_picture,
     other_formats,
     read_json,
+    their_lorebook,
 )
 from sealedlore.storage.zip_members import read_member
 
@@ -1320,7 +1321,7 @@ def scenario_from_card(
                 "storyteller rules stand."
             )
     if card.book is not None:
-        imported = lore_from_book(card.book, fill)
+        imported = lore_from_card(card, fill)
         scenario.lore = imported.entries
         notes += [f"Lorebook: left out {note}." for note in imported.notes()]
     tags = card.fields.get("tags")
@@ -1346,7 +1347,9 @@ def scenario_from_card(
 
 def lore_from_card(card: TavernCard, fill: Callable[[str], str]) -> LoreImport:
     """A card's own lorebook as lore entries (none when it has none)."""
-    return lore_from_book(card.book, fill) if card.book is not None else LoreImport()
+    if card.book is None:
+        return LoreImport()
+    return lore_from_book(card.book, fill, their_lorebook(card.name))
 
 
 # --- out of SealedLore -------------------------------------------------------------

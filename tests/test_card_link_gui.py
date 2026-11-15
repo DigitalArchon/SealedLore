@@ -17,8 +17,12 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication, QDialog, QInputDialog, QMessageBox  # noqa: E402
 
-from sealedlore.engine.authoring import build_generation_messages  # noqa: E402
+from sealedlore.engine.authoring import (  # noqa: E402
+    build_generation_messages,
+    render_own_characters,
+)
 from sealedlore.engine.drafting import StoryDraft  # noqa: E402
+from sealedlore.engine.prompt_texts import DEFAULT_TEXTS  # noqa: E402
 from sealedlore.gui import window_card_link, window_card_start  # noqa: E402
 from sealedlore.gui import window_collection as window_collection_module  # noqa: E402
 from sealedlore.gui.card_changes import KEEP, SAVE, TAKE, VERSION, CardChangesDialog  # noqa: E402
@@ -418,7 +422,9 @@ def test_a_draft_names_their_cards_and_keeps_them_as_they_are(app, window, tmp_p
 
 def test_a_draft_brings_their_own_lorebook_as_add_to_the_story_does(app, window, tmp_path):
     """Their lorebook was left out of a story drafted around them, though Add
-    to the story brings it; an entry the draft already has stays the draft's."""
+    to the story brings it. The drafter reads it now, so an entry it wrote
+    under one of its titles gives way to the card's, and the draft says where
+    everything they brought went."""
     elena = window._kept()[0]
     reply = {**REPLY, "lore": [{"title": "The Harbour", "content": "Salt and tar."}]}
 
@@ -427,17 +433,44 @@ def test_a_draft_brings_their_own_lorebook_as_add_to_the_story_does(app, window,
             MockChatProvider(), "A heist.", "m", reasoning=ReasoningConfig(), characters=[elena]
         )
         draft.text = json.dumps({**reply, "lore": lore})
-        return draft.build(
+        built = draft.build(
             root=tmp_path / "drafts", kept=window._kept(), read=window._collection_pictures().read
         )
+        return (*built, draft)
 
-    bundle, warnings = drafted(reply["lore"])
+    bundle, warnings, draft = drafted(reply["lore"])
+    request = draft.request.messages[1].parts[0].text
+    assert "Their lorebook:\n- Hellsville (keywords: Hellsville, the town): " in request
+    assert "is walled; the author's character is not welcome there." in request
+    assert request.endswith(DEFAULT_TEXTS["authoring.draft.characters.lore"])
     by_title = {entry.title: entry for entry in bundle.lore}
     assert by_title["Hellsville"].content == "Hellsville is walled; Mara is not welcome there."
-    assert "The Harbour" in by_title and warnings == []
-    bundle, warnings = drafted([{"title": "Hellsville", "content": "The draft's own."}])
-    assert [e.content for e in bundle.lore if e.title == "Hellsville"] == ["The draft's own."]
-    assert any("“Hellsville” wasn't added" in warning for warning in warnings)
+    assert by_title["Hellsville"].came_from == "Elena's lorebook"
+    assert by_title["The Harbour"].came_from == "" and warnings == []
+    assert draft.brought == [
+        "Elena: their card as it is, in the cast, with 1 picture; 1 entry of their "
+        "lorebook in the story's lore (the Lore page)."
+    ]
+    bundle, warnings, _draft = drafted([{"title": "Hellsville", "content": "The draft's own."}])
+    assert [e.content for e in bundle.lore if e.title == "Hellsville"] == [
+        "Hellsville is walled; Mara is not welcome there."
+    ]
+    assert warnings == [
+        "the draft's own lore entry “Hellsville” was left out: Elena's lorebook has one by "
+        "that name"
+    ]
+
+
+def test_a_draft_around_characters_without_a_lorebook_is_asked_as_before(app, window):
+    """The lorebook's words are added only when one comes: every other
+    request is byte for byte what it was."""
+    elena = window._kept()[0].model_copy(deep=True)
+    elena.tavern.character_book = None
+    request = build_generation_messages("A heist.", characters=[elena])[1].parts[0].text
+    assert "Their lorebook" not in request and "lorebooks come too" not in request
+    assert request == "The author's premise:\n\nA heist.\n\n" + DEFAULT_TEXTS.fill(
+        "authoring.draft.characters", characters=render_own_characters([elena])
+    )
 
 
 def test_deleting_a_card_says_which_stories_link_to_it(app, window, monkeypatch):

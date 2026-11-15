@@ -26,3 +26,7 @@ class LoreEntry(BaseModel):
     # In a story with a plot: kept from every model and the author's panels
     # until an event brings it in (models/plot.py).
     plot_hidden: bool = False
+    # Where an entry brought in from outside came from, in words ("Elena
+    # Ruiz's lorebook", "the lorebook Hellsville.json"), for the Lore page to
+    # say. Never sent to a model; blank for an entry written here.
+    came_from: str = ""

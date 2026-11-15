@@ -4197,6 +4197,31 @@ is a suggestion only: the premise decides.
     (("characters", "each character's card, under their name"),),
 )
 
+# Their own lorebooks (the author, Nov 15 2026): the drafter used to be shown
+# the cards and not the books, which were added to the story's lore after the
+# draft came back, so it wrote lore of its own beside them on the same things
+# (a ledger and a council of its own beside the card's, live). Only when a
+# character brings one, so every other request is as it was. Measured live
+# before adopting (SealedLoreDocs design/authoring.md, "Their own lorebooks in
+# the draft").
+_text(
+    "authoring.draft.characters.lore",
+    AUTHORING,
+    "Drafting: their own lorebooks",
+    "After the author's own characters, when any of them brings a lorebook of their own.",
+    """\
+Their lorebooks come with them: every entry under "Their lorebook" is already
+in this story's lore, as it is. Your "lore" is for new entries only: list
+none of theirs in it, not even renamed or reworded, and give yours titles of
+your own. Take what they say as true, and write the world, the other
+characters and the opening to agree with them and build on them. Where the
+premise sets a character somewhere their lorebook doesn't fit, say in their
+"in_this_story" what holds instead, and give them a "lorebook_set_aside": the
+titles of their entries that don't hold in this story, which are then kept
+switched off. Their lorebooks don't change whom the author plays: "play_as"
+is whoever the premise says.""",
+)
+
 # How much a draft sets up (the author, Nov 6 2026: "just ... a handful of
 # characters and a basic world based on their premise, or ... really outlined
 # in detail, with lots of characters, each with lots of info about them";

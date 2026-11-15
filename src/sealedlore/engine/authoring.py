@@ -295,9 +295,61 @@ def review_system(detached: bool = False, texts: PromptTexts = DEFAULT_TEXTS) ->
     return system + (texts["authoring.review.detached"] if detached else "")
 
 
+# The most of one character's lorebook the drafter reads whole, in words of
+# its entries' text; past it, the rest by title. An imported card's book can
+# run to hundreds of entries.
+DRAFT_LORE_WORDS = 3000
+# How many titles of those that didn't fit are named.
+DRAFT_LORE_TITLES = 200
+
+
+def own_lorebook(card: Character, user: str | None) -> list[LoreEntry]:
+    """A character's own lorebook as it will be in a story's lore: its
+    entries as lore_from_book makes them, `{{user}}` read as `user`. Those
+    switched off are left out: in the story they are kept and sent nowhere."""
+    from sealedlore.storage.tavern_cards import macro_filler
+    from sealedlore.storage.tavern_lore import lore_from_book
+
+    book = card.tavern.character_book if card.tavern else None
+    if not book:
+        return []
+    imported = lore_from_book(book, macro_filler(card.name, user))
+    return [entry for entry in imported.entries if entry.enabled]
+
+
+def lorebook_lines(entries: Sequence[LoreEntry]) -> list[str]:
+    """A character's lorebook for the drafter: each entry whole while they
+    fit in DRAFT_LORE_WORDS, the others by title."""
+    lines = ["Their lorebook:"]
+    words, rest = 0, []
+    for entry in entries:
+        size = len(entry.content.split())
+        if rest or (words and words + size > DRAFT_LORE_WORDS):
+            rest.append(entry.title)
+            continue
+        words += size
+        how = (
+            " (always on)"
+            if entry.always_on
+            else f" (keywords: {', '.join(entry.keywords)})"
+            if entry.keywords
+            else ""
+        )
+        text = entry.content.strip().replace("\n", "\n  ")
+        lines.append(f"- {entry.title}{how}: {text}")
+    if rest:
+        more = len(rest) - DRAFT_LORE_TITLES
+        lines.append(
+            f"And {len(rest)} more, by title only: {'; '.join(rest[:DRAFT_LORE_TITLES])}"
+            + (f"; and {more} others." if more > 0 else ".")
+        )
+    return lines
+
+
 def render_own_characters(characters: Sequence[Character]) -> str:
     """The author's own characters (Your characters) for the drafter, each
-    under their name, `{{user}}` read as the author's character."""
+    under their name, `{{user}}` read as the author's character, with their
+    own lorebook as it will stand in the story's lore."""
     from sealedlore.storage.tavern_cards import macro_filler
 
     blocks = []
@@ -313,6 +365,9 @@ def render_own_characters(characters: Sequence[Character]) -> str:
         ):
             if text.strip():
                 lines.append(f"{label}: {fill(text).strip()}")
+        lore = own_lorebook(card, "the author's character")
+        if lore:
+            lines += lorebook_lines(lore)
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)
 
@@ -337,6 +392,8 @@ def build_generation_messages(
         user += "\n\n" + texts.fill(
             "authoring.draft.characters", characters=render_own_characters(characters)
         )
+        if any(own_lorebook(card, None) for card in characters):
+            user += "\n\n" + texts["authoring.draft.characters.lore"]
     sizes = render_detail(detail, texts)
     if sizes:
         user += "\n\n" + sizes

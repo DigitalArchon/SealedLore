@@ -221,15 +221,23 @@ def looks_like_lorebook(data: Any) -> bool:
     )
 
 
+def their_lorebook(name: str) -> str:
+    """Where a character's own lorebook's entries came from, in words."""
+    return f"{name}'s lorebook"
+
+
 def lore_from_book(
-    book: Mapping[str, Any], fill: Callable[[str], str] = lambda text: text
+    book: Mapping[str, Any],
+    fill: Callable[[str], str] = lambda text: text,
+    came_from: str = "",
 ) -> LoreImport:
     """A lorebook's entries as lore. `fill` puts names in for {{char}} and
     {{user}} (storage/tavern_cards.py `macro_filler`). Each field is read
     as the Lorebook tab edits it, under the book's own names for it; the
     switches SillyTavern reads at the head of an entry's text are read as
     there and taken off it: @@activate sends the entry whatever is said,
-    @@dont_activate never (and @@activate wins, being looked at first)."""
+    @@dont_activate never (and @@activate wins, being looked at first).
+    `came_from` says where on each entry (`LoreEntry.came_from`)."""
     result = LoreImport()
     numbered = is_numbered(book)
     for number, raw in enumerate(entries_of(book), start=1):
@@ -269,6 +277,7 @@ def lore_from_book(
                 keywords=list(dict.fromkeys(keywords)),
                 always_on=always_on,
                 enabled=enabled,
+                came_from=came_from,
             )
         )
     return result
@@ -872,10 +881,12 @@ class ReadLorebook:
     book: Mapping[str, Any]
     left_out: Counter[str] = field(default_factory=Counter)
 
-    def lore(self, fill: Callable[[str], str] = lambda text: text) -> LoreImport:
+    def lore(
+        self, fill: Callable[[str], str] = lambda text: text, came_from: str = ""
+    ) -> LoreImport:
         """Its entries as lore (`lore_from_book`), what the conversion lost
         said with what reading them leaves out."""
-        imported = lore_from_book(self.book, fill)
+        imported = lore_from_book(self.book, fill, came_from)
         imported.left_out.update(self.left_out)
         return imported
 

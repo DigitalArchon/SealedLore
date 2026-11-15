@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import asdict
+from difflib import SequenceMatcher
 from pathlib import Path
 
 from sealedlore.engine.authoring import (
@@ -39,7 +40,7 @@ from sealedlore.storage.images import REFS_DIR
 from sealedlore.storage.repository import StoryBundle, append_api_log, save_story_bundle
 from sealedlore.storage.scenario import bundle_from_scenario
 from sealedlore.storage.tavern_cards import macro_filler
-from sealedlore.storage.tavern_lore import lore_from_book
+from sealedlore.storage.tavern_lore import lore_from_book, their_lorebook
 
 
 class StoryDraft:
@@ -88,6 +89,9 @@ class StoryDraft:
         )
         self.text = ""
         self.completed: StreamCompleted | None = None
+        # Where each of the author's own characters went, once built: their
+        # card, pictures and lorebook (`put_in_characters`), for the window.
+        self.brought: list[str] = []
         self._requested_at = utc_now_iso()
 
     def stream(self) -> Iterator[StreamEvent]:
@@ -118,6 +122,7 @@ class StoryDraft:
         story is built around.
         """
         scenario, warnings = parse_generated(self.text)
+        self.brought = []
         if self.characters:
             put_in_characters(
                 scenario,
@@ -126,6 +131,7 @@ class StoryDraft:
                 kept or self.characters,
                 read or (lambda _file: None),
                 warnings,
+                self.brought,
             )
         bundle = bundle_from_scenario(scenario, main_model=main_model)
         style = bundle.story.style
@@ -168,6 +174,7 @@ def put_in_characters(
     kept: Sequence[Character],
     read: Callable[[str], bytes | None],
     warnings: list[str],
+    brought: list[str] | None = None,
 ) -> None:
     """The author's own characters in the drafted story as their cards have
     them (engine/card_link.py), in the place the draft gave them (its id, so
@@ -175,8 +182,11 @@ def put_in_characters(
     playable), with their pictures and their own lorebooks as the story's
     lore, as Add to the story brings them. What the draft says this story
     changes of one (`in_this_story`) is added to their description as the
-    story's own change, which their card can take or not later."""
+    story's own change, which their card can take or not later. `brought`
+    gets a line for each, saying where what they brought went."""
     notes: dict[str, str] = {}
+    # Their lorebook's titles the draft says don't hold in this story.
+    aside: dict[str, set[str]] = {}
     for key in ("cast", "supporting"):
         items = data.get(key)
         for item in items if isinstance(items, list) else []:
@@ -185,8 +195,15 @@ def put_in_characters(
             name, note = item.get("name"), item.get("in_this_story")
             if isinstance(name, str) and isinstance(note, str) and note.strip():
                 notes[name.strip().casefold()] = note.strip()
+            titles = item.get("lorebook_set_aside")
+            if isinstance(name, str) and isinstance(titles, list):
+                aside[name.strip().casefold()] = {
+                    title.strip().casefold() for title in titles if isinstance(title, str)
+                }
     played = next((c for c in scenario.cast if c.id == scenario.suggested_character_id), None)
     taken: set[str] = set()
+    # Lore titles a card's lorebook brought, beside the draft's own.
+    from_cards: set[str] = set()
     for card in characters:
         if card.name.casefold() in taken:
             # Two versions of one character: the draft knows one name.
@@ -200,6 +217,7 @@ def put_in_characters(
                 break
         user = played.name if played is not None and played is not drafted else None
         copy = story_copy(card, kept, user)
+        in_cast = drafted is None or tier is scenario.cast
         if drafted is not None:
             copy.id = drafted.id
             copy.is_player_available = drafted.is_player_available
@@ -233,27 +251,95 @@ def put_in_characters(
             copy.reference_images.append(new)
             marks.append(picture_mark(ref, data_bytes))
         copy.linked.pictures = marks
-        _put_in_lore(scenario, card, user, warnings)
+        lore, off = _put_in_lore(
+            scenario, card, user, warnings, from_cards, aside.get(card.name.casefold(), set())
+        )
+        if brought is not None:
+            brought.append(_brought(card.name, in_cast, len(marks), lore, off))
 
 
 def _put_in_lore(
-    scenario: Scenario, card: Character, user: str | None, warnings: list[str]
-) -> None:
-    """A card's own lorebook into the drafted story's lore (it was left out,
-    where Add to the story brings it). An entry the draft already has by its
-    title is the draft's: the two would say the same thing twice."""
+    scenario: Scenario,
+    card: Character,
+    user: str | None,
+    warnings: list[str],
+    from_cards: set[str],
+    set_aside: set[str],
+) -> tuple[int, int]:
+    """A card's own lorebook into the drafted story's lore, as Add to the
+    story brings it; how many entries came, and how many of them the draft
+    set aside (`set_aside`, by title: they don't hold in this story, so they
+    come switched off, kept and sent nowhere, for the author to switch on).
+    The drafter was shown the book (authoring.render_own_characters) and told
+    to write no entry by one of its titles; one it wrote anyway gives way to
+    the card's, which stands as the card's other fields do. A title another chosen character's book
+    brought already stays theirs: the two would say the same thing twice.
+    And one the draft copied from the book under another title (live, Sonnet
+    4.6 copied whole books, once as "The Quiet Deck (lorebook entry)") gives
+    way too: its text is the entry's (`_copied`)."""
     book = card.tavern.character_book if card.tavern else None
     if not book:
-        return
-    imported = lore_from_book(book, macro_filler(card.name, user))
-    titles = {entry.title.casefold() for entry in scenario.lore}
+        return 0, 0
+    imported = lore_from_book(book, macro_filler(card.name, user), their_lorebook(card.name))
+    added = off = 0
     for entry in imported.entries:
-        if entry.title.casefold() in titles:
+        title = entry.title.casefold()
+        if title in from_cards:
             warnings.append(
-                f"{card.name}'s lore entry “{entry.title}” wasn't added: the draft has one by "
-                "that name"
+                f"{card.name}'s lore entry “{entry.title}” wasn't added: another character's "
+                "lorebook has one by that name"
             )
             continue
-        titles.add(entry.title.casefold())
+        for own in [e for e in scenario.lore if not e.came_from]:
+            if own.title.casefold() == title:
+                why = "has one by that name"
+            elif _copied(own.content, entry.content):
+                why = f"says the same in “{entry.title}”"
+            else:
+                continue
+            scenario.lore.remove(own)
+            warnings.append(
+                f"the draft's own lore entry “{own.title}” was left out: {card.name}'s "
+                f"lorebook {why}"
+            )
+        from_cards.add(title)
+        if title in set_aside and entry.enabled:
+            entry.enabled = False
+            off += 1
         scenario.lore.append(entry)
+        added += 1
     warnings += [f"{card.name}'s lorebook: left out {note}" for note in imported.notes()]
+    return added, off
+
+
+# How alike a drafted entry's text and a lorebook entry's must be for the
+# draft's to be a copy. Over 328 entries drafted around three lorebooks
+# (Nov 15 2026), the copies were 0.8 to 1.0 alike (word for word, or but for
+# a name), the draft's own entries at most 0.40, those that build on one
+# (a gate procedure naming the ledger it writes in) included.
+COPIED_RATIO = 0.6
+
+
+def _copied(drafted: str, theirs: str) -> bool:
+    """Whether a drafted entry's text is a lorebook entry's, near enough."""
+    a, b = (" ".join(text.casefold().split()) for text in (drafted, theirs))
+    matcher = SequenceMatcher(None, a, b, autojunk=False)
+    return matcher.real_quick_ratio() >= COPIED_RATIO and matcher.ratio() >= COPIED_RATIO
+
+
+def _brought(name: str, in_cast: bool, pictures: int, lore: int, off: int = 0) -> str:
+    """Where one of the author's own characters went in the draft, in words."""
+    parts = [f"{name}: their card as it is, {'in the cast' if in_cast else 'supporting'}"]
+    if pictures:
+        parts[0] += f", with {pictures} picture{'s' if pictures > 1 else ''}"
+    if lore:
+        parts.append(
+            f"{lore} {'entry' if lore == 1 else 'entries'} of their lorebook in the "
+            "story's lore (the Lore page)"
+        )
+    if off:
+        parts.append(
+            f"{'all' if off == lore else off} of {'them' if lore > 1 else 'it'} disabled there, "
+            "as the draft found they don't hold in this story: tick Enabled on any you want"
+        )
+    return "; ".join(parts) + "."
