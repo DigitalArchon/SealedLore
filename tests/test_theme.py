@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -270,3 +274,31 @@ def test_the_window_switches_theme_and_fonts_and_keeps_them(
         theme.set_theme("dark")
         theme.set_fonts()
         app.setStyleSheet("")
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="/proc: Linux's")
+def test_a_crashed_runs_marks_folder_is_removed_when_the_next_run_makes_its_own(
+    tmp_path, monkeypatch
+):
+    """The marks' folder of a run that ended without its atexit (a crash, SIGTERM, os._exit)
+    stayed in the temporary folder for good; the next run of the app in the same pid
+    namespace removes it (file_dialogs.clear_left), and leaves another app's or a living
+    run's (the rule is tested whole in tests/test_recent_files.py)."""
+    from sealedlore.gui import file_dialogs
+
+    dead = subprocess.Popen([sys.executable, "-c", "pass"])
+    dead.wait()
+    namespace = os.stat("/proc/self/ns/pid").st_ino
+    app = file_dialogs.app_mark()
+    left = tmp_path / f"{theme.ICON_FOLDER}-{app}-{namespace}-{dead.pid}-1-abc_1234"
+    left.mkdir()
+    (left / "chevron_down-ffffff.svg").write_text("<svg/>")
+    another = tmp_path / f"{theme.ICON_FOLDER}-OtherApp-{namespace}-{dead.pid}-1-def_5678"
+    another.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    monkeypatch.setattr(theme, "_icon_folder", None)
+    monkeypatch.setattr(theme.atexit, "register", lambda *_args: None)
+    made = theme._icons()
+    assert made.parent == tmp_path
+    assert made.name.startswith(f"{theme.ICON_FOLDER}-{app}-{namespace}-{os.getpid()}-")
+    assert not left.exists() and another.is_dir()

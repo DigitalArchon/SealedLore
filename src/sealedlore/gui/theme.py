@@ -350,12 +350,20 @@ _SVG = (
     'stroke-linecap="round" stroke-linejoin="round"/></svg>'
 )
 _icon_folder: Path | None = None
+# The marks' folder, in the system's temporary folder, named as file_dialogs.own_folder names
+# a run's own: a run that ended without its atexit (a crash, SIGTERM, os._exit) left its
+# folder behind, and the next run of the app in the same pid namespace removes it.
+ICON_FOLDER = "sealedlore-icons"
 
 
 def _icons() -> Path:
     global _icon_folder
     if _icon_folder is None or not _icon_folder.is_dir():
-        _icon_folder = Path(tempfile.mkdtemp(prefix="sealedlore-icons-"))
+        from sealedlore.gui import file_dialogs
+
+        base = tempfile.gettempdir()
+        file_dialogs.clear_left(base, ICON_FOLDER)
+        _icon_folder = Path(file_dialogs.own_folder(ICON_FOLDER, base))
         atexit.register(shutil.rmtree, _icon_folder, True)
     return _icon_folder
 
