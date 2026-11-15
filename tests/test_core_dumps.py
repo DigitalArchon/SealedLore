@@ -7,13 +7,17 @@ it is (conftest stands in for the command line's guard)."""
 from __future__ import annotations
 
 import os
-import resource
 import signal
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+
+try:
+    import resource
+except ImportError:  # Windows: only the tests that need no core limit run there
+    resource = None
 
 linux_only = pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux's guard")
 
