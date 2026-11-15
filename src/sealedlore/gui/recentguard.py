@@ -62,6 +62,14 @@ The known limit: a program writing the list while the app's own write is pending
 quarter of a second after a choice, or as the app quits, before GTK has read it again)
 loses that write - GTK's own write would already have lost it.
 
+And a chooser shown on those paths fits the screen (fit): GTK sizes one from the font and
+the size it saved last, and on a 1280x800 screen, or under a tiling compositor (Hyprland),
+its header bar - Cancel, Open, the location bar - was off the screen. While one of the app's
+choosers is open, every Gtk.FileChooserDialog realized (the app's own, or the one GTK makes
+for a Gtk.FileChooserNative) is held to the work area of the monitor it opens on, less a
+margin (geometry hints, which GTK holds its own size to and tells a Wayland compositor), and
+where the app may place it (X11) moved to lie inside that area.
+
 This is SealedLore's copy (src/sealedlore/gui/recentguard.py) of DA Assistant's
 (assistant/recentguard.py), the canonical one, from which it differs only in this paragraph
 (the DA apps' security standard, Nov 2026). SealedLore is a Qt app with no PyGObject: only
@@ -89,6 +97,10 @@ MOST = 32 * 1024 * 1024
 HOLD_SECONDS = 30
 # The most lists kept while a chooser is open: the one it opened on, and the newest.
 SEEN = 8
+# A chooser fits the work area of the monitor it opens on, this share of the area's width
+# and height (and at least FIT_MARGIN_MIN pixels) left free on each side.
+FIT_MARGIN = 0.05
+FIT_MARGIN_MIN = 16
 
 ABSENT, FILE, LINK, OTHER = "absent", "file", "link", "other"
 
@@ -565,28 +577,135 @@ def _answered(guarding, chooser, response):
         guarding.chose(_uris(chooser))
 
 
+def fit_room(width, height):
+    """The most a chooser may take of a work area `width` x `height`: the area less its
+    margins (FIT_MARGIN of each side, at least FIT_MARGIN_MIN pixels), never under 1."""
+    across = max(FIT_MARGIN_MIN, int(width * FIT_MARGIN))
+    down = max(FIT_MARGIN_MIN, int(height * FIT_MARGIN))
+    return max(1, width - 2 * across), max(1, height - 2 * down)
+
+
+def placed(x, y, width, height, area):
+    """Where a window of `width` x `height` at (x, y) goes to lie inside `area` (x, y,
+    width, height): moved in as little as it takes, its top left kept on the area where the
+    window is larger than it."""
+    left, top, across, down = area
+    x = max(left, min(x, left + across - width))
+    y = max(top, min(y, top + down - height))
+    return x, y
+
+
+def _monitor(window):
+    """The monitor `window` opens on: its parent's, where it has one on a screen, else its
+    own, else the display's primary (or first) monitor."""
+    display = window.get_display()
+    for each in (window.get_transient_for(), window):
+        surface = each.get_window() if each is not None else None
+        if surface is not None:
+            found = display.get_monitor_at_window(surface)
+            if found is not None:
+                return found
+    return display.get_primary_monitor() or display.get_monitor(0)
+
+
+def _area(window):
+    area = _monitor(window).get_workarea()
+    return area.x, area.y, area.width, area.height
+
+
+def _keep_on(window, _event=None):
+    """A chooser mapped: where the window system lets the app place it (X11), moved to lie
+    inside its monitor's work area. Wayland places it itself, within the size fit() set."""
+    try:
+        if window.get_display().__gtype__.name != "GdkX11Display":
+            return False
+        x, y = window.get_position()
+        frame = window.get_window().get_frame_extents()
+        to = placed(x, y, frame.width, frame.height, _area(window))
+        if to != (x, y):
+            window.move(*to)
+    except Exception as e:  # noqa: BLE001 - never a crash: the chooser stays where it is
+        _say(f"a file chooser not kept on the screen: {e}")
+    return False
+
+
+def fit(window):
+    """A file chooser (a Gtk.FileChooserDialog: the app's own, or the one GTK makes for a
+    Gtk.FileChooserNative) fits the work area of the monitor it opens on: never larger than
+    the area less its margins (geometry hints, which GTK holds every size it asks for to,
+    and which Wayland compositors are told), and, where the app may place it (X11), never
+    off it. GTK's own size for a chooser comes from the font and what it saved last, and on
+    a 1280x800 screen, or under a tiling compositor, its header bar - Cancel and Open - was
+    off the screen."""
+    try:
+        from gi.repository import Gdk
+
+        width, height = fit_room(*_area(window)[2:])
+        hints = Gdk.Geometry()
+        hints.max_width, hints.max_height = width, height
+        window.set_geometry_hints(None, hints, Gdk.WindowHints.MAX_SIZE)
+        across, down = window.get_default_size()
+        if across > width or down > height:
+            window.set_default_size(min(across, width), min(down, height))
+        window.connect("map-event", _keep_on)
+    except Exception as e:  # noqa: BLE001 - never a crash: the chooser opens as GTK sizes it
+        _say(f"a file chooser not fitted to the screen: {e}")
+
+
+def _fit_choosers():
+    """fit() for every Gtk.FileChooserDialog realized from now on (an emission hook on
+    "realize": GtkWindow's show realizes it before it asks for its size and maps it, so it
+    opens at its fitted size; a hook on "show" crashed PyGObject, called for widgets still
+    being made); what takes it away again."""
+    from gi.repository import GObject
+
+    Gtk = _gtk()[1]
+
+    def hook(widget, *_rest):
+        if isinstance(widget, Gtk.FileChooserDialog):
+            fit(widget)
+        return True
+
+    GObject.type_class_ref(Gtk.Widget)
+    hooked = GObject.add_emission_hook(Gtk.Widget, "realize", hook)
+    return lambda: GObject.remove_emission_hook(Gtk.Widget, "realize", hooked)
+
+
+def _fitting():
+    """_fit_choosers(), or where it can't be had (no GTK), a hook that takes nothing away."""
+    try:
+        return _fit_choosers()
+    except Exception as e:  # noqa: BLE001 - never a crash: the chooser opens as GTK sizes it
+        _say(f"file choosers not fitted to the screen: {e}")
+        return lambda: None
+
+
 def run(chooser):
     """chooser.run() for a Gtk.FileChooserNative or Gtk.FileChooserDialog the app made,
     the files it chose kept out of the recent files list: its answer. They are told to the
     keeper as the chooser answers, not once run() has returned: GTK adds them as it answers,
     and run() can come back after GTK's write (a Save dialog's, measured)."""
-    guarding = keeper()
-    if guarding is None:
-        return chooser.run()
+    unfit = _fitting()
     try:
-        chooser.connect("response", lambda answering, response:
-                        _answered(guarding, answering, response))
-        heard = True
-    except Exception:  # noqa: BLE001 - a stand-in with no signals: told once it is answered
-        heard = False
-    guarding.opened()
-    try:
-        response = chooser.run()
-        if not heard:
-            _answered(guarding, chooser, response)
+        guarding = keeper()
+        if guarding is None:
+            return chooser.run()
+        try:
+            chooser.connect("response", lambda answering, response:
+                            _answered(guarding, answering, response))
+            heard = True
+        except Exception:  # noqa: BLE001 - a stand-in with no signals: told once answered
+            heard = False
+        guarding.opened()
+        try:
+            response = chooser.run()
+            if not heard:
+                _answered(guarding, chooser, response)
+        finally:
+            guarding.closed()
+        return response
     finally:
-        guarding.closed()
-    return response
+        unfit()
 
 
 def answer_file_input(webview, request):
@@ -613,7 +732,10 @@ def answer_file_input(webview, request):
         chooser.set_filename(selected[0])
     guarding = keeper()
 
+    unfit = _fitting()
+
     def answered(native, response):
+        unfit()
         _open.discard(native)
         if _accepted(response) and int(response) == int(Gtk.ResponseType.ACCEPT):
             if guarding is not None:
@@ -688,7 +810,11 @@ def _wrap_pywebview_dialogs():
     def create_file_dialog(self, *args, **kwargs):
         guarding = keeper()
         if guarding is None:
-            return original(self, *args, **kwargs)
+            unfit = _fitting()
+            try:
+                return original(self, *args, **kwargs)
+            finally:
+                unfit()
         chooser = _gtk()[1].FileChooser
 
         def answered(dialog, response):
@@ -696,11 +822,13 @@ def _wrap_pywebview_dialogs():
                 _answered(guarding, dialog, response)
 
         unhook = _hook_responses(answered)
+        unfit = _fitting()
         guarding.opened()
         try:
             return original(self, *args, **kwargs)
         finally:
             guarding.closed()
+            unfit()
             unhook()
 
     create_file_dialog.recentguard = True
