@@ -152,12 +152,16 @@ def direct_verify(
     verify: Callable[..., Verified] = sdk_verify,
 ) -> Verified:
     """Attest Tinfoil's router from its own bundle service (network; worker
-    thread), for the endpoint at `host`: refused unless the bundle's enclave,
+    thread), for the endpoint at `host`, the bundle asked for by that host
+    (ATC serves either router's to a plain request, and each has a TLS key
+    of its own): refused unless the bundle's enclave,
     as the SDK verified it (its certificate's names included), is `host`,
     and the attestation names a TLS key to pin."""
     verified = within(
         seconds,
-        lambda: verify(bundle_url, cache_secret, base_url=f"https://{host}", service=TINFOIL),
+        lambda: verify(
+            bundle_url, cache_secret, base_url=f"https://{host}", service=TINFOIL, enclave=host
+        ),
     )
     attested = _host(f"https://{verified.enclave}")
     if attested != host:

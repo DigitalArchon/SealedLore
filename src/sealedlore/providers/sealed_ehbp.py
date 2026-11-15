@@ -150,13 +150,18 @@ def sdk_verify(
     *,
     base_url: str | None = None,
     service: str = NANOGPT_PRIVATE,
+    enclave: str = "",
 ) -> Verified:
     """Attest Tinfoil's router from the attestation bundle `bundle_url`
     serves (network; worker thread): NanoGPT's relay, or Tinfoil's own
     `atc.tinfoil.sh`. Never a router looked up by the SDK (its
     `get_router_address` fetches with plain urllib, outside the guard): a
     bundle names its enclave. `base_url`: the SDK client's own address,
-    which it never uses here (it only verifies)."""
+    which it never uses here (it only verifies). `enclave`: the host whose
+    bundle to ask for (the SDK then POSTs it as `enclaveUrl`); without one,
+    the service's default bundle. Tinfoil's ATC hands out either of its two
+    routers' bundles to a plain GET (live, Nov 15 2026: router-0.tinfoil.sh
+    one time in four), and each router has a TLS key of its own."""
     # Imported here: the SDK pulls in sigstore and the OpenAI client, which
     # nothing else needs, and the app shouldn't pay for them at startup.
     from tinfoil import SecureClient
@@ -176,6 +181,7 @@ def sdk_verify(
     # The secret is passed explicitly, or the SDK would create one in
     # ~/.tinfoil; this client only verifies, it never sends a request.
     client = SecureClient(
+        enclave=enclave,
         base_url=(base_url or bundle_url) + "/",
         attestation_bundle_url=bundle_url,
         transport="ehbp",

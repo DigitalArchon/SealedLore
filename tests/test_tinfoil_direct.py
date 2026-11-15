@@ -199,6 +199,12 @@ def sdk(monkeypatch):
         fetched.append(url)
         return Reply()
 
+    def post(url, json=None, **_kwargs):
+        # ATC's bundle for one named enclave (the SDK's POST): as live, the
+        # bundle of the router asked for.
+        fetched.append(("POST", url, json))
+        return Reply()
+
     def nowhere(*_args, **_kwargs):
         raise AssertionError("a router lookup, or plain urllib: never reached")
 
@@ -208,7 +214,7 @@ def sdk(monkeypatch):
     # The name the SDK's bundle fetch reads at call time (once the guard has run
     # in this process it is the guard's stand-in for requests, not requests).
     monkeypatch.setattr(
-        tinfoil.attestation.bundle, "requests", types.SimpleNamespace(get=get, post=nowhere)
+        tinfoil.attestation.bundle, "requests", types.SimpleNamespace(get=get, post=post)
     )
     # And nothing else gets out: no socket connects during the test.
     monkeypatch.setattr(sockets.socket, "connect", nowhere)
@@ -224,9 +230,13 @@ def sdk(monkeypatch):
 
 
 def test_direct_attestation_takes_atcs_bundle_and_never_looks_a_router_up(sdk):
+    """ATC's bundle is asked for by the endpoint's own host: a plain GET
+    served either of Tinfoil's two routers' bundles (live, Nov 15 2026,
+    router-0.tinfoil.sh one time in four, a TLS key of its own), and the
+    attestation was then refused as another host's."""
     bundle, fetched = sdk
     verified = direct_verify(HOST, ATC_URL, "s" * 64)
-    assert fetched == [ATC_URL + "/attestation"]
+    assert fetched == [("POST", ATC_URL + "/attestation", {"enclaveUrl": f"https://{HOST}"})]
     assert verified.enclave == HOST and verified.tls_public_key == ATTESTED_TLS_KEY
     attestation = verified.attestation
     assert attestation.service == TINFOIL and attestation.attested == "router"
