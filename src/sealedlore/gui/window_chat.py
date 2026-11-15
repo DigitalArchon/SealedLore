@@ -20,7 +20,7 @@ from sealedlore.gui.saved_prompts import SavedPrompts
 from sealedlore.models.node import CHAT_USER_ID
 from sealedlore.models.story import Story
 from sealedlore.providers.base import ChatProvider, ProviderError
-from sealedlore.providers.privacy import NANOGPT_PRIVATE, move_refusal
+from sealedlore.providers.privacy import move_note, move_refusal
 from sealedlore.storage.repository import StoryBundle, save_config, save_story_bundle
 
 MEMORY_TITLE = "(in memory only)"
@@ -220,11 +220,12 @@ class ChatWindow:
         return answer == QMessageBox.Yes
 
     def _chat_model_allowed(self, model: str) -> bool:
-        """A TEE chat moves only to another TEE model; says why otherwise."""
+        """A TEE or end-to-end encrypted chat moves only to a model at its own
+        level of privacy or higher; says why otherwise."""
         try:
             self.session.check_chat_model(model)
         except ValueError as exc:
-            QMessageBox.information(self, "Kept to TEE models", str(exc))
+            QMessageBox.information(self, "Kept to its privacy", str(exc))
             return False
         return True
 
@@ -236,13 +237,8 @@ class ChatWindow:
         session = self.session
         current = session.model
         judge = session.chat_move_judge()
-        privacy = judge(current)
-        if privacy.service == NANOGPT_PRIVATE:
-            note = "this chat is end-to-end encrypted: private/ models only"
-        elif privacy.sealed:
-            note = "this chat is end-to-end encrypted: end-to-end encrypted models only"
-        else:
-            note = "this chat is kept to TEE and end-to-end encrypted models"
+        # Its own level or higher, on any service (providers/privacy.py).
+        note = move_note(judge(current))
         return {
             "allowed": lambda model: move_refusal(current, model, privacy=judge) is None,
             "allowed_note": note,

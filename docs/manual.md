@@ -537,21 +537,40 @@ choose **Tinfoil** as the service under Settings → Private instead. This is
 built and tested against Tinfoil's public listing and attestation, but not
 yet run with an account.
 
-**Chutes E2EE (preliminary, always partial).** Chutes serves end-to-end
-encrypted models too, each message sealed to one attested Chutes instance.
-In Settings → Endpoints, **Add Chutes** fills in its address
-(`https://api.chutes.ai`) and **Speaks** (**Chutes E2EE, end-to-end encrypted
-(partial)**); type your Chutes key and Save. Only Chutes' confidential-compute
-models are offered on it (Choose lists them), and a model that isn't one is
-never sent. For private scenes alone, choose **Chutes E2EE** as the service
-under Settings → Private. See "Private scenes" for what is checked and why it
-is never more than partial; like Tinfoil's, this is built and tested without
-an account and not yet run with one.
+**Chutes (preliminary).** Chutes is an endpoint like NanoGPT: it offers every
+model it lists, each at its own level of privacy (see "Private scenes"). In
+Settings → Endpoints, **Add Chutes** fills in its OpenAI-compatible address
+(`https://llm.chutes.ai/v1`); type your Chutes key and Save. Setting
+**Speaks** to **Anthropic** moves it to `https://claude.chutes.ai`, Chutes'
+own open-source proxy of Anthropic's Messages API, which hands each request on
+to the OpenAI-compatible one (not yet run). **Choose** lists every model
+Chutes lists, read from its public list without your key, with its price and
+how private it is:
+- its models whose ids end in `-TEE` (the ones Chutes lists as confidential
+  compute) are **always sent end-to-end encrypted** to one attested Chutes
+  instance, whatever **Speaks** says, and have **partial** privacy: the
+  program inside the instance that holds the key is Chutes' signed one, not
+  measured (see "Private scenes");
+- its other models are **not private**: Chutes reads their text, as any
+  provider of an ordinary model does. (Chutes itself sends a few old ids,
+  such as `deepseek-ai/DeepSeek-V3.2`, to their `-TEE` twin, in the clear;
+  those aren't on its list.)
 
-An end-to-end encrypted endpoint (anything on `tinfoil.sh` or `chutes.ai`) is
-reached only by its own client: an ordinary one would send your text there in
-the clear, so it refuses, with a note saying so. Pictures, videos and
-embeddings never take the address or key of such an endpoint.
+Your key goes to the endpoint's own address, and for the `-TEE` models to
+`https://api.chutes.ai`, where Chutes' end-to-end encryption is, and nowhere
+else. That is the one place a key goes to a second address: all three are
+Chutes' own, and it takes one key on each. A key saved for any other address
+is never sent to Chutes, and editing the address asks about the key as for
+any endpoint. For private scenes alone, choose **Chutes** as the service under
+Settings → Private. Like Tinfoil's, this is built and tested without an
+account and not yet run with one.
+
+An end-to-end encrypted endpoint (anything on `tinfoil.sh`) is reached only by
+its own client, and so is one of Chutes' `-TEE` models on any of Chutes'
+addresses: an ordinary client would send your text there in the clear, so it
+refuses, with a note saying so. Pictures, videos and embeddings never take the
+address or key of Tinfoil's endpoint, and never send to one of Chutes' `-TEE`
+models: only chat is sent end-to-end encrypted.
 
 **Choosing a model.** Every model field has a **Choose** button. It lists the
 models your endpoint offers (where a job has models measured for it,
@@ -2663,6 +2682,26 @@ had zero data retention on, which no video provider there met).
 
 ## Private scenes
 
+**How private each model is (preliminary for Tinfoil and Chutes).**
+SealedLore names three levels of privacy: highest, end-to-end encrypted to an
+attested enclave whose software is measured (NanoGPT's private/ models, and
+Tinfoil's); partial, attested but with a gap in what is proved (NanoGPT's TEE/
+models, whose text passes NanoGPT's gateway in the clear, and Chutes' -TEE
+models, encrypted all the way to a key that rests on software Chutes signs);
+and not private, every other model, whose provider can read your text.
+
+| Level | Models | What is proved, and what isn't |
+|---|---|---|
+| **Highest** | NanoGPT's `private/` models; Tinfoil's own API | Sealed on your computer to a key only an attested enclave holds, its software measured; the service relays ciphertext. |
+| **Partial** | NanoGPT's `TEE/` models; Chutes' `-TEE` models | A `TEE/` model's enclave is attested and its replies signed, but the text passes NanoGPT's gateway in the clear. A Chutes `-TEE` model's text is encrypted all the way to one attested instance, but that only the model can read it rests on software Chutes signs: the program holding the key is a closed library Chutes admits by its signature, not measured, and the list of measured images is Chutes' own. |
+| **Not private** | Every other model, Chutes' others included | The model's provider reads the text. |
+
+A chat on a private model, and a private scene, keep to their level: each
+moves only to a model at its own level or higher, on any service (a `private/`
+or Tinfoil chat to `private/` or Tinfoil models; a `TEE/` or Chutes `-TEE`
+chat to any of those four), the move noted under its latest message, and the
+refusal says both levels.
+
 The **Private** button beside the composer plays a span of the story on a
 separate model that nothing else ever hears about: a local server (Ollama, LM
 Studio, llama.cpp), or a NanoGPT `TEE/` model. For a TEE model the app
@@ -2928,9 +2967,13 @@ text. What the app doesn't prove: that the router passes your request only to
 attested model enclaves (that is the router's published code, whose
 attested build the app checks, not something it checks itself).
 
-**Chutes E2EE (preliminary, not yet run with an account).** An endpoint on
-`https://api.chutes.ai` that speaks **Chutes E2EE**, or Settings → Private's
-Chutes E2EE service, seals each message to the key of one Chutes instance.
+**Chutes' `-TEE` models (preliminary, not yet run with an account).** A model
+whose id ends in `-TEE` on a Chutes endpoint (`https://llm.chutes.ai/v1`, or
+`https://claude.chutes.ai` speaking Anthropic), or on Settings → Private's
+Chutes service, has each message sealed to the key of one Chutes instance,
+sent through `https://api.chutes.ai`. A variant typed after a colon
+(`…-TEE:THINKING`) isn't one Chutes lists, so it isn't sent: choose the model
+itself.
 Before a message goes, the app asks Chutes which instances serve the model
 (this needs your key) and checks each one it hasn't checked in the last 15
 minutes:
@@ -2948,7 +2991,10 @@ model button: the program inside the machine that makes and uses the key is
 admitted by Chutes' signature, not measured (a closed library), so Chutes, as
 its signer, could run one that gives the key away; and the list of images is
 Chutes' own, which Chutes says builds reproducibly, but the app doesn't
-rebuild it. Replies come **whole, not streamed**: nothing shows until the
+rebuild it. Beside NanoGPT's `TEE/` models, the other partial kind: your text
+is encrypted all the way here, where theirs passes NanoGPT's gateway in the
+clear; but what they attest is the enclave as measured, where here the program
+holding the key is outside the measurement. Replies come **whole, not streamed**: nothing shows until the
 reply is done (Stop still works while you wait), because each piece of a
 stream is sealed on its own and Chutes could drop or reorder pieces unseen.
 Some Chutes models may refuse such a request (an "HTTP 400" in Chutes' words)
@@ -3030,11 +3076,13 @@ story is (Settings → Context), with a plain summariser.
   checked against the record the attested key signs and marked with what the
   check showed (see "Private scenes"), every call (summaries and
   picture prompts included) goes to that model, and the chat can move only
-  to another TEE model. The text still passes NanoGPT's gateway, as a
-  private scene's does, unless the model is a `private/` one, or one on
-  Tinfoil's or Chutes' own API (preliminary): then it is end-to-end encrypted (see
-  "Private scenes"), and the chat can move only to another end-to-end
-  encrypted model, NanoGPT's, Tinfoil's or Chutes'. A move to another service is noted
+  to a model at its own level of privacy or higher (see the table under
+  "Private scenes"). The text still passes NanoGPT's gateway, as a private
+  scene's does, unless the model is a `private/` one, one on Tinfoil's own
+  API, or one of Chutes' `-TEE` models (preliminary): then it is end-to-end
+  encrypted (see "Private scenes"). A `private/` or Tinfoil chat moves only to
+  `private/` or Tinfoil models; a `TEE/` or Chutes `-TEE` chat to any of those
+  four. A move to another service is noted
   under the chat's latest message ("The chat moved from … to …"), kept as the
   chat is (an in-memory chat's in memory). The chat stays as private as it
   was made: if its endpoint is later edited to another address, or removed,
@@ -3368,12 +3416,15 @@ crash reporting.
   list from `inference.tinfoil.sh`, all without your key. The messages are
   sealed first, and your key goes in a header to `inference.tinfoil.sh`
   alone, over a connection pinned to the attested enclave's TLS key.
-- **Chutes E2EE** (preliminary: an endpoint that speaks Chutes E2EE, or
-  Settings → Private's Chutes E2EE service): its public model list
-  (`llm.chutes.ai`), the VM images it publishes and its instances' evidence
-  (`api.chutes.ai`), Intel's and NVIDIA's checks as for TEE models; with
-  your key, to `api.chutes.ai` alone, which instances serve the model and
-  each sealed message.
+- **Chutes** (preliminary: an endpoint on one of Chutes' addresses, or
+  Settings → Private's Chutes service): its public model list
+  (`llm.chutes.ai`), without your key. An ordinary model's messages go with
+  your key to the endpoint's own address (`llm.chutes.ai`, or
+  `claude.chutes.ai` speaking Anthropic), readable by Chutes as by any
+  provider. For a `-TEE` model: the VM images Chutes publishes and its
+  instances' evidence (`api.chutes.ai`), Intel's and NVIDIA's checks as for
+  TEE models; with your key, to `api.chutes.ai` alone, which instances serve
+  the model and each sealed message.
 - **Phone access**, off until you turn it on (File → Phone access): SealedLore
   runs its own tor, which talks to the Tor network's relays and publishes your
   computer's onion address there. The address's key is kept in the keychain

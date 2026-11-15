@@ -79,6 +79,22 @@ def _cap_message(error: ProviderError) -> str:
     )
 
 
+def _models_named(url: str, kwargs: dict[str, Any]) -> list[str]:
+    """Every model a request may name, for `plain_refusal`: its JSON's or
+    form's "model", and each part of its path (WaveSpeed names the model
+    there); "" first, so an address alone is judged too."""
+    named = [""]
+    for body in (kwargs.get("json"), kwargs.get("data")):
+        if isinstance(body, dict) and isinstance(body.get("model"), str):
+            named.append(body["model"])
+    try:
+        path = httpx.URL(url).path
+    except (httpx.InvalidURL, TypeError):
+        path = ""
+    named += [part for part in path.split("/") if part]
+    return named
+
+
 class MediaHttp:
     """One job's HTTP: cancellable, with retries that fit what is asked."""
 
@@ -196,11 +212,13 @@ class MediaHttp:
     def _once(self, method: str, url: str, *, authorised: bool, **kwargs: Any) -> httpx.Response:
         if self._cancelled:
             raise StreamCancelled()
-        # Never to an end-to-end encrypted endpoint (providers/privacy.py): a
-        # picture's prompt and references would go to it in the clear.
-        refusal = plain_refusal(url, api=self.sealed_api, way_out=MEDIA_WAY_OUT)
-        if refusal:
-            raise ProviderError(refusal)
+        # Never to an end-to-end encrypted endpoint, nor one of Chutes' TEE
+        # models (providers/privacy.py): a picture's prompt and references
+        # would go to it in the clear.
+        for model in _models_named(url, kwargs):
+            refusal = plain_refusal(url, api=self.sealed_api, model=model, way_out=MEDIA_WAY_OUT)
+            if refusal:
+                raise ProviderError(refusal)
         headers = kwargs.pop("headers", None)
         if headers is None:
             headers = self.headers() if authorised else {}

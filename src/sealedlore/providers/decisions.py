@@ -100,9 +100,10 @@ class DecisionsClient:
     def decide(self, model: str, state: str, questions: Mapping[str, str]) -> Decisions:
         if self.key_withheld:
             raise ProviderError(self.key_withheld)
-        # Never to an end-to-end encrypted endpoint (providers/privacy.py):
-        # the story's state would go to it in the clear.
-        refusal = plain_refusal(self.endpoint, "the story's state", api=self.api)
+        # Never to an end-to-end encrypted endpoint, nor one of Chutes' TEE
+        # models (providers/privacy.py): the story's state would go to it in
+        # the clear.
+        refusal = plain_refusal(self.endpoint, "the story's state", api=self.api, model=model)
         if refusal:
             raise ProviderError(refusal)
         payload = build_decisions_payload(model, state, questions)

@@ -66,6 +66,7 @@ from sealedlore.gui.speed_test import SpeedTestDialog
 from sealedlore.gui.video_jobs import VideoCatalog
 from sealedlore.models.config import (
     CHAT_API_LABELS,
+    CHUTES_ANTHROPIC_URL,
     CHUTES_BASE_URL,
     DEFAULT_BASE_URL,
     DEFAULT_EMBEDDING_MODEL,
@@ -88,6 +89,7 @@ from sealedlore.models.config import (
     in_the_clear,
     key_origin,
     key_problem,
+    on_chutes,
     on_nanogpt,
     qualify,
     rebind_keys,
@@ -115,6 +117,7 @@ from sealedlore.providers.context_probe import detect_context
 from sealedlore.providers.endpoints import EndpointsProvider, listing_key
 from sealedlore.providers.images import parse_image_models
 from sealedlore.providers.privacy import (
+    PRIVACY_LEVELS,
     SERVICE_NAMES,
     Privacy,
     held,
@@ -172,20 +175,30 @@ LORE_SELECTORS = (
 
 
 # The services private scenes may go to (Settings → Private → Service), each
-# with its own address and key: (value, label, its address). Chutes E2EE joins
-# them once its client is built (providers/privacy.py BUILT_SERVICES).
+# with its own address and key: (value, label, its address).
 PRIVATE_SERVICES = (
     ("nanogpt", "NanoGPT (private/ and TEE/ models)", DEFAULT_BASE_URL),
     ("tinfoil", "Tinfoil, end-to-end encrypted (preliminary)", TINFOIL_BASE_URL),
-    ("chutes", "Chutes E2EE, end-to-end encrypted (preliminary, partial)", CHUTES_BASE_URL),
+    (
+        "chutes",
+        "Chutes (its -TEE models end-to-end encrypted, partially; preliminary)",
+        CHUTES_BASE_URL,
+    ),
     ("other", "Another server (a local one, say)", ""),
 )
 PRIVATE_MODEL_HINTS = {
     "nanogpt": "e.g. private/glm-5-3, or TEE/glm-5.3-flash",
     "tinfoil": "e.g. glm-5-3 (Choose lists Tinfoil's models)",
-    "chutes": "e.g. Qwen/Qwen3.8-27B-TEE (Choose lists Chutes' confidential models)",
+    "chutes": "e.g. Qwen/Qwen3.8-27B-TEE (Choose lists Chutes' models, each with its privacy)",
     "other": "e.g. llama3.1:8b",
 }
+# Under the private model, for Chutes: which of its models are private.
+CHUTES_PRIVATE_NOTE = (
+    "On Chutes, a -TEE model is end-to-end encrypted to an attested Chutes instance "
+    "(partial privacy: the program holding its key is Chutes' signed one, not measured). "
+    "Any other Chutes model isn't private: Chutes reads its text, and a scene on it is kept "
+    "only from the story's model. Preliminary: not yet run with an account."
+)
 
 
 def private_service_of(endpoint: ProviderConfig | None) -> str:
@@ -194,7 +207,7 @@ def private_service_of(endpoint: ProviderConfig | None) -> str:
         return "nanogpt"
     if endpoint.sealed_service() == "tinfoil":
         return "tinfoil"
-    if endpoint.sealed_service() == "chutes-e2ee":
+    if on_chutes(endpoint.base_url):
         return "chutes"
     return "nanogpt" if on_nanogpt(endpoint.base_url) else "other"
 
@@ -730,15 +743,17 @@ class SettingsDialog(QDialog):
 
     def _add_endpoint(self, preset: str = "") -> None:
         """A fresh endpoint, its address to be typed (https://api.anthropic.com
-        for Anthropic's own API, with an Anthropic key), or Tinfoil's own API
-        filled in (`preset` "tinfoil"), its key to be typed."""
+        for Anthropic's own API, with an Anthropic key), or Tinfoil's own API or
+        Chutes' filled in (`preset` "tinfoil", "chutes"), its key to be typed."""
         self._store_endpoint_fields()
         if preset == "tinfoil":
             name = self._unique_endpoint_name("Tinfoil")
             added = ProviderConfig(name=name, base_url=TINFOIL_BASE_URL, api="tinfoil")
         elif preset == "chutes":
+            # OpenAI-compatible at llm.chutes.ai; Speaks Anthropic moves it to
+            # claude.chutes.ai, Chutes' proxy of that API (`_on_speaks`).
             name = self._unique_endpoint_name("Chutes")
-            added = ProviderConfig(name=name, base_url=CHUTES_BASE_URL, api="chutes-e2ee")
+            added = ProviderConfig(name=name, base_url=CHUTES_BASE_URL, api="openai")
         else:
             name = self._unique_endpoint_name("New endpoint")
             added = ProviderConfig(name=name).model_copy(update={"base_url": ""})
@@ -971,8 +986,9 @@ class SettingsDialog(QDialog):
         self.add_tinfoil.clicked.connect(lambda: self._add_endpoint("tinfoil"))
         self.add_chutes = QPushButton("Add Chutes")
         self.add_chutes.setToolTip(
-            "Chutes' end-to-end encrypted models (https://api.chutes.ai), preliminary and "
-            "always partial: its address filled in, your Chutes key to type"
+            "Chutes (https://llm.chutes.ai/v1): every model it lists, its address filled in, "
+            "your Chutes key to type. Its -TEE models are always sent end-to-end encrypted "
+            "(partial privacy, preliminary); its others aren't private."
         )
         self.add_chutes.clicked.connect(lambda: self._add_endpoint("chutes"))
         self.remove_endpoint = QPushButton("Remove")
@@ -1032,6 +1048,7 @@ class SettingsDialog(QDialog):
             "as Anthropic's own API and anything else as OpenAI-compatible."
         )
         self.api_note = _note_label()
+        self.chat_api.currentIndexChanged.connect(self._on_speaks)
         self.chat_api.currentIndexChanged.connect(self._sync_api_note)
         self.chat_api.currentIndexChanged.connect(self._endpoint_fields_changed)
         self.base_url.textChanged.connect(self._sync_api_note)
@@ -1094,20 +1111,37 @@ class SettingsDialog(QDialog):
         self._refresh_endpoint_rows()
         return widget
 
+    def _on_speaks(self, *_args) -> None:
+        """Chutes speaks Anthropic's Messages API at claude.chutes.ai, its own
+        proxy, and OpenAI's at llm.chutes.ai: Speaks moves the preset address
+        between them (an address typed by hand stays). A key saved for the
+        other is asked about at Save, as for any edited address."""
+        if self._loading_endpoint:
+            return
+        url, api = self.base_url.text().strip(), self.chat_api.currentData()
+        if api == "anthropic" and url == CHUTES_BASE_URL:
+            self.base_url.setText(CHUTES_ANTHROPIC_URL)
+        elif api in ("openai", "auto") and url == CHUTES_ANTHROPIC_URL:
+            self.base_url.setText(CHUTES_BASE_URL)
+
     def _sync_api_note(self, *_args) -> None:
         """What the key is sent as, and what the choice of protocol means."""
         sealed = sealed_service(self.base_url.text(), self.chat_api.currentData())
-        if sealed == "chutes-e2ee":
+        if not sealed and on_chutes(self.base_url.text()):
+            speaks = chat_api(self.base_url.text(), self.chat_api.currentData())
+            how = (
+                "Anthropic's Messages API through Chutes' own proxy (claude.chutes.ai, not yet "
+                "run), the key as its x-api-key header"
+                if speaks == "anthropic"
+                else "OpenAI-compatible, the key as a Bearer token"
+            )
             self.api_note.setText(
-                not_built(privacy_at("", self.base_url.text(), sealed))
-                or (
-                    "Chutes' end-to-end encryption (preliminary, not yet run with an account, "
-                    "always partial): every message is sealed on this computer to one attested "
-                    "Chutes instance's key, and each reply comes whole, not streamed. Only "
-                    "Chutes' confidential models are offered. The key goes to "
-                    "https://api.chutes.ai only, as a Bearer token. Pictures, videos and "
-                    "embeddings need endpoints of their own."
-                )
+                f"Chutes (preliminary), {how}: every model it lists. Its -TEE models are always "
+                "sent end-to-end encrypted to an attested Chutes instance whatever this "
+                "speaks, each reply whole, not streamed: partial privacy, since the program "
+                "holding the key is Chutes' signed one, not measured. Its other models aren't "
+                "private: Chutes reads their text. The key goes to this address, and for the "
+                "-TEE models to https://api.chutes.ai, Chutes' own, nowhere else. " + PRIVACY_LEVELS
             )
         elif sealed:
             self.api_note.setText(
@@ -1184,11 +1218,13 @@ class SettingsDialog(QDialog):
 
     def _private_api(self) -> str:
         """What the private endpoint speaks, by the service chosen: Tinfoil's
-        own protocol, or what it spoke (never a sealed one it was moved off)."""
+        own protocol, OpenAI's for Chutes (its -TEE models are sealed by their
+        own client whatever it speaks), or what it spoke (never a sealed one
+        it was moved off)."""
         if self._private_service() == "tinfoil":
             return "tinfoil"
         if self._private_service() == "chutes":
-            return "chutes-e2ee"
+            return "openai"
         existing = self.config.private_provider
         api = existing.api if existing is not None else "auto"
         return "auto" if api in SEALED_APIS else api
@@ -1207,6 +1243,7 @@ class SettingsDialog(QDialog):
         self.private_model.setPlaceholderText(PRIVATE_MODEL_HINTS[chosen])
         self.private_model._show_privacy(self.private_model.text())
         self.private_attest.model_changed(self.private_model.text())
+        self.private_service_note.setVisible(chosen == "chutes")
 
     def _routed_field(self, text: str, role: str = "") -> ModelField:
         """A role's model field, with its route beside it (NanoGPT only) and
@@ -1987,11 +2024,12 @@ class SettingsDialog(QDialog):
         shown_service = private_service_of(existing)
         self.private_service.setCurrentIndex(max(0, self.private_service.findData(shown_service)))
         self.private_service.setToolTip(
-            "NanoGPT: its private/ models are end-to-end encrypted, its TEE/ models run in "
-            "an enclave but their text passes NanoGPT's gateway. Tinfoil: its own API, every "
-            "model end-to-end encrypted, no relay in between (preliminary). Chutes E2EE: each "
-            "message sealed to one attested Chutes instance, always partial (preliminary). "
-            "Another server: a local one, say, which keeps it on this machine."
+            "NanoGPT: its private/ models are end-to-end encrypted (highest privacy), its "
+            "TEE/ models run in an enclave but their text passes NanoGPT's gateway (partial). "
+            "Tinfoil: its own API, every model end-to-end encrypted, no relay in between "
+            "(highest; preliminary). Chutes: its -TEE models sealed to one attested Chutes "
+            "instance (partial; preliminary), its others not private. Another server: a "
+            "local one, say, which keeps it on this machine. " + PRIVACY_LEVELS
         )
         intro = QLabel(
             "Private scenes (the Private button, under More beside Send) are played on this model "
@@ -2037,6 +2075,9 @@ class SettingsDialog(QDialog):
             existing.model if existing else "", browse, privacy_of=self._private_field_privacy
         )
         self.private_model.setPlaceholderText(PRIVATE_MODEL_HINTS[shown_service])
+        self.private_service_note = _note_label()
+        self.private_service_note.setText(CHUTES_PRIVATE_NOTE)
+        self.private_service_note.setVisible(shown_service == "chutes")
         self.private_budget = QSpinBox()
         self.private_budget.setRange(2_000, 1_000_000)
         self.private_budget.setSingleStep(1_000)
@@ -2084,6 +2125,7 @@ class SettingsDialog(QDialog):
         form.addRow("API key", self.private_key)
         form.addRow(self._key_note())
         form.addRow("Model", self.private_model)
+        form.addRow(self.private_service_note)
         self.private_look_model = ModelField(
             self.config.private_look_model, browse, privacy_of=self._private_field_privacy
         )
@@ -3078,12 +3120,12 @@ class SettingsDialog(QDialog):
                     ),
                 )
                 if refusal:
-                    # A TEE chat never moves to a model that can't be attested
-                    # (StorySession.check_chat_model); the endpoint's default
-                    # still changes, for everything else.
+                    # A TEE or end-to-end encrypted chat never moves below its
+                    # level of privacy (StorySession.check_chat_model); the
+                    # endpoint's default still changes, for everything else.
                     QMessageBox.information(
                         self,
-                        "Kept to TEE models",
+                        "Kept to its privacy",
                         f"This chat stays on {current}: {refusal} {provider.model} is the "
                         "default for other stories.",
                     )

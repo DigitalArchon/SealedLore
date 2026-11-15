@@ -191,10 +191,14 @@ def test_a_chat_moved_on_purpose_to_another_services_sealed_model_is_recorded_th
 ):
     cfg = config(tinfoil(), chutes())
     session = chat(tmp_path, cfg)
-    session.check_chat_model("Chutes::zai-org/GLM-5.3-TEE")  # D8: sealed to sealed
-    session.story.defaults.main_model = "Chutes::zai-org/GLM-5.3-TEE"
+    # D8 as amended (Nov 15 2026): its own level or higher, on any service. A
+    # Tinfoil chat has the highest privacy; Chutes' -TEE models are partial.
+    with pytest.raises(ValueError, match="partial privacy.*kept to the highest privacy"):
+        session.check_chat_model("Chutes::zai-org/GLM-5.3-TEE")
+    session.check_chat_model("private/glm-5-3")
+    session.story.defaults.main_model = "private/glm-5-3"
     session.adopt_chat_privacy()
-    assert session.story.chat_privacy.service == CHUTES
+    assert session.story.chat_privacy.service == NANOGPT_PRIVATE
     assert session.privacy_held() is None
     with pytest.raises(ValueError):
         session.check_chat_model("Nano::gpt-plain")
@@ -287,18 +291,21 @@ def test_a_scene_begun_on_tinfoil_resumed_on_a_plain_endpoint_sends_nothing(tmp_
     with pytest.raises(ProviderError):
         play(again, turn(again.story.held_character_id, SECRET))
     assert client.requests == []
-    # Moving it on purpose to another service's sealed model (D8) is allowed.
-    sealed = ProviderConfig(
-        name="private", base_url=CHUTES_BASE_URL, api="chutes-e2ee", model="zai-org/GLM-5.3-TEE"
+    # Not to Chutes' -TEE models: partial privacy, where the scene began with
+    # the highest (the author's levels, Nov 15 2026).
+    chutes_tee = ProviderConfig(
+        name="private", base_url=CHUTES_BASE_URL, model="zai-org/GLM-5.3-TEE"
     )
+    again.private_provider = NotBuiltProvider(chutes_tee, "held")
+    with pytest.raises(ValueError, match="isn't as private"):
+        again.switch_private_model(provider=MockChatProvider(), model="zai-org/GLM-5.3-TEE")
+    # Moving it on purpose to another service's model at its level (D8) is allowed.
+    sealed = ProviderConfig(name="private", base_url=NANO, model="private/kimi-k3")
     again.private_provider = NotBuiltProvider(sealed, "held")
     moved = MockChatProvider()
     moved.config = sealed
-    again.switch_private_model(provider=moved, model="zai-org/GLM-5.3-TEE")
-    assert again.open_span.privacy.service == CHUTES and again.privacy_held() is None
-    # A move never records it less private, whatever the new client says.
-    again.switch_private_model(provider=MockChatProvider(), model="zai-org/GLM-5.3-TEE")
-    assert again.open_span.privacy.service == CHUTES and again.privacy_held()
+    again.switch_private_model(provider=moved, model="private/kimi-k3")
+    assert again.open_span.privacy.service == NANOGPT_PRIVATE and again.privacy_held() is None
 
 
 def test_a_scene_begun_on_an_ordinary_private_model_resumes_as_before(tmp_path: Path):
@@ -349,10 +356,20 @@ def test_the_window_says_a_held_chat_and_a_held_scene_and_offers_the_ways_out(
             return 0
 
         monkeypatch.setattr(QMessageBox, "exec", answer)
-        # A later run: Settings → Private points at Chutes now.
+        # A later run: Settings → Private points at Chutes now, whose -TEE
+        # models have partial privacy: no model the scene may move to is offered.
         window.config.private_provider = ProviderConfig(
-            name="private", base_url=CHUTES_BASE_URL, api="chutes-e2ee", model="zai-org/X-TEE"
+            name="private", base_url=CHUTES_BASE_URL, model="zai-org/X-TEE"
         )
+        window._resume_private()
+        text, buttons = boxes[-1]
+        assert "began end-to-end encrypted through Tinfoil" in text
+        assert "Use another model…" not in buttons
+        # Then at NanoGPT's Private Mode, at the scene's own level: offered.
+        window.config.private_provider = ProviderConfig(
+            name="private", base_url=NANO, model="private/kimi-k3"
+        )
+        boxes.clear()
         window._resume_private()
         text, buttons = boxes[-1]
         assert "began end-to-end encrypted through Tinfoil" in text

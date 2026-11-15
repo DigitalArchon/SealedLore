@@ -14,7 +14,7 @@ from ipaddress import ip_address, ip_network
 from typing import Any, Literal, NamedTuple
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from sealedlore.models.generation import GenerationParams, ReasoningLevel
 from sealedlore.models.private import PrivateKeep
@@ -596,40 +596,59 @@ def key_withheld(
 
 
 # The protocol the chat endpoint speaks: OpenAI's /chat/completions (NanoGPT,
-# OpenRouter, a local server), Anthropic's own Messages API
-# (providers/anthropic.py), or one of the end-to-end encrypted services whose
-# every request is sealed on this computer: Tinfoil's own API
-# (providers/tinfoil_direct.py) and Chutes' E2EE (providers/chutes_provider.py).
-# "auto" reads it from the host (`chat_api`).
-ChatApi = Literal["auto", "openai", "anthropic", "tinfoil", "chutes-e2ee"]
+# OpenRouter, Chutes, a local server), Anthropic's own Messages API
+# (providers/anthropic.py; Chutes' claude.chutes.ai speaks it too), or
+# Tinfoil's, whose every request is sealed on this computer
+# (providers/tinfoil_direct.py). "auto" reads it from the host (`chat_api`).
+# Chutes' end-to-end encryption isn't a protocol an endpoint speaks: a Chutes
+# endpoint offers all of Chutes' models, and its -TEE ones are sealed by their
+# own client whatever it speaks (`chutes_tee`, providers/chutes_provider.py).
+ChatApi = Literal["auto", "openai", "anthropic", "tinfoil"]
 # The end-to-end encrypted protocols: an endpoint speaking one seals every
 # request (`sealed_service`).
-SEALED_APIS = frozenset({"tinfoil", "chutes-e2ee"})
+SEALED_APIS = frozenset({"tinfoil"})
 # What Settings → Endpoints → Speaks offers: only protocols with a client.
 CHAT_API_LABELS: dict[str, str] = {
     "auto": "From the address",
     "openai": "OpenAI-compatible",
     "anthropic": "Anthropic",
     "tinfoil": "Tinfoil, end-to-end encrypted",
-    "chutes-e2ee": "Chutes E2EE, end-to-end encrypted (partial)",
 }
+# What this branch's first build saved for a Chutes endpoint, before Chutes
+# was an ordinary endpoint too (Nov 15 2026; never released): read as
+# "openai" at Chutes' OpenAI-compatible address (`ProviderConfig._settle_chutes`).
+_OLD_CHUTES_API = "chutes-e2ee"
 ANTHROPIC_HOST = "api.anthropic.com"
-# Tinfoil's own API (providers/tinfoil_direct.py) and Chutes' end-to-end
-# encrypted one (providers/chutes_provider.py).
+# Tinfoil's own API (providers/tinfoil_direct.py).
 TINFOIL_BASE_URL = "https://inference.tinfoil.sh/v1"
-CHUTES_BASE_URL = "https://api.chutes.ai"
+# Chutes: its OpenAI-compatible API, its own open-source proxy speaking
+# Anthropic's Messages API (github.com/chutesai/claude-proxy, which hands each
+# request on to the OpenAI-compatible one), and the API its end-to-end
+# encryption goes through (providers/chutes_provider.py).
+CHUTES_BASE_URL = "https://llm.chutes.ai/v1"
+CHUTES_ANTHROPIC_URL = "https://claude.chutes.ai"
+CHUTES_E2EE_ORIGIN = "https://api.chutes.ai"
+# Chutes' own hosts, a fixed list: a Chutes key saved for one of them goes to
+# the endpoint's own address for Chutes' ordinary models and to
+# CHUTES_E2EE_ORIGIN for its -TEE ones, over https, and nowhere else. The one
+# stated exception to "a key goes only to the origin it was entered for"
+# (providers/chutes_provider.py `ChutesE2EEProvider._key`), as NanoGPT's key
+# from the environment is bound to NanoGPT's own origin.
+CHUTES_KEY_ORIGINS = frozenset(
+    {"https://llm.chutes.ai", "https://api.chutes.ai", "https://claude.chutes.ai"}
+)
+# Chutes' domains: a model on a host under one is judged by Chutes' rule
+# (`chutes_tee`).
+CHUTES_DOMAINS = ("chutes.ai", "chutes.dev")
 # The hosts whose chat endpoints take only end-to-end encrypted requests, by
 # domain (any host under it), and the protocol each speaks: Tinfoil's
-# inference.tinfoil.sh and its routers; Chutes' api.chutes.ai, llm.chutes.ai
-# and api.chutes.dev (the chutes-e2ee package's default). Read from the
-# address whatever `api` says (`sealed_service`): a plain request to one
-# would carry the text in the clear.
+# inference.tinfoil.sh and its routers. Read from the address whatever `api`
+# says (`sealed_service`): a plain request to one would carry the text in the
+# clear.
 SEALED_HOSTS: dict[str, str] = {
     "tinfoil.sh": "tinfoil",
-    "chutes.ai": "chutes-e2ee",
-    "chutes.dev": "chutes-e2ee",
 }
-_CHAT_HOSTS = {ANTHROPIC_HOST: "anthropic"}
+_CHAT_HOSTS = {ANTHROPIC_HOST: "anthropic", "claude.chutes.ai": "anthropic"}
 
 
 def _host_of(base_url: str) -> str:
@@ -641,32 +660,66 @@ def _host_of(base_url: str) -> str:
         return ""
 
 
+def _under(host: str, domain: str) -> bool:
+    return host == domain or host.endswith("." + domain)
+
+
 def sealed_service(base_url: str, api: str = "auto") -> str:
     """The end-to-end encrypted protocol an endpoint must be spoken in
-    ("tinfoil", "chutes-e2ee"), or "": the one `api` names, else the one its
-    host is known for, whatever `api` says. When in doubt, sealed: an
-    endpoint set to "openai" on Tinfoil's host is still Tinfoil's."""
+    ("tinfoil"), or "": the one `api` names, else the one its host is known
+    for, whatever `api` says. When in doubt, sealed: an endpoint set to
+    "openai" on Tinfoil's host is still Tinfoil's."""
     if api in SEALED_APIS:
         return api
     host = _host_of(base_url)
     for domain, name in SEALED_HOSTS.items():
-        if host == domain or host.endswith("." + domain):
+        if _under(host, domain):
             return name
     return ""
+
+
+def on_chutes(base_url: str) -> bool:
+    """Whether `base_url` is one of Chutes' hosts (chutes.ai, chutes.dev and
+    any host under them; a trailing dot is the same machine)."""
+    host = _host_of(base_url)
+    return any(_under(host, domain) for domain in CHUTES_DOMAINS)
+
+
+def is_tee_id(model: str) -> bool:
+    """Whether a model id names one of Chutes' TEE models: it ends "-TEE",
+    in any case, whatever stray spaces, less a ":variant" after it
+    ("Qwen/Qwen3-32B-TEE:THINKING"). Read generously, every ":" taken as
+    where a variant might begin: a TEE model judged ordinary would be sent
+    in the clear. The endpoint's name, if the reference names one, is not
+    the id."""
+    bare = split_model(str(model or ""))[1].strip()
+    pieces = [bare]
+    pieces += [bare[:at] for at, char in enumerate(bare) if char == ":"]
+    return any(piece.strip().upper().endswith("-TEE") for piece in pieces)
+
+
+def chutes_tee(model: str, base_url: str) -> bool:
+    """Whether `model` on the endpoint at `base_url` is one of Chutes' TEE
+    models (`is_tee_id` on one of Chutes' hosts, `on_chutes`): always sent
+    end-to-end encrypted to an attested Chutes instance
+    (providers/chutes_provider.py), never in the clear, whatever the
+    endpoint speaks. Chutes lists exactly these as confidential compute (11
+    of its 19 models, Nov 15 2026); its other models are ordinary."""
+    return on_chutes(base_url) and is_tee_id(model)
 
 
 def chat_api(base_url: str, api: str = "auto") -> str:
     """The protocol a chat endpoint speaks: `api` unless "auto", otherwise
     a sealed service's for its host (`sealed_service`), Anthropic's for its
-    own host and OpenAI's for anything else."""
+    own host and Chutes' proxy of it, and OpenAI's for anything else."""
     if api != "auto":
         return api
     sealed = sealed_service(base_url)
     if sealed:
         return sealed
-    host = (urlparse(base_url.strip()).hostname or "").lower()
+    host = _host_of(base_url)
     for known, name in _CHAT_HOSTS.items():
-        if host == known or host.endswith("." + known):
+        if _under(host, known):
             return name
     return "openai"
 
@@ -736,6 +789,25 @@ class ProviderConfig(BaseModel):
     # words rather than go without it. Never written.
     key_withheld: str = Field(default="", exclude=True)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _settle_chutes(cls, data: Any) -> Any:
+        """An endpoint this branch's first build saved speaking "chutes-e2ee"
+        (never released): Chutes is an ordinary endpoint now, its -TEE models
+        sealed whatever it speaks (`chutes_tee`), so it speaks "openai", at
+        Chutes' OpenAI-compatible address when it was at the old preset's
+        (https://api.chutes.ai). A key saved there moves with it: both are
+        Chutes' own hosts (`CHUTES_KEY_ORIGINS`)."""
+        if not isinstance(data, dict) or data.get("api") != _OLD_CHUTES_API:
+            return data
+        data = {**data, "api": "openai"}
+        if key_origin(str(data.get("base_url") or "")) == CHUTES_E2EE_ORIGIN:
+            data["base_url"] = CHUTES_BASE_URL
+            for field in ("key_saved_for", "key_declined_for", "key_in_clear_for"):
+                if data.get(field) == CHUTES_E2EE_ORIGIN:
+                    data[field] = key_origin(CHUTES_BASE_URL)
+        return data
+
     @field_validator("base_url")
     @classmethod
     def _check_scheme(cls, value: str) -> str:
@@ -760,8 +832,8 @@ class ProviderConfig(BaseModel):
         return self.model_copy(update={"api_key": "", "key_withheld": why})
 
     def speaks(self) -> str:
-        """The protocol this endpoint speaks, "openai", "anthropic", "tinfoil"
-        or "chutes-e2ee" (`chat_api`)."""
+        """The protocol this endpoint speaks, "openai", "anthropic" or
+        "tinfoil" (`chat_api`)."""
         return chat_api(self.base_url, self.api)
 
     def sealed_service(self) -> str:

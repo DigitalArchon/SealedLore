@@ -76,26 +76,38 @@ def chutes_record(instances: int = 2) -> Attestation:
 # --- the factory and the plain-client rule -----------------------------------------------
 
 
-def test_a_chutes_endpoint_gets_its_own_sealing_client_everywhere():
+def test_a_chutes_tee_model_gets_its_own_sealing_client_everywhere():
+    """A -TEE model on a Chutes endpoint always gets Chutes' sealing client;
+    the endpoint's ordinary models and its listing get its plain client
+    (Chutes is an ordinary endpoint too since Nov 15 2026:
+    tests/test_chutes_mixed.py)."""
     assert isinstance(make_chat_provider(chutes(model=MODEL)), ChutesE2EEProvider)
     routing = EndpointsProvider(config(chutes()))
     assert isinstance(routing.provider_for(f"Chutes::{MODEL}"), ChutesE2EEProvider)
-    assert isinstance(routing._plain(chutes()), ChutesE2EEProvider), "its listing too"
+    assert isinstance(routing.provider_for("Chutes::zai-org/GLM-5.3"), OpenAICompatibleProvider)
+    assert isinstance(routing._plain(chutes()), OpenAICompatibleProvider), "its listing"
     routing.close()
     assert privacy_of(f"Chutes::{MODEL}", config(chutes())).service == CHUTES
 
 
-def test_only_the_hosts_own_sealing_client_reaches_it():
-    """Chutes' client reaches api.chutes.ai; a plain one, or another
-    service's sealing client, never does."""
+def test_a_plain_client_reaches_chutes_but_never_with_one_of_its_tee_models():
+    """Chutes' client reaches api.chutes.ai; a plain one reaches the endpoint
+    for its ordinary models, and refuses a -TEE one before anything is sent."""
+    from sealedlore.messages import ContentPart, PromptMessage
+    from sealedlore.providers.base import ChatRequest
+
     assert ChutesE2EEProvider(chutes())._get_client() is not None
-
-    class OtherSealer(OpenAICompatibleProvider):
-        seals = "tinfoil"
-
-    for client in (OpenAICompatibleProvider(chutes()), OtherSealer(chutes())):
-        with pytest.raises(ProviderError, match="end-to-end encrypted endpoint"):
-            client._get_client()
+    sent: list[httpx.Request] = []
+    client = httpx.Client(
+        transport=httpx.MockTransport(lambda r: sent.append(r) or httpx.Response(500))
+    )
+    plain = OpenAICompatibleProvider(chutes(), client=client)
+    asked = ChatRequest(
+        model=MODEL, messages=[PromptMessage(role="user", parts=(ContentPart(text="hi"),))]
+    )
+    with pytest.raises(ProviderError, match="one of Chutes' TEE models"):
+        list(plain.stream(asked))
+    assert sent == []
 
 
 # --- the keyless check --------------------------------------------------------------------
@@ -198,19 +210,20 @@ def test_settings_adds_chutes_and_offers_it_for_private_scenes(app):
     cfg = config()
     dialog = SettingsDialog(cfg, None)
     dialog.add_chutes.click()
-    assert dialog.base_url.text() == CHUTES_BASE_URL
-    assert dialog.chat_api.currentData() == "chutes-e2ee"
-    assert "always partial" in dialog.api_note.text()
+    assert dialog.base_url.text() == CHUTES_BASE_URL == "https://llm.chutes.ai/v1"
+    assert dialog.chat_api.currentData() == "openai"
+    assert "-TEE models are always sent end-to-end encrypted" in dialog.api_note.text()
     dialog.api_key.setText("cpk_1")
     dialog.private_service.setCurrentIndex(dialog.private_service.findData("chutes"))
     assert dialog.private_url.text() == CHUTES_BASE_URL
     dialog.private_model.setText(MODEL)
     assert dialog.private_model.privacy.text() == "🔐 E2EE · Chutes ⚠ partial"
     assert not dialog.private_attest.isHidden()
+    assert not dialog.private_service_note.isHidden(), "the page says which are private"
     dialog._save()
-    assert cfg.endpoint_named("Chutes").api == "chutes-e2ee"
+    assert cfg.endpoint_named("Chutes").api == "openai"
     assert (cfg.private_provider.api, private_service_of(cfg.private_provider)) == (
-        "chutes-e2ee",
+        "openai",
         "chutes",
     )
 
@@ -225,7 +238,8 @@ def test_the_picker_says_encrypted_by_chutes_partially(app):
     )
     row = dialog.table.topLevelItem(0)
     assert row.text(COLUMNS.index("Privacy")) == "🔐 Encrypted (Chutes, partial)"
-    assert "always partial" in row.toolTip(COLUMNS.index("Privacy"))
+    tip = row.toolTip(COLUMNS.index("Privacy"))
+    assert tip.startswith("Partial privacy") and "Why partial" in tip
     dialog.deleteLater()
 
 
@@ -251,8 +265,8 @@ def test_a_chutes_passage_names_its_service_and_instance(tmp_path):
     session._check_tee(nodes[-1])
     meta = nodes[-1].meta
     assert (meta.tee, meta.tee_service, meta.tee_instance) == ("encrypted", "chutes", "0f1e2d3c")
-    said = session.note_model_move("private/glm-5-3", f"Chutes::{MODEL}")
-    assert said and "Chutes E2EE, end-to-end encrypted" in said
+    said = session.note_model_move("TEE/glm-5.3", f"Chutes::{MODEL}")
+    assert said and "Chutes, end-to-end encrypted: partial privacy" in said
 
 
 def test_a_chat_on_chutes_attests_through_its_client_and_says_partial(

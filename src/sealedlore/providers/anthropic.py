@@ -27,7 +27,7 @@ from typing import Any
 import httpx
 
 from sealedlore.messages import PromptMessage
-from sealedlore.models.config import ProviderConfig
+from sealedlore.models.config import ProviderConfig, on_chutes
 from sealedlore.providers.anthropic_models import (
     listing_entry,
     reasoning_default,
@@ -46,6 +46,7 @@ from sealedlore.providers.base import (
     parse_usage,
 )
 from sealedlore.providers.http import reply_json
+from sealedlore.providers.privacy import plain_refusal, privacy_for
 from sealedlore.providers.streaming import StreamingHttpProvider, read_lines
 from sealedlore.providers.wire import cache_marker
 from sealedlore.storage.atomic import outside_json
@@ -207,6 +208,18 @@ class AnthropicProvider(StreamingHttpProvider):
         return build_messages_payload(request, provider_extra_body=self.config.extra_body)
 
     def _prepare(self, request: ChatRequest) -> tuple[str, dict[str, Any], dict[str, str]]:
+        # One of Chutes' TEE models (on claude.chutes.ai, Chutes' proxy of this
+        # API), or an end-to-end encrypted model on any endpoint (a `private/`
+        # one): only ever sent sealed to its attested enclave, by its own
+        # client, never by this one in the clear (providers/privacy.py).
+        refusal = plain_refusal(self.endpoint, api=self.config.api, model=request.model)
+        if refusal:
+            raise ProviderError(refusal)
+        if privacy_for(request.model, self.config).sealed:
+            raise ProviderError(
+                f"{request.model} is end-to-end encrypted and can only be sent through "
+                "the encrypted client; nothing was sent"
+            )
         payload = self.build_payload(request)
         if not payload["messages"] or payload["messages"][0]["role"] != "user":
             raise ProviderError(
@@ -334,7 +347,15 @@ class AnthropicProvider(StreamingHttpProvider):
 
     def fetch_model_prices(self) -> dict[str, dict[str, Any]]:
         """GET /v1/models, every page: id → entry in the shape the catalog
-        reads. "Prices" by the interface's name only: Anthropic lists none."""
+        reads. "Prices" by the interface's name only: Anthropic lists none.
+        On Chutes (claude.chutes.ai, its proxy of this API, whose own listing
+        isn't documented), Chutes' public list, without the key
+        (providers/chutes_catalog.py)."""
+        if on_chutes(self.config.base_url):
+            from sealedlore.providers.chutes_catalog import fetch_chutes_models
+
+            self._models = fetch_chutes_models(self._get_client())
+            return self._models
         url = origin(self.config.base_url) + "/v1/models"
         listing: dict[str, dict[str, Any]] = {}
         after: str | None = None
@@ -369,7 +390,10 @@ class AnthropicProvider(StreamingHttpProvider):
         """What each listed model does about thinking when a request says
         nothing. Anthropic's listing doesn't state it; its docs do, by
         generation (anthropic_models.py), and that is what the Settings note
-        and "as low as possible" need to know."""
+        and "as low as possible" need to know. Chutes' models aren't Claude:
+        nothing is said of them."""
+        if on_chutes(self.config.base_url):
+            return None
         models = self._models if self._models is not None else self.fetch_model_prices()
         return {model: reasoning_default(model) for model in models}
 

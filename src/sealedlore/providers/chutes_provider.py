@@ -40,10 +40,22 @@ The attestation is always "partial" (`WORKLOAD_UNMEASURED`,
 `MEASUREMENTS_LISTED`): the workload that makes and uses the key is admitted
 by Chutes' signature, not measured, and the measured sets are Chutes' list.
 
-The key goes to https://api.chutes.ai alone, and only when the endpoint's
-address is that (`not_chutes`, `ProviderConfig.sendable`); nothing is ever
-redirected, and nothing is ever sent unsealed but the discovery, the evidence
-and the two public lists. Not yet wired into Settings or the window.
+A Chutes endpoint (llm.chutes.ai, or claude.chutes.ai speaking Anthropic's
+Messages API) offers every model Chutes lists (the author, Nov 15 2026); its
+-TEE models (models/config.py `chutes_tee`) come here, always, whatever the
+endpoint speaks, and its others go through the endpoint's ordinary client.
+
+**The key** goes from an endpoint at one of Chutes' own hosts
+(`CHUTES_KEY_ORIGINS`: llm.chutes.ai, api.chutes.ai, claude.chutes.ai), the
+key saved for one of them, to https://api.chutes.ai, where Chutes' end-to-end
+encryption is, over https, and nowhere else (`not_chutes`, `_key`). That is
+the one stated exception to "a key goes only to the origin it was entered
+for" (the DA apps' security standard): Chutes takes one key on all three of
+its hosts, as NanoGPT's key from the environment is bound to NanoGPT's own
+origin. A key saved for any other origin never comes here
+(`ProviderConfig.sendable`, then `_key`), and an edited address is asked
+about as for any key. Nothing is ever redirected, and nothing is ever sent
+unsealed but the discovery, the evidence and the two public lists.
 """
 
 from __future__ import annotations
@@ -60,7 +72,14 @@ from typing import Any
 
 import httpx
 
-from sealedlore.models.config import ProviderConfig, key_origin, shown, split_model
+from sealedlore.models.config import (
+    CHUTES_E2EE_ORIGIN,
+    CHUTES_KEY_ORIGINS,
+    ProviderConfig,
+    key_origin,
+    shown,
+    split_model,
+)
 from sealedlore.models.private import Attestation
 from sealedlore.providers.base import (
     ChatRequest,
@@ -74,6 +93,7 @@ from sealedlore.providers.base import (
     parse_usage,
     relay_said,
 )
+from sealedlore.providers.chutes_catalog import MODELS_URL
 from sealedlore.providers.chutes_e2ee import (
     MeasurementSet,
     SealBroken,
@@ -110,8 +130,7 @@ from sealedlore.providers.wire import build_chat_payload, to_wire_messages
 from sealedlore.storage.atomic import outside_json
 from sealedlore.threads import thread_pool
 
-CHUTES_ORIGIN = "https://api.chutes.ai"
-MODELS_URL = "https://llm.chutes.ai/v1/models"
+CHUTES_ORIGIN = CHUTES_E2EE_ORIGIN
 MEASUREMENTS_URL = CHUTES_ORIGIN + "/servers/tdx/measurements"
 INVOKE_URL = CHUTES_ORIGIN + "/e2e/invoke"
 # What the instance's workload maps to its model's own route (chutes run.py).
@@ -170,25 +189,47 @@ EVIDENCE_LIMIT = (
 KEY_BINDING_UNCHECKED = "the key binding unchecked (it needs a Chutes key)"
 
 
-def not_chutes(base_url: str) -> str | None:
-    """Why Chutes' end-to-end encryption can't go through `base_url`, or None:
-    its discovery, evidence and sealed requests are api.chutes.ai's, and the
-    key is sent there alone."""
-    if key_origin(base_url) == CHUTES_ORIGIN:
-        return None
-    return (
-        f"{shown(base_url)} isn't Chutes' API: its end-to-end encrypted models are sent only "
-        f"through {CHUTES_ORIGIN}, so nothing was sent. Set the endpoint's address to that."
-    )
+def not_chutes(base_url: str, key_saved_for: str = "") -> str | None:
+    """Why Chutes' end-to-end encryption can't go through the endpoint at
+    `base_url`, its key saved for `key_saved_for`, or None: its discovery,
+    evidence and sealed requests are api.chutes.ai's, and the key goes there
+    only from an endpoint at one of Chutes' own hosts, saved for one of them
+    (`CHUTES_KEY_ORIGINS`: the one exception to a key going only to the
+    origin it was entered for)."""
+    if key_origin(base_url) not in CHUTES_KEY_ORIGINS:
+        return (
+            f"{shown(base_url)} isn't one of Chutes' own addresses: its end-to-end encrypted "
+            f"models are sent only through {CHUTES_ORIGIN}, from an endpoint at "
+            f"{CHUTES_BASE_HINT}, so nothing was sent. Set the endpoint's address to that."
+        )
+    if key_saved_for and key_saved_for not in CHUTES_KEY_ORIGINS:
+        return (
+            f"The key was saved for {key_saved_for}, which isn't one of Chutes' own "
+            f"addresses, so it isn't sent to {CHUTES_ORIGIN}; nothing was sent. Enter your "
+            "Chutes key for this endpoint (Settings → Endpoints)."
+        )
+    return None
+
+
+CHUTES_BASE_HINT = "https://llm.chutes.ai/v1 or https://claude.chutes.ai"
 
 
 class NotOffered(ProviderError):
-    """Chutes doesn't list the model as one that runs in a TEE: never sent."""
+    """Chutes doesn't list the model as one that runs in a TEE: never sent.
+    A variant ("…-TEE:THINKING") is none of those Chutes lists either: its
+    router reads the variant on the ordinary route alone, which is in the
+    clear."""
 
     def __init__(self, model: str, offered: list[str]) -> None:
+        variant = ":" in model
         super().__init__(
             f"{relay_said(model, 120)} isn't one of Chutes' end-to-end encrypted models "
             "(those it lists as confidential compute); nothing was sent"
+            + (
+                ". A variant after a colon isn't one Chutes lists: choose the model itself"
+                if variant
+                else ""
+            )
         )
         self.model = model
         self.offered = offered
@@ -293,8 +334,9 @@ def gpus_unproved(check: _Checks, short: str) -> tuple[str, bool] | None:
 
 class ChutesE2EEProvider(StreamingHttpProvider):
     sealed_replies = True
-    # Its own client reaches api.chutes.ai (`StreamingHttpProvider._get_client`).
-    seals = "chutes-e2ee"
+    # Chutes' hosts aren't sealed endpoints (`seals` is Tinfoil's): this client
+    # seals each request itself, and reaches only api.chutes.ai (`_key`).
+    seals = ""
 
     def __init__(
         self,
@@ -421,8 +463,12 @@ class ChutesE2EEProvider(StreamingHttpProvider):
     # --- HTTP ------------------------------------------------------------------------
 
     def _key(self) -> str:
-        """The key, once it may go to Chutes: refused, nothing sent, otherwise."""
-        refusal = not_chutes(self.config.base_url)
+        """The key, once it may go to api.chutes.ai: refused, nothing sent,
+        otherwise. The endpoint is at one of Chutes' own hosts and the key
+        saved for one of them (`not_chutes`), the one exception to a key going
+        only to the origin it was entered for; and it is sendable there at all
+        (`ProviderConfig.sendable`: not one saved elsewhere, nor one held back)."""
+        refusal = not_chutes(self.config.base_url, self.config.key_saved_for)
         if refusal:
             raise ProviderError(refusal)
         if self.config.key_withheld:
@@ -1044,16 +1090,16 @@ class ChutesE2EEProvider(StreamingHttpProvider):
 
 def chutes_context(model: str) -> Any:
     """A Chutes model's context from its public listing, read without the key
-    (Settings → Private → Detect); None when it isn't listed as confidential."""
+    (Settings → Private → Detect), any model Chutes lists; None when it isn't."""
+    from sealedlore.providers.chutes_catalog import fetch_chutes_models
     from sealedlore.providers.context_probe import ContextSize
 
+    client = make_client(MODELS_URL)
     try:
-        entry = (
-            ChutesE2EEProvider(ProviderConfig(name="Chutes", base_url=CHUTES_ORIGIN))
-            .fetch_model_prices()
-            .get(split_model(model)[1].strip())
-        )
+        entry = fetch_chutes_models(client).get(split_model(model)[1].strip())
     except ProviderError:
         return None
+    finally:
+        client.close()
     tokens = entry.get("context_length") if entry else None
     return ContextSize(tokens=tokens, source="Chutes' model list") if tokens else None

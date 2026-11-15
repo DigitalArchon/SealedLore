@@ -32,12 +32,14 @@ def make_chat_provider(settings: ProviderConfig) -> ChatProvider:
     place that chooses.
 
     An end-to-end encrypted model (providers/privacy.py: nano-gpt's
-    `private/*`, or any model on a sealed endpoint) is never sent in the
-    clear, whatever the endpoint: NanoGPT's gets its sealing client, and one
-    whose client this version hasn't sends nothing, saying why
-    (`NotBuiltProvider`). Anthropic's own API gets its native client
-    (Settings → Endpoints → Speaks, or read from the address); anything else
-    speaks OpenAI's /chat/completions. A key saved for another place than the
+    `private/*`, any model on Tinfoil's endpoint, one of Chutes' -TEE models
+    on a Chutes endpoint) is never sent in the clear, whatever the endpoint
+    speaks: each gets its service's sealing client, and one whose client
+    this version hasn't sends nothing, saying why (`NotBuiltProvider`).
+    Anthropic's own API (and Chutes' claude.chutes.ai, its proxy of it) gets
+    its native client (Settings → Endpoints → Speaks, or read from the
+    address); anything else, Chutes' ordinary models included, speaks
+    OpenAI's /chat/completions. A key saved for another place than the
     endpoint's address now names goes nowhere: its client refuses, saying
     why (`ProviderConfig.sendable`).
     """
@@ -62,7 +64,7 @@ def make_chat_provider(settings: ProviderConfig) -> ChatProvider:
         from sealedlore.providers.tinfoil_direct import TinfoilDirect
 
         return TinfoilDirect(settings)
-    if privacy.service == CHUTES:
+    if privacy.sealed and privacy.service == CHUTES:
         from sealedlore.providers.chutes_provider import ChutesE2EEProvider
 
         return ChutesE2EEProvider(settings)

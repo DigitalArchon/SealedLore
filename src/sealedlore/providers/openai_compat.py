@@ -17,7 +17,7 @@ from typing import Any
 
 import httpx
 
-from sealedlore.models.config import on_nanogpt
+from sealedlore.models.config import on_chutes, on_nanogpt
 from sealedlore.providers.base import (
     ChatRequest,
     ProviderError,
@@ -69,7 +69,13 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
         return self.config.base_url.rstrip("/") + "/chat/completions"
 
     def fetch_model_prices(self) -> dict[str, dict[str, Any]]:
-        """GET /models (detailed): nano-gpt lists prices only with ?detailed=true."""
+        """GET /models (detailed): nano-gpt lists prices only with ?detailed=true.
+        A Chutes endpoint lists Chutes' public list, without the key
+        (providers/chutes_catalog.py)."""
+        if on_chutes(self.config.base_url):
+            from sealedlore.providers.chutes_catalog import fetch_chutes_models
+
+            return fetch_chutes_models(self._get_client())
         url = self.config.base_url.rstrip("/") + "/models"
         try:
             response = self._get_client().get(
@@ -119,11 +125,12 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
 
     def _prepare(self, request: ChatRequest) -> tuple[str, dict[str, Any], dict[str, str]]:
         """The URL, body and headers of one request."""
-        # A sealed endpoint first, by its address (`plain_refusal`), then an
-        # end-to-end encrypted model on any other (a `private/` one): either
-        # is only ever sent sealed to its attested enclave, and this client
-        # would send it in the clear (providers/privacy.py).
-        refusal = plain_refusal(self.endpoint, api=self.config.api)
+        # A sealed endpoint first, by its address (`plain_refusal`), or one of
+        # Chutes' TEE models on its hosts, then an end-to-end encrypted model
+        # on any other (a `private/` one): each is only ever sent sealed to
+        # its attested enclave, and this client would send it in the clear
+        # (providers/privacy.py).
+        refusal = plain_refusal(self.endpoint, api=self.config.api, model=request.model)
         if refusal:
             raise ProviderError(refusal)
         if privacy_for(request.model, self.config).sealed:

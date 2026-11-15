@@ -67,7 +67,7 @@ def test_every_field_read_is_one_the_captures_and_the_record_know():
     listed = {k for item in models["data"] for k in item}
     assert listed <= set(RECORD["listing_fields"])
     assert set(RECORD["listing_read"]) <= listed
-    source = inspect.getsource(pure.confidential_models)
+    source = inspect.getsource(pure.listed_models)  # every model, confidential or not
     for field in RECORD["listing_read"] + RECORD["pricing_read"]:
         assert f'"{field}"' in source, field
     assert set(evidence["evidence"]) == set(RECORD["evidence_fields"])

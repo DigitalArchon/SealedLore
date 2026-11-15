@@ -176,9 +176,11 @@ class StreamingHttpProvider(ChatProvider):
         # Set by cancel(), so a wait before a retry ends at once.
         self._wake = threading.Event()
 
-    # The end-to-end encrypted protocol this client seals every request in
-    # (models/config.py `SEALED_APIS`), or "" for a plain client, which never
-    # reaches a sealed endpoint.
+    # The end-to-end encrypted protocol of a sealed endpoint this client seals
+    # every request in (models/config.py `SEALED_APIS`: Tinfoil's), or "" for
+    # any other, which never reaches such an endpoint. Chutes' client is one
+    # of those: Chutes' hosts aren't sealed endpoints, and it seals each
+    # request itself (providers/chutes_provider.py).
     seals = ""
 
     def _twin(self) -> StreamingHttpProvider:
@@ -213,7 +215,8 @@ class StreamingHttpProvider(ChatProvider):
         # Judged by the address, whatever the model: a plain client never
         # reaches an end-to-end encrypted endpoint, not even with a listing
         # (it carries the key). Only the sealing client of that endpoint's
-        # own protocol (`seals`) may: Chutes' seals each request itself.
+        # own protocol (`seals`) may. (One of Chutes' TEE models is refused
+        # by the request's own model, `plain_refusal(model=)`.)
         if sealed_service(self.endpoint, self.config.api) != self.seals:
             refusal = plain_refusal(self.endpoint, api=self.config.api)
             if refusal:

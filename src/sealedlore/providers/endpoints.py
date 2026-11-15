@@ -7,9 +7,10 @@ default endpoint's, models/config.py). The session keeps one `ChatProvider`
 and every side call names its model in its `ChatRequest`, so this is the one
 place that resolves: a real client per endpoint (`make_chat_provider`), made
 on first use, given a copy of the request with the bare id. An end-to-end
-encrypted model (providers/privacy.py: a `private/` model, or any on a
-sealed endpoint) gets its endpoint's sealing client, as it always did,
-because the client is chosen by the model it is first asked for.
+encrypted model (providers/privacy.py: a `private/` model, any on a sealed
+endpoint, one of Chutes' -TEE models) gets its endpoint's sealing client, as
+it always did, because the client is chosen by the model it is first asked
+for; a Chutes endpoint's ordinary models get its plain client beside it.
 
 What the session hangs on a provider (`route_watch`, `reasoning_watch`) is
 passed down to each client, wrapped so the session sees the qualified

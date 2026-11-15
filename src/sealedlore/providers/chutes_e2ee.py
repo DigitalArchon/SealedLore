@@ -33,9 +33,11 @@ The protocol, as read from Chutes' own code (Nov 14 2026, MIT: chutes-api
 - **Measurements** (`measured`): the quote's MRTD and RTMR0-3 against the
   sets Chutes publishes (`/servers/tdx/measurements`, or the same in
   `/servers/tee/measurements`' shape).
-- **Models** (`confidential_models`): `llm.chutes.ai/v1/models`, only those
-  listed `confidential_compute: true` (the author's decision: a Chutes
-  endpoint here offers only those, every one end-to-end encrypted).
+- **Models** (`listed_models`, `confidential_models`): `llm.chutes.ai/v1/models`,
+  keyless; its end-to-end encryption goes only to those listed
+  `confidential_compute: true` (exactly its -TEE ids, Nov 15 2026). A Chutes
+  endpoint offers every model it lists, its others in the clear, as any
+  provider's (the author, Nov 15 2026; models/config.py `chutes_tee`).
 
 Chutes' own Python client (`chutes-e2ee` 0.1.0) is not used: it attests
 nothing, sends a body it can't read as JSON in the clear, and takes any
@@ -539,15 +541,28 @@ def _price(value: Any) -> float | None:
 
 def confidential_models(listing: Any) -> dict[str, dict[str, Any]]:
     """The models of Chutes' listing (`llm.chutes.ai/v1/models`) that run in a
-    TEE, `confidential_compute: true` and nothing less, each as the app's
-    model list holds an entry (engine/catalog.py, engine/pricing.py), keyed by
-    its id, with its `chute_id`: its price per million tokens
-    (`unit: per_million_tokens`), context, output limit, what it reads and
-    whether it reasons. A model without a chute id isn't listed."""
+    TEE, `confidential_compute: true` and nothing less (`listed_models`): the
+    only ones its end-to-end encryption is sent to."""
+    return {
+        model_id: entry
+        for model_id, entry in listed_models(listing).items()
+        if entry["confidential_compute"] is True
+    }
+
+
+def listed_models(listing: Any) -> dict[str, dict[str, Any]]:
+    """Every model of Chutes' listing (`llm.chutes.ai/v1/models`), each as the
+    app's model list holds an entry (engine/catalog.py, engine/pricing.py),
+    keyed by its id, with its `chute_id` and whether Chutes lists it as
+    confidential compute (true, and nothing else, counts): its price per
+    million tokens (`unit: per_million_tokens`), context, output limit, what
+    it reads and whether it reasons. A model without a chute id isn't
+    listed. How private each is isn't the listing's to say: its id decides
+    (models/config.py `chutes_tee`)."""
     items = listing.get("data") if isinstance(listing, dict) else None
     entries: dict[str, dict[str, Any]] = {}
     for item in items if isinstance(items, list) else []:
-        if not isinstance(item, dict) or item.get("confidential_compute") is not True:
+        if not isinstance(item, dict):
             continue
         model_id, chute_id = item.get("id"), item.get("chute_id")
         if not (isinstance(model_id, str) and model_id.strip() and is_chute_id(chute_id)):
@@ -556,7 +571,7 @@ def confidential_models(listing: Any) -> dict[str, dict[str, Any]]:
             "id": model_id,
             "name": model_id,
             "chute_id": chute_id,
-            "confidential_compute": True,
+            "confidential_compute": item.get("confidential_compute") is True,
         }
         if isinstance(item.get("owned_by"), str):
             entry["owned_by"] = item["owned_by"]

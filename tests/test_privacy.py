@@ -1,10 +1,11 @@
 """Privacy as a property of the endpoint (providers/privacy.py).
 
 NanoGPT's `private/` and `TEE/` models read as they always did; an endpoint
-that speaks Tinfoil's or Chutes' end-to-end encryption makes every model on
-it sealed, and until their clients exist nothing is sent to one. When in
-doubt, sealed: a plain client never reaches a sealed host, and embeddings,
-pictures and videos never inherit one's address or key.
+that speaks Tinfoil's end-to-end encryption makes every model on it sealed,
+and Chutes' -TEE models are sealed on any of Chutes' hosts (Chutes' others
+are ordinary: tests/test_chutes_mixed.py). When in doubt, sealed: a plain
+client never reaches a sealed host, and embeddings, pictures and videos
+never inherit one's address or key.
 """
 
 from __future__ import annotations
@@ -53,7 +54,7 @@ from sealedlore.storage.repository import StoryBundle
 
 NANO = "https://nano-gpt.com/api/v1"
 TINFOIL_URL = "https://inference.tinfoil.sh/v1"
-CHUTES_URL = "https://api.chutes.ai"
+CHUTES_URL = "https://llm.chutes.ai/v1"
 
 
 def endpoints(*extra: ProviderConfig, default: str = "Nano") -> Config:
@@ -117,15 +118,13 @@ def test_every_model_on_a_sealed_endpoint_is_sealed():
         ("https://INFERENCE.tinfoil.sh./v1", "auto", TINFOIL),
         (TINFOIL_URL, "openai", TINFOIL),  # set to plain, still Tinfoil's host
         (TINFOIL_URL, "anthropic", TINFOIL),
-        ("https://api.chutes.ai", "auto", CHUTES),
-        ("https://llm.chutes.ai/v1", "auto", CHUTES),
-        ("https://api.chutes.dev", "openai", CHUTES),
         ("https://proxy.example/v1", "tinfoil", TINFOIL),  # set to Tinfoil's protocol
-        ("https://proxy.example/v1", "chutes-e2ee", CHUTES),
     ],
 )
 def test_when_in_doubt_sealed(url, api, service):
-    """By the endpoint's `api`, else by its host whatever `api` says."""
+    """By the endpoint's `api`, else by its host whatever `api` says. (Chutes'
+    hosts aren't sealed wholesale since Nov 15 2026: its -TEE models are,
+    tests/test_chutes_mixed.py.)"""
     assert privacy_at("any/model", url, api) == Privacy("sealed", service)
 
 
@@ -137,9 +136,10 @@ def test_hosts_that_only_look_alike_are_not_sealed():
 
 def test_the_hosts_are_read_as_their_protocol_from_the_address():
     assert chat_api(TINFOIL_URL) == "tinfoil"
-    assert chat_api("https://llm.chutes.ai/v1") == "chutes-e2ee"
+    assert chat_api("https://llm.chutes.ai/v1") == "openai"
+    assert chat_api("https://claude.chutes.ai") == "anthropic", "Chutes' Anthropic proxy"
     assert chat_api(NANO) == "openai" and chat_api("https://api.anthropic.com") == "anthropic"
-    assert tinfoil().speaks() == "tinfoil" and chutes().speaks() == "chutes-e2ee"
+    assert tinfoil().speaks() == "tinfoil" and chutes().speaks() == "openai"
     assert chat_api(TINFOIL_URL, "openai") == "openai", "an explicit choice is kept…"
     assert tinfoil(api="openai").sealed_service() == "tinfoil", "…and still sealed"
 
@@ -174,14 +174,15 @@ def test_a_sealed_chat_moves_to_any_sealed_model_and_a_tee_chat_up_to_one():
     assert move_refusal("private/glm-5-3", "Tinfoil::glm-5-3", privacy=judge) is None
     assert move_refusal("Tinfoil::glm-5-3", "private/kimi-k3", privacy=judge) is None
     refusal = move_refusal("Tinfoil::glm-5-3", "TEE/glm-5.3", privacy=judge)
-    assert "isn't end-to-end encrypted" in refusal and "another end-to-end encrypted" in refusal
+    assert "isn't end-to-end encrypted" in refusal and "the highest privacy" in refusal
     assert move_refusal("TEE/glm-5.3", "Tinfoil::glm-5-3", privacy=judge) is None
     assert "TEE" in move_refusal("TEE/glm-5.3", "z-ai/glm-5.3", privacy=judge)
     assert move_refusal("z-ai/glm-5.3", "Tinfoil::glm-5-3", privacy=judge) is None
-    # NanoGPT's words are as they were.
+    # Every refusal names the levels (the author, Nov 15 2026).
     assert move_refusal("private/glm-5-3", "TEE/glm-5.3", privacy=judge) == (
-        "TEE/glm-5.3 isn't end-to-end encrypted, and this chat is: choose a private/ "
-        "model, or start a new chat."
+        "TEE/glm-5.3 isn't end-to-end encrypted (a TEE model), so it has partial privacy, "
+        "and this chat is kept to the highest privacy: choose one of NanoGPT's private/ "
+        "models or Tinfoil's, or start a new chat."
     )
 
 
@@ -191,7 +192,7 @@ def test_a_sealed_chat_moves_to_any_sealed_model_and_a_tee_chat_up_to_one():
 @pytest.fixture
 def chutes_unbuilt(monkeypatch):
     """A sealed service whose client this version hasn't: every service has
-    one now, so Chutes E2EE's is taken away to stand for a future one."""
+    one now, so Chutes' is taken away to stand for a future one."""
     import sealedlore.providers.privacy as privacy_module
 
     monkeypatch.setattr(privacy_module, "BUILT_SERVICES", privacy_module.BUILT_SERVICES - {CHUTES})
@@ -207,7 +208,7 @@ def test_a_sealed_endpoint_without_its_client_sends_nothing_and_says_what_to_do(
     assert "private/" in words and "Settings" in words, "a way out, not a dead end"
     with pytest.raises(ProviderError, match="isn't built"):
         provider.fetch_model_prices()
-    assert "Chutes E2EE" in provider.reason
+    assert "Chutes" in provider.reason
     assert isinstance(make_chat_provider(tinfoil(model="glm-5-3")), TinfoilDirect)
 
 
@@ -215,7 +216,9 @@ def test_the_routing_provider_gives_a_sealed_endpoint_no_plain_client(chutes_unb
     cfg = endpoints(chutes(), tinfoil())
     routing = EndpointsProvider(cfg)
     assert isinstance(routing.provider_for("Chutes::m-TEE"), NotBuiltProvider)
-    assert isinstance(routing._plain(chutes()), NotBuiltProvider), "nor for its listing"
+    # Chutes' ordinary models are its plain client's (since Nov 15 2026), its
+    # listing too (Chutes' public list, keyless).
+    assert isinstance(routing._plain(chutes()), OpenAICompatibleProvider)
     with pytest.raises(ProviderError, match="isn't built"):
         list(routing.stream(request("Chutes::m-TEE")))
     # Tinfoil's sealing client lists its models itself, without the key.
@@ -223,7 +226,7 @@ def test_the_routing_provider_gives_a_sealed_endpoint_no_plain_client(chutes_unb
     routing.close()
 
 
-@pytest.mark.parametrize("url", [CHUTES_URL, "https://llm.chutes.ai/v1", TINFOIL_URL])
+@pytest.mark.parametrize("url", [TINFOIL_URL, "https://router-0.tinfoil.sh/v1"])
 def test_a_plain_client_aimed_at_a_sealed_host_refuses_before_sending(url):
     """Judged by the host, not the model: even a plain model id, even set to
     speak OpenAI's protocol, and a listing too (it carries the key)."""
@@ -267,10 +270,10 @@ def test_a_lore_embedding_never_goes_to_tinfoils_embeddings():
 
 
 def test_pictures_and_videos_never_inherit_a_sealed_endpoint_or_reach_one():
-    cfg = endpoints(chutes(), default="Chutes")
-    assert cfg.images() is None, "no address or key taken from Chutes"
+    cfg = endpoints(tinfoil(), default="Tinfoil")
+    assert cfg.images() is None, "no address or key taken from Tinfoil"
     cfg.image_endpoint.base_url = NANO
-    assert cfg.images().base_url == NANO and cfg.images().api_key == "", "Chutes' key stays"
+    assert cfg.images().base_url == NANO and cfg.images().api_key == "", "Tinfoil's key stays"
     keys = {slot: url for slot, _holder, url in cfg.key_holders()}
     assert keys["images"] == NANO
     client, sent = recording()
@@ -286,7 +289,8 @@ def test_jev_and_the_context_probe_send_nothing_to_a_sealed_host():
     client, sent = recording()
     with pytest.raises(ProviderError, match="story's state"):
         DecisionsClient(TINFOIL_URL, "k", client=client).decide("jev", "state", {"q": "?"})
-    assert detect_context(CHUTES_URL, "k", "m", client=client) is None
+    assert detect_context(TINFOIL_URL, "k", "m", client=client) is None
+    assert detect_context(CHUTES_URL, "k", "m-TEE", client=client) is None, "Chutes' TEE models"
     assert sent == []
 
 

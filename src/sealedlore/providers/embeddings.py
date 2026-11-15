@@ -145,12 +145,14 @@ class OpenAICompatibleEmbeddings:
         )
 
     def _post(self, batch: Sequence[str]) -> dict[str, Any]:
-        # Never to an end-to-end encrypted endpoint (providers/privacy.py):
-        # the text to embed would go to it in the clear.
+        # Never to an end-to-end encrypted endpoint, nor one of Chutes' TEE
+        # models (providers/privacy.py): the text to embed would go to it in
+        # the clear.
         refusal = plain_refusal(
             self.endpoint,
             "the text to embed",
             api=self.config.sealed_api,
+            model=self.config.model,
             way_out=EMBEDDINGS_WAY_OUT,
         )
         if refusal:

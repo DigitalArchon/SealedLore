@@ -585,12 +585,13 @@ def test_no_redirect_is_followed(fake, where):
 @pytest.mark.parametrize(
     "config, why",
     [
-        ({"base_url": "https://llm.chutes.ai/v1"}, "isn't Chutes' API"),
-        ({"base_url": "https://chutes.example.com"}, "isn't Chutes' API"),
+        ({"base_url": "https://chutes.example.com"}, "isn't one of Chutes' own addresses"),
+        ({"base_url": "https://llm.chutes.ai:8443/v1"}, "isn't one of Chutes' own addresses"),
+        ({"base_url": "https://chutes.ai.example"}, "isn't one of Chutes' own addresses"),
         ({"api_key": ""}, "need a Chutes API key"),
         ({"key_saved_for": "https://evil.example"}, "was saved for https://evil.example"),
     ],
-    ids=["llm host", "elsewhere", "no key", "key for elsewhere"],
+    ids=["elsewhere", "another port", "look-alike", "no key", "key for elsewhere"],
 )
 def test_nothing_is_fetched_or_sent_without_a_key_that_may_go_to_chutes(fake, config, why):
     chutes = provider(fake, **config)
