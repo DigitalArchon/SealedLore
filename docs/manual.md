@@ -508,6 +508,24 @@ possible sends nothing to a model that thinks only when asked, and the
 lowest effort to one whose thinking can't be turned off, such as Opus 5.5).
 NanoGPT's routes and private models don't apply.
 
+**OpenRouter.** Set an endpoint's base URL to `https://openrouter.ai/api/v1`
+with an OpenRouter key; its models are OpenRouter's ids
+(`anthropic/claude-sonnet-4.6`, `z-ai/glm-5.3`). Checked live in November
+2026: the model list with its prices, streamed replies with the cost
+OpenRouter reports, reasoning as above (OpenRouter's list says which models
+reason by default, so those are asked for their lowest level from the
+start), and Claude's prompt cache with the hour's lifetime, written once and
+then read. OpenRouter may send one model to several providers, each with a
+cache of its own, so now and then a turn writes the cache again. An
+OpenRouter account with zero data retention on (its privacy settings) is
+served only by providers that keep nothing: Claude was then served by Google
+Vertex, and most picture models and every video model under $0.50 answered
+that no provider was available. Pictures work through OpenRouter (Settings →
+Images, a picture from words or one changed from a reference); some of its
+picture models are priced by the image token or the megapixel, and for
+those the picture dialog says the price is unknown until the picture is
+made.
+
 **Choosing a model.** Every model field has a **Choose** button. It lists the
 models your endpoint offers (where a job has models measured for it,
 **Choose** is a menu: **Browse all models…** first, then those), fetched from the endpoint itself, and the list is
@@ -2612,7 +2630,9 @@ The default is Seedance 2.5 at 480p for 5 seconds with sound, on NanoGPT
 ($0.90 when this was written). **Settings → Video** also takes another
 service's address: OpenRouter's video API (`https://openrouter.ai/api/v1`) and
 WaveSpeed (`https://api.wavespeed.ai/api/v3`, which quotes each request
-itself) are supported.
+itself) are supported. OpenRouter's list and the quotes were checked live in
+November 2026, but no video has been made through it yet (the account tried
+had zero data retention on, which no video provider there met).
 
 ## Private scenes
 
