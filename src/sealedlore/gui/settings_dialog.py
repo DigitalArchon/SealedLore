@@ -179,11 +179,7 @@ LORE_SELECTORS = (
 PRIVATE_SERVICES = (
     ("nanogpt", "NanoGPT (private/ and TEE/ models)", DEFAULT_BASE_URL),
     ("tinfoil", "Tinfoil, end-to-end encrypted (preliminary)", TINFOIL_BASE_URL),
-    (
-        "chutes",
-        "Chutes (its -TEE models end-to-end encrypted, partially; preliminary)",
-        CHUTES_BASE_URL,
-    ),
+    ("chutes", "Chutes (preliminary; its -TEE models partly private)", CHUTES_BASE_URL),
     ("other", "Another server (a local one, say)", ""),
 )
 PRIVATE_MODEL_HINTS = {

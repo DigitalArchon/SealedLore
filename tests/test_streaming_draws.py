@@ -105,6 +105,7 @@ def test_what_is_kept_goes_as_a_private_scene_ends(app, tmp_path: Path, story, c
         keep = "memory"
         model = "private/some-model"
         attestation = None
+        privacy = None  # as PrivateSpan's: the model button reads its level
 
     open_span = [Span()]
     monkeypatch.setattr(type(window.session), "open_span", property(lambda _s: open_span[0]))
