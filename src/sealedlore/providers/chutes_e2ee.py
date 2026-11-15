@@ -298,13 +298,21 @@ def open_reply(blob: bytes, response_key: Any) -> dict[str, Any]:
 # --- a streamed reply (built and tested; never asked for yet) ----------------------------
 #
 # Not used by ChutesE2EEProvider, which asks only for replies not streamed (the
-# author's D6): each piece of a stream is sealed on its own, a random nonce and
-# no associated data, with nothing a client can see that numbers it, so Chutes'
-# relay could drop, reorder or repeat pieces inside a stream unnoticed
-# (`STREAM_ORDER_UNPROVEN`, SealedLoreDocs design/e2ee-providers.md 2.3). Only its end is
-# protected: the decrypted `[DONE]` and a finish reason. A reply not streamed
-# is sealed whole and has no such gap. Kept here for when a live check shows
-# whether the pieces' nonces are a counter that can be held to.
+# author's D6). Each piece of a stream is sealed on its own, with no
+# associated data; but its nonce is a counter (live, Nov 15 2026, two models
+# on two instances, 52 and 54 pieces: four zero bytes, then the piece's
+# number from 0, eight bytes little-endian), and a piece's nonce is part of
+# what opens it. So holding each piece to its number (`stream_nonce`) makes a
+# piece dropped, repeated or put out of its place a refusal: without it, all
+# three opened and read as the model's text (one, two... came back as
+# ",one two"). The end is held by the decrypted `[DONE]` and a finish
+# reason. The counter is what Chutes' closed library does, not a documented
+# promise: should it change, every stream is refused, never read wrongly.
+
+
+def stream_nonce(index: int) -> bytes:
+    """The nonce Chutes' stream seals its piece number `index` (from 0) under."""
+    return b"\x00" * 4 + index.to_bytes(8, "little")
 
 
 class StreamOpener:
@@ -382,13 +390,22 @@ class StreamOpener:
     def _piece(self, value: Any) -> list[dict[str, Any]]:
         if self._key is None:
             raise SealError("Chutes' stream sent a sealed piece before its key exchange; refused")
-        if self.done:
-            raise SealError("Chutes' stream went on after the model's end; refused")
         raw = _b64(value, "a sealed piece of the stream")
         if len(raw) < NONCE_BYTES + TAG_BYTES:
             raise SealBroken("a sealed piece of the stream is too short to be one")
+        if raw[:NONCE_BYTES] != stream_nonce(self.pieces):
+            raise SealBroken(
+                "a piece of the stream isn't the one that comes next: dropped, repeated or "
+                "put out of its place on the way"
+            )
         text = self._decoder.decode(_open(self._key, raw[:NONCE_BYTES], raw[NONCE_BYTES:]))
         self.pieces += 1
+        if self.done:
+            # The model server's SSE ends its [DONE] with a blank line, sealed
+            # as a piece of its own (live): nothing else may follow.
+            if text.strip():
+                raise SealError("Chutes' stream went on after the model's end; refused")
+            return []
         return self._lines(text)
 
     def _lines(self, text: str) -> list[dict[str, Any]]:

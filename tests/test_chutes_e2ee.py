@@ -39,6 +39,7 @@ from sealedlore.providers.chutes_e2ee import (
     open_reply,
     published_measurements,
     seal_request,
+    stream_nonce,
 )
 
 mlkem = pytest.importorskip("cryptography.hazmat.primitives.asymmetric.mlkem")
@@ -244,18 +245,23 @@ def test_without_ml_kem_chutes_is_refused_in_words(monkeypatch):
 
 class Stream:
     """A stream sealed as Chutes' workload seals one: the key exchange, then
-    each piece of the model server's own SSE bytes sealed alone."""
+    each piece of the model server's own SSE bytes sealed alone, its nonce
+    the piece's number (as seen live, tests/data/chutes_stream.json)."""
 
     def __init__(self, response_pk: str) -> None:
         client = mlkem.MLKEM768PublicKey.from_public_bytes(base64.b64decode(response_pk))
         secret, self.ciphertext = client.encapsulate()
         self.key = derive_key(secret, self.ciphertext, INFO_STREAM)
+        self.sent = 0
 
     def init(self) -> str:
         return "data: " + json.dumps({"e2e_init": b64(self.ciphertext)})
 
-    def piece(self, text: str, *, key: bytes | None = None) -> str:
-        nonce = os.urandom(12)
+    def piece(self, text: str, *, key: bytes | None = None, number: int | None = None) -> str:
+        """The next piece (or piece `number`, the count left as it is)."""
+        if number is None:
+            number, self.sent = self.sent, self.sent + 1
+        nonce = stream_nonce(number)
         sealed = ChaCha20Poly1305(key or self.key).encrypt(nonce, text.encode(), None)
         return "data: " + json.dumps({"e2e": b64(nonce + sealed)})
 
@@ -278,7 +284,8 @@ def opened(opener: StreamOpener, lines: list[str]) -> str:
     text = ""
     for line in lines:
         for item in opener.feed(line):
-            text += item["choices"][0]["delta"]["content"]
+            for choice in item.get("choices") or []:
+                text += choice.get("delta", {}).get("content") or ""
     return text
 
 
@@ -328,7 +335,7 @@ def test_an_unsealed_event_with_text_in_it_is_refused():
 def test_a_sealed_piece_before_the_key_exchange_or_a_second_one_is_refused():
     opener, stream = streamed()
     with pytest.raises(SealError, match="before its key exchange"):
-        opener.feed(stream.piece(chunk("x")))
+        opener.feed(stream.piece(chunk("x"), number=0))
     opener.feed(stream.init())
     opener.feed(stream.piece(chunk("x")))
     with pytest.raises(SealError, match="twice"):
@@ -359,19 +366,61 @@ def test_a_stream_that_doesnt_say_it_is_done_sealed_isnt_whole(ending):
 def test_a_piece_changed_or_sealed_to_another_key_or_after_the_end_is_refused():
     opener, stream = streamed()
     opener.feed(stream.init())
-    line = stream.piece(chunk("x"))
+    line = stream.piece(chunk("x"), number=0)
     event = json.loads(line[6:])
     raw = bytearray(base64.b64decode(event["e2e"]))
     raw[-1] ^= 1
-    with pytest.raises(SealBroken):
+    with pytest.raises(SealBroken, match="doesn't hold"):
         opener.feed("data: " + json.dumps({"e2e": b64(bytes(raw))}))
-    with pytest.raises(SealBroken):
-        opener.feed(stream.piece(chunk("x"), key=os.urandom(32)))
+    with pytest.raises(SealBroken, match="doesn't hold"):
+        opener.feed(stream.piece(chunk("x"), key=os.urandom(32), number=0))
     with pytest.raises(SealBroken, match="too short"):
         opener.feed("data: " + json.dumps({"e2e": b64(b"\0" * 27)}))
     opener.feed(stream.piece(chunk("x", "stop") + "data: [DONE]\n\n"))
+    # The blank line ending [DONE], sealed alone (as live), is the one piece after it.
+    opener.feed(stream.piece("\n"))
     with pytest.raises(SealError, match="after the model's end"):
         opener.feed(stream.piece(chunk("more")))
+
+
+def _live_stream() -> tuple[list[str], StreamOpener]:
+    """A streamed reply as it came from Chutes, with the response key it was
+    sealed to (tests/data/chutes_stream.json)."""
+    capture = json.loads((DATA / "chutes_stream.json").read_text())
+    key = mlkem.MLKEM768PrivateKey.from_seed_bytes(bytes.fromhex(capture["response_key_seed"]))
+    return capture["lines"], StreamOpener(key)
+
+
+def test_a_live_stream_opens_piece_by_piece_in_its_counted_order():
+    """Live (Nov 15 2026, Gemma 4 31B Turbo TEE; Qwen3.8 27B TEE alike):
+    every piece's nonce was its number, 54 of them, the last the blank line
+    after the sealed [DONE]."""
+    lines, opener = _live_stream()
+    text = opened(opener, lines)
+    opener.finish()
+    assert text.strip() == (
+        "one, two, three, four, five, six, seven, eight, nine, ten, eleven, twelve"
+    )
+    assert opener.pieces == 54 and opener.finish_reason == "stop"
+
+
+@pytest.mark.parametrize(
+    "change", ["swapped", "dropped", "repeated"], ids=["swapped", "dropped", "repeated"]
+)
+def test_a_piece_out_of_its_place_is_refused(change):
+    """Live, without the count, two pieces swapped read ",one two", one
+    dropped or repeated read as the model's text too: each is refused."""
+    lines, opener = _live_stream()
+    sealed = [i for i, line in enumerate(lines) if '"e2e"' in line]
+    if change == "swapped":
+        a, b = sealed[2], sealed[4]
+        lines[a], lines[b] = lines[b], lines[a]
+    elif change == "dropped":
+        del lines[sealed[4]]
+    else:
+        lines.insert(sealed[5], lines[sealed[4]])
+    with pytest.raises(SealBroken, match="isn't the one that comes next"):
+        opened(opener, lines)
 
 
 def test_chutes_relays_error_is_said_as_its_unauthenticated_words():
