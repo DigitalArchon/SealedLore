@@ -193,7 +193,7 @@ CHUTES_PRIVATE_NOTE = (
     "On Chutes, a -TEE model is end-to-end encrypted to an attested Chutes instance "
     "(partial privacy: the program holding its key is Chutes' signed one, not measured). "
     "Any other Chutes model isn't private: Chutes reads its text, and a scene on it is kept "
-    "only from the story's model. Preliminary: not yet run with an account."
+    "only from the story's model. Preliminary: first run with an account in November 2026."
 )
 
 
@@ -1126,8 +1126,8 @@ class SettingsDialog(QDialog):
         if not sealed and on_chutes(self.base_url.text()):
             speaks = chat_api(self.base_url.text(), self.chat_api.currentData())
             how = (
-                "Anthropic's Messages API through Chutes' own proxy (claude.chutes.ai, not yet "
-                "run), the key as its x-api-key header"
+                "Anthropic's Messages API through Chutes' own proxy (claude.chutes.ai), the "
+                "key as a Bearer token, as Chutes' proxy takes it"
                 if speaks == "anthropic"
                 else "OpenAI-compatible, the key as a Bearer token"
             )
@@ -1143,8 +1143,9 @@ class SettingsDialog(QDialog):
             self.api_note.setText(
                 not_built(privacy_at("", self.base_url.text(), sealed))
                 or (
-                    "Tinfoil's own API, end-to-end encrypted (preliminary, not yet run with an "
-                    "account): every message is sealed on this computer to Tinfoil's attested "
+                    "Tinfoil's own API, end-to-end encrypted (preliminary, first run with an "
+                    "account in November 2026): every message is sealed on this computer to "
+                    "Tinfoil's attested "
                     "router enclave, over a connection pinned to its attested TLS key. The key "
                     "goes to this address only, as a Bearer token; the model list is read "
                     "without it. Pictures, videos and embeddings need endpoints of their own."

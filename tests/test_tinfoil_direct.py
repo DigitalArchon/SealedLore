@@ -471,6 +471,14 @@ def test_the_client_stays_within_the_reviewed_contract():
     assert ROUTER_REPO == CONTRACT["router_repo"]
     assert ATC_URL == CONTRACT["atc"] and TINFOIL_BASE_URL == CONTRACT["base_url"]
     assert ATTESTATION_BUNDLE_ENDPOINT == CONTRACT["paths"]["attestation"]
+    # The pinned SDK asks ATC for one enclave's bundle as ATC took it live.
+    import inspect
+
+    from tinfoil.attestation.bundle import fetch_bundle_from
+
+    asks = CONTRACT["attestation_asks_for"]
+    source = inspect.getsource(fetch_bundle_from)
+    assert f'"{asks["field"]}"' in source and f"requests.{asks['method'].lower()}(" in source
     assert TINFOIL_BASE_URL.endswith("/v1")
     assert DIRECT_FIELDS <= set(CONTRACT["body_fields"])
     assert CACHE_SECRET_FIELD == CONTRACT["cache_secret_field"]

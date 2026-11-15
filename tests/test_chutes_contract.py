@@ -59,6 +59,12 @@ def test_the_client_speaks_the_reviewed_api():
     )
     for field in discovery["fields"] + discovery["instance_fields"]:
         assert f'"{field}"' in source, field
+    assert set(discovery["fields"]) <= set(discovery["fields_seen"]), "live, Nov 15 2026"
+    # Seen live (Nov 15 2026): a stream's piece i is sealed under nonce i, and
+    # every -TEE model's thinking goes off by these template words.
+    for index, nonce in RECORD["stream_nonce_hex"].items():
+        assert pure.stream_nonce(int(index)).hex() == nonce
+    assert client.THINKING_OFF == RECORD["thinking_off"]["chat_template_kwargs"]
 
 
 def test_every_field_read_is_one_the_captures_and_the_record_know():

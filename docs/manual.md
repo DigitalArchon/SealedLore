@@ -533,9 +533,11 @@ its address (`https://inference.tinfoil.sh/v1`) and **Speaks** (**Tinfoil,
 end-to-end encrypted**, also read from the address); type your Tinfoil key
 and Save. Its models are then chosen as `Tinfoil::glm-5-3`, and every one is
 end-to-end encrypted (see "Private scenes"). For private scenes alone,
-choose **Tinfoil** as the service under Settings → Private instead. This is
-built and tested against Tinfoil's public listing and attestation, but not
-yet run with an account.
+choose **Tinfoil** as the service under Settings → Private instead. First
+run with an account in November 2026: every chat model Tinfoil lists, with
+every reasoning effort each takes, a story, a private scene, its prompt
+cache, and the app's estimate of each reply's cost, which came out equal to
+Tinfoil's own figure.
 
 **Chutes (preliminary).** Chutes is an endpoint like NanoGPT: it offers every
 model it lists, each at its own level of privacy (see "Private scenes"). In
@@ -543,7 +545,9 @@ Settings → Endpoints, **Add Chutes** fills in its OpenAI-compatible address
 (`https://llm.chutes.ai/v1`); type your Chutes key and Save. Setting
 **Speaks** to **Anthropic** moves it to `https://claude.chutes.ai`, Chutes'
 own open-source proxy of Anthropic's Messages API, which hands each request on
-to the OpenAI-compatible one (not yet run). **Choose** lists every model
+to the OpenAI-compatible one (the key goes there as a Bearer token, which is
+how the proxy takes it; an error of the proxy's own is said as its, never kept
+as the model's words). **Choose** lists every model
 Chutes lists, read from its public list without your key, with its price and
 how private it is:
 - its models whose ids end in `-TEE` (the ones Chutes lists as confidential
@@ -562,8 +566,9 @@ else. That is the one place a key goes to a second address: all three are
 Chutes' own, and it takes one key on each. A key saved for any other address
 is never sent to Chutes, and editing the address asks about the key as for
 any endpoint. For private scenes alone, choose **Chutes** as the service under
-Settings → Private. Like Tinfoil's, this is built and tested without an
-account and not yet run with one.
+Settings → Private. First run with an account in November 2026: an ordinary
+model on both addresses, and the `-TEE` models end to end (below), each
+reply's cost as Chutes' list prices it.
 
 An end-to-end encrypted endpoint (anything on `tinfoil.sh`) is reached only by
 its own client, and so is one of Chutes' `-TEE` models on any of Chutes'
@@ -2937,12 +2942,14 @@ Nothing else of it is written: the library would cache what it fetches
 and Intel's collateral) in `~/.cache/tinfoil`, and the app keeps it from
 writing there.
 
-**Tinfoil's own API (preliminary, not yet run with an account).** An
+**Tinfoil's own API (preliminary; first run with an account in November
+2026).** An
 endpoint on `https://inference.tinfoil.sh/v1` that speaks **Tinfoil** (see
 "Running the app") reaches the same router with nothing in between:
 - the attestation comes from Tinfoil's own bundle service
-  (`https://atc.tinfoil.sh`), checked by the same verifier under the same
-  rules, and must be for the endpoint's own host, or nothing is sent;
+  (`https://atc.tinfoil.sh`), asked for the endpoint's own host (Tinfoil runs
+  more than one router, each with its own keys), checked by the same verifier
+  under the same rules, and must be for that host, or nothing is sent;
 - the connection is **pinned** to the router's attested TLS key: as the
   handshake completes, before a byte of the request leaves, the
   certificate's key must be the one the attestation binds, behind a proxy
@@ -2954,7 +2961,8 @@ endpoint on `https://inference.tinfoil.sh/v1` that speaks **Tinfoil** (see
   that isn't sealed, and gives each model's prices, context and the
   reasoning efforts it takes. Only an effort the model lists is sent;
 - Tinfoil reports no cost in a stream, so each reply's cost is estimated
-  from the listed prices (shown with "~").
+  from the listed prices (shown with "~"); checked against Tinfoil's own
+  figure, cached prompts included, the estimate was the same.
 
 It works for a private scene (Settings → Private, **Service**: Tinfoil, each
 service with its own address and key) and for a simple chat on a Tinfoil
@@ -2971,7 +2979,8 @@ text. What the app doesn't prove: that the router passes your request only to
 attested model enclaves (that is the router's published code, whose
 attested build the app checks, not something it checks itself).
 
-**Chutes' `-TEE` models (preliminary, not yet run with an account).** A model
+**Chutes' `-TEE` models (preliminary; first run with an account in November
+2026).** A model
 whose id ends in `-TEE` on a Chutes endpoint (`https://llm.chutes.ai/v1`, or
 `https://claude.chutes.ai` speaking Anthropic), or on Settings → Private's
 Chutes service, has each message sealed to the key of one Chutes instance,
@@ -2998,13 +3007,22 @@ Chutes' own, which Chutes says builds reproducibly, but the app doesn't
 rebuild it. Beside NanoGPT's `TEE/` models, the other partial kind: your text
 is encrypted all the way here, where theirs passes NanoGPT's gateway in the
 clear; but what they attest is the enclave as measured, where here the program
-holding the key is outside the measurement. Replies come **whole, not streamed**: nothing shows until the
-reply is done (Stop still works while you wait), because each piece of a
-stream is sealed on its own and Chutes could drop or reorder pieces unseen.
+holding the key is outside the measurement. Checking a model's instances
+takes about half a minute the first time, and again every 15 minutes. Replies
+come **whole, not streamed**: nothing shows until the reply is done (Stop
+still works while you wait), because each piece of a stream is sealed on its
+own. A live check in November 2026 found each piece numbered, which would let
+the app hold the pieces to their order, but streaming isn't switched on yet.
 Some Chutes models may refuse such a request (an "HTTP 400" in Chutes' words)
-until Chutes updates the servers that run them. Reasoning settings aren't
-sent to Chutes yet. Each reply's cost is estimated from Chutes' listed
-prices (shown with "~").
+until Chutes updates the servers that run them. These models take no
+reasoning level, only thinking on or off: **As low as possible** (what a
+private scene's model is always asked for) and **Low** switch it off, and
+Medium and up leave the model as it is. Left on, the Qwen, Kimi and GLM ones
+thought for 300-500 tokens over a one-line question (16-25 s before anything
+showed), and once for 8,000, which lost a scene read; switched off, none, in
+about 2 s. Each reply's cost is estimated from Chutes' listed prices (shown
+with "~"), and checked against what Chutes charged in November 2026, it was
+the same.
 
 The model button reads "🔐 E2EE · Chutes ⚠ partial" and its tooltip says what
 was attested and what each shortfall costs; the model list's Privacy column

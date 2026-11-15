@@ -1,5 +1,5 @@
 {
- "reviewed_on": "2026-11-14",
+ "reviewed_on": "2026-11-15",
  "sdk": {
   "package": "tinfoil",
   "version": "0.15.0",
@@ -13,6 +13,11 @@
   "attestation": "/attestation",
   "chat": "/v1/chat/completions",
   "models": "/v1/models"
+ },
+ "attestation_asks_for": {
+  "method": "POST",
+  "field": "enclaveUrl",
+  "note": "ATC's plain GET of /attestation served either router's bundle (router-0.tinfoil.sh or inference.tinfoil.sh, each with its own TLS key; live Nov 15 2026); asked for the endpoint's host, it serves that one's."
  },
  "chat_type": "chat",
  "listing_fields": [

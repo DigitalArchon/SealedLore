@@ -1,5 +1,5 @@
 {
- "reviewed_on": "2026-11-14",
+ "reviewed_on": "2026-11-15",
  "sources": {
   "chutes-api": "chutesai/chutes-api api/e2e/router.py",
   "chutes": "chutesai/chutes chutes/entrypoint/verify.py"
@@ -48,7 +48,12 @@
   ],
   "max_instances": 5,
   "max_nonces": 10,
-  "nonce_life_seconds": 60
+  "nonce_life_seconds": 60,
+  "fields_seen": [
+   "instances",
+   "nonce_expires_at",
+   "nonce_expires_in"
+  ]
  },
  "evidence_fields": [
   "evidence",
@@ -126,5 +131,18 @@
   "evidence.nonce",
   "evidence.quote or evidence.tdx_quote",
   "evidence.nvtrust_evidence"
- ]
+ ],
+ "stream_nonce": "piece i (from 0): four zero bytes, then i as eight bytes little-endian (live Nov 15 2026, two models, two instances)",
+ "thinking_off": {
+  "chat_template_kwargs": {
+   "enable_thinking": false,
+   "thinking": false
+  },
+  "note": "every -TEE model took it (Nov 15 2026); Qwen, Kimi and GLM thought 300-530 tokens over a one-line question without it, none with it"
+ },
+ "stream_nonce_hex": {
+  "0": "000000000000000000000000",
+  "1": "000000000100000000000000",
+  "50": "000000003200000000000000"
+ }
 }

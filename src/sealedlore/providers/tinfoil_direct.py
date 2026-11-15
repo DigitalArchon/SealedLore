@@ -1,7 +1,12 @@
 """Tinfoil's own API, end-to-end encrypted, with no relay in between.
 
 Preliminary: built and tested offline against captures of Tinfoil's public
-listing and attestation bundle (Nov 14 2026), never yet run with an account.
+listing and attestation bundle (Nov 14 2026), then run with the author's
+account on Nov 15 2026: attested from an empty home, every chat model and
+every effort it lists sealed and answered, a reply not streamed, the prompt
+cache read, the app's cost estimate equal to Tinfoil's own, a story turn and
+a private scene. ATC had to be asked for the endpoint's own router's bundle
+(`direct_verify`).
 
 The same router as NanoGPT's `private/` models (providers/private_mode.py),
 reached directly: `https://inference.tinfoil.sh/v1`. What differs from the
