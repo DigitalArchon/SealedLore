@@ -22,6 +22,7 @@ import json
 import select
 import socket
 import ssl
+import sys
 import threading
 from pathlib import Path
 
@@ -536,6 +537,7 @@ class TlsServer:
         self.listener = socket.create_server(("127.0.0.1", 0))
         self.port = self.listener.getsockname()[1]
         self.received: list[bytes] = []
+        self.connections = 0
         self.handshakes = 0
         self.thread = threading.Thread(target=self._serve, daemon=True)
         self.thread.start()
@@ -546,6 +548,7 @@ class TlsServer:
                 raw, _address = self.listener.accept()
             except OSError:
                 return
+            self.connections += 1
             try:
                 with self.context.wrap_socket(raw, server_side=True) as conn:
                     self.handshakes += 1
@@ -664,7 +667,11 @@ def test_a_tls_key_that_isnt_the_attested_one_gets_not_one_byte(fake, tls):
         list(provider.stream(request("glm-5-3")))
     assert str(refused.value) == PIN_MISMATCH
     server.thread.join(0.5)
-    assert server.handshakes == 1 and server.received == [b""], "the request never left"
+    assert server.connections == 1 and server.received == [b""], "the request never left"
+    # The client's half of the handshake is done when the pin is checked; whether the
+    # server's half saw it finish is a race once the client drops the connection: on
+    # Linux it always has, on Windows the client's close resets it first.
+    assert server.handshakes == 1 or sys.platform == "win32"
     list_attested = len(attested)
     with pytest.raises(TlsPinMismatch):
         list(provider.stream(request("glm-5-3")))

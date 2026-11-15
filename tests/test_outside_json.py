@@ -188,7 +188,7 @@ def _unchecked_parses(path: Path, name: str = "") -> list[str]:
 def test_every_json_from_outside_is_read_through_the_limit():
     offenders = {}
     for path in sorted(SOURCE.rglob("*.py")):
-        name = str(path.relative_to(SOURCE))
+        name = path.relative_to(SOURCE).as_posix()  # the names above, on Windows too
         if name in HELD_OTHERWISE:
             continue
         found = _unchecked_parses(path, name)

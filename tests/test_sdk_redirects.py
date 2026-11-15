@@ -525,6 +525,12 @@ from tinfoil.attestation import collateral_tdx, verify_sev
 from sealedlore.models.config import is_local_host
 from sealedlore.providers import sdk_guard
 
+# Where the SDK keeps its caches (platformdirs: ~/.cache/tinfoil on Linux, the local
+# AppData folder's on Windows), before anything is written: never outside this home.
+cache = os.path.abspath(github._GITHUB_CACHE_DIR)
+if os.path.commonpath([cache, os.path.abspath(home)]) != os.path.abspath(home):
+    print(json.dumps({"outside": cache}))
+    sys.exit(0)
 if sys.argv[1] == "guarded":
     sdk_guard.guard(is_local_host)
 
@@ -556,38 +562,55 @@ verify_sev.CertificateChain.from_report(report)
 collateral_tdx._write_cache(collateral_tdx._get_tcb_info_cache_path("00906ed50000"),
                             collateral_tdx.CacheEntry(body=b"{}"))
 written = sorted(
-    os.path.relpath(os.path.join(top, name), home)
+    os.path.relpath(os.path.join(top, name), home).replace(os.sep, "/")
     for top, _dirs, names in os.walk(home)
     for name in names
 )
-print(json.dumps(written))
+print(json.dumps({"cache": os.path.relpath(cache, home).replace(os.sep, "/"), "written": written}))
 """
 
 
 def test_the_real_sdk_writes_nothing_of_its_own(tmp_path: Path):
     """tinfoil itself, in a process of its own with a home of the test's own: unguarded, its
-    bundle, VCEK and TDX caches land in ~/.cache/tinfoil; guarded as tinfoil_verify guards it,
-    nothing does, nor ~/.tinfoil (the cache secret is always passed)."""
+    bundle, VCEK and TDX caches land in its cache folder (~/.cache/tinfoil; on Windows the
+    local AppData folder's, here moved into the test's home); guarded as tinfoil_verify guards
+    it, nothing does, nor ~/.tinfoil (the cache secret is always passed). The SDK's folder is
+    checked to be inside the test's home before anything is written: on Windows the first
+    version of this test wrote into the real AppData folder."""
     import json
+    import shutil
+    import tempfile
 
     pytest.importorskip("tinfoil")
-    found = {}
-    for how in ("unguarded", "guarded"):
-        home = tmp_path / how
-        home.mkdir()
-        env = {
-            "HOME": str(home),
-            "XDG_CACHE_HOME": str(home / ".cache"),
-            "XDG_DATA_HOME": str(home / ".local" / "share"),
-        }
-        script = WRITES.replace('sys.argv[1] == "guarded"', repr(how) + ' == "guarded"')
-        found[how] = json.loads(in_a_process_of_its_own(script, **env))
-    tinfoil_files = [name for name in found["unguarded"] if name.startswith(".cache/tinfoil/")]
-    assert len(tinfoil_files) == 3, found["unguarded"]
-    assert any(name.startswith(".cache/tinfoil/VCEK_Genoa_") for name in tinfoil_files)
-    assert found["guarded"] == [], "nothing of the SDK's own"
-    assert not (tmp_path / "guarded" / ".cache" / "tinfoil").exists()
-    assert not (tmp_path / "guarded" / ".tinfoil").exists()
+    # On Windows a path is 260 characters at most, and the VCEK's name alone is 164: the
+    # homes go in a short folder of their own there (pytest's tmp_path is too deep).
+    base = Path(tempfile.mkdtemp(prefix="sl")) if sys.platform == "win32" else tmp_path
+    try:
+        found, homes = {}, {}
+        for how in ("unguarded", "guarded"):
+            home = homes[how] = base / how[0]
+            home.mkdir()
+            env = {
+                "HOME": str(home),
+                "XDG_CACHE_HOME": str(home / ".cache"),
+                "XDG_DATA_HOME": str(home / ".local" / "share"),
+                # platformdirs on Windows asks the shell for the folder, unless told otherwise
+                "WIN_PD_OVERRIDE_LOCAL_APPDATA": str(home / "L"),
+                "LOCALAPPDATA": str(home / "L"),
+            }
+            script = WRITES.replace('sys.argv[1] == "guarded"', repr(how) + ' == "guarded"')
+            found[how] = json.loads(in_a_process_of_its_own(script, **env))
+            assert "outside" not in found[how], f"the SDK's caches outside the home: {found}"
+        cache = found["unguarded"]["cache"] + "/"
+        tinfoil_files = [name for name in found["unguarded"]["written"] if name.startswith(cache)]
+        assert len(tinfoil_files) == 3, found["unguarded"]
+        assert any(name.startswith(cache + "VCEK_Genoa_") for name in tinfoil_files)
+        assert found["guarded"]["written"] == [], "nothing of the SDK's own"
+        assert not (homes["guarded"] / found["guarded"]["cache"]).exists()
+        assert not (homes["guarded"] / ".tinfoil").exists()
+    finally:
+        if base != tmp_path:
+            shutil.rmtree(base, ignore_errors=True)
 
 
 def test_what_keeping_the_sdks_files_rests_on_is_where_it_expects():
