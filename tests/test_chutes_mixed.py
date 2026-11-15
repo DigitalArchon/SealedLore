@@ -249,14 +249,73 @@ def test_an_ordinary_chutes_model_streams_through_the_plain_client():
 
 
 def test_through_chutes_proxy_of_anthropics_api_an_ordinary_model_streams_too():
+    """Its key as a bearer token: live (Nov 15 2026) Anthropic's own
+    x-api-key reached the proxy's backend as no key at all."""
     fake = Mixed()
     route = routing(fake, chutes(base_url=CHUTES_ANTHROPIC_URL, api="anthropic"))
     text, _done = route.complete(ask(f"Chutes::{ORDINARY}"))
     assert text == "The door gives."
     (sent,) = fake.requests
     assert (sent.url.host, sent.url.path) == ("claude.chutes.ai", "/v1/messages")
-    assert sent.headers["x-api-key"] == "cpk_test" and "authorization" not in sent.headers
+    assert sent.headers["authorization"] == "Bearer cpk_test" and "x-api-key" not in sent.headers
     route.close()
+
+
+def _proxy_stream(*texts: str, stop: str) -> bytes:
+    """Chutes' proxy's stream as it came live: each text its own block, then
+    the stop reason (its own "error" for a refusal of its backend)."""
+    events: list[dict] = [{"type": "message_start", "message": {"id": "msg_1", "usage": {}}}]
+    for index, text in enumerate(texts):
+        events += [
+            {"type": "content_block_start", "index": index, "content_block": {"type": "text"}},
+            {
+                "type": "content_block_delta",
+                "index": index,
+                "delta": {"type": "text_delta", "text": text},
+            },
+            {"type": "content_block_stop", "index": index},
+        ]
+    events += [
+        {"type": "message_delta", "delta": {"stop_reason": stop}, "usage": {"output_tokens": 0}},
+        {"type": "message_stop"},
+    ]
+    return "".join(f"data: {json.dumps(e)}\n\n" for e in events).encode()
+
+
+def test_the_proxys_error_is_never_taken_for_the_models_words():
+    """Live (Nov 15 2026), a request the proxy's backend refused came back
+    as a passage: "⚠️ Backend Error … Authentication required." and the
+    stop reason "error". It is said as the proxy's, and no text of it is
+    passed on; the model's own text before it stays, and a model that
+    writes those words itself, ending well, is passed on whole."""
+    from sealedlore.providers.base import TextDelta
+
+    error = '⚠️ Backend Error\n\nError: {"detail":"Authentication required."}\n\n'
+
+    def streamed(body: bytes) -> tuple[list[str], BaseException | None]:
+        provider = AnthropicProvider(
+            chutes(base_url=CHUTES_ANTHROPIC_URL, api="anthropic"),
+            client=httpx.Client(
+                transport=httpx.MockTransport(lambda r: httpx.Response(200, content=body))
+            ),
+        )
+        texts: list[str] = []
+        try:
+            for event in provider.stream(ask(ORDINARY)):
+                if isinstance(event, TextDelta):
+                    texts.append(event.text)
+        except ProviderError as exc:
+            return texts, exc
+        return texts, None
+
+    texts, raised = streamed(_proxy_stream(error, stop="error"))
+    assert texts == [] and raised is not None
+    assert "error of its own, not the model's words" in str(raised)
+    assert "Authentication required" in str(raised) and "\n" not in str(raised)
+    texts, raised = streamed(_proxy_stream("The door gives.", error, stop="error"))
+    assert texts == ["The door gives."] and raised is not None
+    texts, raised = streamed(_proxy_stream(error, stop="end_turn"))
+    assert "".join(texts) == error and raised is None
 
 
 @pytest.mark.parametrize(

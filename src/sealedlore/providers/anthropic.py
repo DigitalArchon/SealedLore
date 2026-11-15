@@ -44,6 +44,7 @@ from sealedlore.providers.base import (
     TextDelta,
     checked_key,
     parse_usage,
+    relay_said,
 )
 from sealedlore.providers.http import reply_json
 from sealedlore.providers.privacy import plain_refusal, privacy_for
@@ -65,6 +66,12 @@ LISTING_PAGE = 100
 # Anthropic's stop reasons as the app names them. Anything else (a refusal,
 # a pause) is kept by its own name: the record says what happened.
 _FINISH = {"end_turn": "stop", "stop_sequence": "stop", "max_tokens": "length"}
+# Chutes' proxy of this API (claude.chutes.ai, chutesai/claude-proxy) says a
+# refusal of the model's server mid-stream as text of its own: a text block
+# beginning with this, then the stop reason "error" (one Anthropic's API
+# never gives). Live (Nov 15 2026) a wrong header came back so, and was
+# about to be kept as the passage.
+PROXY_ERROR_TEXT = "⚠️ Backend Error"
 
 
 def origin(base_url: str) -> str:
@@ -201,7 +208,14 @@ class AnthropicProvider(StreamingHttpProvider):
             raise ProviderError(self.config.key_withheld)
         headers = {"content-type": "application/json", "anthropic-version": API_VERSION}
         if self.config.api_key:
-            headers["x-api-key"] = checked_key(self.config.api_key, self.config.name or "Anthropic")
+            key = checked_key(self.config.api_key, self.config.name or "Anthropic")
+            if on_chutes(self.config.base_url):
+                # Chutes' proxy takes the key only as a bearer token: live
+                # (Nov 15 2026) Anthropic's x-api-key reached its backend as
+                # nothing ("Authentication required").
+                headers["authorization"] = f"Bearer {key}"
+            else:
+                headers["x-api-key"] = key
         return headers
 
     def build_payload(self, request: ChatRequest) -> dict[str, Any]:
@@ -249,6 +263,10 @@ class AnthropicProvider(StreamingHttpProvider):
         reasoning_chars = 0
         saw_data = False
         saw_stop = False
+        # Text kept back as perhaps the proxy's error (PROXY_ERROR_TEXT), and
+        # whether the current block has text yet.
+        held: str | None = None
+        block_has_text = False
 
         with self._get_client().stream(
             "POST",
@@ -293,13 +311,23 @@ class AnthropicProvider(StreamingHttpProvider):
                         response_id = message["id"]
                     if isinstance(message.get("usage"), dict):
                         usage_raw.update(message["usage"])
+                elif kind == "content_block_start":
+                    block_has_text = False
                 elif kind == "content_block_delta":
                     delta = event.get("delta")
                     delta = delta if isinstance(delta, dict) else {}
                     if delta.get("type") == "text_delta":
                         text = delta.get("text")
                         if isinstance(text, str) and text:
-                            yield TextDelta(text=text)
+                            if held is not None or (
+                                not block_has_text and text.startswith(PROXY_ERROR_TEXT)
+                            ):
+                                # Perhaps the proxy's error: kept back until
+                                # the stop reason says whether it is.
+                                held = (held or "") + text
+                            else:
+                                yield TextDelta(text=text)
+                            block_has_text = True
                     elif delta.get("type") == "thinking_delta":
                         thinking = delta.get("thinking")
                         if isinstance(thinking, str) and thinking:
@@ -312,6 +340,16 @@ class AnthropicProvider(StreamingHttpProvider):
                     delta = delta if isinstance(delta, dict) else {}
                     if isinstance(delta.get("stop_reason"), str):
                         stop_reason = delta["stop_reason"]
+                        if stop_reason == "error":
+                            said = relay_said((held or "").removeprefix(PROXY_ERROR_TEXT), 300)
+                            raise ProviderError(
+                                f"{origin(self.config.base_url)} ended the reply with an "
+                                "error of its own, not the model's words"
+                                + (f"; it said (unauthenticated): {said}" if said else "")
+                            )
+                        if held is not None:
+                            yield TextDelta(text=held)
+                            held = None
                     # A refusal may say why (informational: it can be null).
                     details = delta.get("stop_details")
                     if isinstance(details, dict) and isinstance(details.get("category"), str):
@@ -327,6 +365,9 @@ class AnthropicProvider(StreamingHttpProvider):
             raise StreamCancelled()
         if not saw_data:
             raise self._no_stream(url, response)
+        if held is not None:
+            # No stop reason came to say: it was the model's after all.
+            yield TextDelta(text=held)
         usage_raw = app_usage(usage_raw) if usage_raw else usage_raw
         completed = StreamCompleted(
             usage=parse_usage(usage_raw),
