@@ -94,9 +94,11 @@ def test_removing_a_card_asks_and_defaults_to_no(app, window, monkeypatch):
 
 
 def test_removing_a_card_that_brought_lore_says_the_lore_stays(app, window, monkeypatch):
-    """The entries a card's lorebook made aren't taken out with the card
-    (nothing says which they were): the question says so, and only for a
-    card that had a lorebook."""
+    """The entries a card's lorebook made aren't taken out with the card:
+    the question says so, and only where some came (a character joining a
+    story that exists brings none unless asked)."""
+    from sealedlore.models.lore import LoreEntry
+
     texts: list[str] = []
     monkeypatch.setattr(
         QMessageBox,
@@ -105,14 +107,23 @@ def test_removing_a_card_that_brought_lore_says_the_lore_stays(app, window, monk
     )
     panel = window.cast_panel
     character = window.session.cast[0]
+    lore = window.session.bundle.lore
+    lore[:] = []
     panel._select(character.id)
     panel._remove_character()
     assert "Lore page" not in texts[-1], "a card of our own brought no lore"
     character.tavern = TavernFields(character_book={"entries": [{"keys": ["x"], "content": "y"}]})
     panel._select(character.id)
     panel._remove_character()
-    assert "lore that came in with their card stays" in texts[-1]
+    assert "Lore page" not in texts[-1], "their lorebook stayed out"
+    lore.append(LoreEntry(title="x", content="y", came_from=f"{character.name}'s lorebook"))
+    panel._remove_character()
+    assert "The 1 lore entry that came from their lorebook stays" in texts[-1]
     assert "Lore page" in texts[-1]
+    # A story whose lore says nowhere where it came from (from before it did).
+    lore[:] = [LoreEntry(title="x", content="y")]
+    panel._remove_character()
+    assert "Any lore that came in with their card stays" in texts[-1]
 
 
 def test_enter_in_the_prompt_editors_search_saves_nothing(app, window, monkeypatch):

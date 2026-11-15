@@ -1414,12 +1414,13 @@ world, and whom you play. The model drafts the world, the other characters,
 the lore and the opening around them, and their card stands as it is: what
 the story changes of them (their role in this world, what has happened to
 them) is added to their description as a change of this story's, which their
-card can take or not (below). Their own lorebook comes too: the model reads it
-before it writes, so the world and the opening agree with it and its own lore
-covers only what the lorebook doesn't, and every entry goes into the story's
-lore as it is (a very large lorebook is read whole up to a few thousand words,
-the rest by title). Entries that are disabled stay out of what the model
-reads, as they stay out of play. When the premise puts them somewhere their
+card can take or not (below). A story drafted around them is made from their
+card, so their own lorebook comes whole: the model reads every entry before
+it writes, however long the lorebook, so the world and the opening agree with
+it and its own lore covers only what the lorebook doesn't, and every entry
+goes into the story's lore as it is. The premise dialog says so before
+anything is sent. Entries that are disabled stay out of what the model reads,
+as they stay out of play. When the premise puts them somewhere their
 lorebook doesn't fit (a river-pilot of an invented world running a ferry in
 present-day Maine), the model may find entries that don't hold in this story:
 those come in disabled, kept on the Lore page for you to tick Enabled on, and
@@ -1431,9 +1432,16 @@ story from an idea** offers the same once you keep any characters.
 **Into a story.** On the cast board, **From Your characters…** (also in the
 new story guide's characters step and Setup's Characters tab) puts any of
 your characters into the open story, on the cast or as supporting
-characters, with their pictures and, if you like, their own lorebook as the
-story's lore. **Add to the story** on their page does the same for the one
-shown. `{{char}}` and `{{user}}` become their name and the name of the
+characters, with their pictures. **Add to the story** on their page does the
+same for the one shown. Their own lorebook stays out: a lorebook is usually
+about the character's own world, and the storyteller takes everything in a
+story's lore as true of that story, so in a story with a world of its own
+(Doomsville, say) it would clash with it. The dialog says which lorebooks
+stay out and why, and **Bring their lorebook too** brings one in anyway, for
+a lorebook that is about the character alone; the message afterwards says
+which way it went. Their lorebook stays on their card either way. Only a
+story made from their card (its own scenario, or a draft built around them)
+takes the lorebook without asking. `{{char}}` and `{{user}}` become their name and the name of the
 character you are playing (before anyone is played, the one the story
 suggests you play, else whoever you choose when it begins).
 
@@ -1490,8 +1498,9 @@ story from it, and asks:
 - which **greeting** opens the story, or none, and you write the first turn.
 
 The card's description and personality become the character's card, its
-example messages their voice, its scenario the story's world, its lorebook
-the story's lore, and its picture their portrait (a world's picture goes
+example messages their voice, its scenario the story's world, its whole
+lorebook the story's lore (the dialog says so: a story made from a card is
+set in the card's own world), and its picture their portrait (a world's picture goes
 behind the story). Cards from card sites are often long; if the cast's cards
 no longer fit their room in the prompt, the largest are sent condensed (see
 "When the cast's cards don't fit"). The card's own background goes behind the story, and the
@@ -1507,17 +1516,21 @@ it to Style → Other notes), its tags, macros other than `{{char}}` and
 
 **A card into a story.** On the cast board, **SillyTavern cards → Import a
 character card…** adds the card's character to the open story, on the cast
-or as a supporting character, with its lorebook if you like. Its `{{user}}`
+or as a supporting character. As with From Your characters…, its lorebook
+stays out unless you tick **Bring their lorebook too**, and the question
+says why. Its `{{user}}`
 becomes the name of the character you are playing. A card with files of its
 own (a background, pictures its greetings show) is also kept whole in Your
 characters, and the story's character linked to it, as From Your
 characters… would; during a private scene that waits until the scene ends.
 Once in, the lore a card brought is the story's own: removing the character
-later leaves it, and the question asking whether to remove them says so.
+later leaves it, and the question asking whether to remove them says how
+many entries came from their lorebook.
 Remove what the story no longer needs on the Lore page.
 
-**Where lore came from.** Whichever way a lorebook comes in (a character
-joining, a card, a story drafted around them, a lorebook file), the message
+**Where lore came from.** Whichever way a lorebook comes in (a story made
+from a card, a story drafted around them, a character joining with Bring
+their lorebook too, a lorebook file), the message
 afterwards says how many entries went into the story's lore, and on the Lore
 page each one says where it came from: "(from Elena Ruiz's lorebook)" beside
 its title in the list, and over the entry. Lore you write yourself, or that a

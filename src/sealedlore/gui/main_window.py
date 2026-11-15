@@ -197,7 +197,7 @@ from sealedlore.storage.scenario import (
     write_scenario,
 )
 from sealedlore.storage.tavern_cards import tavern_kind
-from sealedlore.storage.tavern_lore import is_converted_lorebook
+from sealedlore.storage.tavern_lore import is_converted_lorebook, their_lorebook
 from sealedlore.storage.template_pictures import apply_kept, read_kept, template_of
 from sealedlore.threads import BackgroundThread
 from sealedlore.tree import path_to
@@ -621,6 +621,7 @@ class MainWindow(
         self.cast_panel.changed.connect(self._on_cast_changed)
         self.cast_panel.renamed.connect(self._on_character_renamed)
         self.cast_panel.remove_requested.connect(self._remove_character)
+        self.cast_panel.lore_from = self._lore_from_their_book
         self.cast_panel.promote_requested.connect(self._promote_character)
         self.cast_panel.demote_requested.connect(self._demote_character)
         self.cast_panel.accept_requested.connect(self._accept_suggestion)
@@ -4245,6 +4246,17 @@ class MainWindow(
         )
         if character is not None:
             self.session.rename_on_rosters(character, old_name)
+
+    def _lore_from_their_book(self, character: Character) -> int | None:
+        """How many of the open story's lore entries came from `character`'s
+        own lorebook; None when the story's lore says nowhere where it came
+        from (lore from before entries kept it)."""
+        lore = self.session.bundle.lore if self.session is not None else []
+        theirs = their_lorebook(character.name)
+        count = sum(entry.came_from == theirs for entry in lore)
+        if count or any(entry.came_from for entry in lore) or not lore:
+            return count
+        return None
 
     def _remove_character(self, character_id: str) -> None:
         """The cast board's Remove (in Setup and the guide too): out of the

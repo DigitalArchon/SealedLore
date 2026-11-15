@@ -6,6 +6,7 @@ lorebook is fetched by (providers/card_links.py)."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import PurePosixPath
 from typing import Any
 
@@ -36,6 +37,7 @@ from sealedlore.storage.tavern_cards import (
     TavernCard,
     first_sentence,
     greeting_shown,
+    lore_from_card,
     macro_filler,
 )
 
@@ -53,8 +55,87 @@ def lore_brought(count: int, several: bool = False) -> str:
     if not count:
         return ""
     return (
-        f", with {count} {'entry' if count == 1 else 'entries'} of their "
+        f", with {count} {_entries(count)} of their "
         f"lorebook{'s' if several else ''} in the story's lore (the Lore page)"
+    )
+
+
+def _entries(count: int) -> str:
+    return "entry" if count == 1 else "entries"
+
+
+def _whose(names: Sequence[str]) -> str:
+    """ "Elena's lorebook", "Elena's and Marta's lorebooks"."""
+    owned = [f"{name}'s" for name in names]
+    if len(owned) == 1:
+        return f"{owned[0]} lorebook"
+    return f"{', '.join(owned[:-1])} and {owned[-1]} lorebooks"
+
+
+# Joining a story that exists, a character's own lorebook stays out unless
+# the author brings it (the author, Nov 15 2026: their world's lore "breaks
+# the game" in a story with a world of its own). Only a story made from a
+# card takes it whole. Said wherever someone joins, with the reason.
+BRING_LORE = "Bring their lorebook too"
+BRING_LORES = "Bring their lorebooks too"
+
+
+def joining_lore(names: Sequence[str], count: int, bring: bool) -> str:
+    """What joining does with the lorebooks of `names` (those who have one,
+    `count` entries in all), and why: shown beside the box that brings them."""
+    if not names:
+        return ""
+    whose = _whose(names)
+    several = len(names) > 1
+    if bring:
+        return (
+            f"{whose} ({count} {_entries(count)}) will go into this story's lore, and the "
+            "storyteller will take every entry as true of this story. Look "
+            f"{'them' if several else 'it'} over on the Lore page afterwards and switch off "
+            "anything that doesn't fit."
+        )
+    bring_only = (
+        "Bring them only if they are about the characters alone; their cards and pictures "
+        "come in either way."
+        if several
+        else "Bring it only if it is about the character alone; their card and pictures come "
+        "in either way."
+    )
+    return (
+        f"{whose} ({count} {_entries(count)}) {'stay' if several else 'stays'} out of this "
+        "story. A character's lorebook is usually about their own world, and the storyteller "
+        "takes everything in a story's lore as true of that story, so it would clash with the "
+        f"world this one already has. {bring_only}"
+    )
+
+
+def lore_left_out(count: int, several: bool = False) -> str:
+    """Said after someone joins without their lorebook: " Their lorebook (6
+    entries) stayed out of the story's lore: it is about their own world"."""
+    if not count:
+        return ""
+    if several:
+        return (
+            f" Their lorebooks ({count} {_entries(count)}) stayed out of the story's lore, "
+            "as they are about their own worlds."
+        )
+    return (
+        f" Their lorebook ({count} {_entries(count)}) stayed out of the story's lore, "
+        "as it is about their own world."
+    )
+
+
+def lore_with_the_card(count: int, off: int) -> str:
+    """A story made from a card's own scenario takes its lorebook whole,
+    said in the dialog before it is made."""
+    if not count:
+        return ""
+    stays_off = (
+        f" ({off} switched off on the card {'stays' if off == 1 else 'stay'} off)" if off else ""
+    )
+    return (
+        f"Every entry of the card's lorebook ({count}) becomes the story's lore{stays_off}: "
+        "the story is set in the card's own world, so the storyteller takes them as true."
     )
 
 
@@ -205,6 +286,16 @@ class CardImportDialog(QDialog):
         form.addRow("", self.preview_pictures)
         form.addRow("", self.instructions)
         form.addRow("", self.expressions)
+        made = lore_from_card(card, lambda text: text).entries if card.book else []
+        off = sum(not entry.enabled for entry in made)
+        if made:
+            # Said before it is made: the card's whole lorebook comes, as a
+            # story from the card is set in the card's world (one joining a
+            # story that exists brings none unless asked).
+            lore = QLabel(lore_with_the_card(len(made), off))
+            lore.setWordWrap(True)
+            lore.setTextFormat(Qt.PlainText)
+            form.addRow("Lore", lore)
 
         note = QLabel(
             "Setup opens next, to set the style (person, tense, length) before the story "

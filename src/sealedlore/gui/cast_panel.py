@@ -20,6 +20,8 @@ the new story guide and Setup, it is the list and the card alone.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6.QtCore import QEvent, QSize, Qt, Signal
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
@@ -140,6 +142,10 @@ class CastPanel(QWidget):
         self._supporting: list[Character] = []
         self._suggestions: list[CharacterSuggestion] = []
         self._current: Character | None = None
+        # How many of the story's lore entries came from a character's own
+        # lorebook (the window's, which has the lore); None for a story whose
+        # lore predates saying where it came from.
+        self.lore_from: Callable[[Character], int | None] = lambda _character: None
         self._loading = False
         # The card being renamed and the name it had as its rename began: the
         # rosters (supporting cards are on them by name) follow once, when
@@ -1015,11 +1021,21 @@ class CastPanel(QWidget):
             return
         text = f"Take {self._current.name} out of the story? Their card goes, pictures and all."
         tavern = self._current.tavern
-        if tavern is not None and tavern.book_entries:
+        brought = self.lore_from(self._current)
+        if brought:
             # Once in, the entries a card's lorebook made are the story's own:
-            # nothing says which they were, so they stay, and the author is told.
+            # they stay, and the author is told. Joining a story brings none
+            # unless asked, so it is said only where some came.
             text += (
-                "\n\nThe lore that came in with their card stays: remove it on the Lore page "
+                f"\n\nThe {brought} lore {'entry' if brought == 1 else 'entries'} that came "
+                f"from their lorebook {'stays' if brought == 1 else 'stay'}: remove "
+                f"{'it' if brought == 1 else 'them'} on the Lore page (each says where it came "
+                f"from) if the story no longer needs {'it' if brought == 1 else 'them'}."
+            )
+        elif brought is None and tavern is not None and tavern.book_entries:
+            # Lore from before entries said where they came from.
+            text += (
+                "\n\nAny lore that came in with their card stays: remove it on the Lore page "
                 "if the story no longer needs it."
             )
         answer = QMessageBox.question(

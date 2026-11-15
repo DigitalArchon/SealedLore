@@ -295,14 +295,6 @@ def review_system(detached: bool = False, texts: PromptTexts = DEFAULT_TEXTS) ->
     return system + (texts["authoring.review.detached"] if detached else "")
 
 
-# The most of one character's lorebook the drafter reads whole, in words of
-# its entries' text; past it, the rest by title. An imported card's book can
-# run to hundreds of entries.
-DRAFT_LORE_WORDS = 3000
-# How many titles of those that didn't fit are named.
-DRAFT_LORE_TITLES = 200
-
-
 def own_lorebook(card: Character, user: str | None) -> list[LoreEntry]:
     """A character's own lorebook as it will be in a story's lore: its
     entries as lore_from_book makes them, `{{user}}` read as `user`. Those
@@ -318,16 +310,11 @@ def own_lorebook(card: Character, user: str | None) -> list[LoreEntry]:
 
 
 def lorebook_lines(entries: Sequence[LoreEntry]) -> list[str]:
-    """A character's lorebook for the drafter: each entry whole while they
-    fit in DRAFT_LORE_WORDS, the others by title."""
+    """A character's lorebook for the drafter, every entry whole (the
+    author, Nov 15 2026: a story made from a card takes all its lore, so the
+    drafter reads all of it, however long; it used to stop at 3,000 words)."""
     lines = ["Their lorebook:"]
-    words, rest = 0, []
     for entry in entries:
-        size = len(entry.content.split())
-        if rest or (words and words + size > DRAFT_LORE_WORDS):
-            rest.append(entry.title)
-            continue
-        words += size
         how = (
             " (always on)"
             if entry.always_on
@@ -337,12 +324,6 @@ def lorebook_lines(entries: Sequence[LoreEntry]) -> list[str]:
         )
         text = entry.content.strip().replace("\n", "\n  ")
         lines.append(f"- {entry.title}{how}: {text}")
-    if rest:
-        more = len(rest) - DRAFT_LORE_TITLES
-        lines.append(
-            f"And {len(rest)} more, by title only: {'; '.join(rest[:DRAFT_LORE_TITLES])}"
-            + (f"; and {more} others." if more > 0 else ".")
-        )
     return lines
 
 

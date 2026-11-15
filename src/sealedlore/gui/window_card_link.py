@@ -27,7 +27,7 @@ from sealedlore.gui.card_changes import KEEP, SAVE, TAKE, VERSION, CardChangesDi
 from sealedlore.gui.collection_picker import CollectionPicker
 from sealedlore.gui.ref_images import thumbnail_of
 from sealedlore.gui.save_characters import SaveCharactersDialog
-from sealedlore.gui.tavern_dialog import lore_brought
+from sealedlore.gui.tavern_dialog import lore_brought, lore_left_out
 from sealedlore.ids import new_id
 from sealedlore.models.character import Character
 from sealedlore.models.collection import PictureMark
@@ -212,7 +212,13 @@ class CardLinkWindow:
         notes: list[str] = []
         before = len(self.session.bundle.lore)
         added = [self._kept_into_story(card, to_cast, with_lore, notes) for card in chosen]
-        self._after_cards_added(added, to_cast, notes, len(self.session.bundle.lore) - before)
+        self._after_cards_added(
+            added,
+            to_cast,
+            notes,
+            len(self.session.bundle.lore) - before,
+            left_out=0 if with_lore or chat else _book_entries(chosen),
+        )
 
     def _not_twice(self, cards: list[Character]) -> list[Character]:
         """`cards`, less any the story already has from the same card unless the
@@ -356,9 +362,13 @@ class CardLinkWindow:
         to_cast: bool,
         notes: list[str] | None = None,
         lore: int = 0,
+        *,
+        left_out: int = 0,
     ) -> None:
         """Said once they are in: where they went, and `lore`, how many lore
-        entries their lorebooks brought."""
+        entries their lorebooks brought, or `left_out`, how many stayed out
+        (a story that exists keeps its own world unless the author ticked
+        them in)."""
         session = self.session
         session.forget_review_undo()
         self.refresh_panels()
@@ -373,15 +383,18 @@ class CardLinkWindow:
         names = ", ".join(character.name for character in added)
         where = "the cast" if to_cast else "the supporting characters"
         where += lore_brought(lore, several=len(added) > 1)
+        several = sum(bool(c.tavern and c.tavern.book_entries) for c in added) > 1
+        stayed_out = lore_left_out(left_out, several=several)
         later = (
             " Their card's {{user}} becomes the name of whoever you play when the story begins."
             if any(c.linked is not None and not c.linked.user for c in added)
             else ""
         )
+        said = f"{names} joined {where}.{stayed_out}{later}"
         if notes:
-            self._say_left_out("Into the story", f"{names} joined {where}.{later}", notes)
+            self._say_left_out("Into the story", said, notes)
         else:
-            self.statusBar().showMessage(f"{names} joined {where}.{later}", 12000)
+            self.statusBar().showMessage(said, 12000)
 
     def _add_shown_to_story(self, card_id: str) -> None:
         """Your characters' page: the character shown into the open story."""
@@ -395,7 +408,13 @@ class CardLinkWindow:
         notes: list[str] = []
         before = len(self.session.bundle.lore)
         added = self._kept_into_story(card, to_cast, with_lore, notes)
-        self._after_cards_added([added], to_cast, notes, len(self.session.bundle.lore) - before)
+        self._after_cards_added(
+            [added],
+            to_cast,
+            notes,
+            len(self.session.bundle.lore) - before,
+            left_out=0 if with_lore else _book_entries([card]),
+        )
 
     # --- the Cast page's line ----------------------------------------------------------------
 
@@ -664,3 +683,8 @@ class CardLinkWindow:
             )
         self.statusBar().showMessage(words, 12000)
         return made
+
+
+def _book_entries(cards: list[Character]) -> int:
+    """How many entries the lorebooks of `cards` hold in all."""
+    return sum(card.tavern.book_entries for card in cards if card.tavern)

@@ -203,7 +203,8 @@ def put_in_characters(
     played = next((c for c in scenario.cast if c.id == scenario.suggested_character_id), None)
     taken: set[str] = set()
     # Lore titles a card's lorebook brought, beside the draft's own.
-    from_cards: set[str] = set()
+    # Each title a chosen character's lorebook brought, and whose it was.
+    from_cards: dict[str, str] = {}
     for card in characters:
         if card.name.casefold() in taken:
             # Two versions of one character: the draft knows one name.
@@ -263,17 +264,21 @@ def _put_in_lore(
     card: Character,
     user: str | None,
     warnings: list[str],
-    from_cards: set[str],
+    from_cards: dict[str, str],
     set_aside: set[str],
 ) -> tuple[int, int]:
-    """A card's own lorebook into the drafted story's lore, as Add to the
-    story brings it; how many entries came, and how many of them the draft
-    set aside (`set_aside`, by title: they don't hold in this story, so they
-    come switched off, kept and sent nowhere, for the author to switch on).
+    """A card's own lorebook into the drafted story's lore, every entry (a
+    story made from a card takes all its lore; one joining a story that
+    exists brings none unless asked, gui/window_card_link.py); how many
+    came, and how many of them the draft set aside (`set_aside`, by title:
+    they don't hold in this story, so they come switched off, kept and sent
+    nowhere, for the author to switch on).
     The drafter was shown the book (authoring.render_own_characters) and told
     to write no entry by one of its titles; one it wrote anyway gives way to
-    the card's, which stands as the card's other fields do. A title another chosen character's book
-    brought already stays theirs: the two would say the same thing twice.
+    the card's, which stands as the card's other fields do. A title another
+    chosen character's book brought already stays theirs: the two would say
+    the same thing twice. Within one book, two entries of one title both
+    come (a whole lorebook is the rule; live, a book of 44 lost 24 so).
     And one the draft copied from the book under another title (live, Sonnet
     4.6 copied whole books, once as "The Quiet Deck (lorebook entry)") gives
     way too: its text is the entry's (`_copied`)."""
@@ -284,7 +289,7 @@ def _put_in_lore(
     added = off = 0
     for entry in imported.entries:
         title = entry.title.casefold()
-        if title in from_cards:
+        if from_cards.get(title, card.id) != card.id:
             warnings.append(
                 f"{card.name}'s lore entry “{entry.title}” wasn't added: another character's "
                 "lorebook has one by that name"
@@ -302,7 +307,7 @@ def _put_in_lore(
                 f"the draft's own lore entry “{own.title}” was left out: {card.name}'s "
                 f"lorebook {why}"
             )
-        from_cards.add(title)
+        from_cards.setdefault(title, card.id)
         if title in set_aside and entry.enabled:
             entry.enabled = False
             off += 1

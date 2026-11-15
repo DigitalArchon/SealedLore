@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from sealedlore.engine.authoring import own_lorebook, parse_generated, reply_without_notes
+from sealedlore.engine.authoring import parse_generated, reply_without_notes
 from sealedlore.engine.draft_detail import STANDARD, DraftDetail
 from sealedlore.engine.drafting import StoryDraft
 from sealedlore.engine.plot_draft import DEPTHS, NO_NEWCOMERS, PlotWishes
@@ -40,6 +40,7 @@ from sealedlore.gui.workers import WorkerThread
 from sealedlore.models.character import Character
 from sealedlore.models.generation import ReasoningConfig
 from sealedlore.providers.base import ChatProvider
+from sealedlore.storage.tavern_lore import lore_from_book
 
 PREMISE_EXAMPLE = (
     "e.g. Four years after the dead rose. I play Jane, an ex-army medic who walks "
@@ -315,11 +316,19 @@ class GenerateDialog(QDialog):
             else PREMISE_EXAMPLE
         )
         several = len(self.characters) > 1
-        # Their lorebooks, which the drafter reads and the story's lore takes.
-        lore = sum(len(own_lorebook(card, None)) for card in self.characters)
+        # Their lorebooks, which the drafter reads and the story's lore takes
+        # whole (a story made from their cards; one they join keeps its own
+        # world). Said here, with what the draft may switch off and why.
+        lore = sum(
+            len(lore_from_book(card.tavern.character_book, lambda text: text).entries)
+            for card in self.characters
+            if card.tavern and card.tavern.character_book
+        )
         books = (
-            f", and their lorebook{'s' if several else ''} ({lore} "
-            f"{'entry' if lore == 1 else 'entries'}) as the story's lore"
+            f", and every entry of their lorebook{'s' if several else ''} ({lore}) as the "
+            "story's lore. The draft reads all of it and builds the story to agree; any entry "
+            "your premise leaves no place for (it sets them somewhere else) comes in switched "
+            "off, for you to switch on"
             if lore
             else ""
         )

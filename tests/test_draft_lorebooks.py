@@ -57,19 +57,17 @@ def test_the_drafter_reads_what_the_story_will_have_and_nothing_switched_off():
     assert [e.title for e in own_lorebook(marta, "John")] == ["The Brass Ledger", "The Cistern"]
 
 
-def test_a_big_lorebook_is_read_whole_up_to_its_share_and_the_rest_by_title(monkeypatch):
-    monkeypatch.setattr(authoring, "DRAFT_LORE_WORDS", 10)
-    monkeypatch.setattr(authoring, "DRAFT_LORE_TITLES", 2)
+def test_a_big_lorebook_is_read_whole_however_long():
+    # The author, Nov 15 2026: a story made from a card takes all its lore,
+    # and the drafter reads all of it (it used to stop at 3,000 words).
     entries = [
-        LoreEntry(title=f"E{n}", content="word " * 4, keywords=[f"e{n}"]) for n in range(1, 7)
+        LoreEntry(title=f"E{n}", content=f"fact{n} " * 400, keywords=[f"e{n}"])
+        for n in range(1, 31)
     ]
     lines = lorebook_lines(entries)
-    assert [line.split(" (")[0] for line in lines[1:3]] == ["- E1", "- E2"]
-    assert lines[-1] == "And 4 more, by title only: E3; E4; and 2 others."
-    # One entry longer than the share still goes whole: the first is never only a title.
-    huge = [LoreEntry(title="Huge", content="word " * 50), *entries[:1]]
-    assert lorebook_lines(huge)[1].startswith("- Huge: word word")
-    assert lorebook_lines(huge)[-1] == "And 1 more, by title only: E1."
+    assert len(lines) == 31
+    assert all(f"fact{n} " in lines[n] for n in range(1, 31))
+    assert not any("by title only" in line for line in lines)
 
 
 # --- where the draft puts it ------------------------------------------------------------
@@ -107,6 +105,20 @@ def test_the_first_characters_entry_keeps_a_title_two_lorebooks_share():
         "Elena: their card as it is, in the cast; 1 entry of their lorebook in the story's "
         "lore (the Lore page).",
     ]
+
+
+def test_one_lorebook_with_a_title_twice_comes_whole():
+    """A story made from a card takes its whole lorebook: two entries of one
+    title in one book are both kept (live, a 44-entry book lost 24 to the
+    check meant for another character's book)."""
+    marta = card(
+        "Marta",
+        [entry("Mill Street", "The smithy."), entry("Mill Street", "The bakery.")],
+    )
+    scenario, warnings, brought = drafted(marta, cast=("Marta",))
+    assert [e.content for e in scenario.lore] == ["The smithy.", "The bakery."]
+    assert not warnings
+    assert "2 entries of their lorebook" in brought[0]
 
 
 def test_a_character_with_no_lorebook_is_said_to_bring_only_their_card():

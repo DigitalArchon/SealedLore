@@ -80,17 +80,19 @@ def window(app, tmp_path: Path):
     window.close()
 
 
-def choose_elena(monkeypatch, *, to_cast: bool = True) -> None:
+def choose_elena(monkeypatch, *, to_cast: bool = True, with_lore: bool = False) -> None:
     def exec_(picker: CollectionPicker) -> int:
         picker.list.item(0).setCheckState(picker.list.item(0).checkState().Checked)
         (picker.to_cast if to_cast else picker.to_supporting).setChecked(True)
+        assert not picker.with_lore.isChecked(), "a story that exists keeps its own world"
+        picker.with_lore.setChecked(with_lore)
         return QDialog.Accepted
 
     monkeypatch.setattr(CollectionPicker, "exec", exec_)
 
 
-def added_elena(window, monkeypatch) -> Character:
-    choose_elena(monkeypatch)
+def added_elena(window, monkeypatch, *, with_lore: bool = False) -> Character:
+    choose_elena(monkeypatch, with_lore=with_lore)
     window.cast_panel.collection_button.click()
     return next(c for c in window.session.cast if c.name == "Elena")
 
@@ -124,8 +126,10 @@ def test_a_kept_character_joins_the_story_with_the_names_in(app, window, monkeyp
     portrait = elena.reference_images[0]
     assert session.pictures.read(portrait.file) is not None
     assert (window.root / "stories" / "story-1" / portrait.file).is_file()
-    # Her card's own lorebook is the story's lore.
-    assert [entry.title for entry in session.bundle.lore] == ["Hellsville"]
+    # Her card's own lorebook stays out of a story that exists (its world is
+    # its own), kept on her card for the link and an export.
+    assert session.bundle.lore == []
+    assert elena.tavern.book_entries == 1
     assert window.cast_panel.current is elena
     assert "In step with their card" in window.cast_panel.link_words.text()
     assert window.cast_panel.link_button.text() == window_card_link.CARD_LABEL
@@ -638,7 +642,7 @@ def test_a_cards_lore_added_before_anyone_is_played_is_named_at_the_start(app, w
     """Their lore kept {{user}} for good: the storyteller read it so, and a
     keyword written so could never match."""
     window.session.story.held_character_id = None
-    added_elena(window, monkeypatch)
+    added_elena(window, monkeypatch, with_lore=True)
     entry = window.session.bundle.lore[0]
     assert "{{user}}" in entry.content
     window.session.story.held_character_id = "john"
@@ -648,7 +652,7 @@ def test_a_cards_lore_added_before_anyone_is_played_is_named_at_the_start(app, w
 
 
 def test_the_same_card_twice_is_asked_about_and_no_is_the_default(app, window, monkeypatch):
-    added_elena(window, monkeypatch)
+    added_elena(window, monkeypatch, with_lore=True)
     asked: list = []
 
     def question(_parent, title, _text, _buttons, default):
@@ -671,7 +675,7 @@ def test_what_a_cards_lorebook_leaves_out_is_said_when_they_join(app, window, mo
     book_entry.update({"secondary_keys": ["the walls"], "selective": True})
     said: list = []
     monkeypatch.setattr(window, "_say_left_out", lambda *args: said.append(args))
-    added_elena(window, monkeypatch)
+    added_elena(window, monkeypatch, with_lore=True)
     assert said and said[0][1] == (
         "Elena joined the cast, with 1 entry of their lorebook in the story's lore (the Lore page)."
     )

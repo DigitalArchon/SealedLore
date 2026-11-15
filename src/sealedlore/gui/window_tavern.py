@@ -25,7 +25,14 @@ from PySide6.QtWidgets import (
 from sealedlore.gui import file_dialogs
 from sealedlore.gui.image_codec import encoded
 from sealedlore.gui.ref_images import clean_incoming, image_of, store_reference
-from sealedlore.gui.tavern_dialog import CardImportDialog, LinkDialog, lore_brought
+from sealedlore.gui.tavern_dialog import (
+    BRING_LORE,
+    CardImportDialog,
+    LinkDialog,
+    joining_lore,
+    lore_brought,
+    lore_left_out,
+)
 from sealedlore.models.character import Character
 from sealedlore.models.lore import LoreEntry
 from sealedlore.providers.card_links import (
@@ -293,6 +300,7 @@ class TavernWindow:
             notes += [f"Lorebook: left out {note}." for note in lore.notes()]
         session.add_card(character, to_cast=to_cast, lore=lore.entries if with_lore else ())
         brought = lore_brought(len(lore.entries)) if with_lore else ""
+        left_out = "" if with_lore or chat else lore_left_out(len(lore.entries))
         session.forget_review_undo()
         self.refresh_panels()
         self._refresh_people()
@@ -303,7 +311,7 @@ class TavernWindow:
         where_words = (
             "this chat" if chat else "the cast" if to_cast else "the supporting characters"
         )
-        lead = f"{character.name} joined {where_words}{brought}."
+        lead = f"{character.name} joined {where_words}{brought}.{left_out}"
         if notes:
             self._say_left_out("Import a character card", lead, notes)
         else:
@@ -324,6 +332,8 @@ class TavernWindow:
         before = len(self.session.bundle.lore)
         added = self._kept_into_story(kept, to_cast, with_lore, notes)
         brought = lore_brought(len(self.session.bundle.lore) - before)
+        book = kept.tavern.book_entries if kept.tavern else 0
+        left_out = "" if with_lore or chat else lore_left_out(book)
         self._after_cards_added([added], to_cast)
         notes.insert(
             0,
@@ -334,18 +344,24 @@ class TavernWindow:
             "this chat" if chat else "the cast" if to_cast else "the supporting characters"
         )
         self._say_left_out(
-            "Import a character card", f"{added.name} joined {where_words}{brought}.", notes
+            "Import a character card",
+            f"{added.name} joined {where_words}{brought}.{left_out}",
+            notes,
         )
 
     def _ask_where_card_goes(self, character: Character, lore: int) -> tuple[bool, bool] | None:
-        """(to the cast, with the card's lore), or None for Cancel."""
+        """(to the cast, with the card's lore), or None for Cancel. The
+        lorebook stays out unless ticked, and the box says why
+        (`joining_lore`): it is the character's own world's."""
         box = QMessageBox(self._dialog_parent())
         box.setWindowTitle("Import a character card")
         box.setText(f"Add {character.name} to this story?")
-        box.setInformativeText(
+        box.setTextFormat(Qt.PlainText)
+        where = (
             "The cast is on every turn's roster, and the storyteller has their card always; "
             "a supporting character's card goes with the turns that name them."
         )
+        box.setInformativeText(where)
         cast = box.addButton("Add to the cast", QMessageBox.AcceptRole)
         supporting = box.addButton("Add as a supporting character", QMessageBox.AcceptRole)
         box.addButton(QMessageBox.Cancel)
@@ -353,8 +369,14 @@ class TavernWindow:
         with_lore = None
         if lore:
             # The box as its parent: setCheckBox takes no ownership in PySide6.
-            with_lore = QCheckBox(f"With the card's {lore} lore entries", box)
-            with_lore.setChecked(True)
+            with_lore = QCheckBox(BRING_LORE, box)
+
+            def say(bring: bool) -> None:
+                words = joining_lore([character.name], lore, bring)
+                box.setInformativeText(f"{where}\n\n{words}")
+
+            with_lore.toggled.connect(say)
+            say(False)
             box.setCheckBox(with_lore)
         box.exec()
         clicked = box.clickedButton()

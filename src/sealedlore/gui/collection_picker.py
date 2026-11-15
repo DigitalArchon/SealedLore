@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 from sealedlore.gui.cast_board import Thumbs
 from sealedlore.gui.ref_images import StoryPictures
 from sealedlore.gui.sizing import size_to_screen
+from sealedlore.gui.tavern_dialog import BRING_LORE, BRING_LORES, joining_lore
 from sealedlore.models.character import Character
 from sealedlore.storage import collection
 
@@ -34,7 +35,8 @@ ICON = QSize(40, 60)
 class CollectionPicker(QDialog):
     """`chosen()`: the cards ticked, in the list's order. With `placing`, it
     also asks whether they join the cast or the supporting characters, and
-    whether their own lorebooks come too."""
+    whether their own lorebooks come too: not unless the author ticks it,
+    and the page says what stays out and why (`joining_lore`)."""
 
     def __init__(
         self,
@@ -98,8 +100,13 @@ class CollectionPicker(QDialog):
         group = QButtonGroup(self)
         group.addButton(self.to_cast)
         group.addButton(self.to_supporting)
-        self.with_lore = QCheckBox("With their own lorebooks, as the story's lore")
-        self.with_lore.setChecked(True)
+        self.with_lore = QCheckBox(BRING_LORE)
+        self.with_lore.toggled.connect(lambda _on: self._sync())
+        # In the dialog's own type, not a dim hint: what stays out of the
+        # story, and why, is the author's to see before Add.
+        self.lore_words = QLabel()
+        self.lore_words.setWordWrap(True)
+        self.lore_words.setTextFormat(Qt.PlainText)
         for widget in (self.to_cast, self.to_supporting, self.with_lore):
             widget.setVisible(placing)
 
@@ -116,6 +123,7 @@ class CollectionPicker(QDialog):
         layout.addWidget(self.to_cast)
         layout.addWidget(self.to_supporting)
         layout.addWidget(self.with_lore)
+        layout.addWidget(self.lore_words)
         layout.addWidget(self.buttons)
         self._sync()
 
@@ -149,8 +157,17 @@ class CollectionPicker(QDialog):
         chosen = self.chosen()
         # Putting nobody into a story is nothing; choosing nobody is a choice.
         self.ok.setEnabled(bool(chosen) or not self._placing)
-        books = any(card.tavern and card.tavern.book_entries for card in chosen)
-        self.with_lore.setEnabled(books)
+        books = [card for card in chosen if card.tavern and card.tavern.book_entries]
+        self.with_lore.setEnabled(bool(books))
+        self.with_lore.setText(BRING_LORES if len(books) > 1 else BRING_LORE)
+        self.lore_words.setText(
+            joining_lore(
+                [card.name for card in books],
+                sum(card.tavern.book_entries for card in books),
+                self.with_lore.isChecked(),
+            )
+        )
+        self.lore_words.setVisible(self._placing and bool(books))
 
     def options(self) -> tuple[bool, bool]:
         """(into the cast, with their lorebooks)."""
