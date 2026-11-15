@@ -22,9 +22,24 @@ from sealedlore.phone.tor_control import quoted
 
 SOCKET_PATH_MOST = 100  # under the 107 a unix socket allows, with room
 _UNSAFE = set(' \t\n"\\')
-# The libraries Tor's expert bundle keeps beside its tor (no RUNPATH: it finds
-# them by LD_LIBRARY_PATH, which only its own process is given).
-BUNDLED_LIBRARIES = ("libevent-2.1.so.7", "libssl.so.3", "libcrypto.so.3")
+# The libraries the AppImage keeps beside its tor: every one it loads but glibc's,
+# from their Ubuntu 22.04 packages (packaging/appimage/tools.sh). No RUNPATH: it
+# finds them by LD_LIBRARY_PATH, which only its own process is given. The build
+# stops if tor loads any library not named here.
+BUNDLED_LIBRARIES = (
+    "libevent-2.1.so.7",
+    "libssl.so.3",
+    "libcrypto.so.3",
+    "libz.so.1",
+    "liblzma.so.5",
+    "libzstd.so.1",
+    "libcap.so.2",
+    "libseccomp.so.2",
+    "libsystemd.so.0",
+    "liblz4.so.1",
+    "libgcrypt.so.20",
+    "libgpg-error.so.0",
+)
 
 
 @dataclass(frozen=True)

@@ -25,7 +25,8 @@ downloads.
 
 The build downloads, over HTTPS, a relocatable Python (python-appimage), the
 pinned packages from PyPI, nine small libraries from Debian 11's archive,
-the Tor Expert Bundle from the Tor Project's archive, the tokenizer's data
+tor from the Tor Project's own Ubuntu 22.04 repository and its libraries
+from Ubuntu's archive (through Launchpad), the tokenizer's data
 from OpenAI's public file store (each checked against a pinned checksum), and
 `appimagetool`. They are cached in `build/appimage/cache`. Nothing of your
 uv or pip settings is used, the `UV_` variables in your environment
@@ -41,28 +42,36 @@ and cryptography) or the lock is re-resolved.
 
 ## Tor, for phone access
 
-Phone access runs tor, and the AppImage brings its own: the `tor` program
-and the three libraries it was built against (libevent and OpenSSL), taken
-unmodified from the official Tor Expert Bundle into `usr/lib/tor`. The
-bundle's version and checksum are pinned in `packaging/appimage/tools.sh`
-(`TOR_BUNDLE_VERSION`, `TOR_URL`, `TOR_SHA256`). The build runs the bundled
-tor with the environment the app gives it and stops if it isn't the pinned
-version, or would load a library from anywhere but its own folder.
+Phone access runs tor, and the AppImage brings its own: the `tor` program of
+the Tor Project's own package for Ubuntu 22.04 (from
+<https://deb.torproject.org/torproject.org>) and the Ubuntu 22.04 packages of
+exactly the libraries it loads (libevent, OpenSSL, zlib, xz, zstd, libcap,
+libseccomp, libsystemd, lz4, libgcrypt and libgpg-error), taken unmodified into
+`usr/lib/tor`. Each package is pinned by its sha256 in
+`packaging/appimage/tools.sh` (`TOR_DEB`, `TOR_SHA256`, `TOR_LIBRARY_DEBS`),
+and `packaging/appimage/check-tor-debs.sh` checks the pins against the
+repositories' indexes, signed by the Tor Project's archive key (`TOR_ARCHIVE_KEY`)
+and Ubuntu's. The build runs the bundled tor with the environment the app gives
+it and stops if it isn't the pinned version, isn't the `--enable-gpl` build or
+lacks the onion service's proof-of-work defence, would load a library from
+anywhere but its own folder (glibc's aside), or loads one the app doesn't list
+(`BUNDLED_LIBRARIES` in `phone/torrc.py`). Everything in it runs on glibc 2.34,
+the AppImage's floor.
 
 That build of tor is made with `--enable-gpl` (for the onion service's
 proof-of-work defence), so the `tor` program is covered by the GPL, version 3.
 `packaging/appimage/THIRD-PARTY-NOTICES.md`, inside the AppImage too, says
 where its source is: the Tor Project's own tarball of that version, and the
-tag of Tor Browser's build system that built the bundle from it.
+Debian source package that built it; and each library's Ubuntu source package.
 
-Tor is updated with each release, to carry its fixes: change the versions and
-sum in `tools.sh`, and the versions, source and build-system tag that
-`THIRD-PARTY-NOTICES.md` names (the tag's `projects/tor`, `projects/libevent` and
-`projects/openssl` in
-[tor-browser-build](https://gitlab.torproject.org/tpo/applications/tor-browser-build)
-give the bundle's versions). `tests/test_packaging_tor.py` checks that they
-agree, and `tools/smoke/appimage_tor.sh` checks a built AppImage's tor
-publishes an onion address (it needs the network).
+Tor is updated with each release, to carry its fixes: change the package and
+its sum in `tools.sh` (and any library whose package moved), run
+`check-tor-debs.sh`, and change the versions and source `THIRD-PARTY-NOTICES.md`
+names. `tests/test_packaging_tor.py` checks that they agree, and
+`tools/smoke/appimage_tor.sh` checks a built AppImage's tor publishes an onion
+address (it needs the network). The Tor Project's repository keeps only the
+current tor: a later build from an older tag needs its package in the
+download cache.
 
 A new release of Tor doesn't by itself call for a new release of SealedLore. By
 [Tor's specification](https://spec.torproject.org/tor-spec/subprotocol-versioning.html),

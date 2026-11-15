@@ -9,8 +9,8 @@ licence, and nothing in SealedLore's licence changes those terms. Paths are
 inside the AppImage: run it with `--appimage-extract` to see them. A path
 starting `texts/` is in `usr/share/licenses/sealedlore/texts/`, which holds
 the licence texts the components don't carry themselves; one starting `tor/`
-is in `usr/share/licenses/sealedlore/tor/`, the licence files the Tor Expert
-Bundle ships.
+is in `usr/share/licenses/sealedlore/tor/`, the Debian copyright files of tor
+and the libraries it loads.
 
 ## Qt and Qt for Python
 
@@ -98,32 +98,55 @@ copyright file, with its licence (MIT/X11 style), is in
 
 ## Tor
 
-Phone access runs tor, taken unmodified from the Tor Expert Bundle 16.0.1
-for Linux x86_64 (<https://www.torproject.org/download/tor/>): `tor` 0.4.9.16
-and the libraries it was built against, libevent 2.1.13 (`libevent-2.1.so.7`)
-and OpenSSL 3.5.9 (`libssl.so.3`, `libcrypto.so.3`), in `usr/lib/tor`. Tor is
-a program of its own, which SealedLore starts only while phone access is on.
+Phone access runs tor 0.4.9.17, taken unmodified from the Tor Project's own
+package for Ubuntu 22.04 (`tor` 0.4.9.17-1~jammy+1, from
+<https://deb.torproject.org/torproject.org>, signed by the Tor Project's
+archive key A3C4 F0F9 79CA A22C DBA8 F512 EE8C BC9E 886D DD89), with the
+libraries it loads, taken unmodified from Ubuntu 22.04's packages, in
+`usr/lib/tor`. Tor is a program of its own, which SealedLore starts only while
+phone access is on.
 
 - **Tor** is under the 3-clause BSD license, with the licences of the code it
-  includes, in `tor/tor.txt`. **This build is made with `--enable-gpl`**, for
-  the onion service's proof-of-work defence, so the `tor` program as a whole
-  is covered by the GNU General Public License, version 3
-  (`texts/GPL-3.0.txt`), as `tor --version` says.
-- **libevent** is under the 3-clause BSD license (`tor/libevent.txt`).
-- **OpenSSL 3** is under the Apache License 2.0 (`tor/openssl.txt`).
-- **Source:** tor 0.4.9.16 is
-  <https://archive.torproject.org/tor-package-archive/tor-0.4.9.16.tar.gz>
-  (git tag `tor-0.4.9.16` of <https://gitlab.torproject.org/tpo/core/tor>).
-  The bundle is built from it by Tor Browser's build system, tag
-  `tbb-16.0.1-build1` of
-  <https://gitlab.torproject.org/tpo/applications/tor-browser-build>
-  (`projects/tor`, `projects/libevent` and `projects/openssl`), which also
-  names the libraries' sources: libevent `release-2.1.13-stable`
-  (<https://github.com/libevent/libevent>) and OpenSSL 3.5.9
-  (<https://github.com/openssl/openssl/releases/tag/openssl-3.5.9>).
-- **Replacing it:** extract the AppImage and put your own tor in
-  `usr/lib/tor`, or run the AppImage with `SEALEDLORE_TOR` set to the path of
-  another tor.
+  includes, in `tor/tor/copyright`. **This build is made with
+  `--enable-gpl`**, for the onion service's proof-of-work defence, so the
+  `tor` program as a whole is covered by the GNU General Public License,
+  version 3 (`texts/GPL-3.0.txt`), as `tor --version` says.
+- **Source:** tor 0.4.9.17 is
+  <https://archive.torproject.org/tor-package-archive/tor-0.4.9.17.tar.gz>
+  (git tag `tor-0.4.9.17` of <https://gitlab.torproject.org/tpo/core/tor>),
+  and the package is built from it by the Debian source package
+  `tor_0.4.9.17-1~jammy+1` (`tor_0.4.9.17-1~jammy+1.dsc`, `tor_0.4.9.17.orig.tar.gz`
+  and `tor_0.4.9.17-1~jammy+1.diff.gz`) in
+  <https://deb.torproject.org/torproject.org/pool/main/t/tor/> while it is
+  the current version; its packaging is tag `debian-tor-0.4.9.17-1` of
+  <https://gitlab.torproject.org/tpo/core/debian/tor>, from which the Tor
+  Project builds it for each release it supports.
+- **The libraries**, each with its Debian copyright file (its licence) in
+  `tor/<package>/copyright`; the licence texts those files name from
+  `/usr/share/common-licenses` are in `texts/` (`Apache-2.0.txt`,
+  `GPL-2.0.txt`, `GPL-3.0.txt`, `LGPL-2.0.txt`, `LGPL-2.1.txt`, `CC0-1.0.txt`,
+  `Artistic-1.0.txt`, `GPL-1.0.txt`). Their source is Ubuntu's source package
+  of the same name and version, at
+  <https://launchpad.net/ubuntu/+source/SOURCE/VERSION> (and in
+  `deb-src` of the Ubuntu 22.04 archive).
+
+| Library | Ubuntu package (source) | Version | Licence |
+|---|---|---|---|
+| `libevent-2.1.so.7` | libevent-2.1-7 (libevent) | 2.1.12-stable-1ubuntu0.2 | 3-clause BSD |
+| `libssl.so.3`, `libcrypto.so.3` | libssl3 (openssl) | 3.0.2-0ubuntu1.30 | Apache 2.0 |
+| `libz.so.1` | zlib1g (zlib) | 1:1.2.11.dfsg-2ubuntu9.2 | zlib |
+| `liblzma.so.5` | liblzma5 (xz-utils) | 5.2.5-2ubuntu1.2 | public domain |
+| `libzstd.so.1` | libzstd1 (libzstd) | 1.4.8+dfsg-3build1 | BSD or GPL-2 |
+| `libcap.so.2` | libcap2 (libcap2) | 1:2.44-1ubuntu0.22.04.3 | BSD or GPL-2 |
+| `libseccomp.so.2` | libseccomp2 (libseccomp) | 2.5.3-2ubuntu3~22.04.1 | LGPL 2.1 |
+| `libsystemd.so.0` | libsystemd0 (systemd) | 249.11-0ubuntu3.23 | LGPL 2.1 or later |
+| `liblz4.so.1` | liblz4-1 (lz4) | 1.9.3-2build2 | 2-clause BSD |
+| `libgcrypt.so.20` | libgcrypt20 (libgcrypt20) | 1.9.4-3ubuntu3.3 | LGPL 2.1 or later |
+| `libgpg-error.so.0` | libgpg-error0 (libgpg-error) | 1.43-3 | LGPL 2.1 or later |
+
+- **Replacing them:** extract the AppImage and put your own tor and libraries
+  in `usr/lib/tor`, or run the AppImage with `SEALEDLORE_TOR` set to the path
+  of another tor.
 
 ## Python packages
 

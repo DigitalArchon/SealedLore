@@ -153,8 +153,12 @@ def test_tor_gets_a_clean_environment_and_its_own_libraries_only(tmp_path):
         "SECRET": "x",
     }
     assert tor_environment(tor, env) == {"HOME": "/home/me", "PATH": "/usr/bin"}
-    for name in ("libevent-2.1.so.7", "libssl.so.3", "libcrypto.so.3"):
+    from sealedlore.phone.torrc import BUNDLED_LIBRARIES
+
+    for name in BUNDLED_LIBRARIES[:-1]:
         (tmp_path / name).write_text("")
+    assert "LD_LIBRARY_PATH" not in tor_environment(tor, env), "one of them missing"
+    (tmp_path / BUNDLED_LIBRARIES[-1]).write_text("")
     assert tor_environment(tor, env)["LD_LIBRARY_PATH"] == str(tmp_path)
 
 

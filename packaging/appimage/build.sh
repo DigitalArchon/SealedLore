@@ -46,9 +46,9 @@
 #     taken from Debian 11 (built for glibc <= 2.17) rather than from whatever
 #     machine runs this script — a host's copy can need a newer glibc than the
 #     systems the AppImage is for (Ubuntu 24.04's libxcb-cursor needs 2.38);
-#   - tor, for phone access: the tor program of the official Tor Expert Bundle
-#     and the three libraries it was built against, in usr/lib/tor, run only
-#     while phone access is on;
+#   - tor, for phone access: the tor program of the Tor Project's own Ubuntu
+#     22.04 package and the Ubuntu 22.04 packages of exactly the libraries it
+#     loads, in usr/lib/tor, run only while phone access is on;
 #   - the tokenizer's data file, so the first run on a new machine works offline;
 #   - SealedLore's licence and the third-party notices (THIRD-PARTY-NOTICES.md,
 #     with the licence texts in licenses/ and each Debian library's copyright
@@ -57,10 +57,12 @@
 #
 # Bumping the Python base, a Debian library, the runtime or tor: update the
 # versions THIRD-PARTY-NOTICES.md names, and the texts in licenses/ if they
-# changed. For tor, also the source and build-system tag the notices name
-# (tor-browser-build's for that bundle), and BUNDLED_LIBRARIES in
-# phone/torrc.py if the bundle's libraries are renamed (the build takes
-# exactly those).
+# changed. For tor, also the source the notices name (Tor's tarball and the
+# Debian source package of that version), the libraries' packages, and
+# BUNDLED_LIBRARIES in phone/torrc.py if what tor loads changes (the build
+# takes exactly those and stops if tor loads any other);
+# packaging/appimage/check-tor-debs.sh checks the pins against the signed
+# indexes.
 set -euo pipefail
 umask 022
 
@@ -350,28 +352,42 @@ for entry in "${DEBIAN_LIBS[@]}"; do
 done
 rm -rf "$CACHE/debs/x"
 
-log "Tor, for phone access (Tor Expert Bundle $TOR_BUNDLE_VERSION)"
-# tor and the libraries the app checks for beside it (BUNDLED_LIBRARIES): the
-# bundle has no RUNPATH, so tor finds them through LD_LIBRARY_PATH, which the
-# app sets to this folder for tor alone (phone/torrc.py tor_environment). In a
-# folder of their own, never usr/lib or usr/lib/x11: this OpenSSL 3 must not
-# stand in for anything else's. Left out: the pluggable transports (no bridges
-# yet), the debug copies, and the geoip files (an onion service needs none).
+log "Tor, for phone access (tor $TOR_VERSION, the Tor Project's Ubuntu 22.04 package)"
+# tor and exactly the libraries it loads (BUNDLED_LIBRARIES: every one but
+# glibc's), from the Ubuntu 22.04 packages tools.sh pins. tor has no RUNPATH, so
+# it finds them through LD_LIBRARY_PATH, which the app sets to this folder for
+# tor alone (phone/torrc.py tor_environment). In a folder of their own, never
+# usr/lib or usr/lib/x11: this OpenSSL 3 and libsystemd must not stand in for
+# anything else's. Only the program: no service, configuration or geoip files
+# (an onion service needs none).
 TORDIR="$APPDIR/usr/lib/tor"
-TOR_ARCHIVE="$CACHE/tor-expert-bundle-linux-x86_64-$TOR_BUNDLE_VERSION.tar.gz"
-fetch "$TOR_URL" "$TOR_ARCHIVE" "$TOR_SHA256"
 read -r -a TOR_LIBS <<<"$("$PYTHON" -s -c \
     'from sealedlore.phone.torrc import BUNDLED_LIBRARIES; print(*BUNDLED_LIBRARIES)')"
-rm -rf "$CACHE/tor-x" && mkdir -p "$CACHE/tor-x" "$TORDIR" "$LICENCES/tor"
-tar -xzf "$TOR_ARCHIVE" -C "$CACHE/tor-x" tor/tor "${TOR_LIBS[@]/#/tor/}" \
-    docs/tor.txt docs/libevent.txt docs/openssl.txt
-install -m 755 "$CACHE/tor-x/tor/tor" "$TORDIR/tor"
-for lib in "${TOR_LIBS[@]}"; do
-    install -m 644 "$CACHE/tor-x/tor/$lib" "$TORDIR/$lib"
+rm -rf "$CACHE/tor-x" && mkdir -p "$CACHE/tor-x" "$CACHE/debs" "$TORDIR" "$LICENCES/tor"
+fetch "$TOR_URL" "$CACHE/debs/$TOR_DEB" "$TOR_SHA256"
+dpkg-deb -x "$CACHE/debs/$TOR_DEB" "$CACHE/tor-x"
+install -m 755 "$CACHE/tor-x/usr/bin/tor" "$TORDIR/tor"
+install -D -m 644 "$CACHE/tor-x/usr/share/doc/tor/copyright" "$LICENCES/tor/tor/copyright"
+for entry in "${TOR_LIBRARY_DEBS[@]}"; do
+    read -r file sum <<<"$entry"
+    fetch "$UBUNTU_FILES/${file//\~/%7E}" "$CACHE/debs/$file" "$sum"
+    rm -rf "$CACHE/tor-x/lib" && mkdir -p "$CACHE/tor-x/lib"
+    dpkg-deb -x "$CACHE/debs/$file" "$CACHE/tor-x/lib"
+    pkg="${file%%_*}"
+    # Each package's Debian copyright file, its licence (the texts it names in
+    # /usr/share/common-licenses are in texts/).
+    install -D -m 644 "$CACHE/tor-x/lib/usr/share/doc/$pkg/copyright" "$LICENCES/tor/$pkg/copyright"
+    for lib in "${TOR_LIBS[@]}"; do
+        for dir in lib/x86_64-linux-gnu usr/lib/x86_64-linux-gnu; do
+            if [ -e "$CACHE/tor-x/lib/$dir/$lib" ]; then
+                install -m 644 "$(readlink -f "$CACHE/tor-x/lib/$dir/$lib")" "$TORDIR/$lib"
+            fi
+        done
+    done
 done
-# The licence files the bundle ships with this tor: tor's own (BSD-3, with the
-# code it includes), libevent's (BSD-3) and OpenSSL's (Apache 2.0).
-install -m 644 "$CACHE"/tor-x/docs/{tor,libevent,openssl}.txt "$LICENCES/tor/"
+for lib in "${TOR_LIBS[@]}"; do
+    [ -f "$TORDIR/$lib" ] || { echo "no package brought $lib for tor" >&2; exit 1; }
+done
 rm -rf "$CACHE/tor-x"
 
 log "Tokenizer data"
@@ -464,6 +480,7 @@ fi
 # pinned and finds its libraries in its own folder, never the system's.
 "$PYTHON" -s -c "import PySide6.QtNetwork, sealedlore.gui.phone_server, sealedlore.gui.tor_service"
 "$PYTHON" -s - "$TORDIR/tor" "$TOR_VERSION" <<'TOR'
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -475,16 +492,30 @@ env = tor_environment(tor, {"HOME": "/nonexistent", "PATH": "/usr/bin:/bin", "LD
 if env.get("LD_LIBRARY_PATH") != str(tor.parent):
     sys.exit(f"the app wouldn't give tor its own libraries: {env}")
 said = subprocess.run([tor, "--version"], env=env, capture_output=True, text=True, check=True).stdout
-if f"Tor version {version} " not in said:
+if not re.match(rf"Tor version {re.escape(version)}[ .]", said):
     sys.exit(f"the bundled tor says {said!r}, not version {version}")
+if "GNU General Public License" not in said:
+    sys.exit(f"the bundled tor isn't the --enable-gpl build the notices say: {said!r}")
+modules = subprocess.run([tor, "--list-modules"], env=env, capture_output=True, text=True, check=True).stdout
+if "pow: yes" not in modules.splitlines():
+    sys.exit(f"the bundled tor has no onion-service proof-of-work defence: {modules!r}")
+# Every library it loads is its own, but glibc's (the system's, as every program's).
+GLIBC = {"linux-vdso.so.1", "libc.so.6", "libm.so.6", "libdl.so.2", "libpthread.so.0", "librt.so.1"}
 links = subprocess.run(["ldd", tor], env=env, capture_output=True, text=True, check=True).stdout
+loaded = set()
 for line in links.splitlines():
     name, _, found = line.strip().partition(" => ")
+    name = name.split(" ")[0]
     if "not found" in found:
         sys.exit(f"tor can't resolve {name}")
-    if name in BUNDLED_LIBRARIES and not found.startswith(f"{tor.parent}/"):
+    if name.startswith("/") or name in GLIBC:
+        continue
+    loaded.add(name)
+    if not found.startswith(f"{tor.parent}/"):
         sys.exit(f"tor would load {name} from {found}, not its own folder")
-print(said.splitlines()[0])
+if loaded != set(BUNDLED_LIBRARIES):
+    sys.exit(f"tor loads {sorted(loaded)}, BUNDLED_LIBRARIES says {sorted(BUNDLED_LIBRARIES)}")
+print(said.splitlines()[0], "with pow, its", len(loaded), "libraries its own")
 TOR
 missing="$(find "$APPDIR/usr/lib" "$STDLIB/lib-dynload" -maxdepth 1 -name '*.so*' -type f \
     -exec ldd {} \; 2>/dev/null | grep 'not found' || true)"

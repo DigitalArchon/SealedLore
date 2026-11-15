@@ -30,21 +30,44 @@ RUNTIME_VERSION="20251108"
 RUNTIME_URL="https://github.com/AppImage/type2-runtime/releases/download/$RUNTIME_VERSION/runtime-x86_64"
 RUNTIME_SHA256="2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d"
 
-# Tor, for phone access (gui/tor_service.py): the official Tor Expert Bundle,
-# of which build.sh takes tor and the three libraries it was built against.
-# archive.torproject.org keeps every release (dist.torproject.org only the
-# newest). Checked by hand once against its signature: the Tor Browser
-# Developers key, EF6E 286D DA85 EA2A 4BA7 DE68 4E2C 6E87 9329 8290. Bump it
-# for each release, to carry tor's fixes (docs/building.md says when one calls
-# for a release of its own).
-TOR_BUNDLE_VERSION="16.0.1"
-TOR_VERSION="0.4.9.16"
-TOR_URL="https://archive.torproject.org/tor-package-archive/torbrowser/$TOR_BUNDLE_VERSION/tor-expert-bundle-linux-x86_64-$TOR_BUNDLE_VERSION.tar.gz"
-TOR_SHA256="7039cb16060ab22e669852e55774d894b55f25ea8bd0ab7194d3478429a58725"
-# The bundle's tor is built with --enable-gpl (the onion service's
-# proof-of-work defence), which makes that program GPL-3: THIRD-PARTY-NOTICES.md
-# names its exact source on the Tor Project's archive, and the tag of Tor
-# Browser's build system that built it (tor-browser-build tbb-16.0.1-build1).
+# Tor, for phone access (gui/tor_service.py): the Tor Project's own package of
+# tor for Ubuntu 22.04 (jammy), from deb.torproject.org, and the Ubuntu 22.04
+# packages of exactly the libraries it loads (BUNDLED_LIBRARIES in
+# phone/torrc.py), which build.sh puts beside it. Checked by hand
+# (packaging/appimage/check-tor-debs.sh, which redoes it): the repository's
+# InRelease signed by Tor's archive key, A3C4 F0F9 79CA A22C DBA8 F512 EE8C
+# BC9E 886D DD89 (deb.torproject.org archive signing key, fetched over https
+# from deb.torproject.org), Ubuntu's InRelease files by Ubuntu's archive key
+# (Ubuntu Archive Automatic Signing Key (2018), F6EC B376 2474 EDA9 D21B 7022
+# 8719 20D1 991B C93C), and each .deb's sum here the one its Packages index
+# gives. Ubuntu's packages come from Launchpad's file store, which keeps every
+# version (archive.ubuntu.com drops a superseded one); deb.torproject.org keeps
+# only the current tor, so a build from an older tag needs the .deb in the
+# cache. Built with --enable-gpl (the onion service's proof-of-work defence),
+# so that tor is GPL-3: THIRD-PARTY-NOTICES.md names its source. Bump it for
+# each release, to carry tor's fixes (docs/building.md says when one calls for
+# a release of its own).
+TOR_VERSION="0.4.9.17"
+TOR_DEB="tor_0.4.9.17-1~jammy+1_amd64.deb"
+TOR_URL="https://deb.torproject.org/torproject.org/pool/main/t/tor/$TOR_DEB"
+TOR_SHA256="249f3beef647186a7127f1828c7dec9aaf93de900baca8e01c0fb99bb47c2a58"
+TOR_ARCHIVE_KEY="A3C4F0F979CAA22CDBA8F512EE8CBC9E886DDD89"
+UBUNTU_FILES="https://launchpad.net/ubuntu/+archive/primary/+files"
+# The Ubuntu 22.04 packages of tor's libraries: file and sha256 (jammy, and
+# jammy-updates where it has a newer one, as of Nov 15 2026).
+TOR_LIBRARY_DEBS=(
+    "zlib1g_1.2.11.dfsg-2ubuntu9.2_amd64.deb 9dc17e51a1be2d9ed63b7b84ef0e4e29c5abe6f1bc62cb03e7181483cce8a2f2"
+    "libevent-2.1-7_2.1.12-stable-1ubuntu0.2_amd64.deb 7e73ca523ba62a774c54efc53974178f4f6e94b5726d201f2ebec1a7d684bc89"
+    "libssl3_3.0.2-0ubuntu1.30_amd64.deb d1b4636e32ac6d3b95d583ac05ac548b1aa248414bae1c51b14f54be0f8fd7bc"
+    "libsystemd0_249.11-0ubuntu3.23_amd64.deb ff02a85ba73f850cf7958d2867b34947c67a1072e2b2d1c108a8c6e23715624d"
+    "liblzma5_5.2.5-2ubuntu1.2_amd64.deb a88fca7506963c443c42a578db6c35424336ae28abcdaa60c89f06d30aeb625b"
+    "libzstd1_1.4.8+dfsg-3build1_amd64.deb ae7db00ce8b093e50c994518b90203544e063b4bc574836a048bb142b950b2c9"
+    "libseccomp2_2.5.3-2ubuntu3~22.04.1_amd64.deb 25c63fd46d24f518f362c47c429b6918182875b0c58f7e2742aaa2d1e545bbac"
+    "libcap2_2.44-1ubuntu0.22.04.3_amd64.deb c497efb7fa3cd19a7ff297d95c7c5d678063c80c9fc230c9d034a8ee02ca8446"
+    "libgcrypt20_1.9.4-3ubuntu3.3_amd64.deb 8f16329a0aabf4900271a3687890721bbef307e60983acae5b92eeff12e799b3"
+    "liblz4-1_1.9.3-2build2_amd64.deb ac9b54d0feb840345060c74fb687675c5e1eb2b195effafae38c5f9991041e98"
+    "libgpg-error0_1.43-3_amd64.deb 1fbacdf9bd1e431cee874a697b339f6f925182bc79bba5a112b53669b33265c5"
+)
 
 fetch() {  # fetch <url> <file> <sha256>
     local url="$1" file="$2" sum="$3"
