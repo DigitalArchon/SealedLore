@@ -1438,8 +1438,15 @@ about the character's own world, and the storyteller takes everything in a
 story's lore as true of that story, so in a story with a world of its own
 (Doomsville, say) it would clash with it. The dialog says which lorebooks
 stay out and why, and **Bring their lorebook too** brings one in anyway, for
-a lorebook that is about the character alone; the message afterwards says
-which way it went. Their lorebook stays on their card either way. Only a
+a lorebook that is about the character alone. Ticked, it first shows you the
+lorebook's entries, every one ticked: untick what doesn't belong in this
+story (unticking the lorebook's own line unticks it all, and a search finds
+entries in a long one), choose an entry to change its title, keywords or
+words, then **Bring in** the ones still ticked, or Cancel to add nobody.
+What you leave out or change there is this story's alone: their card keeps
+its lorebook as it is, and what came in can still be changed on the Lore
+page. The message afterwards says how many entries came and how many you
+left out. Their lorebook stays on their card either way. Only a
 story made from their card (its own scenario, or a draft built around them)
 takes the lorebook without asking. `{{char}}` and `{{user}}` become their name and the name of the
 character you are playing (before anyone is played, the one the story
@@ -1518,7 +1525,7 @@ it to Style → Other notes), its tags, macros other than `{{char}}` and
 character card…** adds the card's character to the open story, on the cast
 or as a supporting character. As with From Your characters…, its lorebook
 stays out unless you tick **Bring their lorebook too**, and the question
-says why. Its `{{user}}`
+says why; ticked, you choose its entries for this story first, the same way. Its `{{user}}`
 becomes the name of the character you are playing. A card with files of its
 own (a background, pictures its greetings show) is also kept whole in Your
 characters, and the story's character linked to it, as From Your

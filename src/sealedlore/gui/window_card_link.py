@@ -25,6 +25,7 @@ from sealedlore.engine import card_link
 from sealedlore.engine.card_link import changes, picture_mark
 from sealedlore.gui.card_changes import KEEP, SAVE, TAKE, VERSION, CardChangesDialog
 from sealedlore.gui.collection_picker import CollectionPicker
+from sealedlore.gui.lorebook_pick import LorebookPickDialog
 from sealedlore.gui.ref_images import thumbnail_of
 from sealedlore.gui.save_characters import SaveCharactersDialog
 from sealedlore.gui.tavern_dialog import lore_brought, lore_left_out
@@ -32,6 +33,7 @@ from sealedlore.ids import new_id
 from sealedlore.models.character import Character
 from sealedlore.models.collection import PictureMark
 from sealedlore.models.image import ImageRef
+from sealedlore.models.lore import LoreEntry
 from sealedlore.models.scenario import Scenario
 from sealedlore.storage import collection
 from sealedlore.storage.image_meta import picture_kind
@@ -39,7 +41,7 @@ from sealedlore.storage.images import REFS_DIR
 from sealedlore.storage.paths import COLLECTION_ID
 from sealedlore.storage.picture_store import PictureStore
 from sealedlore.storage.tavern_cards import macro_filler
-from sealedlore.storage.tavern_lore import lore_from_book, their_lorebook
+from sealedlore.storage.tavern_lore import LoreImport, lore_from_book, their_lorebook
 
 # A character's own line, for one only in the story: saved at once. The
 # Cast page's Save to Your characters… (gui/save_characters.py) chooses any.
@@ -210,14 +212,21 @@ class CardLinkWindow:
         if not chosen:
             return
         notes: list[str] = []
-        before = len(self.session.bundle.lore)
-        added = [self._kept_into_story(card, to_cast, with_lore, notes) for card in chosen]
+        bringing = self._lore_to_bring(chosen, with_lore, notes)
+        if bringing is None:
+            return
+        lore_of, total = bringing
+        added = [
+            self._kept_into_story(card, to_cast, lore_of.get(card.id, ()), notes) for card in chosen
+        ]
+        brought = sum(len(entries) for entries in lore_of.values())
         self._after_cards_added(
             added,
             to_cast,
             notes,
-            len(self.session.bundle.lore) - before,
-            left_out=0 if with_lore or chat else _book_entries(chosen),
+            brought,
+            left_out=0 if chat else total - brought,
+            chose=with_lore,
         )
 
     def _not_twice(self, cards: list[Character]) -> list[Character]:
@@ -245,11 +254,15 @@ class CardLinkWindow:
         return [card for card in cards if card.id not in linked]
 
     def _kept_into_story(
-        self, card: Character, to_cast: bool, with_lore: bool, notes: list[str] | None = None
+        self,
+        card: Character,
+        to_cast: bool,
+        lore: Sequence[LoreEntry] = (),
+        notes: list[str] | None = None,
     ) -> Character:
         """One of the author's characters as the open story's: a linked copy,
-        their pictures copied in, their own lorebook as lore if wanted (what
-        it held that a story doesn't use is added to `notes`)."""
+        their pictures copied in, and `lore`, the entries of their own
+        lorebook the author chose to bring (`_lore_to_bring`)."""
         session = self.session
         user = self._story_user()
         copy = card_link.story_copy(card, self._kept(), user)
@@ -262,17 +275,54 @@ class CardLinkWindow:
                 data = session.pictures.read(new.file) or b""
                 marks.append(picture_mark(ref, data))
         copy.linked.pictures = marks
-        lore = []
-        book = card.tavern.character_book if card.tavern else None
-        if with_lore and book:
-            imported = lore_from_book(
-                book, macro_filler(card.name, user), their_lorebook(card.name)
-            )
-            lore = imported.entries
-            if notes is not None:
-                notes += [f"{card.name}'s lorebook: left out {note}." for note in imported.notes()]
-        session.add_card(copy, to_cast=to_cast, lore=lore)
+        session.add_card(copy, to_cast=to_cast, lore=list(lore))
         return copy
+
+    def _their_lore(self, card: Character) -> LoreImport | None:
+        """A character's own lorebook as the open story's lore would take it:
+        new entries, the story's own copies, so nothing done to them reaches
+        their card. None when they have none."""
+        book = card.tavern.character_book if card.tavern else None
+        if not book:
+            return None
+        fill = macro_filler(card.name, self._story_user())
+        return lore_from_book(book, fill, their_lorebook(card.name))
+
+    def _lore_to_bring(
+        self, cards: Sequence[Character], with_lore: bool, notes: list[str]
+    ) -> tuple[dict[str, list[LoreEntry]], int] | None:
+        """For each of `cards` (by id) the lorebook entries joining the story
+        with them, and how many their lorebooks hold in all; None when the
+        author cancels. Without `with_lore`, none. With it, the author first
+        unticks or changes entries for this story alone (`_choose_their_lore`);
+        what the conversion couldn't keep goes to `notes`."""
+        books = [(card, self._their_lore(card)) for card in cards]
+        books = [(card, made) for card, made in books if made is not None and made.entries]
+        total = sum(len(made.entries) for _card, made in books)
+        if not with_lore or not books:
+            return {}, total
+        picked = self._choose_their_lore([(card.name, made.entries) for card, made in books])
+        if picked is None:
+            return None
+        lore_of = {}
+        for (card, made), entries in zip(books, picked, strict=True):
+            if entries:
+                lore_of[card.id] = entries
+                notes += [f"{card.name}'s lorebook: left out {note}." for note in made.notes()]
+        return lore_of, total
+
+    def _choose_their_lore(
+        self, groups: list[tuple[str, list[LoreEntry]]]
+    ) -> list[list[LoreEntry]] | None:
+        """The lorebooks about to join a story, for the author to untick
+        what doesn't belong and change what they like, in this story alone
+        (gui/lorebook_pick.py); the entries chosen, a list a group, or None
+        for Cancel."""
+        dialog = LorebookPickDialog(groups, self._dialog_parent())
+        accepted = dialog.exec() == QDialog.Accepted
+        picked = dialog.chosen()
+        dialog.deleteLater()
+        return picked if accepted else None
 
     def _link_scenario_character(
         self, scenario: Scenario, card: Character, *, user: str, expressions: bool
@@ -364,11 +414,12 @@ class CardLinkWindow:
         lore: int = 0,
         *,
         left_out: int = 0,
+        chose: bool = False,
     ) -> None:
-        """Said once they are in: where they went, and `lore`, how many lore
-        entries their lorebooks brought, or `left_out`, how many stayed out
-        (a story that exists keeps its own world unless the author ticked
-        them in)."""
+        """Said once they are in: where they went, `lore`, how many lore
+        entries their lorebooks brought, and `left_out`, how many stayed out:
+        by the author's choice (`chose`, they unticked them), else because a
+        story that exists keeps its own world."""
         session = self.session
         session.forget_review_undo()
         self.refresh_panels()
@@ -382,9 +433,9 @@ class CardLinkWindow:
             self.cast_panel.select_character(added[0].id)
         names = ", ".join(character.name for character in added)
         where = "the cast" if to_cast else "the supporting characters"
-        where += lore_brought(lore, several=len(added) > 1)
         several = sum(bool(c.tavern and c.tavern.book_entries) for c in added) > 1
-        stayed_out = lore_left_out(left_out, several=several)
+        where += lore_brought(lore, several=several, dropped=left_out)
+        stayed_out = "" if lore else lore_left_out(left_out, several=several, chose=chose)
         later = (
             " Their card's {{user}} becomes the name of whoever you play when the story begins."
             if any(c.linked is not None and not c.linked.user for c in added)
@@ -406,14 +457,14 @@ class CardLinkWindow:
             return
         to_cast, with_lore = where
         notes: list[str] = []
-        before = len(self.session.bundle.lore)
-        added = self._kept_into_story(card, to_cast, with_lore, notes)
+        bringing = self._lore_to_bring([card], with_lore, notes)
+        if bringing is None:
+            return
+        lore_of, total = bringing
+        added = self._kept_into_story(card, to_cast, lore_of.get(card.id, ()), notes)
+        brought = len(lore_of.get(card.id, ()))
         self._after_cards_added(
-            [added],
-            to_cast,
-            notes,
-            len(self.session.bundle.lore) - before,
-            left_out=0 if with_lore else _book_entries([card]),
+            [added], to_cast, notes, brought, left_out=total - brought, chose=with_lore
         )
 
     # --- the Cast page's line ----------------------------------------------------------------
@@ -683,8 +734,3 @@ class CardLinkWindow:
             )
         self.statusBar().showMessage(words, 12000)
         return made
-
-
-def _book_entries(cards: list[Character]) -> int:
-    """How many entries the lorebooks of `cards` hold in all."""
-    return sum(card.tavern.book_entries for card in cards if card.tavern)

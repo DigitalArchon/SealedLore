@@ -196,6 +196,25 @@ def _follow_ups_go_on(request, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _lorebooks_come_as_they_are(request, monkeypatch):
+    """Bring their lorebook too opens a modal review of its entries: here
+    every entry comes as it is. tests/test_lore_origin_gui.py drives it
+    itself (marked `real_lore_pick`)."""
+    if request.node.get_closest_marker("real_lore_pick"):
+        yield
+        return
+    try:
+        from PySide6.QtWidgets import QDialog
+
+        from sealedlore.gui.lorebook_pick import LorebookPickDialog
+    except ImportError:
+        yield
+        return
+    monkeypatch.setattr(LorebookPickDialog, "exec", lambda dialog: QDialog.Accepted)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _crops_take_the_whole_picture(request, monkeypatch):
     """Every picture added from disk opens the crop dialog, which is modal:
     left alone it would wait for a click that never comes. Here it answers

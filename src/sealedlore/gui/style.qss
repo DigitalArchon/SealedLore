@@ -1269,14 +1269,15 @@ QCheckBox, QRadioButton {
 
 /* Qt's default indicators are dark-on-dark here: an unchecked box or radio
    was all but invisible, so draw them outright. */
-QCheckBox::indicator, QListView::indicator, QRadioButton::indicator {
+QCheckBox::indicator, QListView::indicator, QTreeView::indicator,
+QRadioButton::indicator {
   width: 14px;
   height: 14px;
   border: 1px solid @indicator_border;
   background: @field;
 }
 
-QCheckBox::indicator, QListView::indicator {
+QCheckBox::indicator, QListView::indicator, QTreeView::indicator {
   border-radius: 3px;
 }
 
@@ -1289,10 +1290,18 @@ QCheckBox::indicator:hover, QRadioButton::indicator:hover {
 }
 
 /* Ticked: the accent with a check mark (it was a filled square). */
-QCheckBox::indicator:checked, QListView::indicator:checked {
+QCheckBox::indicator:checked, QListView::indicator:checked, QTreeView::indicator:checked {
   background: @primary;
   border-color: @primary_border;
   image: @check;
+}
+
+/* Some ticked, some not (a lorebook's entries under it): a bar in the accent. */
+QTreeView::indicator:indeterminate {
+  border-color: @primary_border;
+  background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+    stop: 0 @field, stop: 0.38 @field, stop: 0.39 @primary, stop: 0.61 @primary,
+    stop: 0.62 @field, stop: 1 @field);
 }
 
 /* Chosen: a dot in the accent. */
@@ -1302,7 +1311,7 @@ QRadioButton::indicator:checked {
     stop: 0 @accent, stop: 0.45 @accent, stop: 0.55 @field, stop: 1 @field);
 }
 
-QCheckBox::indicator:disabled, QListView::indicator:disabled {
+QCheckBox::indicator:disabled, QListView::indicator:disabled, QTreeView::indicator:disabled {
   border-color: @control_border;
 }
 

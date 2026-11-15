@@ -101,7 +101,7 @@ class CardStartWindow:
         # They are in the chat, for their pictures (its People, linked to
         # their card, every picture of theirs), so a picture of the chat draws
         # them as they look now; it was their portrait alone, on no card.
-        self._kept_into_story(card, True, False)
+        self._kept_into_story(card, True)
         self.refresh_panels()
         self._refresh_people()
         if shown:

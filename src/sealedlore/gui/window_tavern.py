@@ -9,7 +9,7 @@ counted thread while a progress dialog offers Stop). A mixin for
 from __future__ import annotations
 
 import threading
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -251,8 +251,20 @@ class TavernWindow:
             if where is None:
                 return
             to_cast, with_lore = where
+        # The entries the author keeps for this story, unticked or changed
+        # here alone (gui/lorebook_pick.py): the card keeps its lorebook.
+        chosen_lore = []
+        if with_lore and lore.entries:
+            picked = self._choose_their_lore([(card.name, lore.entries)])
+            if picked is None:
+                return
+            chosen_lore = picked[0]
+        dropped = len(lore.entries) - len(chosen_lore) if not chat else 0
         if card.files:
-            self._card_kept_into_story(card, to_cast, with_lore)
+            lore_notes = [f"Lorebook: left out {note}." for note in lore.notes()]
+            self._card_kept_into_story(
+                card, to_cast, chosen_lore, dropped, with_lore, lore_notes if chosen_lore else []
+            )
             return
         notes: list[str] = []
         if card.picture is not None:
@@ -296,11 +308,11 @@ class TavernWindow:
                 "The card's scenario and greetings belong to a story of their own: "
                 "File → Import… makes one from the card."
             )
-        if with_lore:
+        if chosen_lore:
             notes += [f"Lorebook: left out {note}." for note in lore.notes()]
-        session.add_card(character, to_cast=to_cast, lore=lore.entries if with_lore else ())
-        brought = lore_brought(len(lore.entries)) if with_lore else ""
-        left_out = "" if with_lore or chat else lore_left_out(len(lore.entries))
+        session.add_card(character, to_cast=to_cast, lore=chosen_lore)
+        brought = lore_brought(len(chosen_lore), dropped=dropped)
+        left_out = "" if chosen_lore else lore_left_out(dropped, chose=with_lore)
         session.forget_review_undo()
         self.refresh_panels()
         self._refresh_people()
@@ -317,11 +329,21 @@ class TavernWindow:
         else:
             self.statusBar().showMessage(lead, 8000)
 
-    def _card_kept_into_story(self, card: TavernCard, to_cast: bool, with_lore: bool) -> None:
+    def _card_kept_into_story(
+        self,
+        card: TavernCard,
+        to_cast: bool,
+        lore: Sequence[LoreEntry],
+        dropped: int,
+        chose: bool,
+        lore_notes: Sequence[str] = (),
+    ) -> None:
         """A card with files a story doesn't hold (a background, pictures its
         greetings show, sounds): kept whole in Your characters, and its
         character into the story linked to it, as From Your characters… does,
-        so nothing on the card is lost."""
+        so nothing on the card is lost. `lore`, the entries of its lorebook
+        the author chose; `dropped`, how many they left out (`chose`: by
+        unticking them)."""
         if self._collection_unwritable():
             return
         chat = self.session.story.chat
@@ -329,11 +351,10 @@ class TavernWindow:
         kept, notes = self._kept_from_card(card, f"the {place} {self.session.story.title}")
         self._collection_session().cast.append(kept)
         self._save_collection()
-        before = len(self.session.bundle.lore)
-        added = self._kept_into_story(kept, to_cast, with_lore, notes)
-        brought = lore_brought(len(self.session.bundle.lore) - before)
-        book = kept.tavern.book_entries if kept.tavern else 0
-        left_out = "" if with_lore or chat else lore_left_out(book)
+        added = self._kept_into_story(kept, to_cast, lore, notes)
+        notes += lore_notes
+        brought = lore_brought(len(lore), dropped=dropped)
+        left_out = "" if lore else lore_left_out(dropped, chose=chose)
         self._after_cards_added([added], to_cast)
         notes.insert(
             0,

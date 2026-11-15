@@ -49,14 +49,16 @@ CARD_EXPORT_LABEL = "Export this character as a card…"
 EXPRESSIONS_LABEL = "Add expression pictures from a zip…"
 
 
-def lore_brought(count: int, several: bool = False) -> str:
+def lore_brought(count: int, several: bool = False, dropped: int = 0) -> str:
     """Where a character's lorebook went, said after they join: ", with 6
-    entries of their lorebook in the story's lore (the Lore page)"."""
+    entries of their lorebook in the story's lore (the Lore page)", and
+    `dropped`, how many the author unticked before it came."""
     if not count:
         return ""
+    left = f", {dropped} left out as you chose" if dropped else ""
     return (
         f", with {count} {_entries(count)} of their "
-        f"lorebook{'s' if several else ''} in the story's lore (the Lore page)"
+        f"lorebook{'s' if several else ''} in the story's lore (the Lore page){left}"
     )
 
 
@@ -88,11 +90,16 @@ def joining_lore(names: Sequence[str], count: int, bring: bool) -> str:
     whose = _whose(names)
     several = len(names) > 1
     if bring:
+        keeps = (
+            "their cards keep their lorebooks as they are"
+            if several
+            else "their card keeps its lorebook as it is"
+        )
         return (
-            f"{whose} ({count} {_entries(count)}) will go into this story's lore, and the "
-            "storyteller will take every entry as true of this story. Look "
-            f"{'them' if several else 'it'} over on the Lore page afterwards and switch off "
-            "anything that doesn't fit."
+            f"{whose} ({count} {_entries(count)}) will come into this story's lore. Next you "
+            "can untick any entry that doesn't belong here and change any words, for this "
+            f"story alone: {keeps}. The storyteller takes every entry that comes in as true "
+            "of this story."
         )
     bring_only = (
         "Bring them only if they are about the characters alone; their cards and pictures "
@@ -109,20 +116,21 @@ def joining_lore(names: Sequence[str], count: int, bring: bool) -> str:
     )
 
 
-def lore_left_out(count: int, several: bool = False) -> str:
+def lore_left_out(count: int, several: bool = False, chose: bool = False) -> str:
     """Said after someone joins without their lorebook: " Their lorebook (6
-    entries) stayed out of the story's lore: it is about their own world"."""
+    entries) stayed out of the story's lore, as it is about their own
+    world", or, when the author unticked every entry (`chose`), "as you
+    chose"."""
     if not count:
         return ""
-    if several:
-        return (
-            f" Their lorebooks ({count} {_entries(count)}) stayed out of the story's lore, "
-            "as they are about their own worlds."
-        )
-    return (
-        f" Their lorebook ({count} {_entries(count)}) stayed out of the story's lore, "
-        "as it is about their own world."
-    )
+    whose = "Their lorebooks" if several else "Their lorebook"
+    if chose:
+        why = "as you chose"
+    elif several:
+        why = "as they are about their own worlds"
+    else:
+        why = "as it is about their own world"
+    return f" {whose} ({count} {_entries(count)}) stayed out of the story's lore, {why}."
 
 
 def lore_with_the_card(count: int, off: int) -> str:
