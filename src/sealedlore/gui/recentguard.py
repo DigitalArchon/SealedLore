@@ -70,7 +70,8 @@ for a Gtk.FileChooserNative) is held to the work area of the monitor it opens on
 margin (geometry hints, which GTK holds its own size to and tells a Wayland compositor), and
 where the app may place it (X11) moved to lie inside that area. Hyprland centres a dialog on
 its parent and keeps neither on the screen: there the chooser is also held to the room around
-its parent's centre, the parent's place read from Hyprland's own socket.
+its parent's centre, the parent's place read from Hyprland's own socket. A chooser that can't
+be that narrow (a Save chooser's header bar) has its name entry narrowed until it can.
 
 This is SealedLore's copy (src/sealedlore/gui/recentguard.py) of DA Assistant's
 (assistant/recentguard.py), the canonical one, from which it differs only in this paragraph
@@ -598,17 +599,66 @@ def within_parent(room, parent, floor=FIT_FLOOR):
                  for space, size, least in zip(room, parent, floor))
 
 
-def around_centre(room, parent, area, floor=FIT_FLOOR):
+def around_centre(room, parent, area):
     """The room a chooser centred on `parent` (x, y, width, height, on the screen) keeps
     inside `area` (the work area): twice the way from the parent's centre to the nearer
-    edge, less FIT_MARGIN_MIN each side, never under `floor` nor over `room`."""
+    edge, less FIT_MARGIN_MIN each side, never over `room` nor under 1."""
     x, y, across, down = parent
     left, top, width, height = area
     centre_x, centre_y = x + across / 2, y + down / 2
     free = (2 * min(centre_x - left, left + width - centre_x) - 2 * FIT_MARGIN_MIN,
             2 * min(centre_y - top, top + height - centre_y) - 2 * FIT_MARGIN_MIN)
-    return tuple(min(space, max(int(each), least))
-                 for space, each, least in zip(room, free, floor))
+    return tuple(max(1, min(space, int(each))) for space, each in zip(room, free))
+
+
+# A chooser's name entry (Save) is narrowed no further than this, in characters.
+NAME_CHARS_LEAST = 12
+
+
+def _least(window):
+    """The narrowest and lowest `window` can be, (width, height), as GTK measures it; None
+    where it can't say."""
+    try:
+        minimum = window.get_preferred_size()[0]
+        return int(minimum.width), int(minimum.height)
+    except Exception:  # noqa: BLE001 - not known
+        return None
+
+
+def _name_entries(window):
+    """The chooser's name entries (GtkFileChooserEntry: a Save chooser's), in its header bar
+    or its body."""
+    found, stack = [], [window, window.get_titlebar()]
+    while stack:
+        each = stack.pop()
+        if each is None or each in found:
+            continue
+        if each.__gtype__.name == "GtkFileChooserEntry":
+            found.append(each)
+        elif hasattr(each, "get_children"):
+            stack.extend(each.get_children())
+    return found
+
+
+def _narrow_name(window, width):
+    """A chooser no narrower than `width` can't be (a Save chooser's header bar - Cancel, the
+    name GTK makes 45 characters wide, the search and Save in one row - wants some 726 px,
+    wider than the room around a window tiled to half a 1280 px screen): its name entry made
+    as many characters narrower as that takes, to NAME_CHARS_LEAST at least. The entry still
+    scrolls whatever is typed in it."""
+    least = _least(window)
+    if least is None or least[0] <= width:
+        return
+    for entry in _name_entries(window):
+        chars = entry.get_width_chars()
+        if chars <= NAME_CHARS_LEAST:
+            continue
+        each = entry.get_preferred_width()[0] / chars
+        cut = math.ceil((least[0] - width) / each) if each > 0 else chars
+        entry.set_width_chars(max(NAME_CHARS_LEAST, chars - cut))
+        least = _least(window)
+        if least is None or least[0] <= width:
+            return
 
 
 def _deepest(text):
@@ -679,14 +729,20 @@ def _hyprland_place(parent):
     return None
 
 
-def _centres_on_parent(window):
-    """Whether the compositor centres `window`, a dialog, on its parent and leaves it there,
-    on the screen or off it: Hyprland (0.56) does, on Wayland; GNOME's and KDE's keep a
+def _hyprland(display):
+    """Whether `display` is a Wayland one Hyprland serves, which centres a dialog on its parent
+    and leaves it there, on the screen or off it (0.56). GNOME's and KDE's compositors keep a
     dialog on the screen themselves, and on X11 the app moves it."""
-    if window.get_display().__gtype__.name != "GdkWaylandDisplay":
+    if display is None or display.__gtype__.name != "GdkWaylandDisplay":
         return False
     desktop = (os.environ.get("XDG_CURRENT_DESKTOP") or "").lower().split(":")
     return "hyprland" in desktop or bool(os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"))
+
+
+def _centres_on_parent(window):
+    """Whether the compositor centres `window`, a dialog, on its parent and leaves it there
+    (_hyprland)."""
+    return _hyprland(window.get_display())
 
 
 def placed(x, y, width, height, area):
@@ -745,7 +801,9 @@ def fit(window):
     is no larger than its parent either (within_parent), so that centred on a parent that is
     on the screen, it is too: no wider or taller than twice the way from its parent's centre
     to the nearer edge (around_centre: the parent's place from Hyprland's own socket), or
-    where that can't be had, than its parent (within_parent).""" 
+    where that can't be had, than its parent (within_parent). Wherever a chooser can't be as
+    narrow as its room (a Save chooser's header bar), its name entry is narrowed until it can
+    (_narrow_name).""" 
     try:
         from gi.repository import Gdk
 
@@ -756,6 +814,7 @@ def fit(window):
             place = _hyprland_place(parent)
             width, height = (around_centre((width, height), place, area) if place
                              else within_parent((width, height), parent.get_size()))
+        _narrow_name(window, width)
         hints = Gdk.Geometry()
         hints.max_width, hints.max_height = width, height
         window.set_geometry_hints(None, hints, Gdk.WindowHints.MAX_SIZE)
