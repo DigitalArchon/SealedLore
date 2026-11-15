@@ -23,6 +23,9 @@ version 3 (`texts/LGPL-3.0.txt`, which adds to `texts/GPL-3.0.txt`).
   and Qt for Python 6.11.3 at
   <https://download.qt.io/official_releases/QtForPython/pyside6/PySide6-6.11.3-src/>
   (also tag `v6.11.3` of <https://code.qt.io/cgit/pyside/pyside-setup.git>).
+OpenSSL is Ubuntu's 3.0.2, with the security fixes Ubuntu has backported to
+it (`3.0.2-0ubuntu1.30`); `tor --version` names it 3.0.2.
+
 - **Replacing them:** extract the AppImage, put your own build of these
   libraries in place of the bundled ones, and run `AppRun` from the extracted
   folder (or repack it with appimagetool).
@@ -113,14 +116,22 @@ phone access is on.
   version 3 (`texts/GPL-3.0.txt`), as `tor --version` says.
 - **Source:** tor 0.4.9.17 is
   <https://archive.torproject.org/tor-package-archive/tor-0.4.9.17.tar.gz>
-  (git tag `tor-0.4.9.17` of <https://gitlab.torproject.org/tpo/core/tor>),
-  and the package is built from it by the Debian source package
-  `tor_0.4.9.17-1~jammy+1` (`tor_0.4.9.17-1~jammy+1.dsc`, `tor_0.4.9.17.orig.tar.gz`
-  and `tor_0.4.9.17-1~jammy+1.diff.gz`) in
-  <https://deb.torproject.org/torproject.org/pool/main/t/tor/> while it is
-  the current version; its packaging is tag `debian-tor-0.4.9.17-1` of
-  <https://gitlab.torproject.org/tpo/core/debian/tor>, from which the Tor
-  Project builds it for each release it supports.
+  (git tag `tor-0.4.9.17` of <https://gitlab.torproject.org/tpo/core/tor>;
+  sha256 `ff372c41ee7013557fe5b7acd96c909950b27a7959c59fcb87c02591682fabe2`,
+  the same file as the Debian source's `tor_0.4.9.17.orig.tar.gz`). The
+  package is built from it by the Debian source package
+  `tor_0.4.9.17-1~jammy+1`, whose packaging is tag `debian-tor-0.4.9.17-1` of
+  <https://gitlab.torproject.org/tpo/core/debian/tor>. Its two other files
+  are on <https://deb.torproject.org/torproject.org/pool/main/t/tor/> while
+  0.4.9.17 is Tor's current version, and attached for good to SealedLore's
+  release v3.1.0b13
+  (<https://github.com/DigitalArchon/SealedLore/releases/tag/v3.1.0b13>)
+  under names GitHub keeps as they are:
+  `tor_0.4.9.17-1~jammy+1.dsc` as `tor_0.4.9.17-1.jammy.1.dsc` (sha256
+  `68a0a524b1fa657612690e6c551df5dcf8a4e908319612dd055f204d404bb2f2`) and
+  `tor_0.4.9.17-1~jammy+1.diff.gz` as `tor_0.4.9.17-1.jammy.1.diff.gz`
+  (sha256 `e0a065df902ec2a22f6120f4aacf81a4f0e9c6728a7d490e788e2fca56038078`),
+  beside the package itself, `tor_0.4.9.17-1.jammy.1_amd64.deb`.
 - **The libraries**, each with its Debian copyright file (its licence) in
   `tor/<package>/copyright`; the licence texts those files name from
   `/usr/share/common-licenses` are in `texts/` (`Apache-2.0.txt`,
@@ -143,6 +154,9 @@ phone access is on.
 | `liblz4.so.1` | liblz4-1 (lz4) | 1.9.3-2build2 | 2-clause BSD |
 | `libgcrypt.so.20` | libgcrypt20 (libgcrypt20) | 1.9.4-3ubuntu3.3 | LGPL 2.1 or later |
 | `libgpg-error.so.0` | libgpg-error0 (libgpg-error) | 1.43-3 | LGPL 2.1 or later |
+
+OpenSSL is Ubuntu's 3.0.2, with the security fixes Ubuntu has backported to
+it (`3.0.2-0ubuntu1.30`); `tor --version` names it 3.0.2.
 
 - **Replacing them:** extract the AppImage and put your own tor and libraries
   in `usr/lib/tor`, or run the AppImage with `SEALEDLORE_TOR` set to the path

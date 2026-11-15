@@ -364,7 +364,7 @@ TORDIR="$APPDIR/usr/lib/tor"
 read -r -a TOR_LIBS <<<"$("$PYTHON" -s -c \
     'from sealedlore.phone.torrc import BUNDLED_LIBRARIES; print(*BUNDLED_LIBRARIES)')"
 rm -rf "$CACHE/tor-x" && mkdir -p "$CACHE/tor-x" "$CACHE/debs" "$TORDIR" "$LICENCES/tor"
-fetch "$TOR_URL" "$CACHE/debs/$TOR_DEB" "$TOR_SHA256"
+fetch_any "$CACHE/debs/$TOR_DEB" "$TOR_SHA256" "$TOR_URL" "$TOR_FALLBACK_URL"
 dpkg-deb -x "$CACHE/debs/$TOR_DEB" "$CACHE/tor-x"
 install -m 755 "$CACHE/tor-x/usr/bin/tor" "$TORDIR/tor"
 install -D -m 644 "$CACHE/tor-x/usr/share/doc/tor/copyright" "$LICENCES/tor/tor/copyright"

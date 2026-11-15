@@ -51,6 +51,12 @@ TOR_VERSION="0.4.9.17"
 TOR_DEB="tor_0.4.9.17-1~jammy+1_amd64.deb"
 TOR_URL="https://deb.torproject.org/torproject.org/pool/main/t/tor/$TOR_DEB"
 TOR_SHA256="249f3beef647186a7127f1828c7dec9aaf93de900baca8e01c0fb99bb47c2a58"
+# deb.torproject.org keeps only the current tor: the same file, under a name
+# GitHub keeps as it is (no "~" or "+"), is an asset of the SealedLore release
+# that first carried it, tried when deb.torproject.org fails or no longer has it,
+# so any tag can be rebuilt. Its sum is the same pin. A tor bump points this at
+# the release it comes with, and that release uploads the file (docs/building.md).
+TOR_FALLBACK_URL="https://github.com/DigitalArchon/SealedLore/releases/download/v3.1.0b13/tor_0.4.9.17-1.jammy.1_amd64.deb"
 TOR_ARCHIVE_KEY="A3C4F0F979CAA22CDBA8F512EE8CBC9E886DDD89"
 UBUNTU_FILES="https://launchpad.net/ubuntu/+archive/primary/+files"
 # The Ubuntu 22.04 packages of tor's libraries: file and sha256 (jammy, and
@@ -68,6 +74,31 @@ TOR_LIBRARY_DEBS=(
     "liblz4-1_1.9.3-2build2_amd64.deb ac9b54d0feb840345060c74fb687675c5e1eb2b195effafae38c5f9991041e98"
     "libgpg-error0_1.43-3_amd64.deb 1fbacdf9bd1e431cee874a697b339f6f925182bc79bba5a112b53669b33265c5"
 )
+
+fetch_any() {  # fetch_any <file> <sha256> <url>...: from the first address that has it
+    local file="$1" sum="$2" url
+    shift 2
+    mkdir -p "$(dirname "$file")"
+    if [ -f "$file" ] && echo "$sum  $file" | sha256sum -c --quiet - 2>/dev/null; then
+        return 0
+    fi
+    rm -f "$file"
+    for url in "$@"; do
+        if curl --proto '=https' --tlsv1.2 -fL --retry 3 -o "$file.part" "$url"; then
+            mv "$file.part" "$file"
+            if echo "$sum  $file" | sha256sum -c --quiet - 2>/dev/null; then
+                return 0
+            fi
+            echo "the file from $url isn't the one pinned; trying the next address" >&2
+            rm -f "$file"
+        else
+            rm -f "$file.part"
+            echo "$url couldn't be fetched; trying the next address" >&2
+        fi
+    done
+    echo "no address gave $(basename "$file") with its pinned sum $sum" >&2
+    exit 1
+}
 
 fetch() {  # fetch <url> <file> <sha256>
     local url="$1" file="$2" sum="$3"

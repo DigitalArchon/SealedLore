@@ -69,9 +69,19 @@ its sum in `tools.sh` (and any library whose package moved), run
 `check-tor-debs.sh`, and change the versions and source `THIRD-PARTY-NOTICES.md`
 names. `tests/test_packaging_tor.py` checks that they agree, and
 `tools/smoke/appimage_tor.sh` checks a built AppImage's tor publishes an onion
-address (it needs the network). The Tor Project's repository keeps only the
-current tor: a later build from an older tag needs its package in the
-download cache.
+address (it needs the network).
+
+The Tor Project's repository keeps only the current tor, so the same package
+is also an asset of the SealedLore release that first carried it
+(`TOR_FALLBACK_URL`: for tor 0.4.9.17, v3.1.0b13's
+`tor_0.4.9.17-1.jammy.1_amd64.deb`, named without the `~` and `+` GitHub
+doesn't keep). A build tries deb.torproject.org first and that asset when it
+fails or no longer has the file; either way the file must have the pinned
+sum, or the build stops. So any tag can be rebuilt. A tor bump points
+`TOR_FALLBACK_URL` at the release it comes with, and that release uploads the
+package and the Debian source's `.dsc` and `.diff.gz` under the names
+`THIRD-PARTY-NOTICES.md` gives (the source tarball stays on
+archive.torproject.org).
 
 A new release of Tor doesn't by itself call for a new release of SealedLore. By
 [Tor's specification](https://spec.torproject.org/tor-spec/subprotocol-versioning.html),
