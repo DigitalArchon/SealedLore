@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 from sealedlore.gui import file_dialogs
 from sealedlore.gui.image_codec import encoded
 from sealedlore.gui.ref_images import clean_incoming, image_of, store_reference
-from sealedlore.gui.tavern_dialog import CardImportDialog, LinkDialog
+from sealedlore.gui.tavern_dialog import CardImportDialog, LinkDialog, lore_brought
 from sealedlore.models.character import Character
 from sealedlore.models.lore import LoreEntry
 from sealedlore.providers.card_links import (
@@ -181,12 +181,15 @@ class TavernWindow:
             )
         bundle = bundle_from_scenario(imported.scenario)
         bundle.pending_files = clean_incoming(bundle.pending_files)
+        ready = f"{card.name} is ready to set up{lore_brought(len(imported.scenario.lore))}."
         if imported.notes:
             self._say_left_out(
                 "A new story from a card",
-                f"{card.name} is ready to set up. Not everything on the card came along:",
+                f"{ready} Not everything on the card came along:",
                 imported.notes,
             )
+        elif imported.scenario.lore:
+            self.statusBar().showMessage(ready, 12000)
         self._open_new_bundle(bundle, review=True)
 
     # --- a card into the open story, or out of it (the Cast page) --------------
@@ -289,6 +292,7 @@ class TavernWindow:
         if with_lore:
             notes += [f"Lorebook: left out {note}." for note in lore.notes()]
         session.add_card(character, to_cast=to_cast, lore=lore.entries if with_lore else ())
+        brought = lore_brought(len(lore.entries)) if with_lore else ""
         session.forget_review_undo()
         self.refresh_panels()
         self._refresh_people()
@@ -299,12 +303,11 @@ class TavernWindow:
         where_words = (
             "this chat" if chat else "the cast" if to_cast else "the supporting characters"
         )
+        lead = f"{character.name} joined {where_words}{brought}."
         if notes:
-            self._say_left_out(
-                "Import a character card", f"{character.name} joined {where_words}.", notes
-            )
+            self._say_left_out("Import a character card", lead, notes)
         else:
-            self.statusBar().showMessage(f"{character.name} joined {where_words}.", 8000)
+            self.statusBar().showMessage(lead, 8000)
 
     def _card_kept_into_story(self, card: TavernCard, to_cast: bool, with_lore: bool) -> None:
         """A card with files a story doesn't hold (a background, pictures its
@@ -318,7 +321,9 @@ class TavernWindow:
         kept, notes = self._kept_from_card(card, f"the {place} {self.session.story.title}")
         self._collection_session().cast.append(kept)
         self._save_collection()
+        before = len(self.session.bundle.lore)
         added = self._kept_into_story(kept, to_cast, with_lore, notes)
+        brought = lore_brought(len(self.session.bundle.lore) - before)
         self._after_cards_added([added], to_cast)
         notes.insert(
             0,
@@ -328,7 +333,9 @@ class TavernWindow:
         where_words = (
             "this chat" if chat else "the cast" if to_cast else "the supporting characters"
         )
-        self._say_left_out("Import a character card", f"{added.name} joined {where_words}.", notes)
+        self._say_left_out(
+            "Import a character card", f"{added.name} joined {where_words}{brought}.", notes
+        )
 
     def _ask_where_card_goes(self, character: Character, lore: int) -> tuple[bool, bool] | None:
         """(to the cast, with the card's lore), or None for Cancel."""
@@ -512,7 +519,9 @@ class TavernWindow:
             try:
                 # A lorebook of its own has no {{char}} to name: it stays. What
                 # converting another app's lost is said with the rest.
-                imported = open_lorebook(path).lore(macro_filler("{{char}}", user))
+                imported = open_lorebook(path).lore(
+                    macro_filler("{{char}}", user), f"the lorebook {path.name}"
+                )
             except LorebookError as exc:
                 problem = str(exc)
         if imported is None:

@@ -10,6 +10,7 @@ changes the story; the dialog stays open across them.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Sequence
 
 from PySide6.QtWidgets import QMessageBox
@@ -54,8 +55,17 @@ def story_preview(bundle: StoryBundle) -> str:
     lore = [e for e in bundle.lore if not e.plot_hidden and e.title.strip()]
     if lore:
         parts.append("## Lore")
-        parts += [f"### {entry.title}\n\n{safe_prose(entry.content, under=3)}" for entry in lore]
+        for entry in lore:
+            # Where it came from (a character's own lorebook), so a draft's
+            # reader can tell their lore from the lore the draft wrote.
+            source = f"*From {_plain(entry.came_from)}.*\n\n" if entry.came_from else ""
+            parts.append(f"### {entry.title}\n\n{source}{safe_prose(entry.content, under=3)}")
     return "\n\n".join(parts)
+
+
+def _plain(text: str) -> str:
+    """`text` as itself in Markdown: its marks escaped."""
+    return re.sub(r"([\\`*_{}\[\]<>()#+!|~-])", r"\\\1", text)
 
 
 class FollowUpWindow:
@@ -68,10 +78,12 @@ class FollowUpWindow:
         go_on: str = "Close",
         drafted: bool = False,
         notes: Sequence[str] = (),
+        brought: Sequence[str] = (),
     ) -> None:
         """Story → Change the story with the model…: requests for changes to
         a story not yet begun. `then` follows when the dialog closes (a
-        premise draft's Setup); `notes`: what the draft left out."""
+        premise draft's Setup); `notes`: what the draft left out or changed;
+        `brought`: where the author's own characters went in it."""
         session = self.session
         if session is None or session.story.chat:
             return
@@ -82,7 +94,9 @@ class FollowUpWindow:
                 10000,
             )
         elif self._may_follow_up("Changing the story"):
-            self._open_follow_up(STORY, then=then, go_on=go_on, drafted=drafted, notes=notes)
+            self._open_follow_up(
+                STORY, then=then, go_on=go_on, drafted=drafted, notes=notes, brought=brought
+            )
             return
         # Not offered: what was to follow goes on without it.
         if then is not None:
@@ -123,6 +137,7 @@ class FollowUpWindow:
         go_on: str,
         drafted: bool = False,
         notes: Sequence[str] = (),
+        brought: Sequence[str] = (),
     ) -> None:
         session = self.session
         story = session.story
@@ -140,6 +155,7 @@ class FollowUpWindow:
             go_on=go_on,
             history=session.follow_up_history(target),
             notes=notes,
+            brought=brought,
             can_undo=session.follow_up_to_undo(target) is not None,
             preview=lambda: self._follow_up_preview(target),
             drafted=drafted,

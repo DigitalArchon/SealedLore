@@ -45,6 +45,19 @@ TAVERN_LABEL = "SillyTavern cards"
 CARD_IMPORT_LABEL = "Import a character card…"
 CARD_EXPORT_LABEL = "Export this character as a card…"
 EXPRESSIONS_LABEL = "Add expression pictures from a zip…"
+
+
+def lore_brought(count: int, several: bool = False) -> str:
+    """Where a character's lorebook went, said after they join: ", with 6
+    entries of their lorebook in the story's lore (the Lore page)"."""
+    if not count:
+        return ""
+    return (
+        f", with {count} {'entry' if count == 1 else 'entries'} of their "
+        f"lorebook{'s' if several else ''} in the story's lore (the Lore page)"
+    )
+
+
 LOREBOOK_LABEL = "SillyTavern lorebook"
 LOREBOOK_IMPORT_LABEL = "Import a lorebook…"
 LOREBOOK_EXPORT_LABEL = "Export the lore as a lorebook…"

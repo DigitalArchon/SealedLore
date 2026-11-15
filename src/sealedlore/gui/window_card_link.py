@@ -27,6 +27,7 @@ from sealedlore.gui.card_changes import KEEP, SAVE, TAKE, VERSION, CardChangesDi
 from sealedlore.gui.collection_picker import CollectionPicker
 from sealedlore.gui.ref_images import thumbnail_of
 from sealedlore.gui.save_characters import SaveCharactersDialog
+from sealedlore.gui.tavern_dialog import lore_brought
 from sealedlore.ids import new_id
 from sealedlore.models.character import Character
 from sealedlore.models.collection import PictureMark
@@ -38,7 +39,7 @@ from sealedlore.storage.images import REFS_DIR
 from sealedlore.storage.paths import COLLECTION_ID
 from sealedlore.storage.picture_store import PictureStore
 from sealedlore.storage.tavern_cards import macro_filler
-from sealedlore.storage.tavern_lore import lore_from_book
+from sealedlore.storage.tavern_lore import lore_from_book, their_lorebook
 
 # A character's own line, for one only in the story: saved at once. The
 # Cast page's Save to Your characters… (gui/save_characters.py) chooses any.
@@ -209,8 +210,9 @@ class CardLinkWindow:
         if not chosen:
             return
         notes: list[str] = []
+        before = len(self.session.bundle.lore)
         added = [self._kept_into_story(card, to_cast, with_lore, notes) for card in chosen]
-        self._after_cards_added(added, to_cast, notes)
+        self._after_cards_added(added, to_cast, notes, len(self.session.bundle.lore) - before)
 
     def _not_twice(self, cards: list[Character]) -> list[Character]:
         """`cards`, less any the story already has from the same card unless the
@@ -257,7 +259,9 @@ class CardLinkWindow:
         lore = []
         book = card.tavern.character_book if card.tavern else None
         if with_lore and book:
-            imported = lore_from_book(book, macro_filler(card.name, user))
+            imported = lore_from_book(
+                book, macro_filler(card.name, user), their_lorebook(card.name)
+            )
             lore = imported.entries
             if notes is not None:
                 notes += [f"{card.name}'s lorebook: left out {note}." for note in imported.notes()]
@@ -347,8 +351,14 @@ class CardLinkWindow:
             session.save()
 
     def _after_cards_added(
-        self, added: list[Character], to_cast: bool, notes: list[str] | None = None
+        self,
+        added: list[Character],
+        to_cast: bool,
+        notes: list[str] | None = None,
+        lore: int = 0,
     ) -> None:
+        """Said once they are in: where they went, and `lore`, how many lore
+        entries their lorebooks brought."""
         session = self.session
         session.forget_review_undo()
         self.refresh_panels()
@@ -362,6 +372,7 @@ class CardLinkWindow:
             self.cast_panel.select_character(added[0].id)
         names = ", ".join(character.name for character in added)
         where = "the cast" if to_cast else "the supporting characters"
+        where += lore_brought(lore, several=len(added) > 1)
         later = (
             " Their card's {{user}} becomes the name of whoever you play when the story begins."
             if any(c.linked is not None and not c.linked.user for c in added)
@@ -382,8 +393,9 @@ class CardLinkWindow:
             return
         to_cast, with_lore = where
         notes: list[str] = []
+        before = len(self.session.bundle.lore)
         added = self._kept_into_story(card, to_cast, with_lore, notes)
-        self._after_cards_added([added], to_cast, notes)
+        self._after_cards_added([added], to_cast, notes, len(self.session.bundle.lore) - before)
 
     # --- the Cast page's line ----------------------------------------------------------------
 

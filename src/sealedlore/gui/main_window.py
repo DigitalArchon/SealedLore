@@ -4506,7 +4506,11 @@ class MainWindow(
         # The author (Nov 6 2026): a reply to what was drafted ("I like the
         # world, but…") first, with what the draft left out said there.
         self.change_story_with_model(
-            then=look_it_over, go_on="Go on to Setup…", drafted=True, notes=warnings[:12]
+            then=look_it_over,
+            go_on="Go on to Setup…",
+            drafted=True,
+            notes=warnings[:12],
+            brought=getattr(draft, "brought", ()),
         )
 
     def _toggle_review_mark(self, node_id: str) -> None:

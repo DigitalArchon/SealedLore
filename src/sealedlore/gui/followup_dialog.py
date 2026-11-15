@@ -60,7 +60,9 @@ def _hint(text: str) -> QLabel:
 class FollowUpDialog(QDialog):
     """`target`: STORY (its setup) or PLOT. `go_on`: the button that ends
     it, and what the window does next (Setup, Start, or nothing). `notes`:
-    what a draft left out, shown first. `preview`: the story or the plot as
+    what a draft left out or changed, shown first, after `brought`: where
+    the author's own characters the draft was built around went (their
+    card, pictures and lorebook). `preview`: the story or the plot as
     it is now, as Markdown. `secret_words`: how long the storyteller's notes
     a draft wrote are (or, for a plot, the notes its writer wrote), to say
     that there are some."""
@@ -77,6 +79,7 @@ class FollowUpDialog(QDialog):
         go_on: str,
         history: Sequence[FollowUpTurn] = (),
         notes: Sequence[str] = (),
+        brought: Sequence[str] = (),
         can_undo: bool = False,
         preview: Callable[[], str] | None = None,
         drafted: bool = False,
@@ -130,9 +133,14 @@ class FollowUpDialog(QDialog):
         if secret_words:
             said = secrets_written(PLOT_SECRETS_WRITTEN if plot else SECRETS_WRITTEN, secret_words)
             self._add(f"<i>{html.escape(said)}</i>")
+        if brought:
+            self._add(
+                "<i>From Your characters:</i><br>"
+                + "<br>".join(f"• {html.escape(line)}" for line in brought)
+            )
         if notes:
             self._add(
-                "<i>Left out of the draft:</i><br>"
+                "<i>Notes on the draft:</i><br>"
                 + "<br>".join(f"• {html.escape(note)}" for note in notes)
             )
         for turn in history:

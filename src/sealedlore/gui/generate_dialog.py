@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from sealedlore.engine.authoring import parse_generated, reply_without_notes
+from sealedlore.engine.authoring import own_lorebook, parse_generated, reply_without_notes
 from sealedlore.engine.draft_detail import STANDARD, DraftDetail
 from sealedlore.engine.drafting import StoryDraft
 from sealedlore.engine.plot_draft import DEPTHS, NO_NEWCOMERS, PlotWishes
@@ -314,9 +314,18 @@ class GenerateDialog(QDialog):
             if self.characters
             else PREMISE_EXAMPLE
         )
+        several = len(self.characters) > 1
+        # Their lorebooks, which the drafter reads and the story's lore takes.
+        lore = sum(len(own_lorebook(card, None)) for card in self.characters)
+        books = (
+            f", and their lorebook{'s' if several else ''} ({lore} "
+            f"{'entry' if lore == 1 else 'entries'}) as the story's lore"
+            if lore
+            else ""
+        )
         self.with_label.setText(
-            f"{self._names()}, as their card{'s have' if len(self.characters) > 1 else ' has'} "
-            "them. Say in the premise what kind of story, in what world, and whom you play."
+            f"{self._names()}, as their card{'s have' if several else ' has'} them{books}. "
+            "Say in the premise what kind of story, in what world, and whom you play."
             if self.characters
             else "Nobody yet: Choose… to build the story around characters of your own."
         )

@@ -672,7 +672,9 @@ def test_what_a_cards_lorebook_leaves_out_is_said_when_they_join(app, window, mo
     said: list = []
     monkeypatch.setattr(window, "_say_left_out", lambda *args: said.append(args))
     added_elena(window, monkeypatch)
-    assert said and "Elena joined the cast." in said[0][1]
+    assert said and said[0][1] == (
+        "Elena joined the cast, with 1 entry of their lorebook in the story's lore (the Lore page)."
+    )
     assert any("Elena's lorebook: left out second keywords" in note for note in said[0][2])
 
 

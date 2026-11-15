@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.retrieval import RetrievalReport
 from sealedlore.gui.fields import FormScroll, set_field_text
+from sealedlore.gui.plain_text import plain_tip
 from sealedlore.gui.portrait_view import PortraitView
 from sealedlore.gui.ref_images import CardIcons, RefImageStrip, StoryPictures
 from sealedlore.gui.sizing import GrowingText
@@ -138,6 +139,13 @@ class LorePanel(QWidget):
 
     def _build_editor(self) -> QWidget:
         self.title = QLineEdit()
+        # Where an entry brought in came from (a character's own lorebook, a
+        # lorebook file): said over its fields, so lore a card or a book
+        # brought is told from lore written here.
+        self.came_from = QLabel()
+        self.came_from.setObjectName("hintLabel")
+        self.came_from.setWordWrap(True)
+        self.came_from.setTextFormat(Qt.PlainText)
         self.content = GrowingText(lines=6)
         self.content.setPlaceholderText("The text injected into the prompt, verbatim.")
         self.keywords = QLineEdit()
@@ -177,6 +185,9 @@ class LorePanel(QWidget):
         form_host = QWidget()
         form = QFormLayout(form_host)
         form.setContentsMargins(0, 0, 0, 0)
+        # Heads the entry, above its picture: under the picture it read as one
+        # of the picture's.
+        form.addRow(self.came_from)
         form.addRow(self.picture)
         form.addRow("Title", self.title)
         form.addRow("Content", self.content)
@@ -298,6 +309,8 @@ class LorePanel(QWidget):
                 continue
             item = QListWidgetItem(self._label(entry))
             item.setData(Qt.UserRole, entry.id)
+            if entry.came_from:
+                item.setToolTip(plain_tip(f"From {entry.came_from}"))
             item.setIcon(self._icons.icon(entry.reference_images))
             self.list.addItem(item)
             if entry.id == selected:
@@ -324,6 +337,8 @@ class LorePanel(QWidget):
 
     def _label(self, entry: LoreEntry) -> str:
         marks = []
+        if entry.came_from:
+            marks.append(f"from {entry.came_from}")
         if entry.always_on:
             marks.append("always on")
         if not entry.enabled:
@@ -468,6 +483,9 @@ class LorePanel(QWidget):
         self.empty_hint.setVisible(not enabled)
         self.pictures.set_refs(entry.reference_images if entry is not None else None)
         self._show_picture()
+        source = entry.came_from if entry is not None else ""
+        self.came_from.setText(f"From {source}." if source else "")
+        self.came_from.setVisible(bool(source))
         if entry is None:
             return
 

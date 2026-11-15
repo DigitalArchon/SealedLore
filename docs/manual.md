@@ -1414,9 +1414,19 @@ world, and whom you play. The model drafts the world, the other characters,
 the lore and the opening around them, and their card stands as it is: what
 the story changes of them (their role in this world, what has happened to
 them) is added to their description as a change of this story's, which their
-card can take or not (below). **Choose…** beside them builds the story around
-others too, and **Draft a story from an idea** offers the same once you keep
-any characters.
+card can take or not (below). Their own lorebook comes too: the model reads it
+before it writes, so the world and the opening agree with it and its own lore
+covers only what the lorebook doesn't, and every entry goes into the story's
+lore as it is (a very large lorebook is read whole up to a few thousand words,
+the rest by title). Entries that are disabled stay out of what the model
+reads, as they stay out of play. When the premise puts them somewhere their
+lorebook doesn't fit (a river-pilot of an invented world running a ferry in
+present-day Maine), the model may find entries that don't hold in this story:
+those come in disabled, kept on the Lore page for you to tick Enabled on, and
+never sent to the storyteller meanwhile. If the draft writes an entry under
+the same title as one of theirs, or copies one, theirs is kept and the notes
+after the draft say so. **Choose…** beside them builds the story around others too, and **Draft a
+story from an idea** offers the same once you keep any characters.
 
 **Into a story.** On the cast board, **From Your characters…** (also in the
 new story guide's characters step and Setup's Characters tab) puts any of
@@ -1505,6 +1515,14 @@ characters… would; during a private scene that waits until the scene ends.
 Once in, the lore a card brought is the story's own: removing the character
 later leaves it, and the question asking whether to remove them says so.
 Remove what the story no longer needs on the Lore page.
+
+**Where lore came from.** Whichever way a lorebook comes in (a character
+joining, a card, a story drafted around them, a lorebook file), the message
+afterwards says how many entries went into the story's lore, and on the Lore
+page each one says where it came from: "(from Elena Ruiz's lorebook)" beside
+its title in the list, and over the entry. Lore you write yourself, or that a
+draft wrote, has no such mark. **Show the story as it is now**, after a draft,
+marks them the same way.
 
 **A character out.** **SillyTavern cards → Export this character as a card…**
 (or Story → Export → SillyTavern card…) saves a character as a card: a PNG
@@ -1622,8 +1640,10 @@ The model drafts everything in one go:
 - a plot, if you ask for one under **A plot** (see
   [A plot written by the model](#a-plot-written-by-the-model)).
 
-**Asking for changes.** Once it is drafted, a dialog shows what was left
-out of the draft, if anything, says whether it wrote notes for the
+**Asking for changes.** Once it is drafted, a dialog shows where each of
+your own characters went (their card, pictures, and how many entries of their
+lorebook are now the story's lore), notes on anything the draft left out or
+changed, says whether it wrote notes for the
 storyteller (never what they say), and lets you say what you'd like different
 in your own words: "I like the world, but I'd prefer the characters were more
 badass", or "I like the characters, but the world isn't hostile enough".
