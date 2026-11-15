@@ -17,6 +17,7 @@ import sealedlore.gui.attest_check as gui_module  # noqa: E402
 from sealedlore.engine.attestation_check import AttestationCheck, check_attestation  # noqa: E402
 from sealedlore.models.config import Config, ProviderConfig  # noqa: E402
 from sealedlore.models.private import Attestation  # noqa: E402
+from sealedlore.providers.privacy import PRIVACY_LEVELS  # noqa: E402
 from sealedlore.providers.tee import TeeRefused  # noqa: E402
 
 NANO = "https://nano-gpt.com/api/v1"
@@ -94,10 +95,13 @@ def test_a_check_says_what_it_attested_and_what_is_someones_word(fake_tee):
     )
     gateway = check_attestation(settings("TEE/glm-5.3-flash"))
     assert gateway.headline.startswith("⚠ TEE gateway attested, partially: GPUs not tied")
-    assert gateway.detail.startswith("Attested: RedPill's TEE gateway")
+    # Its level leads the details and the three levels end them (Nov 15 2026).
+    lead, *said, levels = gateway.detail.split("\n\n")
+    assert lead.startswith("Partial privacy") and levels == PRIVACY_LEVELS
+    assert said[0].startswith("Attested: RedPill's TEE gateway")
     assert "isn't attested by this app" in gateway.detail
     assert "in the clear" in gateway.detail
-    assert gateway.detail.endswith("binds the signing key to our nonce")
+    assert said[-1].endswith("binds the signing key to our nonce")
 
     fake_tee.outcome = Attestation(
         verified=True, level="full", gpus=80, instances=10, attested="instances"

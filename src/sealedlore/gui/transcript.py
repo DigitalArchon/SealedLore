@@ -1555,12 +1555,12 @@ def run_by(tee: str | None, upstream: TeeUpstream | None) -> str:
 # (`NodeMeta.tee_service`); NanoGPT's Private Mode keeps TEE_MARK_TIPS'.
 SEALED_BY_TIPS = {
     "tinfoil": (
-        "End-to-end encrypted through Tinfoil: sealed on this machine to the key of "
-        "Tinfoil's attested router enclave, sent over a connection pinned to its attested "
-        "TLS key, and the reply opened with it. Tinfoil carried ciphertext."
+        "Highest privacy. End-to-end encrypted through Tinfoil: sealed on this machine to "
+        "the key of Tinfoil's attested router enclave, sent over a connection pinned to its "
+        "attested TLS key, and the reply opened with it. Tinfoil carried ciphertext."
     ),
     "chutes": (
-        "End-to-end encrypted through Chutes (always partial): sealed on this machine to the "
+        "Partial privacy. End-to-end encrypted through Chutes: sealed on this machine to the "
         "key of one Chutes instance whose attested hardware binds it (its Intel TDX quote, "
         "and NVIDIA's signed verdict on its GPUs, both for our nonce), and the reply, sent "
         "whole, opened with it. Chutes and the instance's operator carried ciphertext; the "

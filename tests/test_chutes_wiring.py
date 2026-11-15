@@ -37,7 +37,7 @@ from sealedlore.providers.chutes_provider import (  # noqa: E402
 from sealedlore.providers.endpoints import EndpointsProvider  # noqa: E402
 from sealedlore.providers.mock import MockChatProvider  # noqa: E402
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider  # noqa: E402
-from sealedlore.providers.privacy import CHUTES, privacy_of  # noqa: E402
+from sealedlore.providers.privacy import CHUTES, PRIVACY_LEVELS, privacy_of  # noqa: E402
 from sealedlore.providers.tee import MEASUREMENTS_LISTED, WORKLOAD_UNMEASURED  # noqa: E402
 from sealedlore.storage.repository import StoryBundle  # noqa: E402
 
@@ -196,6 +196,9 @@ def test_test_attestation_on_chutes_with_and_without_a_key(monkeypatch):
     keyed = check_attestation(chutes(model=MODEL, api="chutes-e2ee"))
     assert keyed.outcome == "partial" and "partially" in keyed.headline
     assert "Sealed on this computer to the key of one Chutes instance" in keyed.detail
+    # Its level leads the details, the three levels end them.
+    assert keyed.detail.startswith("Partial privacy: end-to-end encrypted, but to a key")
+    assert keyed.detail.endswith(PRIVACY_LEVELS)
     keyless = check_attestation(chutes(model=MODEL).model_copy(update={"api_key": ""}))
     assert keyless.outcome == "partial"
     assert "discovery and the key binding weren't checked" in keyless.headline
@@ -250,6 +253,7 @@ def test_a_chutes_passage_names_its_service_and_instance(tmp_path):
     from tests.conftest import make_exchange
 
     assert "instance 0f1e2d3c" in tee_tip("encrypted", None, "chutes", "0f1e2d3c")
+    assert tee_tip("encrypted", None, "chutes", "0f1e2d3c").startswith("Partial privacy.")
     cfg = config(chutes())
     story = Story(title="Sealed", mode="chat", chat_keep="memory")
     story.defaults.main_model = f"Chutes::{MODEL}"
@@ -316,6 +320,8 @@ def test_a_chat_on_chutes_attests_through_its_client_and_says_partial(
         window._refresh_model_button()
         tip = window.model_button.toolTip()
         assert "one Chutes instance" in tip and "workload holding the key unmeasured" in tip
+        assert tip.startswith("Partial privacy: end-to-end encrypted, but to a key")
+        assert tip.endswith(PRIVACY_LEVELS)
         window.use_mock = True
         window._discard_provider()
     finally:

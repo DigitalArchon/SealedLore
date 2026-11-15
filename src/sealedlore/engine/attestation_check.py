@@ -13,7 +13,16 @@ from dataclasses import dataclass
 
 from sealedlore.models.config import ProviderConfig
 from sealedlore.providers.base import ProviderError
-from sealedlore.providers.privacy import CHUTES, NANOGPT_PRIVATE, TINFOIL, not_built, privacy_for
+from sealedlore.providers.privacy import (
+    CHUTES,
+    NANOGPT_PRIVATE,
+    PRIVACY_LEVELS,
+    TINFOIL,
+    Privacy,
+    level_line,
+    not_built,
+    privacy_for,
+)
 from sealedlore.providers.tee import (
     TeeRefused,
     failure_words,
@@ -42,7 +51,21 @@ def testable(model: str, endpoint: ProviderConfig | None = None) -> bool:
 
 
 def check_attestation(settings: ProviderConfig) -> AttestationCheck:
-    """Attest `settings.model` on `settings`' endpoint, as entering would."""
+    """Attest `settings.model` on `settings`' endpoint, as entering would. Its
+    details lead with the model's level of privacy and end with the three
+    levels (providers/privacy.py), whatever the check found but an error."""
+    privacy = privacy_for(settings.model.strip(), settings)
+    return _with_level(_check(settings), privacy)
+
+
+def _with_level(check: AttestationCheck, privacy: Privacy) -> AttestationCheck:
+    if check.outcome == "error" or not privacy.private:
+        return check
+    detail = "\n\n".join(p for p in (level_line(privacy), check.detail, PRIVACY_LEVELS) if p)
+    return AttestationCheck(check.outcome, check.headline, detail)
+
+
+def _check(settings: ProviderConfig) -> AttestationCheck:
     settings = settings.sendable()
     model = settings.model.strip()
     privacy = privacy_for(model, settings)

@@ -161,7 +161,7 @@ from sealedlore.providers.embeddings import EmbeddingBackend, OpenAICompatibleEm
 from sealedlore.providers.endpoints import listing_key
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.providers.model_hosts import Host
-from sealedlore.providers.privacy import Privacy, privacy_of
+from sealedlore.providers.privacy import PRIVACY_LEVELS, Privacy, level_line, privacy_of
 from sealedlore.storage import keychain
 from sealedlore.storage.archive import (
     ARCHIVE_FORMAT,
@@ -4773,6 +4773,21 @@ class MainWindow(
             **limits,
         )
 
+    def _privacy_lead(self) -> str:
+        """The open scene's or chat's model's level, in one sentence and a
+        paragraph break, to lead the model button's tooltip; "" for none."""
+        session = self.session
+        if session is None:
+            return ""
+        span = session.open_span
+        if span is not None:
+            privacy = session.scene_move_judge()(span.model)
+        elif session.story.chat:
+            privacy = session.chat_move_judge()(session.model)
+        else:
+            return ""
+        return level_line(privacy) + "\n\n" if privacy.private else ""
+
     def _privacy_of(self, model: str) -> Privacy:
         """How private a model reference is on the endpoint it names, for the
         model fields and the picker (providers/privacy.py)."""
@@ -4896,20 +4911,25 @@ class MainWindow(
         private = self._private_model_text()
         if private is not None:
             self.model_button.setText(private)
+            # Its level's words first, the three levels last (providers/privacy.py).
+            lead = self._privacy_lead()
+            levels = "\n\n" + PRIVACY_LEVELS if lead else ""
             if self.in_private:
                 self.model_button.setToolTip(
-                    self._say(
+                    lead
+                    + self._say(
                         "A private scene: every turn goes to the private model only. End "
                         "it with the Private button, under More beside Send."
                     )
                     + self._tee_tip()
+                    + levels
                 )
                 self.model_button.setEnabled(False)
             else:
                 self.model_button.setToolTip(
-                    "A TEE chat: every call goes to this model, attested when the chat "
-                    "opened and again every 15 minutes. Click to move to another TEE "
-                    "model." + self._tee_tip()
+                    lead + "A private chat: every call goes to this model, attested when the "
+                    "chat opened and again every 15 minutes. Click to move to another "
+                    "model at its level of privacy or higher." + self._tee_tip() + levels
                 )
                 self.model_button.setEnabled(not self._busy)
             self.model_button.setVisible(True)

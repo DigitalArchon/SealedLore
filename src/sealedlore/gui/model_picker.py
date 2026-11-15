@@ -46,7 +46,14 @@ from sealedlore.gui.workers import run_detached
 from sealedlore.models.config import ProviderConfig, RecommendedModel, split_model
 from sealedlore.models.route import ModelRoute
 from sealedlore.providers.base import ChatProvider
-from sealedlore.providers.privacy import CHUTES, NANOGPT_TEE, TINFOIL, Privacy, privacy_at
+from sealedlore.providers.privacy import (
+    CHUTES,
+    NANOGPT_TEE,
+    PRIVACY_LEVELS,
+    TINFOIL,
+    Privacy,
+    privacy_at,
+)
 from sealedlore.providers.private_catalog import encrypted_counterpart
 
 CATALOG_MAX_AGE = timedelta(hours=1)
@@ -437,9 +444,11 @@ class ModelPickerDialog(QDialog):
         return encrypted_counterpart(model_id, (self.catalog.models or {}).keys())
 
     def _privacy(self, model_id: str) -> tuple[str, str]:
-        """The Privacy column: end-to-end encrypted, TEE, or nothing. A TEE
-        model with an encrypted twin says so (the author: users should see
-        which offer full Private Mode, not just TEE)."""
+        """The Privacy column and its note, the note led by the model's level:
+        end-to-end encrypted, TEE, or nothing (one of Chutes' ordinary models:
+        nothing, its note saying Chutes reads it). A TEE model with an
+        encrypted twin says so (the author: users should see which offer full
+        Private Mode, not just TEE)."""
         privacy = self._judge(model_id)
         label, note = privacy.label()
         if label.startswith("🔐"):
@@ -500,9 +509,10 @@ class ModelPickerDialog(QDialog):
     def _sync_buttons(self, *_args) -> None:
         chosen = self.selected_model()
         self.buttons.button(QDialogButtonBox.Ok).setEnabled(chosen is not None)
-        # What the chosen model keeps private, under the list.
+        # What the chosen model keeps private, its level first, under the list;
+        # the three levels after it. On Chutes, an ordinary model's says so too.
         note = self._privacy(chosen)[1] if chosen else ""
-        self.privacy_note.setText(note)
+        self.privacy_note.setText(f"{note}\n\n{PRIVACY_LEVELS}" if note else "")
         self.privacy_note.setVisible(bool(note))
         twin = self._twin_of(chosen) if chosen else None
         if twin and self.allowed is not None and not self.allowed(twin):
@@ -786,7 +796,8 @@ class ModelField(QWidget):
                 privacy.service, ""
             )
         self.privacy.setText(label)
-        self.privacy.setToolTip(note)
+        # Its level's words lead the note; the three levels follow it.
+        self.privacy.setToolTip(f"{note}\n\n{PRIVACY_LEVELS}" if note else "")
         self.privacy.setVisible(bool(label))
 
     def show_pictures(self) -> None:

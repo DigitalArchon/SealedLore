@@ -14,12 +14,24 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
+from sealedlore.engine.catalog import ModelInfo  # noqa: E402
+from sealedlore.gui.model_picker import (  # noqa: E402
+    COLUMNS,
+    ModelCatalog,
+    ModelField,
+    ModelPickerDialog,
+)
 from sealedlore.gui.settings_dialog import SettingsDialog, private_service_of  # noqa: E402
 from sealedlore.models.config import (  # noqa: E402
     CHUTES_ANTHROPIC_URL,
     CHUTES_BASE_URL,
     Config,
     ProviderConfig,
+)
+from sealedlore.providers.privacy import (  # noqa: E402
+    CHUTES_PLAIN_NOTE,
+    PRIVACY_LEVELS,
+    privacy_of,
 )
 
 NANO = "https://nano-gpt.com/api/v1"
@@ -115,3 +127,56 @@ def test_the_private_page_offers_chutes_and_says_which_of_its_models_are_private
     assert dialog.private_service_note.isHidden()
     dialog.deleteLater()
     assert private_service_of(ProviderConfig(name="p", base_url=CHUTES_ANTHROPIC_URL)) == "chutes"
+
+
+# --- each level's words, wherever a model is chosen or shown ----------------------------
+
+
+def test_a_model_fields_label_says_its_level_first_and_the_three_after(app):
+    cfg = config(ProviderConfig(name="Chutes", base_url=CHUTES_BASE_URL, api_key="cpk"))
+
+    def judge(model: str):
+        return privacy_of(model, cfg)
+
+    for model, label, lead in (
+        ("private/glm-5-3", "🔐 E2EE", "Highest privacy."),
+        ("TEE/glm-5.3", "TEE", "Partial privacy."),
+        ("Chutes::Qwen/Qwen3.8-27B-TEE", "🔐 E2EE · Chutes ⚠ partial", "Partial privacy."),
+    ):
+        field = ModelField(model, privacy_of=judge)
+        assert field.privacy.text() == label
+        tip = field.privacy.toolTip()
+        assert tip.startswith(lead) and tip.endswith(PRIVACY_LEVELS), model
+    ordinary = ModelField("Chutes::zai-org/GLM-5.3", privacy_of=judge)
+    assert ordinary.privacy.isHidden(), "not private: no label beside it"
+
+
+def test_the_picker_says_each_chutes_models_level_and_what_chutes_reads(app):
+    cfg = config(ProviderConfig(name="Chutes", base_url=CHUTES_BASE_URL, api_key="cpk"))
+    tee, ordinary = "Chutes::Qwen/Qwen3.8-27B-TEE", "Chutes::zai-org/GLM-5.3"
+    catalog = ModelCatalog()
+    catalog.models = {m: ModelInfo(id=m, name=m, endpoint="Chutes") for m in (tee, ordinary)}
+    from datetime import UTC, datetime
+
+    catalog._endpoint, catalog._fetched_at = "e", datetime.now(UTC)
+    dialog = ModelPickerDialog(
+        catalog, lambda: (None, "e", False), privacy_of=lambda m: privacy_of(m, cfg)
+    )
+    rows = {
+        dialog.table.topLevelItem(i).data(0, 0x0100 + 1): dialog.table.topLevelItem(i)
+        for i in range(dialog.table.topLevelItemCount())
+    }
+    column = COLUMNS.index("Privacy")
+    assert rows[tee].text(column) == "🔐 Encrypted (Chutes, partial)"
+    assert rows[tee].toolTip(column).startswith("Partial privacy.")
+    assert rows[ordinary].text(column) == ""
+    assert rows[ordinary].toolTip(column) == CHUTES_PLAIN_NOTE
+    dialog.table.setCurrentItem(rows[ordinary])
+    note = dialog.privacy_note.text()
+    assert not dialog.privacy_note.isHidden()
+    assert note.startswith("Not private. Chutes reads this model's text")
+    assert "-TEE models are the ones sent end-to-end encrypted" in note
+    assert note.endswith(PRIVACY_LEVELS)
+    dialog.table.setCurrentItem(rows[tee])
+    assert dialog.privacy_note.text().startswith("Partial privacy.")
+    dialog.deleteLater()

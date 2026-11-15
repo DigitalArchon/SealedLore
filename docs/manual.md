@@ -2700,7 +2700,11 @@ A chat on a private model, and a private scene, keep to their level: each
 moves only to a model at its own level or higher, on any service (a `private/`
 or Tinfoil chat to `private/` or Tinfoil models; a `TEE/` or Chutes `-TEE`
 chat to any of those four), the move noted under its latest message, and the
-refusal says both levels.
+refusal says both levels. Wherever a model is chosen or shown, its level comes
+first: the model button's tooltip, a model field's label, the model list's
+Privacy column and the note under the list (one of Chutes' ordinary models
+says there that Chutes reads it), and Test attestation's details, each ending
+with the sentence above.
 
 The **Private** button beside the composer plays a span of the story on a
 separate model that nothing else ever hears about: a local server (Ollama, LM

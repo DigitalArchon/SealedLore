@@ -891,22 +891,24 @@ class PrivateWindow:
             if attestation.service == CHUTES:
                 self._tee_state = "🔐 E2EE · Chutes ⚠ partial"
                 said = (
-                    f"End-to-end encrypted through Chutes, partially: {attestation.instances} "
-                    "attested instance(s); the workload holding the key is Chutes' signed "
-                    "program, not measured. Chutes sees the account, the model, timing, sizes "
-                    "and cost; the instance's operator, ciphertext."
+                    "Partial privacy. End-to-end encrypted through Chutes: "
+                    f"{attestation.instances} attested instance(s); the workload holding the "
+                    "key is Chutes' signed program, not measured. Chutes sees the account, "
+                    "the model, timing, sizes and cost; the instance's operator, ciphertext."
                 )
             elif attestation.service == TINFOIL:
                 self._tee_state = f"🔐 E2EE · Tinfoil{older}"
                 said = (
-                    f"End-to-end encrypted through Tinfoil: {attestation.detail}. Tinfoil "
-                    "sees the account, the model, timing, sizes and cost, never the text."
+                    "Highest privacy. End-to-end encrypted through Tinfoil: "
+                    f"{attestation.detail}. Tinfoil sees the account, the model, timing, "
+                    "sizes and cost, never the text."
                 )
             else:
                 self._tee_state = f"end-to-end encrypted{older}"
                 said = (
-                    f"End-to-end encrypted: {attestation.detail}. NanoGPT relays ciphertext; "
-                    "it sees the account, the model, timing, sizes and usage."
+                    f"Highest privacy. End-to-end encrypted: {attestation.detail}. NanoGPT "
+                    "relays ciphertext; it sees the account, the model, timing, sizes and "
+                    "usage."
                 )
             self._refresh_model_button()
             self.statusBar().showMessage(said, 15000)
