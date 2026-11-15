@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import NamedTuple
 from urllib.parse import urlparse
 
-from PySide6.QtCore import QSize, Qt, QTimer
+from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -392,6 +392,10 @@ class SettingsProblem(ValueError):
 
 
 class SettingsDialog(QDialog):
+    # Save pressed and the settings written, the dialog staying open: the window
+    # applies them at once, as it does when the dialog is accepted.
+    saved = Signal()
+
     def __init__(
         self,
         config: Config,
@@ -469,7 +473,19 @@ class SettingsDialog(QDialog):
             for name, build in members:
                 self.tabs.addTab(_scrolled(build()), name, PAGE_ABOUT[name])
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        # Save keeps the dialog open (the author, Nov 15 2026: add an endpoint,
+        # save, then choose its models), Save and Close is what Save did, and
+        # Close asks before what wasn't saved is lost. Enter is still Save and
+        # Close, the box's default.
+        buttons = QDialogButtonBox()
+        self.save_button = buttons.addButton("Save", QDialogButtonBox.ButtonRole.ApplyRole)
+        self.save_close_button = buttons.addButton(
+            "Save and Close", QDialogButtonBox.ButtonRole.AcceptRole
+        )
+        self.close_button = buttons.addButton(QDialogButtonBox.StandardButton.Close)
+        self.save_button.setAutoDefault(False)
+        self.save_close_button.setDefault(True)
+        self.save_button.clicked.connect(self.save_and_stay)
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
 
@@ -960,9 +976,12 @@ class SettingsDialog(QDialog):
         intro.setObjectName("hintLabel")
         intro.setWordWrap(True)
         form.addRow(intro)
-        held = self._held_back_box()
-        if held is not None:
-            form.addRow(held)
+        # The keys held back, in a holder of their own so a Save that stays
+        # open (`save_and_stay`) can list them afresh.
+        self._held_holder = QWidget()
+        QVBoxLayout(self._held_holder).setContentsMargins(0, 0, 0, 0)
+        form.addRow(self._held_holder)
+        self._refresh_held_back()
 
         self.endpoint_list = QListWidget()
         self.endpoint_list.setObjectName("endpointList")
@@ -2728,6 +2747,18 @@ class SettingsDialog(QDialog):
                 held.append(KeyMove(slot, holder, holder.key_saved_for, now, declined))
         return held
 
+    def _refresh_held_back(self) -> None:
+        """The Keys held back box, built from the settings as they stand saved."""
+        layout = self._held_holder.layout()
+        while layout.count():
+            item = layout.takeAt(0)
+            if item.widget() is not None:
+                item.widget().deleteLater()
+        held = self._held_back_box()
+        if held is not None:
+            layout.addWidget(held)
+        self._held_holder.setVisible(held is not None)
+
     def _held_back_box(self) -> QWidget | None:
         """On the Endpoints page, each saved key held back from its address's
         new place: where it is for, where it isn't sent, and Ask again…, or a
@@ -2972,6 +3003,44 @@ class SettingsDialog(QDialog):
         return None
 
     def _save(self) -> None:
+        """Save and Close (and Enter): written, then closed."""
+        if self._write():
+            self.accept()
+
+    def save_and_stay(self) -> None:
+        """Save: written, told to the window (`saved`), which applies it at once,
+        and the dialog goes on as if just opened on what was saved: Close then
+        asks about nothing saved, a key question answered isn't asked again,
+        and the open story's model is compared with the saved one."""
+        if not self._write():
+            return
+        self.saved.emit()
+        self._as_opened()
+
+    def _as_opened(self) -> None:
+        """What the dialog remembers of how things stood as it opened, taken
+        afresh from the settings just saved."""
+        config = self.config
+        self._endpoints = [p.model_copy(deep=True) for p in config.providers] or self._endpoints
+        self._origins = [p.name for p in config.providers] or self._origins
+        self._named = [p.name for p in self._endpoints]
+        self._plain_at_open = keys_in_the_clear(config)
+        self._plain_confirmed = [
+            entry for entry in self._plain_at_open if confirmed_in_clear(config, entry)
+        ]
+        self._plain_allowed = []
+        self._moves_answered = {}
+        self._model_at_open = self.model.text().strip()
+        self._route_at_open = self.model.effective_route()
+        self._shown = {field: _shown_value(field) for field in self._shown}
+        self.error.hide()
+        self._refresh_held_back()
+        self._opened = self._state()
+
+    def _write(self) -> bool:
+        """Every field into the settings, once what they hold is checked and the
+        questions about keys asked: True when written, False (the problem said
+        on its page) when not."""
         endpoints = self._endpoints_as_typed()
         embed_url = self.embed_base_url.text().strip()
         try:
@@ -2996,7 +3065,7 @@ class SettingsDialog(QDialog):
             for index in range(self.tabs.count()):
                 if page and self.tabs.tabText(index) == page:
                     self.tabs.setCurrentIndex(index)
-            return
+            return False
 
         # The list as it stands replaces the saved one: a renamed endpoint is
         # the same entry under its new name (its key with it, `_carry_keys`),
@@ -3156,5 +3225,4 @@ class SettingsDialog(QDialog):
         # Settings" for one that needs none any more, so it is no longer said
         # at every start. One it couldn't be asked about stays looked for.
         keychain.let_go_of_gone(self.config, self._root)
-
-        self.accept()
+        return True

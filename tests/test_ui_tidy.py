@@ -722,6 +722,11 @@ def test_saving_settings_replaces_the_welcome(app, tmp_path: Path, monkeypatch):
     class FilledIn:
         Accepted = 1
 
+        class saved:  # noqa: N801 - the dialog's signal, which this one never sends
+            @staticmethod
+            def connect(_slot) -> None:
+                pass
+
         def __init__(self, config, *args, **kwargs) -> None:
             self.config = config
 

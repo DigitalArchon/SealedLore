@@ -437,7 +437,11 @@ it closes.
 **Settings** (File → Settings…, Ctrl+,) lists its pages down the left in
 groups: **Connection** (Endpoints, Models), **Writing** (Generation, Context,
 Lore), **Pictures** (Images, Video) and **Privacy** (Private, Phone). Each page says
-at its top what it is for. Options most people never change are put away
+at its top what it is for. **Save** keeps what you changed and puts it to use
+at once, and Settings stays open (add an endpoint, Save, then choose its
+models); **Save and Close** does the same and closes it (Enter does this);
+**Close** closes it, asking first if anything you changed since the last Save
+would be lost. Options most people never change are put away
 under a heading that opens them, such as **Sampling (advanced)** under
 Generation, **Prompt caching (advanced)** under Endpoints, **Chapters and
 recall (advanced)** under Context, and, under Images, the picture endpoint

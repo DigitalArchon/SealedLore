@@ -5581,7 +5581,7 @@ class MainWindow(
         if self._settings_paused():
             return
         story = self.session.story if self.session else None
-        model_before = self.session.model if self.session else None
+        model_before = [self.session.model if self.session else None]
         dialog = SettingsDialog(
             self.config,
             story,
@@ -5596,39 +5596,54 @@ class MainWindow(
             for index in range(dialog.tabs.count()):
                 if dialog.tabs.tabText(index) == tab:
                     dialog.tabs.setCurrentIndex(index)
+
+        def applied() -> None:
+            # Save, the dialog staying open: everything a Save and Close does,
+            # now, and the chat's model compared with what was saved next time.
+            self._settings_saved(story, model_before[0])
+            model_before[0] = self.session.model if self.session else None
+
+        dialog.saved.connect(applied)
         accepted = dialog.exec() == SettingsDialog.Accepted
         # Freed once closed: kept as the window's child, every Settings opened
         # stayed, each holding in its fields the keys typed there, Cancel too.
         dialog.deleteLater()
         if accepted:
-            save_config(self.config, root=self.root)
-            if keychain.last_problem and self.config.key_storage == "keychain":
-                self.statusBar().showMessage(
-                    f"API keys are in config.json for now: {keychain.last_problem}.", 20000
-                )
-            self._discard_provider()
-            self._renew_collection_provider()
-            if self.session is not None:
-                # Undo restores the story's settings wholesale; after a save
-                # here it would take these edits with it.
-                self.session.forget_review_undo()
-                self.session.save()
-                self.session.provider = self._current_provider()
-                self.session.embeddings = self._current_embeddings()
-                self.lore_panel.set_embeddings_available(self.session.embeddings is not None)
-                self._reassemble_inspector()
-                # The budget or the archival switch may have changed, and
-                # with them the cast's room.
-                self.refresh_summaries()
-                self._cast_changed_soon()
-                if self.in_chat and self.session.model != model_before:
-                    self._chat_model_changed(model_before or "")
-            else:
-                # The first-run welcome gives way, or says what is still missing.
-                self.reload_transcript()
-            # Which stories' models differ from the settings may have changed.
-            self.stories.refresh(selected_id=story.id if story is not None else None)
-            self._update_controls()
+            self._settings_saved(story, model_before[0])
+
+    def _settings_saved(self, story: Story | None, model_before: str | None) -> None:
+        """What saving Settings does: the settings written, the provider, keys and
+        embeddings renewed, the open story saved and reassembled, the lists and
+        controls brought up to date. On Save and Close, and on Save, which keeps
+        the dialog open."""
+        save_config(self.config, root=self.root)
+        if keychain.last_problem and self.config.key_storage == "keychain":
+            self.statusBar().showMessage(
+                f"API keys are in config.json for now: {keychain.last_problem}.", 20000
+            )
+        self._discard_provider()
+        self._renew_collection_provider()
+        if self.session is not None:
+            # Undo restores the story's settings wholesale; after a save
+            # here it would take these edits with it.
+            self.session.forget_review_undo()
+            self.session.save()
+            self.session.provider = self._current_provider()
+            self.session.embeddings = self._current_embeddings()
+            self.lore_panel.set_embeddings_available(self.session.embeddings is not None)
+            self._reassemble_inspector()
+            # The budget or the archival switch may have changed, and
+            # with them the cast's room.
+            self.refresh_summaries()
+            self._cast_changed_soon()
+            if self.in_chat and self.session.model != model_before:
+                self._chat_model_changed(model_before or "")
+        else:
+            # The first-run welcome gives way, or says what is still missing.
+            self.reload_transcript()
+        # Which stories' models differ from the settings may have changed.
+        self.stories.refresh(selected_id=story.id if story is not None else None)
+        self._update_controls()
 
     def open_prompt_editor(self, import_path: Path | None = None) -> None:
         """File → Prompts (advanced)…: the texts for this story and for every
