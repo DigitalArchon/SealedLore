@@ -198,8 +198,10 @@ CHUTES_NOTE = (
     "list of measured images is Chutes' own. Beside NanoGPT's TEE models: your text is "
     "encrypted all the way here, where theirs passes NanoGPT's gateway in the clear; but "
     "what they attest is the enclave as measured, where here the program holding the key "
-    "is outside the measurement. Replies come whole, not streamed. Chutes sees your "
-    "account, the model, timing, sizes and cost; the instance's operator, ciphertext."
+    "is outside the measurement. Replies stream, each piece held to its number, which "
+    "Chutes' closed library writes: a piece dropped, repeated or out of its place is "
+    "refused. Chutes sees your account, the model, timing, sizes and cost; the "
+    "instance's operator, ciphertext."
 )
 TEE_NOTE = (
     "Partial privacy. TEE: the model runs in an attested enclave and its replies are "

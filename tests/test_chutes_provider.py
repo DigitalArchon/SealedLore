@@ -12,10 +12,10 @@ import base64
 import gzip
 import hashlib
 import json
-import os
 import secrets
 import struct
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 
 import httpx
@@ -25,8 +25,15 @@ from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.config import ProviderConfig
 from sealedlore.models.generation import GenerationParams, ReasoningConfig
 from sealedlore.providers import chutes_e2ee, dcap
-from sealedlore.providers.base import ChatRequest, ProviderError, StreamCancelled
-from sealedlore.providers.chutes_e2ee import INFO_REQUEST, INFO_RESPONSE, derive_key
+from sealedlore.providers.base import (
+    ChatRequest,
+    ProviderError,
+    ReasoningDelta,
+    StreamCancelled,
+    StreamCompleted,
+    TextDelta,
+)
+from sealedlore.providers.chutes_e2ee import INFO_REQUEST, INFO_STREAM, derive_key, stream_nonce
 from sealedlore.providers.chutes_provider import (
     CHUTES_ORIGIN,
     EVIDENCE_LIMIT,
@@ -153,16 +160,47 @@ class FakeInstance:
         return json.loads(gzip.decompress(ChaCha20Poly1305(key).decrypt(nonce, sealed, None)))
 
 
-def seal_reply(reply: dict, response_pk: str) -> bytes:
+def stream_pieces(reply: dict) -> list[str]:
+    """`reply` (a chat completion as the model server would send it whole) as
+    the pieces of its stream, each one SSE event of the model server's own,
+    as Chutes' workload seals them: the reasoning, the text a word or so at a
+    time, the finish, the usage, the [DONE], then the blank line after it
+    sealed on its own (live, tests/data/chutes_stream.json)."""
+    if reply.get("error"):
+        return ["data: " + json.dumps({"error": reply["error"]}) + "\n\n"]
+    rid = reply.get("id", "chatcmpl-x")
+    choice = (reply.get("choices") or [{}])[0]
+    message = choice.get("message") or {}
+    chunks: list[dict] = []
+    if message.get("reasoning_content"):
+        chunks.append({"delta": {"reasoning_content": message["reasoning_content"]}})
+    words = (message.get("content") or "").split(" ")
+    for i, word in enumerate(words):
+        if word:
+            chunks.append({"delta": {"content": word + (" " if i < len(words) - 1 else "")}})
+    if choice.get("finish_reason"):
+        chunks.append({"delta": {}, "finish_reason": choice["finish_reason"]})
+    events = [{"id": rid, "choices": [{"index": 0, **c}]} for c in chunks]
+    if reply.get("usage"):
+        events.append({"id": rid, "choices": [], "usage": reply["usage"]})
+    return ["data: " + json.dumps(event) + "\n\n" for event in events] + ["data: [DONE]\n", "\n"]
+
+
+def sealed_stream(pieces: list[str], response_pk: str, *, usage: dict | None = None) -> list[str]:
+    """`pieces` sealed as Chutes' stream: the key exchange, then each piece
+    under the stream key, its nonce its number from 0; Chutes' unsealed
+    copy of the usage and its own [DONE] last, as live."""
     client = mlkem.MLKEM768PublicKey.from_public_bytes(base64.b64decode(response_pk))
     secret, ciphertext = client.encapsulate()
-    key = derive_key(secret, ciphertext, INFO_RESPONSE)
-    nonce = os.urandom(12)
-    return (
-        ciphertext
-        + nonce
-        + ChaCha20Poly1305(key).encrypt(nonce, gzip.compress(json.dumps(reply).encode()), None)
-    )
+    key = derive_key(secret, ciphertext, INFO_STREAM)
+    lines = ["data: " + json.dumps({"e2e_init": base64.b64encode(ciphertext).decode()}), ""]
+    for number, piece in enumerate(pieces):
+        nonce = stream_nonce(number)
+        sealed = nonce + ChaCha20Poly1305(key).encrypt(nonce, piece.encode(), None)
+        lines += ["data: " + json.dumps({"e2e": base64.b64encode(sealed).decode()}), ""]
+    if usage:
+        lines += ["data: " + json.dumps({"usage": usage}), ""]
+    return [*lines, "data: [DONE]", ""]
 
 
 class FakeChutes:
@@ -180,6 +218,8 @@ class FakeChutes:
         self.invoke_status: list[int] = []
         self.invoke_body: bytes | None = None
         self.tamper = False
+        # How the stream's sealed lines are spoilt on the way, if at all.
+        self.spoil: Callable[[list[str]], list[str]] | None = None
         self.redirect: str | None = None
         self.measured = [MRTD]
         self.nonce_life = 60
@@ -255,19 +295,26 @@ class FakeChutes:
         if self.invoke_status:
             return httpx.Response(self.invoke_status.pop(0), json={"detail": "Instance‮ busy\nnow"})
         assert headers["authorization"] == "Bearer cpk_test"
-        assert (headers["x-chute-id"], headers["x-e2e-stream"]) == (CHUTE, "false")
+        assert (headers["x-chute-id"], headers["x-e2e-stream"]) == (CHUTE, "true")
         assert headers["x-e2e-path"] == "/v1/chat/completions"
+        assert headers["accept"] == "text/event-stream"
+        event_stream = {"content-type": "text/event-stream"}
         if self.invoke_body is not None:
-            return httpx.Response(200, content=self.invoke_body)
+            return httpx.Response(200, content=self.invoke_body, headers=event_stream)
         instance = next(i for i in self.instances if i.id == instance_id)
         body = instance.open(request.content)
         self.opened.append((instance_id, body))
-        blob = bytearray(seal_reply(self.reply, body["e2e_response_pk"]))
-        if self.tamper:
-            blob[-1] ^= 1
-        return httpx.Response(
-            200, content=bytes(blob), headers={"content-type": "application/octet-stream"}
+        lines = sealed_stream(
+            stream_pieces(self.reply), body["e2e_response_pk"], usage=self.reply.get("usage")
         )
+        if self.tamper:
+            first = next(i for i, line in enumerate(lines) if '"e2e"' in line)
+            raw = bytearray(base64.b64decode(json.loads(lines[first][6:])["e2e"]))
+            raw[-1] ^= 1
+            lines[first] = "data: " + json.dumps({"e2e": base64.b64encode(raw).decode()})
+        if self.spoil is not None:
+            lines = self.spoil(lines)
+        return httpx.Response(200, content="\n".join(lines).encode(), headers=event_stream)
 
     @staticmethod
     def models() -> dict:
@@ -340,7 +387,8 @@ def test_a_request_is_sealed_to_an_attested_instance_and_its_reply_opened(fake):
     response_pk = body.pop("e2e_response_pk")
     assert len(base64.b64decode(response_pk)) == 1184
     assert body == chutes.build_payload(ask())
-    assert body["model"] == MODEL and body["stream"] is False and "stream_options" not in body
+    assert body["model"] == MODEL and body["stream"] is True
+    assert body["stream_options"] == {"include_usage": True}
     assert body["messages"][1] == {"role": "user", "content": "Open the door."}
     # Discovered once, the whole chute's evidence once, then sealed.
     assert fake.paths() == [
@@ -555,13 +603,138 @@ def test_a_reply_whose_seal_doesnt_hold_is_refused_and_doubts_the_attestation(fa
 
 @pytest.mark.parametrize(
     "body",
-    [b'{"choices": [{"message": {"content": "relay text"}}]}', b"x" * 4000],
-    ids=["json", "long"],
+    [
+        b'data: {"choices": [{"delta": {"content": "relay text"}}]}\n\ndata: [DONE]\n\n',
+        b'{"choices": [{"message": {"content": "relay text"}}]}',
+        b"x" * 4000,
+    ],
+    ids=["event", "json", "long"],
 )
 def test_an_unsealed_reply_is_never_taken_for_the_models(fake, body):
     fake.invoke_body = body
-    with pytest.raises(ProviderError, match="couldn't be opened"):
-        provider(fake).complete(ask())
+    shown = []
+    with pytest.raises(ProviderError, match="couldn't be read"):
+        for event in provider(fake).stream(ask()):
+            shown.append(event)
+    assert shown == [], "nothing of it shown as the model's"
+
+
+# --- the stream: each piece held to its number ------------------------------------------
+
+
+def sealed_at(lines: list[str]) -> list[int]:
+    return [i for i, line in enumerate(lines) if '"e2e"' in line]
+
+
+def streamed_text(chutes: ChutesE2EEProvider) -> tuple[str, str, list]:
+    """What the stream showed as the passage and its reasoning, and every event."""
+    events = []
+    try:
+        for event in chutes.stream(ask()):
+            events.append(event)
+    finally:
+        text = "".join(e.text for e in events if isinstance(e, TextDelta))
+        reasoning = "".join(e.text for e in events if isinstance(e, ReasoningDelta))
+    return text, reasoning, events
+
+
+def test_the_reply_streams_piece_by_piece_as_it_comes(fake):
+    """Every -TEE request streams (D6 as changed, Nov 15 2026): the reasoning
+    and the text arrive as the pieces open, the usage is the sealed one."""
+    text, reasoning, events = streamed_text(provider(fake))
+    deltas = [e.text for e in events if isinstance(e, TextDelta)]
+    assert deltas == ["The ", "door ", "opens."] and text == "The door opens."
+    assert reasoning == "Hm."
+    completed = events[-1]
+    assert isinstance(completed, StreamCompleted) and completed.sealed
+    assert completed.finish_reason == "stop" and completed.sealed_to is not None
+    assert (completed.usage.prompt_tokens, completed.usage.completion_tokens) == (40, 5)
+
+
+def test_chutes_unsealed_usage_is_only_a_fallback_for_the_cost(fake):
+    """The sealed usage counts; Chutes' unsealed copy only when it is missing."""
+    fake.spoil = lambda lines: [
+        line.replace('"prompt_tokens": 40', '"prompt_tokens": 4000')
+        if line.startswith('data: {"usage"')
+        else line
+        for line in lines
+    ]
+    _, completed = provider(fake).complete(ask())
+    assert completed.usage.prompt_tokens == 40
+    fake.reply = {**REPLY, "usage": None}
+
+    def chutes_count(lines: list[str]) -> list[str]:
+        return [*lines[:-2], 'data: {"usage": {"prompt_tokens": 7}}', "", *lines[-2:]]
+
+    fake.spoil = chutes_count
+    _, completed = provider(fake).complete(ask())
+    assert completed.usage.prompt_tokens == 7
+
+
+@pytest.mark.parametrize("change", ["swapped", "dropped", "repeated"])
+def test_a_piece_out_of_its_place_is_refused_in_words_and_never_shown(fake, change):
+    """Pieces 1-3 are "The ", "door " and "opens.": whatever the relay did,
+    what was shown is the model's text in its order up to there, and nothing
+    of the piece out of its place; the instances are attested again."""
+
+    def spoil(lines: list[str]) -> list[str]:
+        at = sealed_at(lines)
+        if change == "swapped":
+            lines[at[1]], lines[at[2]] = lines[at[2]], lines[at[1]]
+        elif change == "dropped":
+            del lines[at[2]]
+        else:
+            lines.insert(at[3], lines[at[2]])
+        return lines
+
+    chutes = provider(fake)
+    chutes.complete(ask())
+    fake.spoil = spoil
+    shown = []
+    with pytest.raises(ProviderError) as caught:
+        for event in chutes.stream(ask()):
+            shown.append(event)
+    assert str(caught.value).startswith("the encrypted reply couldn't be opened (a piece of the ")
+    assert "isn't the one that comes next" in str(caught.value)
+    assert "attested again" in str(caught.value)
+    text = "".join(e.text for e in shown if isinstance(e, TextDelta))
+    assert text == {"swapped": "", "dropped": "The ", "repeated": "The door "}[change]
+    assert not any(isinstance(e, StreamCompleted) for e in shown)
+    fake.spoil = None
+    chutes.complete(ask())
+    assert fake.count(f"/chutes/{CHUTE}/evidence") == 2, "doubted, attested again"
+
+
+@pytest.mark.parametrize(
+    "cut",
+    ["before the finish", "before the sealed done", "after the key exchange"],
+)
+def test_a_stream_cut_short_is_refused_in_words(fake, cut):
+    """The connection closing (or the relay ending it) before the sealed
+    [DONE] and a finish reason: what came is kept as far as it came, never
+    passed off as whole; Chutes' own unsealed [DONE] counts for nothing."""
+
+    def spoil(lines: list[str]) -> list[str]:
+        at = sealed_at(lines)
+        upto = {"before the finish": at[4], "before the sealed done": at[6]}.get(cut, at[0])
+        return [*lines[:upto], "data: [DONE]", ""]
+
+    fake.spoil = spoil
+    with pytest.raises(ProviderError, match="ended before the model said it was done"):
+        streamed_text(provider(fake))
+
+
+def test_a_stop_mid_stream_stops_at_once(fake):
+    """Stop between pieces: nothing more is opened or shown, and no end is made up."""
+    chutes = provider(fake)
+    shown = []
+    with pytest.raises(StreamCancelled):
+        for event in chutes.stream(ask()):
+            shown.append(event)
+            if isinstance(event, TextDelta):
+                chutes.cancel()
+    assert [e.text for e in shown if isinstance(e, TextDelta)] == ["The "]
+    assert not any(isinstance(e, StreamCompleted) for e in shown)
 
 
 def test_a_refusal_is_said_as_chutes_unauthenticated_words_and_a_500_never_resent(fake):
@@ -659,10 +832,11 @@ def test_the_models_own_error_inside_the_seal_is_said(fake):
         provider(fake).complete(ask())
 
 
-def test_a_reply_with_no_finish_reason_is_marked_unfinished(fake):
+def test_a_stream_whose_model_never_said_it_was_done_is_refused_in_words(fake):
+    """Its sealed [DONE] came, but no finish reason: not taken for a whole reply."""
     fake.reply = {"choices": [{"message": {"content": "Half"}}]}
-    text, completed = provider(fake).complete(ask())
-    assert text == "Half" and completed.unterminated
+    with pytest.raises(ProviderError, match="ended before the model said it was done"):
+        provider(fake).complete(ask())
 
 
 def test_a_discovered_key_that_isnt_one_is_never_sealed_to(fake):

@@ -32,12 +32,16 @@ What this adds, for each request (design/e2ee-providers.md 2.3):
    NanoGPT: this provider chooses the instance, and what is sealed to one key
    can't be opened by another.
 3. **The request** (`_stream`): sealed to the chosen instance, `POST
-   /e2e/invoke`, not streamed (the author's D6), the nonce used once and
-   never again. The reply is opened with our response key or refused; a seal
-   that doesn't hold refuses and doubts every instance's attestation, so
-   they are attested again before the next request (`ChutesState.doubt`).
-   Anything Chutes writes in refusing is said as its, unauthenticated
-   (`relay_said`).
+   /e2e/invoke`, streamed, the nonce used once and never again. The reply's
+   pieces are each opened with the stream key made for our response key,
+   and each held to its number (`StreamOpener`: Chutes' closed library
+   numbers them, seen live; D6 as the author changed it, Nov 15 2026), so
+   a piece dropped, repeated or out of its place, and a stream that ends
+   before the sealed end, is refused in words and nothing of the refused
+   piece is shown. A seal that doesn't hold refuses and doubts every
+   instance's attestation, so they are attested again before the next
+   request (`ChutesState.doubt`). Anything Chutes writes in refusing is
+   said as its, unauthenticated (`relay_said`).
 
 The attestation is always "partial" (`WORKLOAD_UNMEASURED`,
 `MEASUREMENTS_LISTED`): the workload that makes and uses the key is admitted
@@ -70,7 +74,7 @@ import secrets
 import threading
 import time
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -101,12 +105,12 @@ from sealedlore.providers.chutes_e2ee import (
     MeasurementSet,
     SealBroken,
     SealError,
+    StreamOpener,
     confidential_models,
     is_chute_id,
     key_bound,
     measured,
     mlkem_refusal,
-    open_reply,
     public_key,
     published_measurements,
     seal_request,
@@ -114,7 +118,12 @@ from sealedlore.providers.chutes_e2ee import (
 from sealedlore.providers.dcap import since_boot
 from sealedlore.providers.http import REPLY_MAX_BYTES, make_client
 from sealedlore.providers.privacy import CHUTES
-from sealedlore.providers.streaming import StreamingHttpProvider, read_body, read_start
+from sealedlore.providers.streaming import (
+    StreamingHttpProvider,
+    read_body,
+    read_lines,
+    read_start,
+)
 from sealedlore.providers.tee import (
     ATTEMPT_SECONDS,
     ATTESTATION_TIMEOUT_SECONDS,
@@ -173,6 +182,7 @@ ALLOWED_FIELDS = frozenset(
         "seed",
         "stop",
         "stream",
+        "stream_options",
         "temperature",
         "top_p",
         "user",
@@ -992,14 +1002,17 @@ class ChutesE2EEProvider(StreamingHttpProvider):
 
     def build_payload(self, request: ChatRequest) -> dict[str, Any]:
         """The body sealed to the instance (less our response key): plain text
-        messages, not streamed, only the fields vLLM's route takes. The app's
+        messages, streamed with the model server's usage at its end, only the
+        fields vLLM's route takes. The app's
         lowest reasoning (as low as possible, which a private model is
         always asked for, or low) switches thinking off (`THINKING_OFF`); a
         higher level leaves the model's own."""
         body = dict(build_chat_payload(request, provider_extra_body=self.config.extra_body))
         body["messages"] = to_wire_messages(request.messages, use_cache_control=False)
         body["model"] = split_model(request.model)[1].strip()
-        body["stream"] = False
+        body["stream"] = True
+        # The model server's own count, sealed with the rest (live: its last chunk).
+        body["stream_options"] = {"include_usage": True}
         if request.params.reasoning.effort in THINKING_OFF_EFFORTS:
             own = body.get("chat_template_kwargs")
             body["chat_template_kwargs"] = {
@@ -1012,40 +1025,97 @@ class ChutesE2EEProvider(StreamingHttpProvider):
         refusal = mlkem_refusal()
         if refusal:
             raise ProviderError(refusal)
-        self._key()  # before anything is fetched: the address and the key may go there
+        key = self._key()  # before anything is fetched: the address and the key may go there
         model, chute_id = self._chute_for(request.model)
         body = self.build_payload(request)
         instance, nonce = self._instance_and_nonce(model, chute_id)
         sealed = seal_request(instance.pubkey, body)
+        opener = StreamOpener(sealed.response_key)
         self.last_instance = instance.instance_id
         sent_at = time.time()
-        status, headers, blob = self._request(
-            self._get_client(),
-            "POST",
-            INVOKE_URL,
-            keyed=True,
-            content=sealed.blob,
-            headers={
-                "Content-Type": "application/octet-stream",
-                "Accept": "application/octet-stream",
-                "X-Chute-Id": chute_id,
-                "X-Instance-Id": instance.instance_id,
-                "X-E2E-Nonce": nonce,
-                "X-E2E-Stream": "false",
-                "X-E2E-Path": E2E_PATH,
-            },
-            timeout=self.config.timeout_seconds,
-        )
-        if status != 200:
-            if status == 403:
-                # "Invalid, expired, or already-used nonce": the rest of this
-                # discovery's nonces are no better; the next request discovers again.
-                with self.state.lock:
-                    if self.state.pools.get(chute_id) is not None:
-                        del self.state.pools[chute_id]
-            raise self._refusal("Chutes refused the sealed request", status, blob, headers)
+        response_id: str | None = None
+        reasoning_chars = 0
         try:
-            reply = open_reply(blob, sealed.response_key)
+            with self._get_client().stream(
+                "POST",
+                INVOKE_URL,
+                content=sealed.blob,
+                headers={
+                    "Authorization": f"Bearer {key}",
+                    "Content-Type": "application/octet-stream",
+                    "Accept": "text/event-stream",
+                    "X-Chute-Id": chute_id,
+                    "X-Instance-Id": instance.instance_id,
+                    "X-E2E-Nonce": nonce,
+                    "X-E2E-Stream": "true",
+                    "X-E2E-Path": E2E_PATH,
+                },
+                timeout=self.config.timeout_seconds,
+                extensions={"trace": self._trace},
+            ) as response:
+                status = response.status_code
+                if 300 <= status < 400:
+                    raise self._redirected(INVOKE_URL, response)
+                if status != 200:
+                    if status == 403:
+                        # "Invalid, expired, or already-used nonce": the rest of this
+                        # discovery's nonces are no better; the next request discovers again.
+                        with self.state.lock:
+                            if self.state.pools.get(chute_id) is not None:
+                                del self.state.pools[chute_id]
+                    raise self._refusal(
+                        "Chutes refused the sealed request",
+                        status,
+                        read_start(response),
+                        response.headers,
+                    )
+                for line in read_lines(response):
+                    if self._cancelled:
+                        # Stopped: what was read and not yet shown stays unread.
+                        raise StreamCancelled()
+                    for chunk in self._opened(opener, line):
+                        if response_id is None and isinstance(chunk.get("id"), str):
+                            response_id = chunk["id"]
+                        for event in _deltas(chunk):
+                            if isinstance(event, ReasoningDelta):
+                                reasoning_chars += len(event.text)
+                            yield event
+        except httpx.HTTPError as exc:
+            if self._cancelled:
+                raise StreamCancelled() from exc
+            raise ProviderError(
+                f"{httpx.URL(INVOKE_URL).host} couldn't be reached ({type(exc).__name__})"
+            ) from exc
+        if self._cancelled:
+            # Shut down mid-stream, the connection just reads as ended.
+            raise StreamCancelled()
+        try:
+            opener.finish()
+        except SealError as exc:
+            raise ProviderError(f"the encrypted reply couldn't be read ({exc}); refused") from exc
+        # The sealed usage is the model server's own; Chutes' unsealed copy is
+        # its word, taken only for a cost estimate when the sealed one is missing.
+        usage = opener.usage or opener.plain_usage
+        completed = StreamCompleted(
+            usage=parse_usage(usage),
+            finish_reason=opener.finish_reason,
+            raw_usage=usage,
+            response_id=response_id,
+            sent_at=sent_at,
+            sealed=True,
+            sealed_to=instance.instance_id,
+            reasoning_tokens=max(_reasoning_tokens(usage), reasoning_chars // 4),
+        )
+        self._report_reasoning(request, completed)
+        self._report_tee(request, completed)
+        yield completed
+
+    def _opened(self, opener: StreamOpener, line: str) -> list[dict[str, Any]]:
+        """One line of Chutes' stream, opened (`StreamOpener.feed`): the model
+        server's chunks it held, in their counted order, or a refusal in words.
+        Nothing a refused piece held is ever read as the model's."""
+        try:
+            return opener.feed(line)
         except SealBroken as exc:
             self.state.doubt()
             raise ProviderError(
@@ -1054,60 +1124,38 @@ class ChutesE2EEProvider(StreamingHttpProvider):
             ) from exc
         except SealError as exc:
             raise ProviderError(f"the encrypted reply couldn't be read ({exc}); refused") from exc
-        if self._cancelled:
-            raise StreamCancelled()
-        events, completed = self._read_reply(reply, sent_at)
-        completed = replace(completed, sealed_to=instance.instance_id)
-        yield from events
-        self._report_reasoning(request, completed)
-        self._report_tee(request, completed)
-        yield completed
 
-    @staticmethod
-    def _read_reply(
-        reply: dict[str, Any], sent_at: float
-    ) -> tuple[list[StreamEvent], StreamCompleted]:
-        """The opened reply (an OpenAI chat completion, the model server's own) as
-        the passage's text, its reasoning, and how it ended."""
-        error = reply.get("error")
-        if error:
-            message = error.get("message") if isinstance(error, dict) else error
-            raise ProviderError(f"the model's server reported an error: {relay_said(str(message))}")
-        choices = reply.get("choices")
-        if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
-            raise ProviderError("the encrypted reply held no answer")
-        choice = choices[0]
-        message = choice.get("message")
-        message = message if isinstance(message, dict) else {}
-        events: list[StreamEvent] = []
-        reasoning = message.get("reasoning_content") or message.get("reasoning")
+
+def _deltas(chunk: dict[str, Any]) -> Iterator[StreamEvent]:
+    """A sealed chunk of the model server's stream (an OpenAI chat completion
+    chunk) as the passage's text and its reasoning."""
+    for choice in chunk.get("choices") or []:
+        if not isinstance(choice, dict):
+            continue
+        delta = choice.get("delta")
+        if not isinstance(delta, dict):
+            continue
+        reasoning = delta.get("reasoning_content") or delta.get("reasoning")
         if isinstance(reasoning, str) and reasoning:
-            events.append(ReasoningDelta(text=reasoning))
-        content = message.get("content")
+            yield ReasoningDelta(text=reasoning)
+        content = delta.get("content")
         if isinstance(content, str) and content:
-            events.append(TextDelta(text=content))
+            yield TextDelta(text=content)
         elif isinstance(content, list):
             for block in content:
                 text = block.get("text") if isinstance(block, dict) else None
                 if isinstance(text, str) and text:
-                    events.append(TextDelta(text=text))
-        finish = choice.get("finish_reason")
-        finish = finish if isinstance(finish, str) and finish else None
-        usage = reply.get("usage") if isinstance(reply.get("usage"), dict) else {}
-        details = usage.get("completion_tokens_details")
-        counted = details.get("reasoning_tokens") if isinstance(details, dict) else None
-        counted = counted if isinstance(counted, int) and not isinstance(counted, bool) else 0
-        response_id = reply.get("id") if isinstance(reply.get("id"), str) else None
-        return events, StreamCompleted(
-            usage=parse_usage(usage),
-            finish_reason=finish,
-            raw_usage=usage,
-            response_id=response_id,
-            sent_at=sent_at,
-            sealed=True,
-            reasoning_tokens=max(counted, len(reasoning) // 4 if isinstance(reasoning, str) else 0),
-            unterminated=finish is None,
-        )
+                    yield TextDelta(text=text)
+
+
+def _reasoning_tokens(usage: dict[str, Any]) -> int:
+    """The reply's reported reasoning tokens, where the model server put them
+    (vLLM's beside the counts, live; OpenAI's in completion_tokens_details)."""
+    details = usage.get("completion_tokens_details")
+    count = details.get("reasoning_tokens") if isinstance(details, dict) else None
+    if not isinstance(count, int):
+        count = usage.get("reasoning_tokens")
+    return count if isinstance(count, int) and not isinstance(count, bool) else 0
 
 
 def chutes_context(model: str) -> Any:

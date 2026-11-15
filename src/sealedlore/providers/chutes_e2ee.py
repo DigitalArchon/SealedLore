@@ -15,8 +15,9 @@ The protocol, as read from Chutes' own code (Nov 14 2026, MIT: chutes-api
   ML-KEM-768 key of ours, base64) added, gzipped, sealed with
   ChaCha20-Poly1305 (a random 12-byte nonce, no associated data): the blob
   `ct ‖ nonce ‖ ciphertext ‖ tag`, POSTed to `/e2e/invoke`.
-- **A reply not streamed** (`open_reply`): the same layout, encapsulated to
-  our response key, info b"e2e-resp-v1"; the text inside is gzipped JSON.
+- **A reply sent whole** (`open_reply`, which the app no longer asks for: it
+  streams every request): the same layout, encapsulated to our response
+  key, info b"e2e-resp-v1"; the text inside is gzipped JSON.
 - **A streamed reply** (`StreamOpener`): SSE events. `{"e2e_init": b64(ct)}`
   first, the stream key from it with info b"e2e-stream-v1"; then
   `{"e2e": b64(nonce ‖ ciphertext ‖ tag)}` per piece of the model server's
@@ -220,7 +221,7 @@ def seal_request(e2e_pubkey_b64: str, body: Mapping[str, Any]) -> SealedRequest:
     return SealedRequest(blob=ciphertext + nonce + sealed, response_key=response_key)
 
 
-# --- a reply not streamed ----------------------------------------------------------
+# --- a reply sent whole (the protocol's; the app streams every request) ----------
 
 
 def _open(key: bytes, nonce: bytes, sealed: bytes) -> bytes:
@@ -268,7 +269,7 @@ def gunzip(data: bytes, most: int = MAX_DECODED_BYTES) -> bytes:
 
 
 def open_reply(blob: bytes, response_key: Any) -> dict[str, Any]:
-    """A reply not streamed, opened with our response key: the model server's
+    """A reply sent whole, opened with our response key: the model server's
     JSON (an OpenAI chat completion), or SealBroken when the seal doesn't hold
     and SealError when what it holds can't be read."""
     _refuse_unless_available()
@@ -295,10 +296,10 @@ def open_reply(blob: bytes, response_key: Any) -> dict[str, Any]:
     return reply
 
 
-# --- a streamed reply (built and tested; never asked for yet) ----------------------------
+# --- a streamed reply (how every request is answered) -----------------------------------
 #
-# Not used by ChutesE2EEProvider, which asks only for replies not streamed (the
-# author's D6). Each piece of a stream is sealed on its own, with no
+# ChutesE2EEProvider streams every request through this (D6 as the author
+# changed it, Nov 15 2026). Each piece of a stream is sealed on its own, with no
 # associated data; but its nonce is a counter (live, Nov 15 2026, two models
 # on two instances, 52 and 54 pieces: four zero bytes, then the piece's
 # number from 0, eight bytes little-endian), and a piece's nonce is part of

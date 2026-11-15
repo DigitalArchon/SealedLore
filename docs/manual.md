@@ -3009,12 +3009,15 @@ is encrypted all the way here, where theirs passes NanoGPT's gateway in the
 clear; but what they attest is the enclave as measured, where here the program
 holding the key is outside the measurement. Checking a model's instances
 takes about half a minute the first time, and again every 15 minutes. Replies
-come **whole, not streamed**: nothing shows until the reply is done (Stop
-still works while you wait), because each piece of a stream is sealed on its
-own. A live check in November 2026 found each piece numbered, which would let
-the app hold the pieces to their order, but streaming isn't switched on yet.
-Some Chutes models may refuse such a request (an "HTTP 400" in Chutes' words)
-until Chutes updates the servers that run them. These models take no
+**stream** as they are written. Each piece of the stream is sealed on its own,
+and Chutes' library (the closed one above) numbers the pieces: the app holds
+each piece to its number, so a piece dropped, repeated or put out of its place
+on the way is refused, and so is a stream that ends before the model says it
+is done. Nothing of a refused piece is shown; what came before it stays, as a
+stopped passage does, with the refusal said in words. The numbering is what
+Chutes' library was seen to do (November 2026), not something Chutes has
+promised: should it change, replies are refused, never read in the wrong
+order. These models take no
 reasoning level, only thinking on or off: **As low as possible** (what a
 private scene's model is always asked for) and **Low** switch it off, and
 Medium and up leave the model as it is. Left on, the Qwen, Kimi and GLM ones

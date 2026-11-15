@@ -1134,7 +1134,8 @@ class SettingsDialog(QDialog):
             self.api_note.setText(
                 f"Chutes (preliminary), {how}: every model it lists. Its -TEE models are always "
                 "sent end-to-end encrypted to an attested Chutes instance whatever this "
-                "speaks, each reply whole, not streamed: partial privacy, since the program "
+                "speaks, each reply streamed and its pieces held to the numbers Chutes' closed "
+                "library writes: partial privacy, since the program "
                 "holding the key is Chutes' signed one, not measured. Its other models aren't "
                 "private: Chutes reads their text. The key goes to this address, and for the "
                 "-TEE models to https://api.chutes.ai, Chutes' own, nowhere else. " + PRIVACY_LEVELS
