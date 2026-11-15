@@ -36,6 +36,13 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
 
+      # As in ci.yml: the AppImage's pinned vocabulary, never a download in a test.
+      - name: Tokenizer
+        shell: bash
+        run: |
+          python tools/fetch_tokenizer.py "$RUNNER_TEMP/tiktoken"
+          echo "TIKTOKEN_CACHE_DIR=$RUNNER_TEMP/tiktoken" >> "$GITHUB_ENV"
+
       - name: Tests
         run: python -m pytest -q -rs
 

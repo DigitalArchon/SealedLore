@@ -382,6 +382,30 @@ socket.socket.connect_ex = _guarded_connect(socket.socket.connect_ex)
 socket.getaddrinfo = _guarded_lookup(socket.getaddrinfo)
 
 
+def _tokenizer_never_fetched() -> None:
+    """tiktoken downloads its vocabulary the first time it is used where it
+    has none cached (GitHub's runners, a fresh machine), and the window warms
+    it for any test that shows one: the guard above then failed every such
+    test. Tests read it only from a cache (CI fills one from the AppImage's
+    pinned file, `tools/fetch_tokenizer.py`); with none, the estimator falls
+    back to its approximate count, as the app does offline."""
+    try:
+        import tiktoken.load
+    except ImportError:
+        return
+    reading = tiktoken.load.read_file
+
+    def read_file(blobpath: str) -> bytes:
+        if "://" in blobpath:
+            raise OSError(f"tests never download tiktoken's files: {blobpath}")
+        return reading(blobpath)
+
+    tiktoken.load.read_file = read_file
+
+
+_tokenizer_never_fetched()
+
+
 @pytest.fixture(autouse=True)
 def _no_network():
     """Tests never use the network (the project's rule, held here rather than

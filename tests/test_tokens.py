@@ -65,3 +65,16 @@ def test_smoothing_limits_how_far_one_observation_moves_the_factor():
 def test_factor_ignores_unusable_inputs():
     assert updated_correction_factor(1.3, 0, 500) == 1.3
     assert updated_correction_factor(1.3, 500, 0) == 1.3
+
+
+def test_with_no_vocabulary_cached_the_tests_count_approximately_and_fetch_nothing(
+    tmp_path, monkeypatch
+):
+    """GitHub's runners have no tiktoken cache: its download used to trip the
+    network guard in every test that warmed the tokenizer (3.1.0b13's CI)."""
+    import tiktoken.registry
+
+    monkeypatch.setenv("TIKTOKEN_CACHE_DIR", str(tmp_path))
+    monkeypatch.setattr(tiktoken.registry, "ENCODINGS", {})
+    assert TokenEstimator().is_approximate
+    assert list(tmp_path.iterdir()) == []

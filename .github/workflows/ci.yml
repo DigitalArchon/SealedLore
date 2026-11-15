@@ -82,6 +82,13 @@ jobs:
           ruff check .
           ruff format --check .
 
+      # tiktoken's vocabulary, the AppImage's pinned file: the tests never use
+      # the network, and without it they would count tokens approximately.
+      - name: Tokenizer
+        run: |
+          python tools/fetch_tokenizer.py "$RUNNER_TEMP/tiktoken"
+          echo "TIKTOKEN_CACHE_DIR=$RUNNER_TEMP/tiktoken" >> "$GITHUB_ENV"
+
       - name: Tests
         run: pytest -q
 
@@ -139,6 +146,13 @@ jobs:
             -r packaging/appimage/requirements.lock
           pip install --no-deps -e .
           pip install "pytest==9.1.1"
+
+      # tiktoken's vocabulary, the AppImage's pinned file: the tests never use
+      # the network, and without it they would count tokens approximately.
+      - name: Tokenizer
+        run: |
+          python tools/fetch_tokenizer.py "$RUNNER_TEMP/tiktoken"
+          echo "TIKTOKEN_CACHE_DIR=$RUNNER_TEMP/tiktoken" >> "$GITHUB_ENV"
 
       - name: Tests
         run: pytest -q
