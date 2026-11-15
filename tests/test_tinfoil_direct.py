@@ -415,6 +415,38 @@ def test_the_listing_is_fetched_without_the_key_and_read_as_the_apps_shape():
     assert listing_entries({"data": [{"id": 3, "type": "chat"}, "x"]}) == {}
 
 
+def test_tinfoils_usage_gives_its_cache_and_its_own_bill():
+    """The usage of two live sealed replies (Nov 15 2026, DeepSeek V4.1 Flash,
+    the same 3,840-token prefix twice): Tinfoil names a cache write
+    `created_cache_tokens`, and the app's estimate from the listed prices is
+    the cost Tinfoil's usage-metrics header gave for each, to the cent's
+    hundred-thousandth ($0.00237685 written, $0.00011125 read)."""
+    from sealedlore.engine.pricing import estimate_cost
+    from sealedlore.providers.base import parse_usage
+
+    price = parse_price(listing([]).fetch()["deepseek-v4-1-flash"])
+    write = parse_usage(
+        {
+            "prompt_tokens": 3930,
+            "completion_tokens": 13,
+            "prompt_tokens_details": {"cached_tokens": 0, "created_cache_tokens": 3840},
+            "completion_tokens_details": {"reasoning_tokens": 0},
+        }
+    )
+    read = parse_usage(
+        {
+            "prompt_tokens": 3930,
+            "completion_tokens": 13,
+            "prompt_tokens_details": {"cached_tokens": 3840, "created_cache_tokens": 0},
+        }
+    )
+    assert (write.cache_creation_tokens, write.cache_read_tokens) == (3840, 0)
+    assert (read.cache_creation_tokens, read.cache_read_tokens) == (0, 3840)
+    model = "deepseek-v4-1-flash"
+    assert round(estimate_cost(write, price, model), 7) == round(0.00237685, 7)
+    assert round(estimate_cost(read, price, model), 7) == round(0.00011125, 7)
+
+
 def test_the_client_reaches_tinfoil_whatever_the_plain_clients_refuse(fake, direct):
     """A plain client refuses Tinfoil's host (tests/test_privacy.py); its own
     sealing client is what make_chat_provider builds for it."""
