@@ -332,8 +332,11 @@ def parse_usage(raw: dict[str, Any] | None) -> Usage:
                 return int(value)
         return 0
 
+    # OpenRouter names a cache write `prompt_tokens_details.cache_write_tokens`
+    # (live, Nov 15 2026: Claude through it wrote 12,965 tokens at the hour's
+    # price, and the app read none of them).
     cache_creation = first_int("cache_creation_input_tokens", "cache_creation_tokens") or first_int(
-        "cache_creation_tokens", source=details
+        "cache_creation_tokens", "cache_write_tokens", source=details
     )
     cache_read = first_int("cache_read_input_tokens", "cache_read_tokens") or first_int(
         "cached_tokens", "cache_read_tokens", source=details

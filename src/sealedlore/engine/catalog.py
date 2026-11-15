@@ -73,10 +73,35 @@ def _outputs_text(entry: Mapping[str, Any]) -> bool:
     return "text" in outputs
 
 
+def _reasoning(entry: Mapping[str, Any], capabilities: Mapping[str, Any]) -> tuple[bool, list]:
+    """Whether a model reasons and the efforts it takes: NanoGPT's
+    `capabilities.reasoning` and `reasoning_efforts`, or OpenRouter's own
+    `reasoning` record and `supported_parameters` (engine/reasoning.py)."""
+    stated = entry.get("reasoning")
+    if isinstance(stated, dict) or isinstance(entry.get("supported_parameters"), list):
+        stated = stated if isinstance(stated, dict) else {}
+        params = entry.get("supported_parameters")
+        efforts = stated.get("supported_efforts")
+        return bool(stated) or (isinstance(params, list) and "reasoning" in params), (
+            efforts if isinstance(efforts, list) else []
+        )
+    efforts = entry.get("reasoning_efforts")
+    return capabilities.get("reasoning") is True, efforts if isinstance(efforts, list) else []
+
+
+def _max_output(entry: Mapping[str, Any]) -> int | None:
+    """NanoGPT's `max_output_tokens`, or OpenRouter's
+    `top_provider.max_completion_tokens`."""
+    top = entry.get("top_provider")
+    return _int(entry.get("max_output_tokens")) or (
+        _int(top.get("max_completion_tokens")) if isinstance(top, dict) else None
+    )
+
+
 def model_info(model_id: str, entry: Mapping[str, Any]) -> ModelInfo:
     capabilities = entry.get("capabilities")
     capabilities = capabilities if isinstance(capabilities, dict) else {}
-    efforts = entry.get("reasoning_efforts")
+    reasons, efforts = _reasoning(entry, capabilities)
     hosts = entry.get("providers")
     price = parse_price(dict(entry))
     return ModelInfo(
@@ -86,11 +111,9 @@ def model_info(model_id: str, entry: Mapping[str, Any]) -> ModelInfo:
         description=_text(entry.get("description")),
         endpoint=_text(entry.get("endpoint")),
         context_length=_int(entry.get("context_length")),
-        max_output_tokens=_int(entry.get("max_output_tokens")),
-        reasoning=capabilities.get("reasoning") is True,
-        reasoning_efforts=tuple(e for e in efforts if isinstance(e, str))
-        if isinstance(efforts, list)
-        else (),
+        max_output_tokens=_max_output(entry),
+        reasoning=reasons,
+        reasoning_efforts=tuple(e for e in efforts if isinstance(e, str)),
         prompt_price=price.prompt if price else None,
         completion_price=price.completion if price else None,
         hosts=tuple(h for h in hosts if isinstance(h, str)) if isinstance(hosts, list) else (),

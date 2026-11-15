@@ -133,6 +133,53 @@ def test_no_default_or_nothing_to_ask_for_instead_sends_nothing():
     assert reasoning_for("medium", "moonshotai/kimi-k3", kimi, now=NOW).effort == "high"
 
 
+def _openrouter(model: str) -> dict:
+    """An entry of OpenRouter's public listing (tests/data, fetched Nov 15 2026)."""
+    import json
+
+    body = json.loads((Path(__file__).parent / "data" / "openrouter_models.json").read_text())
+    return next(entry for entry in body["data"] if entry["id"] == model)
+
+
+def test_openrouters_listing_says_which_models_reason_by_default():
+    """OpenRouter states it beside each model. Sent nothing, DeepSeek V4.1
+    Flash (on by default, at high) reasoned 1,433 tokens over a scene read
+    (live, Nov 15 2026): its lowest, "none", goes from the first request."""
+    deepseek = listed(_openrouter("deepseek/deepseek-v4.1-flash"))
+    assert deepseek.reasons and deepseek.reasons_by_default
+    assert deepseek.default_effort == "high"
+    assert reasoning_for("least", "deepseek/deepseek-v4.1-flash", deepseek, now=NOW) == (
+        ReasoningConfig(effort="none")
+    )
+    # Reasons whatever is sent (mandatory): its lowest by name.
+    glm = listed(_openrouter("z-ai/glm-5.3"))
+    assert reasoning_for("least", "z-ai/glm-5.3", glm, now=NOW) == ReasoningConfig(
+        enabled=True, effort="low"
+    )
+    assert default_note(glm) == "Left to itself, it reasons at max."
+    gpt = listed(_openrouter("openai/gpt-oss-20b"))
+    assert reasoning_for("least", "openai/gpt-oss-20b", gpt, now=NOW).effort == "low"
+    # A chosen level maps to what OpenRouter lists for the model.
+    assert reasoning_for("max", "z-ai/glm-5.3", glm, now=NOW).effort == "max"
+    assert reasoning_for("medium", "z-ai/glm-5.3", glm, now=NOW).effort == "high"
+
+
+def test_openrouters_listing_leaves_unstated_defaults_unknown():
+    """Claude states no default there (Haiku 5.5 reasoned 24 tokens unasked):
+    nothing is sent until a reply says otherwise. A model OpenRouter lists as
+    not reasoning is never asked to."""
+    haiku = listed(_openrouter("anthropic/claude-haiku-5.5"))
+    assert haiku.reasons and haiku.reasons_by_default is None
+    assert reasoning_for("least", "anthropic/claude-haiku-5.5", haiku, now=NOW) == NOTHING
+    nemo = listed(_openrouter("mistralai/mistral-nemo"))
+    assert nemo.reasons is False and nemo.efforts == []
+    for level in ("least", "low", "max"):
+        assert reasoning_for(level, "mistralai/mistral-nemo", nemo, now=NOW) == NOTHING
+    # NanoGPT's own entries (no `reasoning` record) read as before.
+    glm = listed({"reasoning": None, "supported_parameters": None, **GLM_ENTRY})
+    assert glm.efforts == ["low", "high", "max"] and glm.reasons_by_default is None
+
+
 def test_the_settings_note_says_what_a_model_does_left_to_itself():
     assert default_note(listed(KIMI_ENTRY, WEB["moonshotai/kimi-k3"])) == (
         "Left to itself, it reasons at max."

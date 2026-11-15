@@ -181,6 +181,10 @@ def listed(
     from NanoGPT's web listing when there is one (`defaults`)."""
     if not isinstance(entry, dict):
         return None
+    if isinstance(entry.get("reasoning"), dict) or isinstance(
+        entry.get("supported_parameters"), list
+    ):
+        return _openrouter_listed(entry)
     capabilities = entry.get("capabilities")
     reasons = capabilities.get("reasoning") if isinstance(capabilities, dict) else None
     efforts = entry.get("reasoning_efforts")
@@ -190,6 +194,39 @@ def listed(
         efforts=[e for e in efforts if isinstance(e, str)] if isinstance(efforts, list) else [],
         reasons_by_default=by_default,
         default_effort=default_effort,
+    )
+
+
+def _openrouter_listed(entry: dict[str, Any]) -> ModelReasoning:
+    """OpenRouter's own listing states a model's reasoning beside it (live,
+    Nov 15 2026): `reasoning` {mandatory, default_enabled, default_effort,
+    supported_efforts}, null for a model that doesn't reason, and "reasoning"
+    among `supported_parameters` for one that takes it. Read only where it is
+    stated: a model said to reason whether asked or not (mandatory, or
+    enabled by default) reasons by default; one said to be off by default
+    doesn't; one that says neither (Claude: Haiku 5.5 reasoned 24 tokens
+    unasked) is not known, and the reply decides as elsewhere. Sent nothing,
+    DeepSeek V4.1 Flash (enabled, default high) reasoned 1,433 tokens over a
+    scene read and was caught; its listing offers "none"."""
+    stated = entry.get("reasoning")
+    stated = stated if isinstance(stated, dict) else {}
+    params = entry.get("supported_parameters")
+    takes = isinstance(params, list) and "reasoning" in params
+    efforts = stated.get("supported_efforts")
+    efforts = [e for e in efforts if isinstance(e, str)] if isinstance(efforts, list) else []
+    enabled = stated.get("default_enabled")
+    if stated.get("mandatory") is True or enabled is True:
+        by_default: bool | None = True
+    elif enabled is False:
+        by_default = False
+    else:
+        by_default = None
+    effort = stated.get("default_effort")
+    return ModelReasoning(
+        reasons=bool(stated) or takes,
+        efforts=efforts,
+        reasons_by_default=by_default,
+        default_effort=effort if by_default and isinstance(effort, str) else None,
     )
 
 

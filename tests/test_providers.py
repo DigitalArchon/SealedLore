@@ -386,6 +386,43 @@ def test_parse_usage_reads_openai_cached_token_details():
     assert usage.prompt_tokens == 900
 
 
+def test_parse_usage_reads_openrouters_cache_writes():
+    """OpenRouter's usage for a Claude request that wrote the cache (its
+    shape, live Nov 15 2026): the write is in `cache_write_tokens`, and the
+    cost it reports stands."""
+    usage = parse_usage(
+        {
+            "prompt_tokens": 12990,
+            "completion_tokens": 43,
+            "total_tokens": 13033,
+            "cost": 0.002617,
+            "is_byok": False,
+            "prompt_tokens_details": {
+                "cached_tokens": 0,
+                "cache_write_tokens": 12965,
+                "audio_tokens": 0,
+                "video_tokens": 0,
+            },
+            "cost_details": {
+                "upstream_inference_cost": 0.002617,
+                "upstream_inference_prompt_cost": 0.0025955,
+                "upstream_inference_completions_cost": 2.15e-05,
+            },
+            "completion_tokens_details": {"reasoning_tokens": 24},
+        }
+    )
+    assert usage.cache_creation_tokens == 12965
+    assert usage.cache_read_tokens == 0
+    assert usage.cost == 0.002617 and usage.cost_reported
+    read = parse_usage(
+        {
+            "prompt_tokens": 12990,
+            "prompt_tokens_details": {"cached_tokens": 12965, "cache_write_tokens": 0},
+        }
+    )
+    assert (read.cache_read_tokens, read.cache_creation_tokens) == (12965, 0)
+
+
 def test_parse_usage_reads_anthropic_field_names():
     usage = parse_usage({"input_tokens": 10, "output_tokens": 5, "cache_creation_input_tokens": 7})
     assert usage.prompt_tokens == 10
