@@ -37,6 +37,22 @@ fun to play. This app will remain focused on text based roleplay.
 
 ### New in version 3
 
+- **More end-to-end encrypted providers** (3.1.0b13, preliminary). Tinfoil's
+  own API and Chutes work beside NanoGPT: Tinfoil's models are end-to-end
+  encrypted to its attested router, and Chutes is an endpoint for all its
+  models, its `-TEE` ones always end-to-end encrypted to an instance the app
+  has attested, their replies streamed. Each model's privacy level (highest,
+  partial or not private) is said wherever it is chosen, and a private chat
+  or scene moves only to a model as private or more. OpenRouter's cache
+  writes and picture prices are read right, Continue reads its own reply
+  from the cache, and file dialogs leave the desktop's recent files and Qt's
+  folder history alone. A key that would go over plain http to another
+  machine, or to an address it wasn't saved for, is held back until you
+  confirm it. A story drafted around your characters reads their whole
+  lorebooks, and a character joining a story you already have brings their
+  lorebook only if you ask, its entries yours to choose and change for that
+  story. Settings' **Save** keeps the window open (Save and Close closes it),
+  and phone access runs tor 0.4.9.17.
 - **Livelier play** (3.1.0b12). When your turn only waits, or lets time
   pass, the storyteller makes the next move instead of describing the room
   again, and it is reminded of the habits its recent passages have fallen
