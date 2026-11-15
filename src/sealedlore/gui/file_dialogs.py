@@ -46,9 +46,14 @@ Qt's own settings are a second trace (`settings_aside`): every QFileDialog, GTK'
 own alike, writes the folders it visited (history, lastVisited, the sidebar's places; never
 a file's name) to $XDG_CONFIG_HOME/QtProject.conf as it is deleted, a file every Qt program
 the user runs reads. The app keeps no QSettings of its own, so on Linux Qt's user settings
-go to a folder of the process's own in $XDG_RUNTIME_DIR (memory), named with its process id
-and removed as the app quits - or, after a crash, when the next run starts: the user's file
-is neither read nor written, and the dialogs remember folders for the run.
+go to a folder of the process's own in $XDG_RUNTIME_DIR (memory), removed as the app quits -
+or, after a crash, when the next run of the same app in the same pid namespace finds that
+run's process gone (`own_folder`, `clear_left`, also for other folders a run keeps for
+itself): the user's file is neither read nor written, and the dialogs remember folders for
+the run. A folder names its app, its process's pid namespace, its pid and its start time, so
+a run never takes another app's folder, nor one from another namespace (firejail runs the
+app in one of its own, where every pid outside looks gone), nor a living process's whose pid
+was reused.
 
 The Qt DA apps' copies (SealedLore's gui/file_dialogs.py, the canonical one, and DA Media
 Browser's) are the same file, but for the licence header DA Media Browser puts on every file.
@@ -99,39 +104,92 @@ def keeps_the_list() -> bool:
     return sys.platform.startswith("linux")
 
 
-SETTINGS_ASIDE = "qt-settings-"
-# A folder set aside: the prefix, the process's id, and mkdtemp's own letters.
-_ASIDE_NAME = re.compile(rf"{SETTINGS_ASIDE}(\d+)-[a-z0-9_]+")
+SETTINGS_ASIDE = "qt-settings"
+# Where the processes are told of: /proc, or a stand-in in the tests.
+PROC = "/proc"
+# mkdtemp's own letters.
+_LETTERS = r"[a-z0-9_]{1,16}"
 
 
 def _remove_aside(folder: str) -> None:
     shutil.rmtree(folder, ignore_errors=True)
 
 
-def _gone(pid: int) -> bool:
-    """Whether no process has the id `pid` now."""
+def app_mark() -> str:
+    """This app's name as a folder of its own carries it: QCoreApplication's, letters and
+    digits only ("SealedLore", "DAMediaBrowser")."""
+    name = re.sub(r"[^A-Za-z0-9]", "", QCoreApplication.applicationName() or "")[:40]
+    return name or "app"
+
+
+def _namespace(proc: str = PROC) -> int | None:
+    """The inode of this process's pid namespace (/proc/self/ns/pid), or None unread."""
     try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return True
-    except OSError:  # another user's: there
-        return False
-    return False
+        return os.stat(os.path.join(proc, "self", "ns", "pid")).st_ino
+    except OSError:
+        return None
 
 
-def clear_left(base: str) -> list[str]:
-    """The folders a run that is gone set aside in `base` - a crash: its atexit never ran -
-    removed: only this user's own folders, named as settings_aside names them, whose process
-    is no longer there. What was removed."""
-    removed = []
+def _started(pid: int, proc: str = PROC) -> int | None:
+    """When process `pid` of this namespace started (clock ticks since boot, /proc/PID/stat's
+    22nd field), or None when there is no such process (or it can't be read)."""
+    try:
+        with open(os.path.join(proc, str(pid), "stat"), encoding="ascii", errors="replace") as f:
+            text = f.read()
+    except OSError:
+        return None
+    try:
+        # The command's name, in parentheses, may hold anything: the fields follow the last ")".
+        return int(text[text.rindex(")") + 2 :].split()[19])
+    except (ValueError, IndexError):
+        return None
+
+
+def _mark(prefix: str, proc: str = PROC) -> str | None:
+    """What a folder of this run's own is named with before mkdtemp's letters, or None when
+    this process's namespace or start can't be read (a folder then marked with neither is
+    never taken for a crashed run's)."""
+    namespace, pid = _namespace(proc), os.getpid()
+    started = _started(pid, proc)
+    if namespace is None or started is None:
+        return None
+    return f"{prefix}-{app_mark()}-{namespace}-{pid}-{started}-"
+
+
+def own_folder(prefix: str, base: str | None = None, proc: str = PROC) -> str:
+    """A new 0700 folder of this run's own in `base` (the system's temporary folder by
+    default), named so that a later run of this app in this namespace can tell it is left
+    from a run that is gone (`clear_left`). OSError where it can't be made."""
+    mark = _mark(prefix, proc) or f"{prefix}-{app_mark()}-"
+    return tempfile.mkdtemp(prefix=mark, dir=base)
+
+
+def clear_left(base: str, prefix: str = SETTINGS_ASIDE, proc: str = PROC) -> list[str]:
+    """The folders runs that are gone left in `base` - a crash: their atexit never ran -
+    removed, and what was removed: only folders named as own_folder names them for this
+    prefix and this app, from this process's own pid namespace, this user's, a folder (never a
+    link), whose process is no longer there or is another process now (another start time).
+    Another app's folders, another namespace's (firejail's), a living run's, and any named
+    otherwise are left as they are."""
+    removed: list[str] = []
+    namespace = _namespace(proc)
+    if namespace is None:
+        return removed
+    named = re.compile(
+        rf"{re.escape(prefix)}-{re.escape(app_mark())}-(\d{{1,20}})-(\d{{1,10}})-(\d{{1,20}})-"
+        rf"{_LETTERS}"
+    )
     try:
         names = os.listdir(base)
     except OSError:
         return removed
     for name in names:
-        found = _ASIDE_NAME.fullmatch(name)
-        if not found or int(found.group(1)) == os.getpid() or not _gone(int(found.group(1))):
+        found = named.fullmatch(name)
+        if not found or int(found.group(1)) != namespace:
             continue
+        pid, started = int(found.group(2)), int(found.group(3))
+        if _started(pid, proc) == started:
+            continue  # its run is still there
         path = os.path.join(base, name)
         try:
             info = os.lstat(path)
@@ -145,18 +203,18 @@ def clear_left(base: str) -> list[str]:
 
 def settings_aside() -> str | None:
     """On Linux, Qt's user settings (QtProject.conf, where a dialog keeps the folders it
-    visited) go to a new 0700 folder in $XDG_RUNTIME_DIR, else in the system's temporary
-    folder, named with the process's id and removed as the process ends (and those of a run
-    that crashed, as this one starts: clear_left); its path, or None where nothing was set
-    aside. Before the first dialog (gui/app.py build_app). Never where the app keeps
-    QSettings of its own: they would go there too."""
+    visited) go to a new 0700 folder of the run's own in $XDG_RUNTIME_DIR, else in the
+    system's temporary folder (`own_folder`), removed as the process ends (and those of this
+    app's runs that crashed, as this one starts: clear_left); its path, or None where nothing
+    was set aside. Before the first dialog (gui/app.py build_app), after the application's
+    name is set. Never where the app keeps QSettings of its own: they would go there too."""
     if not keeps_the_list():
         return None
     runtime = os.environ.get("XDG_RUNTIME_DIR", "")
     base = runtime if runtime and os.path.isdir(runtime) else None
     clear_left(base or tempfile.gettempdir())
     try:
-        folder = tempfile.mkdtemp(prefix=f"{SETTINGS_ASIDE}{os.getpid()}-", dir=base)
+        folder = own_folder(SETTINGS_ASIDE, base)
     except OSError as error:
         _say(f"Qt's settings were left where they are: {error}")
         return None

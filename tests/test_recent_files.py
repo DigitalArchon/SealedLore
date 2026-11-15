@@ -877,46 +877,123 @@ def test_qts_own_settings_are_kept_out_of_the_users_and_removed_after(tmp_path, 
     if aside:
         assert users.read_bytes() == before
         assert set_aside.startswith(str(run)) and not os.path.exists(set_aside)
-        assert os.path.basename(set_aside).startswith(f"qt-settings-{pid}-")
+        name = os.path.basename(set_aside)
+        assert name.startswith("qt-settings-") and f"-{pid}-" in name, name
     else:
         assert set_aside == ""
         assert users.read_bytes() != before and str(visited) in unquote(users.read_text())
 
 
+def fake_proc(root: Path, processes: dict[int, int]) -> tuple[str, int]:
+    """A stand-in for /proc: this process's pid namespace (a file whose inode stands for
+    it) and each process's stat, its start time in field 22 (and a name with a ")" in it,
+    as a command's name may have). The namespace's number, and the root."""
+    (root / "self" / "ns").mkdir(parents=True)
+    (root / "self" / "ns" / "pid").write_text("")
+    for pid, started in processes.items():
+        (root / str(pid)).mkdir()
+        fields = ["S"] + ["0"] * 18 + [str(started)] + ["0"] * 10
+        (root / str(pid) / "stat").write_text(f"{pid} (odd ) name) " + " ".join(fields))
+    return str(root), os.stat(root / "self" / "ns" / "pid").st_ino
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only")
+def test_only_this_apps_own_folders_from_this_namespace_whose_run_is_gone_are_removed(
+    tmp_path, monkeypatch
+):
+    """A crash runs no atexit, and its folder stays. A later run removes it only when it is
+    this app's, from this run's own pid namespace (firejail gives the app one of its own,
+    where every pid outside looks gone), this user's, a folder, and its process is gone or is
+    another process now (another start time: the pid was reused)."""
+    me = os.getpid()
+    proc, namespace = fake_proc(tmp_path / "proc", {me: 500, 4100: 700, 4200: 900})
+    monkeypatch.setattr(file_dialogs, "app_mark", lambda: "SealedLore")
+    run = tmp_path / "run"
+    run.mkdir(mode=0o700)
+
+    def folder(name: str) -> Path:
+        made = run / name
+        made.mkdir()
+        (made / "QtProject.conf").write_text("[FileDialog]\nlastVisited=file:///private\n")
+        return made
+
+    ours = f"qt-settings-SealedLore-{namespace}"
+    gone = folder(f"{ours}-4000-300-abc_1234")  # no process 4000 now
+    reused = folder(f"{ours}-4100-650-def_5678")  # 4100 is another process now
+    alive = folder(f"{ours}-4200-900-ghi_9012")  # its run is still there
+    mine = folder(f"{ours}-{me}-500-own_3456")  # this run's own
+    another_app = folder(f"qt-settings-DAMediaBrowser-{namespace}-4000-300-jkl_7890")
+    elsewhere = folder(f"qt-settings-SealedLore-{namespace + 1}-6-300-mno_1234")  # firejail's
+    old_style = folder("qt-settings-4000-pqr_5678")  # named before any of this: whose?
+    icons = folder(f"sealedlore-icons-SealedLore-{namespace}-4000-300-stu_9012")
+    target = tmp_path / "theirs"
+    target.mkdir()
+    link = run / f"{ours}-4000-300-lnk_3456"
+    link.symlink_to(target)
+
+    removed = file_dialogs.clear_left(str(run), proc=proc)
+    assert sorted(removed) == sorted([str(gone), str(reused)])
+    assert not gone.exists() and not reused.exists()
+    for kept in (alive, mine, another_app, elsewhere, old_style, icons):
+        assert kept.is_dir(), kept.name
+    assert link.is_symlink() and target.is_dir()
+    # The icons' folders by their own prefix, the same rule.
+    assert file_dialogs.clear_left(str(run), "sealedlore-icons", proc=proc) == [str(icons)]
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux only")
+def test_a_folder_of_the_runs_own_names_its_app_namespace_pid_and_start(tmp_path, monkeypatch):
+    me = os.getpid()
+    proc, namespace = fake_proc(tmp_path / "proc", {me: 1234})
+    monkeypatch.setattr(file_dialogs, "app_mark", lambda: "SealedLore")
+    made = file_dialogs.own_folder("qt-settings", str(tmp_path), proc=proc)
+    name = os.path.basename(made)
+    assert name.startswith(f"qt-settings-SealedLore-{namespace}-{me}-1234-"), name
+    assert stat.S_IMODE(os.stat(made).st_mode) == 0o700
+    assert file_dialogs.clear_left(str(tmp_path), proc=proc) == [], "a living run's own"
+    # Where this process's namespace or start can't be read, the folder carries no marks,
+    # and is never taken for a crashed run's.
+    unread = file_dialogs.own_folder("qt-settings", str(tmp_path), proc=str(tmp_path / "none"))
+    assert os.path.basename(unread).startswith("qt-settings-SealedLore-")
+    assert file_dialogs.clear_left(str(tmp_path), proc=str(tmp_path / "none")) == []
+    assert os.path.isdir(unread)
+
+
+def test_the_apps_name_as_a_folder_carries_it(monkeypatch):
+    monkeypatch.setattr(
+        file_dialogs.QCoreApplication, "applicationName", lambda: "DA Media Browser"
+    )
+    assert file_dialogs.app_mark() == "DAMediaBrowser"
+    monkeypatch.setattr(file_dialogs.QCoreApplication, "applicationName", lambda: "../ *")
+    assert file_dialogs.app_mark() == "app"
+
+
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux only")
 def test_a_crashed_runs_settings_folder_is_removed_as_the_next_run_starts(tmp_path, monkeypatch):
-    """A crash runs no atexit: the folder it set aside stays in $XDG_RUNTIME_DIR, the folders
-    its dialogs visited in it, until a run finds its process gone. Only this user's folders,
-    named as settings_aside names them, whose process is no longer there."""
+    """With the real /proc: a process that has ended left its folder; settings_aside removes
+    it as it sets this run's aside, and a living process's stays."""
     run = tmp_path / "run"
     run.mkdir(mode=0o700)
     dead = subprocess.Popen([sys.executable, "-c", "pass"])
     dead.wait()
     alive = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
     try:
-        gone = run / f"qt-settings-{dead.pid}-abc_12"
+        namespace = os.stat("/proc/self/ns/pid").st_ino
+        app = file_dialogs.app_mark()
+        gone = run / f"qt-settings-{app}-{namespace}-{dead.pid}-1-abc_12"
         gone.mkdir()
-        (gone / "QtProject.conf").write_text("[FileDialog]\nlastVisited=file:///private\n")
-        live = run / f"qt-settings-{alive.pid}-xyz_34"
+        started = file_dialogs._started(alive.pid)
+        assert started is not None
+        live = run / f"qt-settings-{app}-{namespace}-{alive.pid}-{started}-xyz_34"
         live.mkdir()
-        mine = run / f"qt-settings-{os.getpid()}-own_56"
-        mine.mkdir()
-        unnamed = run / "qt-settings-k2j3h4ab"  # no process id: whose, nobody can tell
-        unnamed.mkdir()
-        other = run / "something-else"
-        other.mkdir()
-        link = run / f"qt-settings-{dead.pid}-lnk_78"
-        link.symlink_to(other)
         monkeypatch.setenv("XDG_RUNTIME_DIR", str(run))
         monkeypatch.setattr(sys, "platform", "linux")
         monkeypatch.setattr(file_dialogs.QSettings, "setPath", lambda *_args: None)
         monkeypatch.setattr(file_dialogs.atexit, "register", lambda *_args: None)
         folder = file_dialogs.settings_aside()
         assert folder is not None
-        assert os.path.basename(folder).startswith(f"qt-settings-{os.getpid()}-")
-        assert not gone.exists()
-        assert live.is_dir() and mine.is_dir() and unnamed.is_dir() and other.is_dir()
-        assert link.is_symlink()
+        assert os.path.basename(folder).startswith(f"qt-settings-{app}-{namespace}-{os.getpid()}-")
+        assert not gone.exists() and live.is_dir()
         assert file_dialogs.clear_left(str(run)) == []
     finally:
         alive.kill()
