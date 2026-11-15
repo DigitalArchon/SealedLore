@@ -1,6 +1,9 @@
 """Chutes' end-to-end encrypted models: every message sealed on this computer to
 the key of one Chutes instance whose TDX quote, for our nonce, binds that key
-(preliminary: built and tested without an account, never yet run with one).
+(preliminary: built and tested without an account, then run with the author's
+on Nov 15 2026: five instances discovered and each attested, its key binding
+held live, sealed replies opened, a nonce never used twice, the listed prices
+what Chutes charged, a story turn and a private scene).
 
 The framing is providers/chutes_e2ee.py; the hardware's checks are tee.py's
 own for a Chutes instance (`TeeClient.check_instance`: Intel's DCAP chain, no
@@ -175,6 +178,16 @@ ALLOWED_FIELDS = frozenset(
         "user",
     }
 )
+# Chutes' models run on vLLM, which takes no reasoning effort for them: their
+# chat template switches thinking on or off. Live (Nov 15 2026, every -TEE
+# model, a one-line question): sent nothing, the Qwen models thought 435-468
+# tokens and ran out of a 400-token limit before a word (16-25 s, the reply
+# whole, so nothing showed), and Qwen3.8 27B thought 1-2,400 tokens a story
+# call and once 8,001, which lost a scene read; with these, none at all,
+# 1.6-1.8 s. A template that knows neither name (DeepSeek V3.2 thinks only
+# when asked) is unchanged.
+THINKING_OFF = {"enable_thinking": False, "thinking": False}
+THINKING_OFF_EFFORTS = frozenset({"none", "minimal", "low"})
 # A discovery nonce as Chutes makes them (secrets.token_urlsafe(24)): nothing
 # else goes into a header.
 _TOKEN = re.compile(r"[A-Za-z0-9_-]{16,128}")
@@ -979,11 +992,20 @@ class ChutesE2EEProvider(StreamingHttpProvider):
 
     def build_payload(self, request: ChatRequest) -> dict[str, Any]:
         """The body sealed to the instance (less our response key): plain text
-        messages, not streamed, only the fields vLLM's route takes."""
+        messages, not streamed, only the fields vLLM's route takes. The app's
+        lowest reasoning (as low as possible, which a private model is
+        always asked for, or low) switches thinking off (`THINKING_OFF`); a
+        higher level leaves the model's own."""
         body = dict(build_chat_payload(request, provider_extra_body=self.config.extra_body))
         body["messages"] = to_wire_messages(request.messages, use_cache_control=False)
         body["model"] = split_model(request.model)[1].strip()
         body["stream"] = False
+        if request.params.reasoning.effort in THINKING_OFF_EFFORTS:
+            own = body.get("chat_template_kwargs")
+            body["chat_template_kwargs"] = {
+                **THINKING_OFF,
+                **(own if isinstance(own, dict) else {}),
+            }
         return {key: value for key, value in body.items() if key in ALLOWED_FIELDS}
 
     def _stream(self, request: ChatRequest) -> Iterator[StreamEvent]:

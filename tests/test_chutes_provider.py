@@ -23,7 +23,7 @@ import pytest
 
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.config import ProviderConfig
-from sealedlore.models.generation import GenerationParams
+from sealedlore.models.generation import GenerationParams, ReasoningConfig
 from sealedlore.providers import chutes_e2ee, dcap
 from sealedlore.providers.base import ChatRequest, ProviderError, StreamCancelled
 from sealedlore.providers.chutes_e2ee import INFO_REQUEST, INFO_RESPONSE, derive_key
@@ -349,6 +349,38 @@ def test_a_request_is_sealed_to_an_attested_instance_and_its_reply_opened(fake):
         f"/chutes/{CHUTE}/evidence",
         "/e2e/invoke",
     ]
+
+
+def test_the_lowest_reasoning_switches_thinking_off_through_the_chat_template(fake):
+    """Chutes' vLLM takes no effort: thinking is the chat template's to switch.
+    Live (Nov 15 2026) the Qwen -TEE models sent nothing thought 435-468
+    tokens over a one-line question and wrote none of it within 400; with
+    these switches off, nothing, in 1.6-1.8 s against 16-25."""
+    from sealedlore.providers.chutes_provider import THINKING_OFF
+
+    chutes = provider(fake)
+
+    def sent(reasoning: ReasoningConfig, extra: dict | None = None) -> dict:
+        request = ask()
+        request = ChatRequest(
+            model=request.model,
+            messages=request.messages,
+            params=GenerationParams(max_tokens=300, reasoning=reasoning),
+        )
+        if extra is not None:
+            chutes.config = chutes.config.model_copy(update={"extra_body": extra})
+        return chutes.build_payload(request)
+
+    off = {"chat_template_kwargs": THINKING_OFF}
+    for lowest in ("none", "low"):
+        effort = ReasoningConfig(enabled=lowest != "none", effort=lowest)
+        assert sent(effort)["chat_template_kwargs"] == off["chat_template_kwargs"]
+    assert "chat_template_kwargs" not in sent(ReasoningConfig()), "nothing asked: the model's own"
+    assert "chat_template_kwargs" not in sent(ReasoningConfig(enabled=True, effort="high"))
+    assert "reasoning" not in sent(ReasoningConfig(enabled=True, effort="high")), "vLLM's fields"
+    # The author's own template words, in the endpoint's extra fields, stand.
+    own = sent(ReasoningConfig(effort="none"), {"chat_template_kwargs": {"thinking": True}})
+    assert own["chat_template_kwargs"] == {"enable_thinking": False, "thinking": True}
 
 
 def test_the_record_is_partial_always_and_says_what_was_attested(fake):
