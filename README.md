@@ -284,6 +284,20 @@ what was attested and what fell short on the model button and under each
 message, attests a TEE model again before a message once 15 minutes have
 passed, and refuses the TEE models it can't attest at all.
 
+Two more services work the same way (preliminary, first run with an account
+in November 2026). **Tinfoil's own API** (Settings → Endpoints → Add
+Tinfoil) seals every message on your computer to Tinfoil's attested router,
+as NanoGPT's `private/` models do, with no relay in between. **Chutes**
+(Add Chutes) is an endpoint like NanoGPT for all its models, and its `-TEE`
+models are always end-to-end encrypted to one Chutes instance the app has
+attested; their replies stream, each piece checked to come in its place.
+They are only partly private: the program inside the instance that holds the
+key is a closed library Chutes admits by its signature, not measured. The app
+names three levels, highest (`private/` and Tinfoil), partial (`TEE/` and
+Chutes `-TEE`) and not private (every other model), says each model's level
+wherever it is chosen or shown, and a private chat or scene only ever moves to
+a model at its own level or higher.
+
 ### Author-driven plots
 
 The "Sealed" in the name also refers to plots written by a person (or, I
@@ -614,7 +628,12 @@ encrypts the whole way.
   record of the session that ran a reply is fetched from `api.redpill.ai`
   directly, which sees your address; only the session's id is sent. A
   `private/` model is end-to-end encrypted, so NanoGPT relays only
-  ciphertext.
+  ciphertext. **Tinfoil's own API** and **Chutes' `-TEE` models** are
+  attested the same way before anything is sent (Tinfoil's attestation from
+  `atc.tinfoil.sh`; each Chutes instance's evidence from `api.chutes.ai`,
+  checked with Intel and NVIDIA), and they see your account, the model, when,
+  and how large the request and reply are, never the text. Chutes' ordinary
+  models are read by Chutes, as any provider's are.
 - **Phone access**, off unless you turn it on, runs SealedLore's own tor,
   which publishes your computer's onion address on the Tor network. Only
   phones you paired get anything, and only from the stories you share. What a
