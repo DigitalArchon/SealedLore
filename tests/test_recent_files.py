@@ -577,7 +577,18 @@ SCRIPT = textwrap.dedent(
 )
 
 
+def _xcb_missing() -> list[str]:
+    """The X11 libraries Qt's xcb plugin needs that this system lacks (a stock Ubuntu
+    26.04 has seven of them missing, Nov 2026): GTK's dialog under Xvfb can't be shown."""
+    if sys.platform != "linux":
+        return []
+    from sealedlore.gui.x11_check import missing_libraries
+
+    return missing_libraries()
+
+
 @pytest.mark.skipif(sys.platform != "linux" or not shutil.which("xvfb-run"), reason="needs Xvfb")
+@pytest.mark.skipif(bool(_xcb_missing()), reason="Qt's xcb plugin can't load here")
 class TestGtksOwnDialog:
     def choose(self, how: str, guarded: bool):
         top = tempfile.mkdtemp()
