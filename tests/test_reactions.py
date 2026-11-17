@@ -455,3 +455,119 @@ def test_two_who_answered_are_named_together() -> None:
         "Put the words from the answers of Maela Orr and Captain Idris into the passage"
     )
     assert round_clause([]) == ""
+
+
+# --- what a character remembers (step 2c) --------------------------------------
+
+from sealedlore.engine import reactions as reactions_module  # noqa: E402
+from sealedlore.engine.reactions import (  # noqa: E402
+    due_to_recollect,
+    fingerprint,
+    memory_chain,
+    seen_entries,
+)
+from sealedlore.models.memory import Recollection  # noqa: E402
+from sealedlore.storage.archive import archive_data, read_archive  # noqa: E402
+
+
+def entries(n: int) -> list[tuple[str, str]]:
+    return [(f"n{i}", f"Message {i}.") for i in range(n)]
+
+
+def test_a_memory_matches_only_what_it_was_written_from() -> None:
+    seen = entries(6)
+    first = Recollection(
+        character_id="m",
+        covered_node_ids=["n0", "n1"],
+        fingerprint=fingerprint(seen[:2]),
+        content="A",
+    )
+    second = Recollection(
+        character_id="m",
+        covered_node_ids=["n2", "n3"],
+        fingerprint=fingerprint(seen[2:4]),
+        content="B",
+    )
+    other = Recollection(
+        character_id="x",
+        covered_node_ids=["n0", "n1"],
+        fingerprint=fingerprint(seen[:2]),
+        content="X",
+    )
+    chain, covered = memory_chain([second, other, first], "m", seen)
+    assert [m.content for m in chain] == ["A", "B"] and covered == 4
+    # An edit to a message it covers: it, and the chain after it, stop matching.
+    edited = [*seen[:1], ("n1", "Message 1, changed."), *seen[2:]]
+    assert memory_chain([first, second], "m", edited) == ([], 0)
+    # A branch that differs at n2: the first still holds.
+    branch = [*seen[:2], ("b2", "Elsewhere."), ("b3", "Elsewhere still.")]
+    assert memory_chain([first, second], "m", branch)[1] == 2
+
+
+def test_only_whole_stretches_are_remembered_until_the_rest_fits() -> None:
+    seen = entries(50)  # each "Message N." is about 3 rough tokens
+    due = due_to_recollect(seen, 0, budget=40, size=20)
+    assert [len(chunk) for chunk in due] == [20, 20]
+    assert due[0][0][0] == "n0" and due[1][0][0] == "n20"
+    assert due_to_recollect(seen, 40, budget=40, size=20) == []  # 10 left: fits
+    assert due_to_recollect(seen, 0, budget=10_000, size=20) == []  # everything fits
+
+
+def test_the_round_remembers_older_scenes_and_sends_the_memory(tmp_path: Path, monkeypatch) -> None:
+    """Past the recent window, the round writes what the character remembers
+    first, once, and then sends it before the recent scenes."""
+    monkeypatch.setattr(reactions_module, "HISTORY_TOKENS", 30)
+    monkeypatch.setattr(reactions_module, "RECOLLECT_MESSAGES", 4)
+    responses = []
+    for i in range(4):
+        responses += [f"PASSAGE-{i} " + "word " * 20, f"ANSWER-{i}"]
+    responses += ["I REMEMBER THE DOOR AND THE STAIRS.", "ANSWER-4"]
+    session = make_session(tmp_path, ["The door gives."] + responses)
+    session.provider.responses = responses
+    for i in range(4):
+        play(session, turn(f"Turn {i}."))
+    # Memories are written on the summarisation model (here the story's own).
+    memory_calls = [r for r in session.provider.requests if "keep the memory" in r.messages[0].text]
+    assert memory_calls
+    calls = round_calls(session)
+    written = [m for m in session.bundle.memories if m.character_id == "char-maela"]
+    assert written and written[0].covered_node_ids
+    last_answer = calls[-1]
+    text = "\n".join(p.text for m in last_answer.messages for p in m.parts)
+    assert "WHAT YOU REMEMBER" in text
+    assert written[0].content in text
+    # Kept with the story, and in a backup.
+    reloaded = load_story_bundle("story-1", root=tmp_path)
+    assert [m.id for m in reloaded.memories] == [m.id for m in session.bundle.memories]
+    data = archive_data(session.bundle, [])
+    assert [m["id"] for m in data["memories"]] == [m.id for m in session.bundle.memories]
+
+
+def test_an_older_backup_has_no_memories(tmp_path: Path) -> None:
+    session = make_session(tmp_path, ["The door gives."])
+    data = archive_data(session.bundle, [])
+    del data["memories"]
+    archive = tmp_path / "old.sealedlore-archive.json"
+    archive.write_text(json.dumps(data))
+    bundle, _log = read_archive(archive)
+    assert bundle.memories == []
+
+
+def test_seen_entries_name_their_messages(tmp_path: Path) -> None:
+    session = make_session(tmp_path, ["The door gives.", "Hm."])
+    play(session, turn())
+    maela = session.cast[1]
+    ids = [
+        node_id
+        for node_id, _text in seen_entries(
+            session.path(), maela, session.cast, start=session.story.setup.starting_scene
+        )
+    ]
+    assert ids == [node.id for node in session.path()]
+
+
+def test_she_is_told_to_say_when_she_doesnt_remember(tmp_path: Path) -> None:
+    session = make_session(tmp_path, ["The door gives.", "Hm."])
+    play(session, turn())
+    system = round_calls(session)[0].messages[0].text
+    assert "you don't remember it: say so" in system

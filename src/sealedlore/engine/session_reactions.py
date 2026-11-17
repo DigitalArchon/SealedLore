@@ -26,9 +26,19 @@ import time
 from collections.abc import Generator, Iterator
 from typing import Any
 
-from sealedlore.engine.reactions import reacting_characters, reaction_messages
+from sealedlore.engine import reactions
+from sealedlore.engine.reactions import (
+    due_to_recollect,
+    fingerprint,
+    memory_chain,
+    reacting_characters,
+    reaction_messages,
+    recollect_messages,
+    seen_entries,
+)
 from sealedlore.engine.session_plot import SessionNotice
 from sealedlore.ids import utc_now_iso
+from sealedlore.models.memory import Recollection
 from sealedlore.models.node import Reaction
 from sealedlore.providers.base import (
     ChatRequest,
@@ -67,6 +77,10 @@ class ReactionRuntime:
         def count(text: str) -> int:
             return self.estimator.estimate(text)
 
+        # What each remembers of what they saw before their recent window,
+        # written first where a stretch has newly fallen out of it.
+        yield from self._recollect_due(characters, history, cast, count)
+
         # Every request before any goes out: each is given only its own
         # character's view, so no answer can reach another's prompt.
         calls: list[tuple[Any, ChatRequest, str]] = []
@@ -81,6 +95,8 @@ class ReactionRuntime:
                     history=history,
                     texts=self.texts,
                     count=count,
+                    budget=reactions.HISTORY_TOKENS,
+                    recollections=self.bundle.memories,
                 ),
                 params=self.side_params(model),
                 # No route: a route is a role's (models/route.py), and a
@@ -99,7 +115,10 @@ class ReactionRuntime:
             )
             calls.append((character, request, log_ref))
 
-        boxes = yield from self._answer_side_by_side([request for _, request, _ in calls])
+        boxes = yield from self._answer_side_by_side(
+            [request for _, request, _ in calls],
+            "Waiting for the characters played by their own model…",
+        )
 
         answers: list[Reaction] = []
         stopped = False
@@ -152,8 +171,102 @@ class ReactionRuntime:
                 "as what they mean to do."
             )
 
+    def _recollect_due(self, characters, history, cast, count) -> Iterator[SessionNotice]:
+        """Write what each character remembers of the stretches of the story
+        they saw that are now older than their recent window, all at once, on
+        the summarisation model. A failed one is said and skipped: the round
+        goes on, sending as much of the story whole as fits."""
+        jobs = []
+        for character in characters:
+            seen = seen_entries(
+                history, character, cast, start=self.story.setup.starting_scene, texts=self.texts
+            )
+            _chain, covered = memory_chain(self.bundle.memories, character.id, seen)
+            jobs += [
+                (character, chunk)
+                for chunk in due_to_recollect(
+                    seen,
+                    covered,
+                    count=count,
+                    budget=reactions.HISTORY_TOKENS,
+                    size=reactions.RECOLLECT_MESSAGES,
+                )
+            ]
+        if not jobs:
+            return
+        model = self.summarization_model
+        requests = [
+            ChatRequest(
+                model=model,
+                extra_body=self.route_for("summarisation"),
+                messages=recollect_messages(character, chunk, texts=self.texts),
+                params=self.side_params(model),
+            )
+            for character, chunk in jobs
+        ]
+        refs = [
+            self._log(
+                "recollect_request",
+                {
+                    "character": character.name,
+                    "node_ids": [node_id for node_id, _text in chunk],
+                    "payload": self.provider.build_payload(request),
+                },
+            )
+            for (character, chunk), request in zip(jobs, requests, strict=True)
+        ]
+        names = ", ".join(dict.fromkeys(character.name for character, _chunk in jobs))
+        boxes = yield from self._answer_side_by_side(
+            requests, f"Writing what {names} remember{'s' if ',' not in names else ''}…"
+        )
+        stopped = False
+        written = 0
+        for (character, chunk), request, ref, box in zip(jobs, requests, refs, boxes, strict=True):
+            error = box.get("error")
+            if isinstance(error, StreamCancelled):
+                stopped = True
+                continue
+            if isinstance(error, (ProviderError, ValueError)):
+                self._log("recollect_response", {"request_log_ref": ref, "error": str(error)})
+                yield SessionNotice(f"{character.name}'s memory couldn't be written: {error}")
+                continue
+            if error is not None:
+                raise error
+            text, completed = box["reply"]
+            self._log(
+                "recollect_response",
+                {"request_log_ref": ref, "text": text, "usage": completed.raw_usage},
+            )
+            why = why_not_whole(completed) or ("it was empty" if not text.strip() else None)
+            if why:
+                yield SessionNotice(f"{character.name}'s memory wasn't written: {why}.")
+                continue
+            ids = [node_id for node_id, _text in chunk]
+            # One a stretch: an older account of the same start (an edit, a
+            # branch) gives way to this one.
+            self.bundle.memories = [
+                memory
+                for memory in self.bundle.memories
+                if memory.character_id != character.id or memory.covered_node_ids[:1] != ids[:1]
+            ]
+            self.bundle.memories.append(
+                Recollection(
+                    character_id=character.id,
+                    covered_node_ids=ids,
+                    fingerprint=fingerprint(chunk),
+                    content=text.strip(),
+                    model=request.model,
+                    usage=self.priced(completed.usage, request.model),
+                )
+            )
+            written += 1
+        if written:
+            self.save()
+        if stopped:
+            raise StreamCancelled()
+
     def _answer_side_by_side(
-        self, requests: list[ChatRequest]
+        self, requests: list[ChatRequest], waiting: str
     ) -> Generator[SessionNotice, None, list[dict[str, Any]]]:
         """Each request on a client of its own, at once, as the reads go
         (session_plot `_read_after_turn`); with fewer clients than requests,
@@ -178,10 +291,7 @@ class ReactionRuntime:
             thread.start()
             threads.append(thread)
         try:
-            yield SessionNotice(
-                "Waiting for the characters played by their own model…",
-                waiting_since=time.monotonic(),
-            )
+            yield SessionNotice(waiting, waiting_since=time.monotonic())
             for thread in threads:
                 thread.join()
         finally:

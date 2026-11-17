@@ -29,6 +29,7 @@ from sealedlore.models.authoring import ReviewRecord
 from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage
 from sealedlore.models.lore import LoreEntry
+from sealedlore.models.memory import Recollection
 from sealedlore.models.node import Node
 from sealedlore.models.story import Story
 from sealedlore.models.summary import Summary
@@ -83,6 +84,7 @@ def archive_data(
         "summaries": [summary.model_dump() for summary in bundle.summaries],
         "asides": [aside.model_dump() for aside in bundle.asides],
         "reviews": [record.model_dump() for record in bundle.reviews],
+        "memories": [memory.model_dump() for memory in bundle.memories],
         "api_log": api_log,
         "files": {
             relative: base64.b64encode(data).decode("ascii")
@@ -196,6 +198,8 @@ def read_archive(path: Path) -> tuple[StoryBundle, list[dict[str, Any]]]:
             summaries=[Summary.model_validate(s) for s in _items(data, "summaries", name)],
             asides=[Aside.model_validate(a) for a in _items(data, "asides", name)],
             reviews=[ReviewRecord.model_validate(r) for r in _items(data, "reviews", name)],
+            # Older backups have none.
+            memories=[Recollection.model_validate(m) for m in data.get("memories") or []],
             pending_files=_decoded_files(data.get("files"), name),
         )
     except KeyError as exc:

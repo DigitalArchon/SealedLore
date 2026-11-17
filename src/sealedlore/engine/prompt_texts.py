@@ -1635,6 +1635,58 @@ _text(
     (),
 )
 
+# What a character remembers of the scenes older than their recent window
+# (models/memory.py). The memory probe (design/own-models.md): past the window
+# their model invented an answer to 12 of 12 questions about their own past,
+# and never once said it didn't remember. With these recollections (written by
+# the app on GLM 5.3, ~290 words a stretch of 20 messages), two blind judges:
+# 5-6 right, 4-5 partly, 2 wrong of 12, as good as sending their whole 104k
+# tokens of history (6/4/2) for ~14k; with `characters.own.unsure` too, 5-7
+# right, 1 wrong.
+_text(
+    "characters.own.memory.heading",
+    OWN,
+    "A character's own prompt: what they remember",
+    "Before the recent scenes in the character's own prompt, over their own account of the "
+    "older ones they were in.",
+    "WHAT YOU REMEMBER of the scenes before those below, in your own words, oldest first:",
+    (),
+)
+
+_text(
+    "characters.own.recollect",
+    OWN,
+    "A character's memory: writing it",
+    "The system prompt that writes a character's own account of a stretch of the story they "
+    "saw, once it is older than the scenes their round sends whole. Its reply is what they "
+    "remember of it.",
+    """\
+You keep the memory of {name}, a character in a collaborative story. Below
+are scenes {name} was in, as {name} saw them; where {name} answered a passage,
+their answer is marked. Write what {name} will remember of them, in the first
+person, as {name}: what happened in front of them, what was said to them and
+by them, what they did, decided, promised or found out, and how they stand
+with the people in it. Keep the names, places, numbers and exact words that
+matter. Only what {name} saw, heard or was told: nothing that happened
+elsewhere. About {words} words, plain notes, no story-telling.""",
+    (("name", "the character's name"), ("words", "about how many words")),
+)
+
+# Measured with the memory above: alone it halved the inventions (12 -> 6-8
+# wrong, 3-4 said they didn't remember) and hedged on none of 4 questions about
+# the recent scenes; with the memory, wrong 2 -> 1 on both judges, one hedge in
+# 8 control answers (Sonnet judge).
+_text(
+    "characters.own.unsure",
+    OWN,
+    "A character's own prompt: what they don't remember",
+    "After the round's rules in the character's own prompt: they say so when something "
+    "isn't in what they remember or the story they were given, rather than invent it.",
+    "If something comes up that isn't in what you remember or in the story below, you don't "
+    "remember it: say so, as {name} would, rather than make it up.",
+    (("name", "the character's name"),),
+)
+
 _text(
     "characters.own.answered",
     OWN,

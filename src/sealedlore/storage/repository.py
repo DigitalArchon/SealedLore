@@ -25,6 +25,7 @@ from sealedlore.models.character import Character
 from sealedlore.models.config import Config, bind_unbound_keys, key_withheld, without_password
 from sealedlore.models.embedding import EmbeddingCacheEntry
 from sealedlore.models.lore import LoreEntry
+from sealedlore.models.memory import Recollection
 from sealedlore.models.node import Node
 from sealedlore.models.prompt_edit import PromptEdit
 from sealedlore.models.story import Story
@@ -68,6 +69,8 @@ class StoryBundle(BaseModel):
     asides: list[Aside] = Field(default_factory=list)
     supporting: SupportingCast = Field(default_factory=SupportingCast)
     reviews: list[ReviewRecord] = Field(default_factory=list)
+    # What characters played by their own model remember (models/memory.py).
+    memories: list[Recollection] = Field(default_factory=list)
     # Image files to write with the bundle (a path relative to the story
     # folder, to its bytes): the pictures an imported archive or scenario, or
     # a restart, brings with it. Written by `save_story_bundle`, then cleared.
@@ -483,6 +486,7 @@ def save_story_bundle(bundle: StoryBundle, root: Path | None = None) -> None:
     atomic_write_json(directory / "embeddings.json", [e.model_dump() for e in bundle.embeddings])
     atomic_write_json(directory / "asides.json", [a.model_dump() for a in bundle.asides])
     atomic_write_json(directory / "reviews.json", [r.model_dump() for r in bundle.reviews])
+    atomic_write_json(directory / "memories.json", [m.model_dump() for m in bundle.memories])
     atomic_write_json(directory / "story.json", bundle.story.model_dump())
     bundle.pending_files = {}
 
@@ -548,6 +552,9 @@ def load_story_bundle(story_id: str, root: Path | None = None) -> StoryBundle:
         asides=[Aside.model_validate(a) for a in read_json(directory / "asides.json", [])],
         supporting=SupportingCast.model_validate(read_json(directory / "supporting.json", {})),
         reviews=[ReviewRecord.model_validate(r) for r in read_json(directory / "reviews.json", [])],
+        memories=[
+            Recollection.model_validate(m) for m in read_json(directory / "memories.json", [])
+        ],
     )
 
 

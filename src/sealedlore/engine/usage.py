@@ -45,6 +45,7 @@ KIND_LABELS: dict[str, str] = {
     "condense_response": "Condensed cards",
     # The own-model trial: a character's own model's answer to a passage.
     "own_response": "Own-model characters",
+    "recollect_response": "Own-model characters' memories",
     "draft_response": "Story drafting",
     "plot_draft_response": "Plot writing",
     "followup_response": "Changes asked for",

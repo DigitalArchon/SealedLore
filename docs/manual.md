@@ -1904,11 +1904,17 @@ happened, so the storyteller decides how it turns out.
 
 Each character's model is given their card (summary, description,
 personality, voice and skills) and the story's setting. It also gets the
-story as they saw it, as far as it fits: the scenes they were in, the
-storyteller's passages, your turns without their out-of-character notes, and
-their own earlier answers. It never sees a Direction, another character's
-answer or the storyteller's notes. A character who isn't in the scene isn't
-asked. Nothing runs in a private scene or a simple chat.
+story as they saw it: the scenes they were in, the storyteller's passages,
+your turns without their out-of-character notes, and their own earlier
+answers. The most recent of it goes whole. What they saw before that, they
+are given as their own memory of it: a few notes in their own words for each
+older stretch, written by the summarisation model the first time it is
+needed, and again for a stretch you edit or a branch that goes another way.
+They are also told to say so when something comes up that they don't
+remember, rather than make it up. A character's model never sees a
+Direction, another character's answer or the storyteller's notes. A
+character who isn't in the scene isn't asked. Nothing runs in a private
+scene or a simple chat.
 
 The answers to the latest passage are hidden under it until you send your
 turn, so you answer it as they did. **View → Show the characters' answers**
@@ -1916,8 +1922,9 @@ shows them anyway. Once you've sent, they show under their passage, each with
 **Edit**. Edit an answer to the latest passage and the storyteller gets your
 version with your next turn. Edit an older one and the passage that followed
 it is written again from your version, as a new take, with the one there now
-kept (‹ ›). Their calls show under *Own-model characters* in Story → Usage
-and cost…, and Stop skips them.
+kept (‹ ›). Their calls show under *Own-model characters* (and their memories
+under *Own-model characters' memories*) in Story → Usage and cost…, and Stop
+skips them.
 
 ### When the cast's cards don't fit
 
