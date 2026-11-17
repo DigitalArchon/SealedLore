@@ -1880,10 +1880,44 @@ picture is shown the same way on the Lore page.
   speech, thoughts and choices in full, and they leave the *Speaking as* list.
   Use this when you hand a character over, including one you have been
   writing yourself: the roster tells the storyteller that it now writes them.
+- **Their own model (a trial)** — another model plays them, as another
+  player. Name it in the field under the choice, or press **Choose**: any
+  model your endpoints offer, including a local or fine-tuned one on an
+  endpoint of its own (`Endpoint::model`). They leave the *Playing* list while
+  their model plays them.
 
 A supporting character is always the storyteller's, so their card has no
 **Played by**. Your characters' cards have it too, for the stories they join
-as main characters.
+as main characters, without the trial's choice: which model plays someone is
+up to each story.
+
+#### Characters played by their own model (a trial)
+
+This is an experiment, and how well it plays isn't known yet. After each
+passage, every character in the scene who is played by their own model
+answers it at once, in their own words: what they say, and what they mean to
+do next. None of them sees the others' answers or your next turn. You answer
+the passage too, with your turn as usual. The storyteller then gets your turn
+and every character's answer, and writes what happens when all of it meets:
+an answer is what that character means to do, not something that has
+happened, so the storyteller decides how it turns out.
+
+Each character's model is given their card (summary, description,
+personality, voice and skills) and the story's setting. It also gets the
+story as they saw it, as far as it fits: the scenes they were in, the
+storyteller's passages, your turns without their out-of-character notes, and
+their own earlier answers. It never sees a Direction, another character's
+answer or the storyteller's notes. A character who isn't in the scene isn't
+asked. Nothing runs in a private scene or a simple chat.
+
+The answers to the latest passage are hidden under it until you send your
+turn, so you answer it as they did. **View → Show the characters' answers**
+shows them anyway. Once you've sent, they show under their passage, each with
+**Edit**. Edit an answer to the latest passage and the storyteller gets your
+version with your next turn. Edit an older one and the passage that followed
+it is written again from your version, as a new take, with the one there now
+kept (‹ ›). Their calls show under *Own-model characters* in Story → Usage
+and cost…, and Stop skips them.
 
 ### When the cast's cards don't fit
 

@@ -1286,6 +1286,33 @@ QComboBox QAbstractItemView {
 }
 
 /* Main or supporting, over a name on the People page (gui/people_page.py). */
+/* What characters played by their own model answered a passage (the trial). */
+#answersBox {
+  background: @panel;
+  border: 1px solid @border;
+  border-left: 3px solid @accent;
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
+#answersHead {
+  color: @text_dim;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  background: transparent;
+}
+
+#answerText {
+  background: transparent;
+}
+
+#answersHidden {
+  color: @text_hint;
+  font-size: 12px;
+  background: transparent;
+}
+
 #personRole {
   color: @text_dim;
   font-size: 10px;

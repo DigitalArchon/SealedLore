@@ -35,6 +35,7 @@ from sealedlore.engine.reasoning import caught_note
 from sealedlore.gui import theme
 from sealedlore.gui.markdown_text import markdown_html, shown_text
 from sealedlore.gui.picture_words import EDIT_LABEL, USE_CHARACTER_LABEL, USE_PLACE_LABEL
+from sealedlore.gui.plain_text import plain_tip
 from sealedlore.gui.ref_images import pixmap_of, pixmap_within
 from sealedlore.gui.sizing import GrowingText
 from sealedlore.gui.video_view import PendingVideoWidget, VideoItem, VideoMessageWidget
@@ -46,6 +47,7 @@ from sealedlore.models.node import (
     DIRECTOR_SPEAKER_ID,
     NARRATOR_SPEAKER_ID,
     Node,
+    Reaction,
     Usage,
 )
 from sealedlore.models.private import TeeUpstream
@@ -289,6 +291,13 @@ def _retakeable_ids(nodes: Sequence[Node]) -> set[str]:
     }
 
 
+# Over a passage's answers while its round is open (`add_answers`).
+ANSWERS_HIDDEN = (
+    "{names} answered this passage. Hidden until you send your turn, so you answer it as "
+    "they did, without seeing theirs (View → Show the characters' answers)."
+)
+
+
 class MessageWidget(QFrame):
     regenerate_requested = Signal(str)
     # Another take, with the author's words for it (the window asks for them).
@@ -315,6 +324,9 @@ class MessageWidget(QFrame):
     video_requested = Signal(str)
     # A simple chat's message kept word for word, or not (engine/chat.py).
     keep_full_requested = Signal(str, bool)
+    # (passage id, character id): edit what a character's own model answered it
+    # with (engine/reactions.py, the trial).
+    answer_edit_requested = Signal(str, str)
 
     def __init__(
         self,
@@ -506,6 +518,69 @@ class MessageWidget(QFrame):
             self.layout_.addWidget(note)
         else:
             self.layout_.insertWidget(index, note)
+
+    def add_answers(self, answers: Sequence[Reaction], *, hidden: bool) -> None:
+        """What each character played by their own model answered this
+        passage with (the trial, engine/reactions.py): their intention, which
+        the storyteller works in with the author's next turn. `hidden` while
+        the round is still open and the author hasn't asked to see them (the
+        author: answers that come in early are invisible to the others,
+        unless shown as a spoiler)."""
+        if not answers:
+            return
+        box = QFrame(self)
+        box.setObjectName("answersBox")
+        lines = QVBoxLayout(box)
+        lines.setContentsMargins(0, 0, 0, 0)
+        lines.setSpacing(6)
+        self.answer_buttons: list[QToolButton] = []
+        if hidden:
+            names = ", ".join(answer.name for answer in answers)
+            head = TextBody(ANSWERS_HIDDEN.format(names=names))
+            head.setTextFormat(Qt.PlainText)
+            head.setObjectName("answersHidden")
+            head.setWordWrap(True)
+            lines.addWidget(head)
+        else:
+            for answer in answers:
+                row = QHBoxLayout()
+                row.setSpacing(8)
+                edited = " · edited" if answer.edited_at else ""
+                head = QLabel(f"{answer.name.upper()} MEANS TO{edited}")
+                head.setObjectName("answersHead")
+                head.setToolTip(
+                    plain_tip(
+                        f"Answered by {answer.model or 'their own model'}, without seeing your "
+                        "turn or the others' answers. The storyteller is given it with your "
+                        "next turn as what they mean to do, and decides what comes of it."
+                    )
+                )
+                row.addWidget(head)
+                row.addStretch(1)
+                edit = QToolButton()
+                edit.setText("Edit")
+                edit.setObjectName("messageAction")
+                edit.setToolTip("Change what they mean to do; the storyteller is given yours")
+                edit.setEnabled(not self._busy)
+                edit.clicked.connect(
+                    lambda _=False, cid=answer.character_id: self.answer_edit_requested.emit(
+                        self.node_id, cid
+                    )
+                )
+                row.addWidget(edit)
+                self.answer_buttons.append(edit)
+                lines.addLayout(row)
+                body = TextBody(answer.text)
+                body.setTextFormat(Qt.PlainText)
+                body.setObjectName("answerText")
+                body.setWordWrap(True)
+                lines.addWidget(body)
+        index = self.layout_.indexOf(self.usage) if self.usage is not None else -1
+        if index < 0:
+            self.layout_.addWidget(box)
+        else:
+            self.layout_.insertWidget(index, box)
+        self.answers_box = box
 
     def add_take_note(self, text: str) -> None:
         """Under a take the author steered with a few words: what they asked
@@ -924,6 +999,8 @@ class MessageWidget(QFrame):
         self.edit_button.setEnabled(not busy and self._editor is None)
         if self.more_button is not None:
             self.more_button.setEnabled(not busy)
+        for button in getattr(self, "answer_buttons", ()):
+            button.setEnabled(not busy)
         self._sync_save()
 
     def _sync_save(self) -> None:
@@ -1599,6 +1676,7 @@ def sent_mark(message: Node, reply: Node | None) -> str | None:
 
 class TranscriptView(QScrollArea):
     regenerate_requested = Signal(str)
+    answer_edit_requested = Signal(str, str)
     regenerate_note_requested = Signal(str)
     revise_requested = Signal(str)
     continue_requested = Signal(str)
@@ -1633,6 +1711,12 @@ class TranscriptView(QScrollArea):
         # chat's private look.
         self._chat = False
         self._tee_look = False
+        # What characters played by their own model answered (the trial):
+        # shown under their passage in the story as written, never in what
+        # the storyteller sees (they are in its tail, not its history). The
+        # round still open is shown only when the author asks (a spoiler).
+        self._answers_here = True
+        self.answers_shown = False
         # For a new branch's name field: the name it gets if left blank.
         self.default_branch_name: Callable[[], str] = lambda: ""
         self._background: QPixmap | None = None
@@ -1840,6 +1924,7 @@ class TranscriptView(QScrollArea):
             keep_full=keep_full,
         )
         widget.keep_full_requested.connect(self.keep_full_requested)
+        widget.answer_edit_requested.connect(self.answer_edit_requested)
         widget.review_mark_requested.connect(self.review_mark_requested)
         widget.reroll_requested.connect(self.reroll_requested)
         widget.rewrite_committed.connect(self.rewrite_committed)
@@ -1988,6 +2073,7 @@ class TranscriptView(QScrollArea):
         edits = self._open_edits()
         self.clear()
         self._faces_for = faces_for
+        self._answers_here = True
 
         def add_asides(anchor: str | None) -> None:
             for aside in asides_for(anchor) if asides_for else ():
@@ -2060,6 +2146,7 @@ class TranscriptView(QScrollArea):
         edits = self._open_edits()
         self.clear()
         self._faces_for = None  # what the storyteller is sent: words only
+        self._answers_here = False
 
         def note() -> None:
             label = QLabel(
@@ -2200,6 +2287,10 @@ class TranscriptView(QScrollArea):
         faces_for = getattr(self, "_faces_for", None)
         if faces_for is not None and node.kind == "assistant":
             widget.add_faces(faces_for(node.id))
+        if self._answers_here and node.kind == "assistant" and node.meta.reactions:
+            # Nothing after the passage yet: the round is open, and its
+            # answers are the others' secret until the author sends.
+            widget.add_answers(node.meta.reactions, hidden=reply is None and not self.answers_shown)
         # The private scene it was written in, and a passage's turn's, for ⋯.
         own = node.meta.private_span
         answered = turn.meta.private_span if turn is not None and node.kind == "assistant" else own

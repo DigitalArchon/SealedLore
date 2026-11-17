@@ -66,8 +66,12 @@ class NoteDialog(QDialog):
         button: str,
         hint: str = "",
         placeholder: str = "",
+        text: str = "",
     ) -> None:
+        """`text`: words to start from (an answer being edited); closing asks
+        first only when they were changed."""
         super().__init__(parent)
+        self._start = text.strip()
         self.setWindowTitle(title)
         layout = QVBoxLayout(self)
         question = QLabel(asks)
@@ -76,6 +80,7 @@ class NoteDialog(QDialog):
         self.text = GrowingText(lines=4, most=14, fill=True)
         self.text.setObjectName("noteText")
         self.text.setPlaceholderText(placeholder)
+        self.text.setPlainText(text)
         question.setBuddy(self.text)
         layout.addWidget(self.text, 1)
         self.hint = QLabel(hint)
@@ -113,7 +118,7 @@ class NoteDialog(QDialog):
     def reject(self) -> None:
         """Cancel, Esc or the window's close: asked first when something
         was written."""
-        if may_discard(self, [""], [self.note()]):
+        if may_discard(self, [self._start], [self.note()]):
             super().reject()
 
 

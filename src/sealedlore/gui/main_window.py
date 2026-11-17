@@ -124,6 +124,7 @@ from sealedlore.gui.transcript import (
 )
 from sealedlore.gui.usage_dialog import UsageDialog
 from sealedlore.gui.welcome import setup_missing, welcome_html
+from sealedlore.gui.window_answers import AnswersWindow
 from sealedlore.gui.window_board import CastBoardWindow
 from sealedlore.gui.window_card_link import CardLinkWindow
 from sealedlore.gui.window_card_start import CardStartWindow
@@ -362,6 +363,7 @@ class MainWindow(
     PhoneWindow,
     PrivateWindow,
     RetakesWindow,
+    AnswersWindow,
     TextSizeWindow,
     LayoutWindow,
     QMainWindow,
@@ -483,6 +485,7 @@ class MainWindow(
     def _build_ui(self) -> None:
         self.transcript = TranscriptView()
         self.transcript.regenerate_requested.connect(self._regenerate_node)
+        self.transcript.answer_edit_requested.connect(self._edit_answer)
         self.transcript.regenerate_note_requested.connect(self._regenerate_with_note)
         self.transcript.revise_requested.connect(self._change_passage)
         self.transcript.continue_requested.connect(self._continue_node)
@@ -622,6 +625,8 @@ class MainWindow(
         self.cast_panel.renamed.connect(self._on_character_renamed)
         self.cast_panel.remove_requested.connect(self._remove_character)
         self.cast_panel.lore_from = self._lore_from_their_book
+        # A main character's own model (the trial): Choose lists the endpoints' models.
+        self.cast_panel.played_by.set_browse(self._browse_models)
         self.cast_panel.promote_requested.connect(self._promote_character)
         self.cast_panel.demote_requested.connect(self._demote_character)
         self.cast_panel.accept_requested.connect(self._accept_suggestion)
@@ -1007,6 +1012,7 @@ class MainWindow(
         )
         self.dice_rolls_action.toggled.connect(self.set_show_dice_rolls)
         view_menu.addAction(self.dice_rolls_action)
+        self._answers_action(view_menu)
         self._looks_actions(view_menu)
         self._board_action(view_menu)
         self._text_size_actions(view_menu)
@@ -1839,6 +1845,7 @@ class MainWindow(
             self.session.close(wait_seconds=0)
             self.session.save()
         self.session = None
+        self._sync_answers_action()
         # Its messages' drawings go with it (a memory-only chat's words
         # mustn't stay in the process after it).
         forget_drawn_text()
@@ -5515,6 +5522,8 @@ class MainWindow(
             default_length=story.style.response_style,
         )
         self.composer.set_default_agency(story.defaults.agency_mode)
+        # A character played by their own model: their answers can be shown.
+        self._sync_answers_action()
 
     def _on_style_changed(self) -> None:
         if self.session is None:
