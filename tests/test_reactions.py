@@ -417,3 +417,41 @@ def test_every_answer_is_logged_and_counted_even_a_declined_one(tmp_path: Path) 
     ]
     lines = {line.label: line for line in usage_report(log).lines}
     assert lines["Own-model characters"].calls == 1
+
+
+# --- their words, as dialogue (measured: design/own-models.md) -----------------
+
+CLAUSE = (
+    "Put the words from the answer of Maela Orr into the passage as spoken dialogue, in "
+    "quotation marks, never as reported speech, leaving out whatever the author's turn has "
+    "already done or answered; what they only thought stays theirs."
+)
+
+
+def test_their_words_go_in_as_dialogue_on_the_directives_and_remember(tmp_path: Path) -> None:
+    """The clause measured on 54 real turns, in both places it was measured: after
+    "write everyone and everything else" in the directives and on REMEMBER."""
+    session = make_session(tmp_path, ["The door gives.", "I pick the lock.", "It turns."])
+    play(session, turn())
+    play(session, turn("I hold the lamp."))
+    prompt = session.last_prompt
+    directives = prompt.section("tail.directives").text
+    reminder = prompt.section(SECTION_REMINDER).text
+    assert f"Write everyone and everything else. {CLAUSE}" in directives
+    assert f"Write everyone and everything else. {CLAUSE}" in reminder
+
+
+def test_no_answers_no_clause(tmp_path: Path) -> None:
+    session = make_session(tmp_path, ["The door gives.", "I pick the lock.", "It turns."])
+    play(session, turn())  # the first turn: the passage before it had no round
+    text = "\n".join(section.text for section in session.last_prompt.sections)
+    assert "into the passage as spoken dialogue" not in text
+
+
+def test_two_who_answered_are_named_together() -> None:
+    from sealedlore.engine.rules import round_clause
+
+    assert round_clause(["Maela Orr", "Captain Idris"]).startswith(
+        "Put the words from the answers of Maela Orr and Captain Idris into the passage"
+    )
+    assert round_clause([]) == ""

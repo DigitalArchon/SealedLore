@@ -546,13 +546,19 @@ def render_turn_directives(
     roll_explanation: str | None,
     length: LengthInstruction | None,
     texts: PromptTexts = DEFAULT_TEXTS,
+    round_names: Sequence[str] = (),
 ) -> str:
+    """`round_names`: the characters played by their own model who answered the
+    passage before this turn (engine/reactions.py): their words go in as dialogue
+    (`round_clause`), right after "write everyone else"."""
     lines = ["# TURN DIRECTIVES (this turn only)", ""]
 
     if controlled_character is not None:
-        lines.append(texts.fill("turn.directives.held", held=controlled_character.name))
+        first = texts.fill("turn.directives.held", held=controlled_character.name)
     else:
-        lines.append(texts["turn.directives.no_one"])
+        first = texts["turn.directives.no_one"]
+    clause = round_clause(round_names, texts)
+    lines.append(f"{first} {clause}" if clause else first)
 
     held_id = controlled_character.id if controlled_character is not None else None
     reserved = [
@@ -686,6 +692,7 @@ def render_reminder(
     move: Move = "",
     voice: bool = False,
     habits: str = "",
+    round_names: Sequence[str] = (),
 ) -> str:
     """The last line before generation — recency is the point (§3.3).
     `fixed`: the clause naming what the turn names that can't be moved.
@@ -704,14 +711,17 @@ def render_reminder(
         "voice": f" {texts['turn.remember.voice']}" if voice else "",
         "habits": f" {habits}" if habits else "",
         "others": (
-            " "
-            + texts.fill(
-                "turn.remember.author_only",
-                names=_join_names(list(author_only_names)),
-                **{"is": _are(author_only_names)},
+            (f" {clause}" if (clause := round_clause(round_names, texts)) else "")
+            + (
+                " "
+                + texts.fill(
+                    "turn.remember.author_only",
+                    names=_join_names(list(author_only_names)),
+                    **{"is": _are(author_only_names)},
+                )
+                if author_only_names
+                else ""
             )
-            if author_only_names
-            else ""
         ),
     }
     if controlled_character is None:
@@ -753,6 +763,19 @@ def render_history_node(
         lines.append(texts["turn.ooc"])
         lines.append(node.ooc.strip())
     return _joined(lines)
+
+
+def round_clause(names: Sequence[str], texts: PromptTexts = DEFAULT_TEXTS) -> str:
+    """For the turn's directives and its REMEMBER line, when characters played by
+    their own model answered the passage before it: their words go into the passage
+    as dialogue. Empty when nobody did, so no other prompt changes."""
+    if not names:
+        return ""
+    return texts.fill(
+        "turn.round.remember",
+        names=_join_names(list(names)),
+        answers="answers" if len(names) > 1 else "answer",
+    )
 
 
 def render_round_block(reactions: Sequence[Reaction], texts: PromptTexts = DEFAULT_TEXTS) -> str:

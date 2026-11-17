@@ -1693,6 +1693,32 @@ _text(
     (("names", "the names of the characters who answered"),),
 )
 
+# Measured Nov 2026 (design/own-models.md, kit tools/testbed/data/own_models/
+# wording): 54 real turns of the trial's chains replayed on Sonnet 4.6 and GLM 5.3,
+# blind Opus and Sonnet judges. The storyteller had reported a character's speech
+# instead of writing it ("Then Myla spoke"), mostly on the long story. Rewording
+# the note above instead tied (25-26) and made the long story worse; this clause,
+# after "write everyone else" in the directives and on REMEMBER (what the model
+# reads last decides, as for person and tense): preferred 28-23 (Opus) and 28-18
+# (Sonnet), 11-3 and 11-1 on the long story with Sonnet; speech reported 18 -> 5 and
+# 18 -> 4. Without "leaving out ..." it put overtaken lines in too and split the
+# judges (32-16, 21-29). Costs left: overtaken lines 0-1 -> 4-6, leaked thoughts
+# 5-8 -> 7-10 of 54.
+_text(
+    "turn.round.remember",
+    OWN,
+    "The other players' words, as dialogue (directives and REMEMBER)",
+    'After "write everyone and everything else" in the turn\'s directives and on the '
+    "REMEMBER line, when characters played by their own model answered the last passage.",
+    "Put the words from the {answers} of {names} into the passage as spoken dialogue, in "
+    "quotation marks, never as reported speech, leaving out whatever the author's turn has "
+    "already done or answered; what they only thought stays theirs.",
+    (
+        ("answers", "'answer' or 'answers'"),
+        ("names", "the names of the characters who answered"),
+    ),
+)
+
 _text(
     "turn.round.answer",
     OWN,

@@ -388,6 +388,14 @@ def assemble_prompt(
     habits = (
         habits_feedback(_recent_exchanges(history_nodes), texts) if opts.prose_reminders else ""
     )
+    # Who answered the passage before this turn with their own model (the trial):
+    # their words go in as dialogue, on the directives and the REMEMBER line.
+    answers = (
+        history_nodes[-1].meta.reactions
+        if history_nodes and history_nodes[-1].kind == "assistant"
+        else ()
+    )
+    round_names = [answer.name for answer in answers if answer.text.strip()]
 
     tail_specs = [
         # The story's own past, fuller than its chapters (engine/recall.py).
@@ -428,6 +436,7 @@ def assemble_prompt(
                 roll_explanation=turn.roll_explanation,
                 length=length,
                 texts=texts,
+                round_names=round_names,
             ),
         ),
         (
@@ -444,12 +453,7 @@ def assemble_prompt(
         # turn answers, so Regenerate sends them again, edited if edited.
         (
             SECTION_ROUND,
-            render_round_block(
-                history_nodes[-1].meta.reactions
-                if history_nodes and history_nodes[-1].kind == "assistant"
-                else (),
-                texts,
-            ),
+            render_round_block(answers, texts),
         ),
         (SECTION_RETAKE_NOTE, render_retake_note(turn.retake_note, texts)),
         (
@@ -473,6 +477,7 @@ def assemble_prompt(
                 move=move,
                 voice=opts.prose_reminders,
                 habits=habits,
+                round_names=round_names,
             ),
         ),
     ]
