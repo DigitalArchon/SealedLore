@@ -38,12 +38,14 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.catalog import ModelInfo, chat_models, matches, short_count
+from sealedlore.engine.model_tuning import summary as tuning_summary
 from sealedlore.engine.routing import describe, routable, route_body
 from sealedlore.gui.fields import line_edit, set_field_text
+from sealedlore.gui.plain_text import plain_tip
 from sealedlore.gui.route_dialog import RouteDialog
 from sealedlore.gui.sizing import adjustable_columns, size_to_screen
 from sealedlore.gui.workers import run_detached
-from sealedlore.models.config import ProviderConfig, RecommendedModel, split_model
+from sealedlore.models.config import ProviderConfig, RecommendedModel, chat_api, split_model
 from sealedlore.models.route import ModelRoute
 from sealedlore.providers.base import ChatProvider
 from sealedlore.providers.privacy import (
@@ -639,6 +641,8 @@ def choose_menu(
 
 # The model fields' one button, and its menu's first entry.
 CHOOSE_LABEL = "Choose"
+# Beside a model field when SealedLore adjusts its prompt or requests for it.
+TUNED_LABEL = "· tuned"
 BROWSE_ALL = "Browse all models…"
 
 
@@ -715,6 +719,11 @@ class ModelField(QWidget):
         # only TEE; the tooltip says what each protects.
         self.privacy = QLabel()
         self.privacy.setObjectName("hintLabel")
+        # Says, beside the field, when SealedLore adjusts its prompt or requests
+        # for this model (engine/model_tuning.py); the tooltip says how.
+        self.tuned = QLabel(TUNED_LABEL)
+        self.tuned.setObjectName("hintLabel")
+        self.tuned.hide()
         # An image model: whether it can be given a picture (the author, Oct
         # 18 2026: "the UI should show if it supports adding an image or not").
         self.picture_note = QLabel()
@@ -731,14 +740,17 @@ class ModelField(QWidget):
         layout.addWidget(self.edit, 1)
         layout.addWidget(self.endpoint_label)
         layout.addWidget(self.privacy)
+        layout.addWidget(self.tuned)
         layout.addWidget(self.picture_note)
         layout.addWidget(self.route_button)
         layout.addWidget(self.button)
         self.edit.textChanged.connect(self._show_privacy)
+        self.edit.textChanged.connect(self._show_tuning)
         self.edit.textChanged.connect(lambda _text: self.show_pictures())
         self.edit.textChanged.connect(self._show_endpoint)
         self.edit.textChanged.connect(lambda _text: self._show_route())
         self._show_privacy(text)
+        self._show_tuning(text)
         self._show_endpoint(text)
         self.show_pictures()
         self._show_route()
@@ -786,6 +798,19 @@ class ModelField(QWidget):
         getter = self._route_endpoint() if self._route_endpoint is not None else None
         base_url = getter(model) if getter is not None else None
         return privacy_at(model, base_url or "")
+
+    def _anthropic_api(self, model: str) -> bool | None:
+        """Whether the model's endpoint speaks Anthropic's own API, when the
+        field knows its endpoint."""
+        getter = self._route_endpoint() if self._route_endpoint is not None else None
+        base_url = getter(model) if getter is not None else None
+        return chat_api(base_url) == "anthropic" if base_url else None
+
+    def _show_tuning(self, text: str) -> None:
+        model = text.strip()
+        words = tuning_summary(model, anthropic_api=self._anthropic_api(model)) if model else ""
+        self.tuned.setToolTip(plain_tip(words))
+        self.tuned.setVisible(bool(words))
 
     def _show_privacy(self, text: str) -> None:
         privacy = self.model_privacy(text)

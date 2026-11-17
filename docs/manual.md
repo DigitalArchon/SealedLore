@@ -980,6 +980,16 @@ to another host. Those models usually have one host, so the check offers
 their equally private alternatives on the built-in prompt instead, or says
 that trying other hosts would mean playing outside private mode.
 
+## Models SealedLore adjusts for
+
+SealedLore sends every model the same story, but for a few models it leaves a
+text out of the prompt, where testing showed it made that model's writing
+worse, or shapes the request the way the model's own service requires (how
+Claude models are asked to think on Anthropic's own API, cache markers for
+Claude, the form NanoGPT's encrypted models need). A model field shows
+**· tuned** beside a model any of these apply to, and its tooltip says what is
+done. **Help → Models SealedLore adjusts for…** lists all of them, with why.
+
 ## Setting up a story
 
 **Write a story from scratch** (on the start page, or File → New…) walks
@@ -1900,7 +1910,10 @@ do next. None of them sees the others' answers or your next turn. You answer
 the passage too, with your turn as usual. The storyteller then gets your turn
 and every character's answer, and writes what happens when all of it meets:
 an answer is what that character means to do, not something that has
-happened, so the storyteller decides how it turns out.
+happened, so the storyteller decides how it turns out. The storyteller is also
+asked to put their words into the passage as dialogue, rather than report
+them; with Claude Opus 5.5, which never needed it and wrote a little worse for
+it, that request is left out (see "Models SealedLore adjusts for").
 
 Each character's model is given their card (summary, description,
 personality, voice and skills) and the story's setting. It also gets the

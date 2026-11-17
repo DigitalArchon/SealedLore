@@ -86,6 +86,7 @@ from sealedlore.gui.model_trouble import (
     TroubleContext,
     TroubleRole,
 )
+from sealedlore.gui.model_tuning_dialog import show_model_tuning
 from sealedlore.gui.new_story_guide import NewStoryGuide
 from sealedlore.gui.people_page import PeoplePage, chat_view, people_view
 from sealedlore.gui.phone_status import PhoneStatusButton
@@ -1047,6 +1048,13 @@ class MainWindow(
         )
         worse_action.triggered.connect(lambda: self.open_model_trouble("worse"))
         trouble_menu.addAction(worse_action)
+        tuning_action = QAction("Models SealedLore adjusts &for…", self)
+        tuning_action.setStatusTip(
+            "Every model SealedLore treats differently: what it changes in the prompt or the "
+            "request, and why"
+        )
+        tuning_action.triggered.connect(lambda: show_model_tuning(self))
+        help_menu.addAction(tuning_action)
         about_action = QAction("&About SealedLore", self)
         about_action.triggered.connect(self._show_about)
         help_menu.addAction(about_action)

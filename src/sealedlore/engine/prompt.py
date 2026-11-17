@@ -30,6 +30,7 @@ from sealedlore.engine.cast_fit import CastFit, fit_cast
 from sealedlore.engine.characters import render_supporting_block
 from sealedlore.engine.habits import feedback as habits_feedback
 from sealedlore.engine.initiative import Move, move_left
+from sealedlore.engine.model_tuning import left_out
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.recall import RecallItem, render_recall_block
 from sealedlore.engine.response_style import LengthInstruction, for_turn
@@ -396,6 +397,9 @@ def assemble_prompt(
         else ()
     )
     round_names = [answer.name for answer in answers if answer.text.strip()]
+    # The dialogue sentence on the directives and REMEMBER, unless the model is
+    # one it was measured hurting (engine/model_tuning.py): the answers still go.
+    clause_names = [] if "turn.round.remember" in left_out(opts.model) else round_names
 
     tail_specs = [
         # The story's own past, fuller than its chapters (engine/recall.py).
@@ -436,7 +440,7 @@ def assemble_prompt(
                 roll_explanation=turn.roll_explanation,
                 length=length,
                 texts=texts,
-                round_names=round_names,
+                round_names=clause_names,
             ),
         ),
         (
@@ -477,7 +481,7 @@ def assemble_prompt(
                 move=move,
                 voice=opts.prose_reminders,
                 habits=habits,
-                round_names=round_names,
+                round_names=clause_names,
             ),
         ),
     ]
