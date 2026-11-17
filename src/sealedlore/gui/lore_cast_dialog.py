@@ -69,9 +69,10 @@ class LoreCastDialog(QDialog):
         layout.addWidget(
             _hint(
                 f"Written by {model_label(model) if model else 'the story model'} (Settings → "
-                "Models → Authoring model). The central figures go into the cast, everyone "
-                "else as supporting cards, sent to the storyteller when the story mentions "
-                "them. Cards written by the model are marked ✦: look them over."
+                "Models → Authoring model). The central figures become main characters, "
+                "everyone else supporting characters, their cards sent to the storyteller "
+                "when the story mentions them. Cards written by the model are marked ✦: "
+                "look them over."
             )
         )
         layout.addStretch(1)

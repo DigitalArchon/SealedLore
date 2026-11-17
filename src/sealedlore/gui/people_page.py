@@ -52,6 +52,7 @@ from PySide6.QtWidgets import (
 from sealedlore.engine.looks import look_words, shown_picture
 from sealedlore.engine.scene_state import same_person
 from sealedlore.gui import theme
+from sealedlore.gui.character_roles import MAIN_ABOUT, MAIN_TAG, SUPPORTING_ABOUT, SUPPORTING_TAG
 from sealedlore.gui.expression_set import SET_LABEL
 from sealedlore.models.character import Character
 from sealedlore.models.scene import SceneState
@@ -65,9 +66,11 @@ OTHERS_MAX_HEIGHT = 200
 READ_AT = QSize(480, 640)
 
 HERE_HEADING = "Here now"
-AWAY_HEADING = "Not here"
-OTHERS_HEADING = "Also in the story"
-CAST_HEADING = "The cast"
+# Main and supporting characters apart, each card tagged (gui/character_roles.py):
+# "Not here" and "Also in the story" were the two kinds, unnamed.
+AWAY_HEADING = "Main characters, not here"
+OTHERS_HEADING = "Supporting characters, not here"
+CAST_HEADING = "Main characters"
 SUPPORTING_HEADING = "Supporting characters"
 NOT_BEGUN = (
     "The story hasn't begun. Story → Start story… chooses who you play, and the "
@@ -112,7 +115,7 @@ def card_choices(name: str) -> list[tuple[str, bool]]:
     """Make a card's choices for someone with none: (words, into the cast)."""
     return [
         (f"Make a card for {name} (a supporting character)", False),
-        (f"Make a card for {name} in the cast (you can play them)", True),
+        (f"Make a card for {name} as a main character (you can play them)", True),
     ]
 
 
@@ -129,6 +132,8 @@ class Person:
     picture: str
     you: bool = False
     playable: bool = False
+    # "main" or "supporting" (said over their name), "" in a chat.
+    role: str = ""
     # Where they are, when it is known and not here.
     note: str = ""
     # Their pictures to be shown as, (picture id, words), the portrait first;
@@ -181,6 +186,7 @@ def _person(
     note: str = "",
     looks: Mapping[str, str] | None = None,
     wanted: Mapping[str, str] | None = None,
+    role: str = "",
 ) -> Person:
     shown = shown_picture(character, looks or {})
     refs = character.reference_images
@@ -191,6 +197,7 @@ def _person(
         picture=shown.file if shown is not None else "",
         you=character.id == held_id,
         playable=character.is_player_available,
+        role=role,
         note=note,
         looks=tuple(
             (ref.id, PORTRAIT_WORDS if number == 1 else look_words(ref, number))
@@ -237,15 +244,17 @@ def people_view(
     )
     for character in cast:
         if character.id in present:
-            view.here.append(_person(character, held_id, looks=looks, wanted=wanted))
+            view.here.append(_person(character, held_id, looks=looks, wanted=wanted, role="main"))
         else:
             note = notes.get(character.id, "")
-            view.away.append(_person(character, held_id, note, looks))
+            view.away.append(_person(character, held_id, note, looks, role="main"))
     for character in supporting:
         if any(same_person(name, character) for name in scene.present_others):
-            view.here.append(_person(character, held_id, looks=looks, wanted=wanted))
+            view.here.append(
+                _person(character, held_id, looks=looks, wanted=wanted, role="supporting")
+            )
         else:
-            view.others.append(_person(character, held_id, looks=looks))
+            view.others.append(_person(character, held_id, looks=looks, role="supporting"))
     view.also_here = [
         name
         for name in scene.present_others
@@ -369,6 +378,13 @@ class PersonCard(QFrame):
             badge = QLabel("You")
             badge.setObjectName("personYou")
             words.addWidget(badge)
+        elif person.role:
+            # Which kind of character, over the name (the one played is
+            # always a main character, and "You" says more).
+            tag = QLabel(MAIN_TAG if person.role == "main" else SUPPORTING_TAG)
+            tag.setObjectName("personRole")
+            tag.setToolTip(MAIN_ABOUT if person.role == "main" else SUPPORTING_ABOUT)
+            words.addWidget(tag)
         self.name = QLabel(person.name)
         self.name.setObjectName("personName")
         self.name.setWordWrap(True)

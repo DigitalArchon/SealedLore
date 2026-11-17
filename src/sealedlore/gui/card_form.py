@@ -21,7 +21,6 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QCheckBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -36,6 +35,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.look_sheet import keep_order
+from sealedlore.gui.character_roles import PLAYED_BY, PlayedBy
 from sealedlore.gui.fields import FormScroll, set_field_text
 from sealedlore.gui.json_field import JsonField
 from sealedlore.gui.portrait_view import PortraitView
@@ -127,15 +127,9 @@ class CharacterForm(QWidget):
         skills_layout.setContentsMargins(0, 0, 0, 0)
         skills_layout.addWidget(self.skills)
         skills_layout.addLayout(skill_buttons)
-        self.player_available = QCheckBox("Available to play")
-        self.player_available.setToolTip(
-            "In a story they join: you can play them, and the storyteller voices them on the "
-            "turns you don't. Off: they are the storyteller's."
-        )
-        self.author_only = QCheckBox("Never voiced by the storyteller")
-        self.author_only.setToolTip(
-            "In a story they join: yours on every turn, not only while you play them."
-        )
+        # Who plays them in a story they join as a main character, as the
+        # cast board's card has it (gui/character_roles.py).
+        self.played_by = PlayedBy(in_a_story=False)
 
         self.portrait = PortraitView(scene=False)
         self.others = RefImageStrip(self._pictures, "them", after_portrait=True, crop="portrait")
@@ -162,8 +156,7 @@ class CharacterForm(QWidget):
             widget.textChanged.connect(self._apply)
         for line in (self.name, self.aliases, self.canon):
             line.textChanged.connect(self._apply)
-        self.player_available.toggled.connect(self._apply)
-        self.author_only.toggled.connect(self._apply)
+        self.played_by.changed.connect(self._apply)
 
         pictures_column = QWidget()
         pictures_column.setMinimumWidth(PORTRAIT_COLUMN_MIN)
@@ -189,8 +182,7 @@ class CharacterForm(QWidget):
         form.addRow("Voice", self.voice_notes)
         form.addRow("Competence", self.competence)
         form.addRow("Skills", skills_box)
-        form.addRow(self.player_available)
-        form.addRow(self.author_only)
+        form.addRow(PLAYED_BY, self.played_by)
         host = QWidget()
         card = QHBoxLayout(host)
         card.setContentsMargins(10, 10, 10, 0)
@@ -226,8 +218,7 @@ class CharacterForm(QWidget):
         self.voice_notes.setPlainText(character.voice_notes or "")
         self.competence.setPlainText(character.competence.notes)
         self.skills.show_tiers(character.competence.tiers)
-        self.player_available.setChecked(character.is_player_available)
-        self.author_only.setChecked(character.author_only)
+        self.played_by.show_character(character)
         self._loading = False
 
     def refresh_pictures(self) -> None:
@@ -264,8 +255,7 @@ class CharacterForm(QWidget):
         character.voice_notes = self.voice_notes.toPlainText().strip() or None
         character.competence.notes = self.competence.toPlainText().strip()
         character.competence.tiers = self.skills.tiers()
-        character.is_player_available = self.player_available.isChecked()
-        character.author_only = self.author_only.isChecked()
+        self.played_by.apply_to(character)
         self.changed.emit()
 
     def _ask(self, what: str, ref_id: str = "", *, first: bool = False) -> None:

@@ -5,10 +5,13 @@ freeform prose, plus optional per-skill tiers (§4.1) — the author's ruling on
 a character's ceiling, which dice mode turns into odds. Nothing here is
 required; with no tiers the prose carries it.
 
-Two tiers share one list. The cast is the author's: on the roster, holdable,
-in the cached system block. Supporting characters are people the story
-introduced, carded for continuity and shown to the model only when mentioned.
-The model suggests them; nothing joins either tier without the author's say.
+Two tiers share one list, shown as main characters and supporting characters
+(gui/character_roles.py has the words). The cast, the main characters, is the
+author's: on the roster, holdable, in the cached system block. Supporting
+characters are people the story introduced, carded for continuity and shown to
+the model only when mentioned. The model suggests them; nothing joins either
+tier without the author's say. Each card says which it is, at its top, with
+the way to the other.
 
 Laid out as Your characters is (the author, Nov 7 2026: the People page, the
 Cast page and the cast board were three places for one thing): the list down
@@ -28,6 +31,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QFormLayout,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -50,6 +54,20 @@ from sealedlore.gui import text_size, theme
 from sealedlore.gui.banners import CastRoomBanner
 from sealedlore.gui.cast_board import SAVE_LABEL
 from sealedlore.gui.cast_room import CastRoom, banner_text, card_note, supporting_note
+from sealedlore.gui.character_roles import (
+    MAIN,
+    MAIN_ABOUT,
+    MAIN_HEADING,
+    MAKE_MAIN,
+    MAKE_MAIN_TIP,
+    MAKE_SUPPORTING,
+    MAKE_SUPPORTING_TIP,
+    PLAYED_BY,
+    SUPPORTING,
+    SUPPORTING_ABOUT,
+    SUPPORTING_HEADING,
+    PlayedBy,
+)
 from sealedlore.gui.fields import FormScroll, set_field_text
 from sealedlore.gui.lore_cast_dialog import FILL_LABEL
 from sealedlore.gui.portrait_view import PortraitView
@@ -164,10 +182,14 @@ class CastPanel(QWidget):
         self.list.currentItemChanged.connect(self._on_selection_changed)
 
         add_button = QPushButton("Add")
+        add_button.setToolTip(
+            "Add a main character. Their card says how to make them a supporting one."
+        )
         add_button.clicked.connect(self._add_character)
         self.remove_button = QPushButton("Remove")
         self.remove_button.clicked.connect(self._remove_character)
-        self.move_button = QPushButton("Move to supporting")
+        # On the card, in the box that says which kind they are.
+        self.move_button = QPushButton(MAKE_SUPPORTING)
         self.move_button.clicked.connect(self._move_character)
 
         # Its own line: a fourth button abreast widened the Inspector.
@@ -232,7 +254,6 @@ class CastPanel(QWidget):
         buttons.addWidget(self.remove_button, 0, 1)
         for row, button in enumerate(
             (
-                self.move_button,
                 self.collection_button,
                 self.save_button,
                 self.fill_button,
@@ -308,17 +329,8 @@ class CastPanel(QWidget):
         self.competence.setPlaceholderText(
             "Freeform: 'a veteran duellist, illiterate, hopeless at deception'"
         )
-        self.player_available = QCheckBox("Available to play")
-        self.player_available.setToolTip(
-            "On: you can hold this character, and the storyteller voices them on the turns "
-            "you don't.\nOff: they are the storyteller's — it writes their speech, thoughts "
-            "and choices in full, and they no longer appear in the Speaking as list."
-        )
-        self.author_only = QCheckBox("Never voiced by the storyteller")
-        self.author_only.setToolTip(
-            "Yours on every turn, not only while you hold them. The storyteller is told "
-            "never to write their speech, thoughts or decisions."
-        )
+        # Who plays a main character: the two flags on the card as one choice.
+        self.played_by = PlayedBy()
         self.keep_whole = QCheckBox("Always send the whole card")
         self.keep_whole.setToolTip(
             "For a main character. When the cast's cards don't fit their room in the "
@@ -411,9 +423,7 @@ class CastPanel(QWidget):
         self.name.editingFinished.connect(self.finish_rename)
         self.aliases.textChanged.connect(self._apply_edits)
         self.canon.textChanged.connect(self._apply_edits)
-        self.player_available.toggled.connect(self._apply_edits)
-        self.player_available.toggled.connect(self._sync_voicing)
-        self.author_only.toggled.connect(self._apply_edits)
+        self.played_by.changed.connect(self._apply_edits)
         self.keep_whole.toggled.connect(self._apply_edits)
         self.condensed.textChanged.connect(self._condensed_edited)
 
@@ -432,8 +442,18 @@ class CastPanel(QWidget):
         column.addWidget(QLabel("Other pictures"))
         column.addWidget(self.pictures)
         column.addStretch(1)
+        # The card's words: which kind of character they are (`role_box`,
+        # added below), then the form, then a stretch. In the form, the box
+        # took the height the form has to spare (its rows' hints are at
+        # narrower widths) and stood 20px taller than its text.
         fields = QWidget()
-        form = QFormLayout(fields)
+        fields_layout = QVBoxLayout(fields)
+        fields_layout.setContentsMargins(0, 0, 0, 0)
+        fields_layout.setSpacing(8)
+        form_widget = QWidget()
+        fields_layout.addWidget(form_widget)
+        fields_layout.addStretch(1)
+        form = QFormLayout(form_widget)
         form.setContentsMargins(0, 0, 0, 0)
         form.addRow("Name", self.name)
         form.addRow("Aliases", self.aliases)
@@ -445,8 +465,7 @@ class CastPanel(QWidget):
         form.addRow("Voice", self.voice_notes)
         form.addRow("Competence", self.competence)
         form.addRow("Skills", skills_box)
-        form.addRow(self.player_available)
-        form.addRow(self.author_only)
+        form.addRow(PLAYED_BY, self.played_by)
         form.addRow(self.keep_whole)
         form.addRow("Condensed", self.condensed_box)
         self._form = form
@@ -485,6 +504,23 @@ class CastPanel(QWidget):
         link_layout.setSpacing(4)
         link_layout.addWidget(self.link_words)
         link_layout.addWidget(self.link_button, 0, Qt.AlignLeft)
+        # Which kind of character they are, what that means, and the way to
+        # the other kind: at the top of the card, above everything they are.
+        self.role_box = QFrame()
+        self.role_box.setObjectName("roleBox")
+        self.role_title = QLabel()
+        self.role_title.setObjectName("roleTitle")
+        self.role_about = QLabel()
+        self.role_about.setObjectName("roleAbout")
+        self.role_about.setWordWrap(True)
+        role_layout = QVBoxLayout(self.role_box)
+        role_layout.setContentsMargins(10, 8, 10, 8)
+        role_layout.setSpacing(4)
+        role_layout.addWidget(self.role_title)
+        role_layout.addWidget(self.role_about)
+        role_layout.addWidget(self.move_button, 0, Qt.AlignLeft)
+        self.role_box.hide()
+        fields_layout.insertWidget(0, self.role_box)
         self.link_box.hide()
         form.insertRow(1, self.link_box)
 
@@ -498,14 +534,12 @@ class CastPanel(QWidget):
         self.suggestion_list.setMaximumHeight(110)
         self.suggestion_list.currentItemChanged.connect(self._sync_suggestion_buttons)
 
-        self.accept_button = QPushButton("Add")
-        self.accept_button.setToolTip(
-            "Keep as a supporting character: shown to the model when mentioned"
-        )
+        self.accept_button = QPushButton("Add as supporting")
+        self.accept_button.setToolTip(f"Keep them as a supporting character. {SUPPORTING_ABOUT}")
         self.accept_button.clicked.connect(lambda: self._accept(False))
-        self.accept_cast_button = QPushButton("Add to cast")
+        self.accept_cast_button = QPushButton("Add as main")
         self.accept_cast_button.setToolTip(
-            "Put on the roster and in every prompt; costs one cache miss"
+            f"Keep them as a main character. {MAIN_ABOUT} Costs one cache miss."
         )
         self.accept_cast_button.clicked.connect(lambda: self._accept(True))
         self.dismiss_button = QPushButton("Dismiss")
@@ -575,11 +609,15 @@ class CastPanel(QWidget):
             self.list.addItem(everyone)
             if everyone_was:
                 self.list.setCurrentItem(everyone)
-        sections = [("IN THIS CHAT" if self._chat else "CAST", self._cast)]
+        sections = [
+            ("IN THIS CHAT", "", self._cast)
+            if self._chat
+            else (MAIN_HEADING, MAIN_ABOUT, self._cast)
+        ]
         if self._supporting:
-            sections.append(("SUPPORTING — FROM THE STORY", self._supporting))
-        for title, characters in sections:
-            self._add_header(title)
+            sections.append((SUPPORTING_HEADING, SUPPORTING_ABOUT, self._supporting))
+        for title, about, characters in sections:
+            self._add_header(title, about)
             for character in characters:
                 if character.id in self._hidden:
                     continue
@@ -633,8 +671,7 @@ class CastPanel(QWidget):
             self.voice_notes,
             self.competence,
             self._skills_box,
-            self.player_available,
-            self.author_only,
+            self.played_by,
             self.keep_whole,
             self.condensed_box,
         ):
@@ -643,8 +680,7 @@ class CastPanel(QWidget):
         # SillyTavern cards stay: a card's character, and its expression
         # pictures, are as welcome in a chat (its lore isn't brought).
         # (The suggestions are the page's to show: lent, the panel has none.)
-        for widget in (self.move_button, self.fill_button):
-            widget.setVisible(not on)
+        self.fill_button.setVisible(not on)
         # The room's banner shows only when it has something to say: forced
         # visible on leaving a chat, a story with nothing over its room had
         # an empty banner over its board.
@@ -766,9 +802,11 @@ class CastPanel(QWidget):
         if item is not None and character is not None:
             item.setIcon(self._icon(character))
 
-    def _add_header(self, title: str) -> None:
+    def _add_header(self, title: str, about: str = "") -> None:
         item = QListWidgetItem(title)
         item.setData(HEADER_ROLE, True)
+        if about:
+            item.setToolTip(about)
         item.setFlags(Qt.NoItemFlags)
         # QSS can't select list items by role, so the header is styled here.
         font = QFont(self.list.font())
@@ -819,17 +857,22 @@ class CastPanel(QWidget):
         if suggestion_id:
             self.dismiss_requested.emit(suggestion_id)
 
-    def _sync_voicing(self) -> None:
-        """ "Never voiced" only means something for a character you can play.
-
-        With "Available to play" off the character is the storyteller's, which
-        is the opposite setting; leaving the box live would offer a state where
-        nobody writes them.
-        """
-        playable = self.player_available.isChecked()
-        self.author_only.setEnabled(playable)
-        if not playable and self.author_only.isChecked():
-            self.author_only.setChecked(False)
+    def _show_role(self, character: Character | None) -> None:
+        """Main or supporting, at the top of their card, with the way to the
+        other; who plays them only for a main character (a supporting
+        character's flags reach no prompt). Nothing of it in a chat."""
+        supporting = self._is_supporting(character)
+        self.role_title.setText(SUPPORTING if supporting else MAIN)
+        self.role_about.setText(SUPPORTING_ABOUT if supporting else MAIN_ABOUT)
+        self.role_box.setProperty("role", "supporting" if supporting else "main")
+        self.role_box.style().unpolish(self.role_box)
+        self.role_box.style().polish(self.role_box)
+        self.move_button.setText(MAKE_MAIN if supporting else MAKE_SUPPORTING)
+        self.move_button.setToolTip(MAKE_MAIN_TIP if supporting else MAKE_SUPPORTING_TIP)
+        self.role_box.setVisible(character is not None and not self._chat)
+        self._form.setRowVisible(
+            self.played_by, character is not None and not supporting and not self._chat
+        )
 
     def _is_supporting(self, character: Character | None) -> bool:
         return character is not None and any(c is character for c in self._supporting)
@@ -866,9 +909,7 @@ class CastPanel(QWidget):
         self._form_host.setEnabled(enabled)
         self.remove_button.setEnabled(enabled)
         self.move_button.setEnabled(enabled)
-        self.move_button.setText(
-            "Move to cast" if self._is_supporting(character) else "Move to supporting"
-        )
+        self._show_role(character)
         self.empty_hint.setVisible(not enabled)
         self.origin_note.setVisible(bool(character and character.origin == "model"))
         self.pictures.set_refs(character.reference_images if character is not None else None)
@@ -884,11 +925,9 @@ class CastPanel(QWidget):
         self.personality.setPlainText(character.personality or "")
         self.voice_notes.setPlainText(character.voice_notes or "")
         self.competence.setPlainText(character.competence.notes)
-        self.player_available.setChecked(character.is_player_available)
-        self.author_only.setChecked(character.author_only)
+        self.played_by.show_character(character)
         self.keep_whole.setChecked(character.keep_whole)
         self.condensed.setPlainText(character.condensed or "")
-        self._sync_voicing()
         set_field_text(self.canon, character.canon or "")
         self._show_skills(character)
         self._loading = False
@@ -919,8 +958,8 @@ class CastPanel(QWidget):
         character.personality = self.personality.toPlainText().strip() or None
         character.voice_notes = self.voice_notes.toPlainText().strip() or None
         character.competence.notes = self.competence.toPlainText().strip()
-        character.is_player_available = self.player_available.isChecked()
-        character.author_only = self.author_only.isChecked()
+        if not self._is_supporting(character):
+            self.played_by.apply_to(character)
         character.keep_whole = self.keep_whole.isChecked()
         character.canon = self.canon.text().strip() or None
         character.competence.tiers = self._skills_from_table()

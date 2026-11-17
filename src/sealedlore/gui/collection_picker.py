@@ -92,7 +92,9 @@ class CollectionPicker(QDialog):
         self.empty.setWordWrap(True)
         self.empty.setVisible(not self._characters)
 
-        self.to_cast = QRadioButton("Into the cast: on every turn's roster, and playable")
+        self.to_cast = QRadioButton(
+            "As main characters: their whole cards on every turn, and playable"
+        )
         self.to_supporting = QRadioButton(
             "As supporting characters: their cards go with the turns that name them"
         )

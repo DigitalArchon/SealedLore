@@ -1258,6 +1258,42 @@ QComboBox QAbstractItemView {
   font-size: 12px;
 }
 
+/* Main or supporting, at the top of a character's card on the cast board
+   (gui/cast_panel.py, gui/character_roles.py): a main character's edge the
+   accent, a supporting character's quieter. */
+#roleBox {
+  background: @panel;
+  border: 1px solid @border;
+  border-left: 3px solid @accent;
+  border-radius: 4px;
+}
+
+#roleBox[role="supporting"] {
+  border-left: 3px solid @text_faint;
+}
+
+#roleTitle {
+  color: @text_bright;
+  font-size: 13px;
+  font-weight: 600;
+  background: transparent;
+}
+
+#roleAbout {
+  color: @text_dim;
+  font-size: 12px;
+  background: transparent;
+}
+
+/* Main or supporting, over a name on the People page (gui/people_page.py). */
+#personRole {
+  color: @text_dim;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  background: transparent;
+}
+
 #errorLabel {
   color: @error;
   font-size: 13px;

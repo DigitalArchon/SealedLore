@@ -1813,9 +1813,21 @@ stays in this story; **Save to Your characters…** beside it keeps any of
 them in Your characters, for other stories and chats (see "Your
 characters").
 
-Down the left is **Everyone**, then your cast and, below it, the
-**supporting** characters: the people the story introduced, marked ✦ when
-the model drafted the card. Choose one and the right side has two tabs:
+Down the left is **Everyone**, then the **main characters** and, below them,
+the **supporting characters**, marked ✦ when the model drafted the card.
+The two kinds differ in what the storyteller gets:
+
+- A **main character**'s whole card goes to the storyteller on every turn,
+  and the scene always says where they are. You can play a main character.
+- A **supporting character**'s card goes to the storyteller only on turns
+  that name them, or that find them in the scene, so that someone the story
+  introduced keeps their name and manner once the prose about them is
+  summarised. The storyteller always writes them, and you can't play them.
+
+Every card says which kind it is in a box at its top, with **Make them a
+supporting character** or **Make them a main character** to switch. Making
+someone a main character changes what the storyteller's cached prompt holds,
+so the next turn costs one cache miss. Choose one and the right side has two tabs:
 **Card**, everything the storyteller is told of them (below), and
 **Pictures**, their pictures as a sheet of looks and expressions (see "The
 cast board" under The People page). **Everyone** shows each character's
@@ -1826,20 +1838,17 @@ Open in the plot editor… first), nor the one you are playing while a private
 scene is open. When turns are archived, or when you
 press **Scan recent story** (under the list too), the model suggests named
 characters who aren't on file yet:
-- **Add** keeps them as supporting characters, shown to the model only when
-  they're mentioned;
-- **Add to cast** puts them on the roster and in every prompt;
+- **Add as supporting** keeps them as supporting characters;
+- **Add as main** makes them main characters;
 - **Dismiss** stops the name being suggested again.
-
-**Move to cast** and **Move to supporting** switch a character between the two.
 
 **Fill with lore characters…** is for a story set in a world that already
 exists: a book or series, a film, a game, a myth, a period of history. Name
 the world and, if you like, the characters you want for sure, in plain words,
 and the authoring model (Settings → Models) writes a card for each of them
 and for the world's other main and recurring characters, fitted to the
-story's World where it changes the original. The central figures go into the
-cast, everyone else in as supporting characters, all marked ✦. Change, move
+story's World where it changes the original. The central figures become main
+characters, everyone else supporting characters, all marked ✦. Change, move
 or remove any of them like your own cards. Ask again to add people it missed:
 it is told who is on file already, and never adds a name twice. Without
 cards, a story in a known world tends to bring in its first few famous
@@ -1860,16 +1869,21 @@ picture is shown the same way on the Lore page.
 
 ![A character's card: the list of characters, each with a small portrait, and the selected character's portrait at the left with the buttons that draw or change it, and the fields of their card at the right](screenshots/cast-page.webp)
 
-Two checkboxes on a character's card decide who writes them:
+**Played by**, on a main character's card, decides who writes them:
 
-- **Available to play** on (the default) — you can play them, and the model
-  voices them on the turns you don't.
-- **Available to play** off — they are the model's: it writes their speech,
-  thoughts and choices in full, and they leave the *Speaking as* list. Use this
-  when you hand a character over, including one you have been writing yourself:
-  the roster tells the model that it now voices them.
-- **Never voiced by the storyteller** — yours on every turn, not only while you
-  play them. The model is told never to write them.
+- **You or the storyteller** (the default) — you can play them, and the
+  storyteller writes them on the turns you play someone else.
+- **Only you** — yours on every turn, not only while you play them: the
+  storyteller is told never to write their words, thoughts or choices. For a
+  group of characters you switch between.
+- **Only the storyteller** — they are the storyteller's: it writes their
+  speech, thoughts and choices in full, and they leave the *Speaking as* list.
+  Use this when you hand a character over, including one you have been
+  writing yourself: the roster tells the storyteller that it now writes them.
+
+A supporting character is always the storyteller's, so their card has no
+**Played by**. Your characters' cards have it too, for the stories they join
+as main characters.
 
 ### When the cast's cards don't fit
 

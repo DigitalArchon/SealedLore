@@ -1263,7 +1263,7 @@ def test_a_chats_characters_are_for_their_pictures_alone(app, window, monkeypatc
     assert window.board_shown()
     panel = window.cast_panel
     assert [c.name for c in window.session.cast] == ["New character"]
-    for field in (panel._skills_box, panel.voice_notes, panel.player_available, panel.canon):
+    for field in (panel._skills_box, panel.voice_notes, panel.played_by, panel.canon):
         assert not field.isVisibleTo(panel)
     for field in (panel.name, panel.full_description, panel.chat_hint):
         assert field.isVisibleTo(panel)

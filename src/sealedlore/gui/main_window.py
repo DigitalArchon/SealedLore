@@ -4298,7 +4298,7 @@ class MainWindow(
         self.session.promote(character_id)
         self._after_tier_change(character_id)
         self.statusBar().showMessage(
-            "Moved to the cast: on the roster now, and one cache miss next turn", 6000
+            "Now a main character: on the roster, and one cache miss next turn", 6000
         )
 
     def _demote_character(self, character_id: str) -> None:

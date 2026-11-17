@@ -379,11 +379,12 @@ class TavernWindow:
         box.setText(f"Add {character.name} to this story?")
         box.setTextFormat(Qt.PlainText)
         where = (
-            "The cast is on every turn's roster, and the storyteller has their card always; "
-            "a supporting character's card goes with the turns that name them."
+            "A main character's whole card goes with every turn, and you can play them; "
+            "a supporting character's card goes with the turns that name them, and the "
+            "storyteller always writes them."
         )
         box.setInformativeText(where)
-        cast = box.addButton("Add to the cast", QMessageBox.AcceptRole)
+        cast = box.addButton("Add as a main character", QMessageBox.AcceptRole)
         supporting = box.addButton("Add as a supporting character", QMessageBox.AcceptRole)
         box.addButton(QMessageBox.Cancel)
         box.setDefaultButton(cast)
