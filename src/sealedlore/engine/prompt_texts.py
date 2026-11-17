@@ -1549,22 +1549,23 @@ _text(
 # whose card names a model answers it as that character, blind to what the
 # others answered and to what the author is about to write; the storyteller
 # then works all of it in with the author's next turn, taking each answer as
-# intention, never as fact. A trial: every wording here is a first draft,
-# none of it measured yet, and nothing is sent for a story that names no
-# character's own model.
+# intention, never as fact (the author's ruling). A trial: every wording here
+# is a first draft, none of it measured, and nothing is sent for a story that
+# names no character's own model. The character speaks as themselves, first
+# person: the author asked for their answer to appear "as if from them
+# directly".
 _text(
     "characters.own.system",
     OWN,
     "A character's own prompt: who they are",
-    "The system prompt sent to a character's own model: their name and card, and the part "
-    "they play. Sent only when the card names a model for them.",
-    "You are {name} in a collaborative story, played by your own model as one of its "
-    "players: the author plays another character, and a storyteller model writes the "
-    "prose of what happens.\n\n{summary}\n\n{description}",
+    "The system prompt sent to a character's own model: who they are, from their card. Sent "
+    "only when the card names a model for them.",
+    "You are {name}, a character in a collaborative story, and you play yourself: another "
+    "player plays a different character, and a storyteller writes what happens. Stay "
+    "{name} in everything you write.\n\n{card}",
     (
         ("name", "the character's name"),
-        ("summary", "their summary"),
-        ("description", "their full card text"),
+        ("card", "their card: summary, description, personality"),
     ),
 )
 
@@ -1578,40 +1579,70 @@ _text(
 )
 
 _text(
+    "characters.own.skills",
+    OWN,
+    "A character's own prompt: what they can do",
+    "The card's skills, in the character's own prompt.",
+    "What you can do: {skills}",
+    (("skills", "the card's skill tiers and notes"),),
+)
+
+_text(
+    "characters.own.setting",
+    OWN,
+    "A character's own prompt: the setting",
+    "The story's setting (Story → Setup → World), in the character's own prompt. Never the "
+    "storyteller's notes.",
+    "THE WORLD YOU LIVE IN\n\n{setting}",
+    (("setting", "the story's setting text"),),
+)
+
+_text(
     "characters.own.rules",
     OWN,
     "A character's own prompt: the round's rules",
-    "The rules a character's own model is given for its answer. The storyteller's "
-    "writing is fact for it, its answer is intention, and it writes as itself alone.",
+    "The rules a character's own model is given for its answer: the storyteller's writing "
+    "is fact, its answer is intention, and it writes for itself alone.",
     """\
-THE ROUND
+HOW TO ANSWER
 
-The storyteller's passage below is what has just happened. Take it as fact:
-never rewrite it, never answer past it. You answer as {name} alone — never
-another character's words, actions or decisions, and never the story's
-prose, which the storyteller writes. Your answer is what {name} thinks,
-says or wants to do next, not something that has happened: the storyteller
-works out what comes of it. Write in {name}'s own voice, third person, past
-tense, a few sentences only.""",
+What the storyteller writes is what has happened: take it as fact, never
+rewrite it or answer past it. You know only what you saw, heard or were told
+in the story below. Answer as {name} alone, in the first person: what you
+say (in quotation marks), what you do or mean to do next, and briefly what
+you think or feel. It is your intention, not something that has happened
+yet: the storyteller decides what comes of it, alongside what the others
+do. Never write another character's words, actions or thoughts, and never
+narrate what happens. A few sentences.""",
     (("name", "the character's name"),),
 )
 
 _text(
     "characters.own.history.heading",
     OWN,
-    "A character's own prompt: their history",
-    "The heading over the scenes a character was present for, in their own prompt.",
-    "THE STORY AS {name} LIVED IT — the scenes they were present for:",
-    (("name", "the character's name"),),
+    "A character's own prompt: the story so far",
+    "The heading over the scenes the character was present for, in their own prompt.",
+    "THE STORY AS YOU SAW IT: the scenes you were in, oldest first.",
+    (),
 )
 
 _text(
-    "characters.own.scene.heading",
+    "characters.own.trimmed",
     OWN,
-    "A character's own prompt: where they are",
-    "The heading over the scene card in a character's own prompt.",
-    "WHERE THEY ARE NOW",
+    "A character's own prompt: older scenes left out",
+    "Before the scenes shown, when the older ones the character was in don't fit.",
+    "(Earlier scenes you were in are not shown here.)",
     (),
+)
+
+_text(
+    "characters.own.answered",
+    OWN,
+    "A character's own prompt: what they answered before",
+    "After a passage in the character's own history: what they answered it with then. Only "
+    "their own answers, never another character's.",
+    "(You answered: {text})",
+    (("text", "what they answered then"),),
 )
 
 _text(
@@ -1619,7 +1650,7 @@ _text(
     OWN,
     "A character's own prompt: the scene",
     "The scene card's place, time and situation, in the character's own prompt.",
-    "Location: {location}\nTime: {time}\nSituation: {situation}",
+    "WHERE YOU ARE NOW\n\nLocation: {location}\nTime: {time}\nSituation: {situation}",
     (
         ("location", "where the scene is"),
         ("time", "the time of day"),
@@ -1637,32 +1668,37 @@ _text(
 )
 
 _text(
-    "characters.own.passage",
-    OWN,
-    "A character's own prompt: the passage to answer",
-    "The heading over the latest passage in a character's own prompt.",
-    "THE LATEST PASSAGE — what has just happened, and what you answer:",
-    (),
-)
-
-_text(
     "characters.own.ask",
     OWN,
     "A character's own prompt: the ask",
-    "What the character's own model is finally asked for, after the passage.",
-    "{name}, what do you do? What you say, think or want next — your intention for "
-    "the coming moment, not something you have already done.",
+    "Last in the character's own prompt, after the story they saw.",
+    "That is where things stand. {name}, what do you say, do or mean to do now?",
     (("name", "the character's name"),),
 )
 
 _text(
-    "characters.own.history",
+    "turn.round",
     OWN,
-    "A passage's own-model answers, in history",
-    "How a character's answer to a passage is rendered in the history every model "
-    "reads: named as intention, so no reader takes it for fact. Goes to the "
-    "storyteller, the reads and the summariser alike.",
-    "{name} (by their own model — what they intend to do, not what they did): {text}",
+    "The other players' intentions (storyteller)",
+    "In the storyteller's tail after the author's turn, when characters played by their own "
+    "model answered the last passage. Their answers follow it.",
+    "Some characters are played by players of their own: {names}. They answered the last "
+    "passage at the same time as the author, without seeing the author's turn or each "
+    "other's answers. Each "
+    "answer is what that character means to do, not something that has happened. Work them "
+    "in with the author's turn: decide what actually happens when these intentions meet, "
+    "and write it. Keep each of them true to what they meant; where intentions clash, or one "
+    "assumes something the others' actions change, resolve it as the world would. Write "
+    "nothing for the author's character beyond their own turn.",
+    (("names", "the names of the characters who answered"),),
+)
+
+_text(
+    "turn.round.answer",
+    OWN,
+    "One player's intention (storyteller)",
+    "Each answer under the storyteller's note about the other players.",
+    "[{name}] {text}",
     (
         ("name", "the character's name"),
         ("text", "what their model answered"),

@@ -745,9 +745,7 @@ def render_history_node(
 ) -> str:
     """One node as it appears in the verbatim history window."""
     if node.kind == "assistant":
-        lines = [node.content.strip()]
-        lines += render_reactions(node.meta.reactions, texts)
-        return _joined(lines)
+        return node.content.strip()
 
     speaker = cast_by_id.get(node.speaker_id)
     lines = [render_speaker_tag(node.speaker_id, speaker, texts), node.content.strip()]
@@ -757,18 +755,26 @@ def render_history_node(
     return _joined(lines)
 
 
-def render_reactions(
-    reactions: Sequence[Reaction], texts: PromptTexts = DEFAULT_TEXTS
-) -> list[str]:
-    """A passage's own-model answers as they go to every reader of the
-    history: named as that character's intention, never as fact of what
-    they did — the storyteller works out what actually happens (the
-    author's ruling, Nov 2026)."""
-    return [
-        texts.fill("characters.own.history", name=reaction.name, text=reaction.text.strip())
+def render_round_block(reactions: Sequence[Reaction], texts: PromptTexts = DEFAULT_TEXTS) -> str:
+    """The own-model round's answers to the passage just before the author's
+    turn, for the storyteller's tail only (the trial, engine/reactions.py).
+
+    Each is what that character means to do, said blind to the author's turn
+    and to each other's: the storyteller works them all in with the author's
+    turn and decides what actually happens (the author's ruling). Never in
+    the history: once a passage has resolved them they are spent, and no
+    read, summary or later turn reads them as something that happened."""
+    answers = [
+        texts.fill("turn.round.answer", name=reaction.name, text=reaction.text.strip())
         for reaction in reactions
         if reaction.text.strip()
     ]
+    if not answers:
+        return ""
+    names = ", ".join(reaction.name for reaction in reactions if reaction.text.strip())
+    return "\n\n".join(
+        ["# WHAT THE OTHER PLAYERS INTEND", texts.fill("turn.round", names=names), *answers]
+    )
 
 
 def render_question(

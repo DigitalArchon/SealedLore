@@ -59,6 +59,7 @@ SECTION_LABELS = {
     "tail.direction": "Plot direction",
     "tail.directives": "This turn's instructions",
     "tail.author_turn": "Your turn",
+    "tail.round": "What the other players intend",
     "tail.retake_note": "Your note for this take",
     "tail.question": "Your question",
     "tail.reminder": "Final reminder",

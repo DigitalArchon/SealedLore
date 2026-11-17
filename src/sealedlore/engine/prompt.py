@@ -43,6 +43,7 @@ from sealedlore.engine.rules import (
     render_question,
     render_reminder,
     render_retake_note,
+    render_round_block,
     render_scene_block,
     render_scene_log_block,
     render_standing_lore,
@@ -95,6 +96,9 @@ SECTION_MAP = "tail.map"
 SECTION_DIRECTION = "tail.direction"
 SECTION_DIRECTIVES = "tail.directives"
 SECTION_AUTHOR_TURN = "tail.author_turn"
+# The own-model round's answers to the passage before the author's turn
+# (engine/reactions.py, the trial): after the turn, which they are worked in with.
+SECTION_ROUND = "tail.round"
 # Regenerate with a note: the author's words for this take only.
 SECTION_RETAKE_NOTE = "tail.retake_note"
 SECTION_QUESTION = "tail.question"
@@ -434,6 +438,17 @@ def assemble_prompt(
                 text=turn.user_text,
                 ooc=turn.ooc,
                 texts=texts,
+            ),
+        ),
+        # Right after the turn they answer beside: read from the passage the
+        # turn answers, so Regenerate sends them again, edited if edited.
+        (
+            SECTION_ROUND,
+            render_round_block(
+                history_nodes[-1].meta.reactions
+                if history_nodes and history_nodes[-1].kind == "assistant"
+                else (),
+                texts,
             ),
         ),
         (SECTION_RETAKE_NOTE, render_retake_note(turn.retake_note, texts)),

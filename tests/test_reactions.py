@@ -1,316 +1,419 @@
-"""The reaction round: main characters played by their own model.
+"""The reaction round: main characters played by a model of their own.
 
-The author's trial (Nov 2026): after the storyteller's passage lands, the
-player and every character whose card names a model answer it at once, none
-seeing the others' answers; the storyteller gets all of it with the author's
-next turn and works out how the intentions fit together, treating each
-character's answer as what they intend to do, never as fact of what they did
-(the author's explicit ruling: nothing a character says can move another
-out of order — the storyteller resolves it as intention).
-
-These tests drive the round end to end against the mock provider.
+The author's trial (Nov 2026): after the storyteller's passage, every
+character whose card names a model answers it at once, blind to the others;
+the storyteller gets the answers with the author's next turn and works them
+in as intentions, never facts. Each character sees only what they would
+know: the scenes they were in, the storyteller's passages and the author's
+turns without OOC notes, their own earlier answers, never a Direction and
+never another character's answer. Driven end to end against the mock.
 """
 
 from __future__ import annotations
 
+import json
+from collections.abc import Iterator
 from pathlib import Path
 
+import pytest
+
+from sealedlore.engine.archival import render_chunk
+from sealedlore.engine.prompt import (
+    SECTION_AUTHOR_TURN,
+    SECTION_REMINDER,
+    SECTION_ROUND,
+    TurnRequest,
+)
+from sealedlore.engine.reactions import character_history, reaction_messages
 from sealedlore.engine.session import SessionNotice, StorySession
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
+from sealedlore.engine.usage import usage_report
 from sealedlore.models.character import Character
 from sealedlore.models.config import Config, ProviderConfig
+from sealedlore.models.node import DIRECTOR_SPEAKER_ID, NARRATOR_SPEAKER_ID
 from sealedlore.models.scene import SceneState
 from sealedlore.models.story import Story
+from sealedlore.providers.base import (
+    ChatRequest,
+    ProviderError,
+    StreamCancelled,
+    StreamEvent,
+)
 from sealedlore.providers.mock import MockChatProvider
-from sealedlore.storage.repository import StoryBundle, save_story_bundle
+from sealedlore.storage.repository import (
+    StoryBundle,
+    load_story_bundle,
+    read_api_log,
+    save_story_bundle,
+)
+
+MAELA_MODEL = "Local::maela-lora"
 
 
-def make_story() -> Story:
-    """The conftest story fixture's value, built directly (a fixture cannot be
-    called as a function)."""
-    return Story(
+def a_story() -> Story:
+    story = Story(
         id="story-1",
         title="The Sundering",
         world_bible="Calder Keep has stood empty for a hundred years.",
         scene=SceneState(
             location="The undercroft beneath Calder Keep",
-            time_of_day="past midnight",
-            situation="Torchlight, and something moving in the dark.",
             present_character_ids=["char-serrik", "char-maela"],
         ),
     )
+    story.defaults.main_model = "story-model"
+    story.held_character_id = "char-serrik"
+    return story
 
 
-def make_cast() -> list[Character]:
+def a_cast(*, idris_model: str | None = None) -> list[Character]:
     return [
+        Character(id="char-serrik", name="Serrik Vaun", summary="A duellist in debt."),
         Character(
-            id="char-serrik",
-            name="Serrik Vaun",
-            aliases=["the Grey Wolf"],
-            summary="A veteran duellist with a debt he cannot repay.",
+            id="char-maela",
+            name="Maela Orr",
+            summary="A locksmith who talks too much.",
+            voice_notes="Quick, and full of questions.",
+            own_model=MAELA_MODEL,
         ),
-        Character(id="char-maela", name="Maela Orr", summary="A locksmith who talks too much."),
-        Character(id="char-idris", name="Captain Idris", summary="Three days' ride north."),
+        Character(
+            id="char-idris",
+            name="Captain Idris",
+            summary="Three days' ride north.",
+            own_model=idris_model,
+        ),
     ]
 
 
 def make_session(
     tmp_path: Path,
-    story: Story,
-    cast: list[Character],
     responses: list[str],
+    *,
+    story: Story | None = None,
+    cast: list[Character] | None = None,
+    provider: MockChatProvider | None = None,
+    reads: bool = False,
 ) -> StorySession:
-    story.defaults.main_model = "anthropic/claude-sonnet-4.5"
-    bundle = StoryBundle(story=story, cast=cast)
+    story = story or a_story()
+    bundle = StoryBundle(story=story, cast=cast if cast is not None else a_cast())
     save_story_bundle(bundle, root=tmp_path)
     config = Config(
         providers=[ProviderConfig(name="nano", base_url="https://nano-gpt.com/api/v1")],
         active_provider_name="nano",
         min_cacheable_tokens=1,
     )
-    # Every call is the mock's, in order: passage, scene read (its JSON),
-    # then the own-model round. No scene read model is set, so the read is
-    # a second passage-shaped reply the tests count past.
-    config.scene_reads = "manual"
+    # Off unless a test is about the reads: then each turn's calls are the
+    # passage, the scene read's JSON, then the round.
+    config.scene_reads = "every_turn" if reads else "manual"
+    if provider is not None:
+        provider.responses = list(responses)
     return StorySession(
         bundle,
         config,
-        MockChatProvider(responses),
+        provider or MockChatProvider(responses),
         root=tmp_path,
         estimator=TokenEstimator(counter=fallback_counter),
         learn_corrections=False,
     )
 
 
-def own_story() -> Story:
-    return make_story()
+def turn(text: str = "I put my shoulder to the door.", **fields) -> TurnRequest:
+    return TurnRequest(
+        speaker_id=fields.pop("speaker_id", "char-serrik"),
+        user_text=text,
+        controlled_character_id="char-serrik",
+        **fields,
+    )
 
 
-def own_cast() -> list[Character]:
-    """The conftest cast, with Maela played by her own model and Idris not."""
-    cast = [c.model_copy(deep=True) for c in make_cast()]
-    cast[1].own_model = "nano/maela-tuned"
-    return cast
+def play(session: StorySession, request: TurnRequest) -> list:
+    return list(session.send(request))
 
 
-def drain(turns) -> list:
-    return list(turns)
+def sent(request: ChatRequest) -> str:
+    return "\n".join(part.text for message in request.messages for part in message.parts)
 
 
-def test_no_round_without_an_own_model(tmp_path: Path) -> None:
-    """A story that names no character's own model behaves exactly as before:
-    the passage lands and no extra call goes out."""
-    story = own_story()
-    cast = [c.model_copy(deep=True) for c in make_cast()]
-    session = make_session(tmp_path, story, cast, ["The world answers."])
-    list(session.send(_turn()))
-    provider = session.provider
-    assert isinstance(provider, MockChatProvider)
-    assert len(provider.requests) == 1  # the passage alone
+def round_calls(session: StorySession) -> list[ChatRequest]:
+    return [r for r in session.provider.requests if r.model != "story-model"]
 
 
-def test_the_round_answers_each_present_character(tmp_path: Path) -> None:
-    """After a passage, each character with an own model who is in the scene
-    answers it on their own model: two calls after the passage, each blind to
-    the other's answer, kept on the passage as their intention."""
-    story = own_story()
-    cast = own_cast()
+# --- who is asked, and on what ---------------------------------------------
+
+
+def test_no_own_model_means_no_round_and_no_new_section(tmp_path: Path) -> None:
+    cast = a_cast()
+    cast[1].own_model = None
+    session = make_session(tmp_path, ["The door gives.", "It swings wide."], cast=cast)
+    play(session, turn())
+    play(session, turn("I go in."))
+    assert [r.model for r in session.provider.requests] == ["story-model", "story-model"]
+    assert session.last_prompt.section(SECTION_ROUND) is None
+
+
+def test_the_card_s_model_is_sent_whole_with_its_endpoint(tmp_path: Path) -> None:
+    """ "Local::maela-lora" names the endpoint it is reached on; stripped to
+    "maela-lora" it went to the default endpoint instead."""
+    session = make_session(tmp_path, ["The door gives.", "I reach for my picks."])
+    play(session, turn())
+    assert [r.model for r in round_calls(session)] == [MAELA_MODEL]
+    answer = session.path()[-1].meta.reactions[0]
+    assert (answer.character_id, answer.text, answer.model) == (
+        "char-maela",
+        "I reach for my picks.",
+        MAELA_MODEL,
+    )
+
+
+def test_only_those_in_the_scene_are_asked(tmp_path: Path) -> None:
+    session = make_session(
+        tmp_path, ["The door gives.", "I reach for my picks."], cast=a_cast(idris_model="x")
+    )
+    play(session, turn())
+    assert [r.model for r in round_calls(session)] == [MAELA_MODEL]  # Idris is away
+
+
+def test_the_character_the_author_holds_is_not_asked(tmp_path: Path) -> None:
+    story = a_story()
+    story.held_character_id = "char-maela"
+    session = make_session(tmp_path, ["The door gives."], story=story)
+    play(
+        session,
+        TurnRequest(speaker_id="char-maela", user_text="Hm.", controlled_character_id="char-maela"),
+    )
+    assert round_calls(session) == []
+
+
+def test_the_round_follows_the_scene_the_read_left(tmp_path: Path) -> None:
+    """After the reads: Idris arrives in this passage, so he answers it."""
     session = make_session(
         tmp_path,
-        story,
-        cast,
         [
-            "The door gives.",  # the passage
-            "Maela reaches for her picks.",  # her own model's answer
+            "Boots on the stair: Captain Idris comes down into the undercroft.",
+            json.dumps({"arrived": [{"name": "Captain Idris", "how": "came down the stair"}]}),
+            "Idris: I set the lantern down.",
+            "Maela: I reach for my picks.",
         ],
+        cast=a_cast(idris_model="Local::idris"),
+        reads=True,
     )
-    events = drain(session.send(_turn()))
-    provider = session.provider
-    assert isinstance(provider, MockChatProvider)
-    assert len(provider.requests) == 2
-    passage = session.path()[-1]
-    assert passage.kind == "assistant"
-    assert [r.character_id for r in passage.meta.reactions] == ["char-maela"]
-    reaction = passage.meta.reactions[0]
-    assert reaction.text == "Maela reaches for her picks."
-    assert reaction.model == "nano/maela-tuned"
-    # The round's notice says the answers ride with the next turn.
-    assert any(isinstance(e, SessionNotice) and "answered at once" in e.text for e in events)
-    # The history renders the answer as Maela's intention, for every reader.
-    from sealedlore.engine.rules import render_history_node
-
-    cast_by_id = {c.id: c for c in cast}
-    rendered = render_history_node(passage, cast_by_id)
-    assert "Maela reaches for her picks." in rendered
-    assert "intend to do" in rendered
+    play(session, turn())
+    assert sorted(r.model for r in round_calls(session)) == ["Local::idris", MAELA_MODEL]
 
 
-def test_each_answer_is_blind_to_the_others(tmp_path: Path) -> None:
-    """Each character's prompt holds only the story as they lived it and the
-    passage: no other character's answer, and nothing of what the author will
-    write. The blindness is in what each is given, built before any call."""
-    story = own_story()
-    cast = own_cast()
-    cast[2].own_model = "nano/idris-tuned"
-    # Both answering characters are in the scene.
-    story.scene.present_character_ids = ["char-serrik", "char-maela", "char-idris"]
+def test_a_plot_hidden_character_is_never_asked(tmp_path: Path) -> None:
+    from sealedlore.models.plot import Plot
+
+    story = a_story()
+    story.plot = Plot()
+    cast = a_cast()
+    cast[1].plot_hidden = True
+    session = make_session(tmp_path, ["The door gives."], story=story, cast=cast)
+    play(session, turn())
+    assert round_calls(session) == []
+
+
+def test_a_passage_after_direction_or_narration_is_answered(tmp_path: Path) -> None:
+    """Direction is to the storyteller; the passage it gets is fact, and
+    whoever is present answers it."""
+    for speaker in (DIRECTOR_SPEAKER_ID, NARRATOR_SPEAKER_ID):
+        session = make_session(tmp_path / speaker, ["Weeks pass.", "I count my coin."])
+        play(session, turn("Five weeks pass.", speaker_id=speaker))
+        assert [r.model for r in round_calls(session)] == [MAELA_MODEL], speaker
+
+
+def test_no_round_in_a_private_scene(tmp_path: Path) -> None:
+    session = make_session(tmp_path, ["The door gives.", "I reach for my picks."])
+    play(session, turn())
+    private = MockChatProvider(["A quiet reply."])
+    session.enter_private(keep="memory", provider=private, model="local/model")
+    play(session, turn("I lower my voice."))
+    assert [r.model for r in private.requests] == ["local/model"]
+    assert len(round_calls(session)) == 1  # only the round before the scene
+
+
+# --- what each character sees ----------------------------------------------
+
+
+def test_answers_are_blind_to_each_other_in_a_round_and_after(tmp_path: Path) -> None:
+    story = a_story()
+    story.scene.present_character_ids.append("char-idris")
     session = make_session(
         tmp_path,
-        story,
-        cast,
-        [
-            "The door gives.",
-            "Idris sets his lantern down.",
-            "Maela reaches for her picks.",
-        ],
+        ["The door gives.", "IDRIS-ONE", "MAELA-ONE", "It swings wide.", "IDRIS-TWO", "MAELA-TWO"],
+        story=story,
+        cast=a_cast(idris_model="Local::idris"),
     )
-    list(session.send(_turn()))
-    provider = session.provider
-    assert isinstance(provider, MockChatProvider)
-    assert len(provider.requests) == 3  # the passage, then two round calls
-    idris_call = provider.requests[1]
-    maela_call = provider.requests[2]
-    idris_text = "\n".join(part.text for m in idris_call.messages for part in m.parts)
-    maela_text = "\n".join(part.text for m in maela_call.messages for part in m.parts)
-    # Neither holds the other's answer: both prompts were built before either
-    # call went out, and neither answer is in the history they read.
-    assert "Maela reaches for her picks." not in idris_text
-    assert "Idris sets his lantern down." not in maela_text
-    # Each holds the passage they answer, and their own card.
-    assert "The door gives." in idris_text
-    assert "The door gives." in maela_text
-    # And neither holds what the author will write next (nothing has been).
-    assert "shoulder it again" not in maela_text
+    play(session, turn())
+    play(session, turn("I go in."))
+    idris_two, maela_two = round_calls(session)[2:]
+    assert "MAELA-ONE" not in sent(idris_two)  # another's intention is theirs alone
+    assert "IDRIS-ONE" in sent(idris_two)  # their own earlier answer is theirs
+    assert "IDRIS-ONE" not in sent(maela_two)
 
 
-def test_a_character_not_in_the_scene_is_not_asked(tmp_path: Path) -> None:
-    """Presence decides who answers, by the scene snapshots: a character whose
-    card names a model but whom the scene puts elsewhere gets no call."""
-    story = own_story()
-    cast = own_cast()
-    cast[2].own_model = "nano/idris-tuned"
-    session = make_session(tmp_path, story, cast, ["The door gives.", "unused"])
-    list(session.send(_turn()))
-    provider = session.provider
-    assert isinstance(provider, MockChatProvider)
-    models = [r.model for r in provider.requests]
-    assert models == ["anthropic/claude-sonnet-4.5", "nano/maela-tuned"]
+def test_a_character_sees_the_authors_turn_without_its_ooc_note(tmp_path: Path) -> None:
+    session = make_session(tmp_path, ["The door gives.", "Hm."])
+    play(session, turn('"Keep watch," I say.', ooc="make Maela betray him later"))
+    text = sent(round_calls(session)[0])
+    assert '"Keep watch," I say.' in text
+    assert "betray" not in text
 
 
-def test_direction_turns_get_no_round(tmp_path: Path) -> None:
-    """A Director turn is to the storyteller alone (the author's answer 3):
-    the passage it lands gets no own-model round."""
-    story = own_story()
-    cast = own_cast()
-    session = make_session(tmp_path, story, cast, ["The world answers."])
-    from sealedlore.engine.prompt import TurnRequest
+def test_a_character_never_sees_a_direction_but_sees_narration(tmp_path: Path) -> None:
+    session = make_session(tmp_path, ["The lamp gutters.", "Hm.", "Rain on the grate.", "Hm."])
+    play(session, turn("SECRET-DIRECTION: the lamp fails.", speaker_id=DIRECTOR_SPEAKER_ID))
+    play(session, turn("NARRATED-RAIN begins to fall.", speaker_id=NARRATOR_SPEAKER_ID))
+    text = sent(round_calls(session)[-1])
+    assert "SECRET-DIRECTION" not in text
+    assert "The lamp gutters." in text  # the storyteller's passage is fact
+    assert "NARRATED-RAIN" in text
 
-    turn = TurnRequest(
-        speaker_id="__director__",
-        user_text="The door holds.",
-        controlled_character_id=None,
+
+def test_a_character_sees_only_scenes_they_were_in(tmp_path: Path) -> None:
+    session = make_session(tmp_path, ["The door gives.", "Hm."])
+    play(session, turn())
+    history = session.path()
+    away = SceneState(location="The road north", present_character_ids=["char-serrik"])
+    history[-1].meta.scene = away  # the passage that took Serrik away from her
+    history[-1].content = "Serrik leaves Maela and walks the north road alone."
+    later = history[-1].model_copy(deep=True, update={"id": "far", "content": "ALONE-ON-ROAD"})
+    later.meta.scene = away
+    maela = session.cast[1]
+    seen, _ = character_history(
+        [*history, later], maela, session.cast, start=session.story.setup.starting_scene
     )
-    list(session.send(turn))
-    provider = session.provider
-    assert isinstance(provider, MockChatProvider)
-    assert len(provider.requests) == 1
+    joined = "\n".join(seen)
+    assert "Serrik leaves Maela" in joined  # she was there when he left
+    assert "ALONE-ON-ROAD" not in joined
 
 
-def test_the_storyteller_gets_the_answers_as_intention(tmp_path: Path) -> None:
-    """The answers a passage carries ride into the next turn's history, as that
-    character's intention — so the storyteller works them in with the author's
-    turn, and a later take or branch renders them exactly as they were."""
-    story = own_story()
-    cast = own_cast()
+def test_older_scenes_give_way_to_the_budget(tmp_path: Path) -> None:
+    session = make_session(tmp_path, ["OLDEST passage.", "Hm.", "NEWEST passage.", "Hm."])
+    play(session, turn())
+    play(session, turn("Again."))
+    maela = session.cast[1]
+    messages = reaction_messages(
+        story=session.story,
+        cast=session.cast,
+        character=maela,
+        history=session.path(),
+        budget=20,
+    )
+    text = "\n".join(p.text for m in messages for p in m.parts)
+    assert "NEWEST passage." in text  # the passage they answer always stays
+    assert "OLDEST passage." not in text
+    assert "not shown here" in text
+
+
+def test_a_character_is_given_their_card_skills_and_the_setting(tmp_path: Path) -> None:
+    cast = a_cast()
+    cast[1].competence.tiers = {"locks": "expert"}
+    session = make_session(tmp_path, ["The door gives.", "Hm."], cast=cast)
+    session.story.storyteller_notes = "STORYTELLER-SECRET"
+    play(session, turn())
+    request = round_calls(session)[0]
+    system = request.messages[0].text
+    assert "Maela Orr" in system and "talks too much" in system
+    assert "full of questions" in system and "locks expert" in system
+    assert "Calder Keep" in system
+    assert "STORYTELLER-SECRET" not in sent(request)
+    assert request.messages[0].parts[-1].cache_breakpoint
+
+
+# --- what the storyteller does with them -------------------------------------
+
+
+def test_the_storyteller_gets_them_after_the_turn_and_nowhere_else(tmp_path: Path) -> None:
     session = make_session(
-        tmp_path,
-        story,
-        cast,
-        [
-            "The door gives.",
-            "Maela reaches for her picks.",
-            "The lock turns over.",
-        ],
+        tmp_path, ["The door gives.", "MAELA-MEANS-TO-PICK-THE-LOCK", "The lock turns."]
     )
-    list(session.send(_turn()))
-    session.save()
-    # The next turn: its prompt carries the passage, and Maela's answer with it.
-    list(session.send(_turn(text="I shoulder it again.")))
-    provider = session.provider
-    assert isinstance(provider, MockChatProvider)
-    last = provider.requests[-1]
-    joined = "\n".join(m.text for m in last.messages)
-    assert "Maela reaches for her picks." in joined
-    assert "intend to do" in joined
+    play(session, turn())
+    play(session, turn("I hold the lamp for her."))
+    prompt = session.last_prompt
+    names = [section.name for section in prompt.sections]
+    assert names.index(SECTION_AUTHOR_TURN) < names.index(SECTION_ROUND)
+    assert names.index(SECTION_ROUND) < names.index(SECTION_REMINDER)
+    block = prompt.section(SECTION_ROUND).text
+    assert "[Maela Orr] MAELA-MEANS-TO-PICK-THE-LOCK" in block
+    assert "means to do, not something that has happened" in block
+    storyteller = session.provider.requests[2]
+    assert not any("MAELA-MEANS" in m.text for m in storyteller.messages if m.role != "user")
+    # No read, summary or scan sees them: they are spent once answered.
+    assert "MAELA-MEANS" not in render_chunk(session.path(), session.cast)
 
 
-def test_a_failed_answer_never_costs_the_turn(tmp_path: Path) -> None:
-    """A character's model failing is a notice, never a failed passage: the
-    round is a passenger, not a pilot. Nothing is kept for a failed answer."""
-    from collections.abc import Iterator
-
-    from sealedlore.providers.base import ChatRequest, ProviderError, StreamEvent
-
-    class SecondCallFails(MockChatProvider):
-        def stream(self, request: ChatRequest) -> Iterator[StreamEvent]:
-            if len(self.requests) >= 1:
-                raise ProviderError("the endpoint is down")
-            return super().stream(request)
-
-    story = own_story()
-    cast = own_cast()
-    story.defaults.main_model = "anthropic/claude-sonnet-4.5"
-    bundle = StoryBundle(story=story, cast=cast)
-    save_story_bundle(bundle, root=tmp_path)
-    config = Config(
-        providers=[ProviderConfig(name="nano", base_url="https://nano-gpt.com/api/v1")],
-        active_provider_name="nano",
-        min_cacheable_tokens=1,
+def test_regenerate_sends_an_edited_answer(tmp_path: Path) -> None:
+    session = make_session(
+        tmp_path, ["The door gives.", "I pick the lock.", "The lock turns.", "Again, it turns."]
     )
-    session = StorySession(
-        bundle,
-        config,
-        SecondCallFails(["The door gives."]),
-        root=tmp_path,
-        estimator=TokenEstimator(counter=fallback_counter),
-        learn_corrections=False,
-    )
-    events = drain(session.send(_turn()))
-    passage = session.path()[-1]
-    assert passage.kind == "assistant"
-    assert passage.meta.reactions == []
+    play(session, turn())
+    answered = session.path()[-1]
+    play(session, turn("I hold the lamp."))
+    session.edit_reaction(answered.id, "char-maela", "I step back, hands up.")
+    list(session.regenerate())
+    assert "[Maela Orr] I step back, hands up." in session.last_prompt.section(SECTION_ROUND).text
+    reloaded = load_story_bundle("story-1", root=tmp_path)
+    kept = next(n for n in reloaded.nodes if n.id == answered.id).meta.reactions[0]
+    assert kept.text == "I step back, hands up." and kept.edited_at
+
+
+def test_a_new_take_gets_a_new_round(tmp_path: Path) -> None:
+    session = make_session(tmp_path, ["The door gives.", "FIRST", "It holds.", "SECOND"])
+    play(session, turn())
+    list(session.regenerate())
+    assert [r.text for r in session.path()[-1].meta.reactions] == ["SECOND"]
+
+
+# --- failures, Stop and cost --------------------------------------------------
+
+
+class FailsAfterPassage(MockChatProvider):
+    def __init__(self, error: Exception) -> None:
+        super().__init__(["The door gives."])
+        self.raise_on_round = error
+
+    def stream(self, request: ChatRequest) -> Iterator[StreamEvent]:
+        if request.model != "story-model":
+            self.requests.append(request)
+            raise self.raise_on_round
+        return super().stream(request)
+
+
+def test_a_failed_answer_is_a_notice_and_the_turn_stands(tmp_path: Path) -> None:
+    provider = FailsAfterPassage(ProviderError("the endpoint is down"))
+    session = make_session(tmp_path, ["The door gives."], provider=provider)
+    events = play(session, turn())
+    assert session.path()[-1].content == "The door gives."
+    assert session.path()[-1].meta.reactions == []
     assert any(isinstance(e, SessionNotice) and "couldn't answer" in e.text for e in events)
 
 
-def _turn(text: str = "I put my shoulder to the door.") -> object:
-    from sealedlore.engine.prompt import TurnRequest
-
-    return TurnRequest(
-        speaker_id="char-serrik",
-        user_text=text,
-        controlled_character_id="char-serrik",
-    )
+def test_stop_during_the_round_stops_the_turn(tmp_path: Path) -> None:
+    provider = FailsAfterPassage(StreamCancelled())
+    session = make_session(tmp_path, ["The door gives."], provider=provider)
+    with pytest.raises(StreamCancelled):
+        play(session, turn())
+    assert session.path()[-1].meta.reactions == []
 
 
-def test_editing_an_answer(tmp_path: Path) -> None:
-    """The author can edit a character's answer (answer 4): the edited text is
-    what the storyteller and every reader gets, and the passage keeps whose
-    model wrote the original."""
-    story = own_story()
-    cast = own_cast()
-    session = make_session(
-        tmp_path, story, cast, ["The door gives.", "Maela reaches for her picks."]
-    )
-    list(session.send(_turn()))
-    passage = session.path()[-1]
-    session.edit_reaction(passage.id, "char-maela", "Maela steps back, hands up.")
-    reaction = passage.meta.reactions[0]
-    assert reaction.text == "Maela steps back, hands up."
-    assert reaction.edited_at is not None
-    session.save()
-    # Reloaded, the edit stands.
-    from sealedlore.storage.repository import load_story_bundle
+class DeclinesTheRound(MockChatProvider):
+    """The storyteller writes; every character's model is filtered."""
 
-    bundle = load_story_bundle(story.id, root=tmp_path)
-    node = next(n for n in bundle.nodes if n.id == passage.id)
-    assert node.meta.reactions[0].text == "Maela steps back, hands up."
+    def stream(self, request: ChatRequest) -> Iterator[StreamEvent]:
+        self.finish_reason = "stop" if request.model == "story-model" else "content_filter"
+        return super().stream(request)
+
+
+def test_every_answer_is_logged_and_counted_even_a_declined_one(tmp_path: Path) -> None:
+    provider = DeclinesTheRound()
+    session = make_session(tmp_path, ["The door gives.", "I won't."], provider=provider)
+    events = play(session, turn())
+    assert session.path()[-1].meta.reactions == []
+    assert any(isinstance(e, SessionNotice) and "content filter" in e.text for e in events)
+    log = read_api_log("story-1", root=tmp_path)
+    assert [e["kind"] for e in log if e["kind"].startswith("own_")] == [
+        "own_request",
+        "own_response",
+    ]
+    lines = {line.label: line for line in usage_report(log).lines}
+    assert lines["Own-model characters"].calls == 1
