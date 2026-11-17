@@ -30,6 +30,10 @@ SCENE_READ = "Scene read"
 PLOT = "Plot"
 CHAPTERS = "Chapters and the ledger"
 CHARACTERS = "Characters"
+# The own-model trial (Nov 2026): main characters answered by a model of
+# their own, as additional players. Grouped apart so the trial is easy to
+# find — and easy to retire — in the editor.
+OWN = "Characters played by their own model (trial)"
 LORE = "Lore"
 PRIVATE = "Private scenes"
 CHAT = "Simple chat"
@@ -46,6 +50,7 @@ GROUPS = (
     PLOT,
     CHAPTERS,
     CHARACTERS,
+    OWN,
     LORE,
     PRIVATE,
     CHAT,
@@ -1538,6 +1543,130 @@ _text(
     "In the scan's request: names the author turned down before.",
     "Not to be listed, at the author's request: {names}.",
     (("names", "the names declined, comma-separated"),),
+)
+
+# The reaction round (engine/reactions.py): after each passage, a character
+# whose card names a model answers it as that character, blind to what the
+# others answered and to what the author is about to write; the storyteller
+# then works all of it in with the author's next turn, taking each answer as
+# intention, never as fact. A trial: every wording here is a first draft,
+# none of it measured yet, and nothing is sent for a story that names no
+# character's own model.
+_text(
+    "characters.own.system",
+    OWN,
+    "A character's own prompt: who they are",
+    "The system prompt sent to a character's own model: their name and card, and the part "
+    "they play. Sent only when the card names a model for them.",
+    "You are {name} in a collaborative story, played by your own model as one of its "
+    "players: the author plays another character, and a storyteller model writes the "
+    "prose of what happens.\n\n{summary}\n\n{description}",
+    (
+        ("name", "the character's name"),
+        ("summary", "their summary"),
+        ("description", "their full card text"),
+    ),
+)
+
+_text(
+    "characters.own.voice",
+    OWN,
+    "A character's own prompt: how they speak",
+    "The card's voice notes, in the character's own prompt.",
+    "How you speak: {voice}",
+    (("voice", "the card's voice notes"),),
+)
+
+_text(
+    "characters.own.rules",
+    OWN,
+    "A character's own prompt: the round's rules",
+    "The rules a character's own model is given for its answer. The storyteller's "
+    "writing is fact for it, its answer is intention, and it writes as itself alone.",
+    """\
+THE ROUND
+
+The storyteller's passage below is what has just happened. Take it as fact:
+never rewrite it, never answer past it. You answer as {name} alone — never
+another character's words, actions or decisions, and never the story's
+prose, which the storyteller writes. Your answer is what {name} thinks,
+says or wants to do next, not something that has happened: the storyteller
+works out what comes of it. Write in {name}'s own voice, third person, past
+tense, a few sentences only.""",
+    (("name", "the character's name"),),
+)
+
+_text(
+    "characters.own.history.heading",
+    OWN,
+    "A character's own prompt: their history",
+    "The heading over the scenes a character was present for, in their own prompt.",
+    "THE STORY AS {name} LIVED IT — the scenes they were present for:",
+    (("name", "the character's name"),),
+)
+
+_text(
+    "characters.own.scene.heading",
+    OWN,
+    "A character's own prompt: where they are",
+    "The heading over the scene card in a character's own prompt.",
+    "WHERE THEY ARE NOW",
+    (),
+)
+
+_text(
+    "characters.own.scene",
+    OWN,
+    "A character's own prompt: the scene",
+    "The scene card's place, time and situation, in the character's own prompt.",
+    "Location: {location}\nTime: {time}\nSituation: {situation}",
+    (
+        ("location", "where the scene is"),
+        ("time", "the time of day"),
+        ("situation", "what is going on"),
+    ),
+)
+
+_text(
+    "characters.own.present",
+    OWN,
+    "A character's own prompt: who is with them",
+    "The others present in the scene, in the character's own prompt.",
+    "Also here: {names}.",
+    (("names", "the names of everyone else present"),),
+)
+
+_text(
+    "characters.own.passage",
+    OWN,
+    "A character's own prompt: the passage to answer",
+    "The heading over the latest passage in a character's own prompt.",
+    "THE LATEST PASSAGE — what has just happened, and what you answer:",
+    (),
+)
+
+_text(
+    "characters.own.ask",
+    OWN,
+    "A character's own prompt: the ask",
+    "What the character's own model is finally asked for, after the passage.",
+    "{name}, what do you do? What you say, think or want next — your intention for "
+    "the coming moment, not something you have already done.",
+    (("name", "the character's name"),),
+)
+
+_text(
+    "characters.own.history",
+    OWN,
+    "A passage's own-model answers, in history",
+    "How a character's answer to a passage is rendered in the history every model "
+    "reads: named as intention, so no reader takes it for fact. Goes to the "
+    "storyteller, the reads and the summariser alike.",
+    "{name} (by their own model — what they intend to do, not what they did): {text}",
+    (
+        ("name", "the character's name"),
+        ("text", "what their model answered"),
+    ),
 )
 
 # A card too large for the cast's share of the context is sent condensed

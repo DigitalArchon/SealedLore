@@ -180,6 +180,34 @@ class NodeMeta(BaseModel):
     # changes the text, and the offsets no longer count.
     continued_at: list[int] = Field(default_factory=list)
     continued_sha: str | None = None
+    # On a passage: what each character played by their own model answered it
+    # with, in the order they were asked (engine/reactions.py). Every reader
+    # of the history sees them, rendered as that character's intention.
+    reactions: list[Reaction] = Field(default_factory=list)
+
+
+class Reaction(BaseModel):
+    """What a character played by their own model answered a passage with
+    (`Character.own_model`, the trial): what that character thinks or wants
+    to do next, given blind to the storyteller alongside the author's next
+    turn, never taken as fact of what they did.
+
+    Kept on the passage it answers — part of that take's record, so a retake
+    starts with none and a branch keeps the ones its own passage drew.
+    """
+
+    character_id: str
+    # Their name as the roster had it when the reaction was made, kept so the
+    # prompt's rendering survives a card renamed since.
+    name: str
+    text: str
+    model: str | None = None
+    reasoning: str | None = None
+    usage: Usage = Field(default_factory=Usage)
+    created_at: str = Field(default_factory=utc_now_iso)
+    # When the author last edited the text (their answer 4: edit a
+    # character's response and redo the turn with the edited response).
+    edited_at: str | None = None
 
 
 class Node(BaseModel):

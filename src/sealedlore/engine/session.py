@@ -181,6 +181,7 @@ from sealedlore.engine.session_plot import NoticeSeverity, PlotRuntime, SessionN
 from sealedlore.engine.session_plot_draft import PlotDraftRuntime
 from sealedlore.engine.session_portraits import PortraitRuntime
 from sealedlore.engine.session_private import PrivateRuntime, checked_where_marked
+from sealedlore.engine.session_reactions import ReactionRuntime
 from sealedlore.engine.session_reasoning import ReasoningRuntime
 from sealedlore.engine.session_rebuild import RebuildRuntime
 from sealedlore.engine.session_recall import RecallRuntime
@@ -578,6 +579,7 @@ class StorySession(
     LooksRuntime,
     CastRuntime,
     SuggestRuntime,
+    ReactionRuntime,
 ):
     def __init__(
         self,
@@ -1652,6 +1654,9 @@ class StorySession(
         pick = self._start_lore_pick()
         yield from self.read_after_turn()
         yield from self._finish_lore_pick(pick)
+        # The own-model round, after the reads so the roster the passage left
+        # decides who answers (engine/session_reactions.py).
+        yield from self.react_after_turn()
         # Off this thread entirely: adopted when archival is next due, and the
         # cards at the start of the next turn.
         self.prepare_archival()
@@ -2150,6 +2155,8 @@ class StorySession(
         pick = self._start_lore_pick()
         yield from self.read_after_turn()
         yield from self._finish_lore_pick(pick)
+        # A fresh take is a fresh passage: its own-model round answers it.
+        yield from self.react_after_turn()
         # Off this thread entirely: adopted when archival is next due, and the
         # cards at the start of the next turn.
         self.prepare_archival()
@@ -2306,6 +2313,9 @@ class StorySession(
         pick = self._start_lore_pick()
         yield from self.read_after_turn()
         yield from self._finish_lore_pick(pick)
+        # A carried-on passage is answered afresh: the earlier round answered
+        # less of it (engine/session_reactions.py replaces them).
+        yield from self.react_after_turn()
         self.prepare_archival()
         self.start_background_merge()
 
@@ -2441,6 +2451,8 @@ class StorySession(
         pick = self._start_lore_pick()
         yield from self.read_after_turn()
         yield from self._finish_lore_pick(pick)
+        # A changed passage is answered afresh, as a carried-on one is.
+        yield from self.react_after_turn()
         self.prepare_archival()
         self.start_background_merge()
         self.start_condensing()

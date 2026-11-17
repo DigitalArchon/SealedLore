@@ -34,6 +34,7 @@ from sealedlore.models.node import (
     AgencyMode,
     Node,
     NpcScope,
+    Reaction,
     Roll,
 )
 from sealedlore.models.scene import SceneLogEntry, SceneState
@@ -744,7 +745,9 @@ def render_history_node(
 ) -> str:
     """One node as it appears in the verbatim history window."""
     if node.kind == "assistant":
-        return node.content.strip()
+        lines = [node.content.strip()]
+        lines += render_reactions(node.meta.reactions, texts)
+        return _joined(lines)
 
     speaker = cast_by_id.get(node.speaker_id)
     lines = [render_speaker_tag(node.speaker_id, speaker, texts), node.content.strip()]
@@ -752,6 +755,20 @@ def render_history_node(
         lines.append(texts["turn.ooc"])
         lines.append(node.ooc.strip())
     return _joined(lines)
+
+
+def render_reactions(
+    reactions: Sequence[Reaction], texts: PromptTexts = DEFAULT_TEXTS
+) -> list[str]:
+    """A passage's own-model answers as they go to every reader of the
+    history: named as that character's intention, never as fact of what
+    they did — the storyteller works out what actually happens (the
+    author's ruling, Nov 2026)."""
+    return [
+        texts.fill("characters.own.history", name=reaction.name, text=reaction.text.strip())
+        for reaction in reactions
+        if reaction.text.strip()
+    ]
 
 
 def render_question(

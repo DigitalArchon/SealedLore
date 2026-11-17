@@ -87,3 +87,10 @@ class Character(BaseModel):
     # Never sent condensed, however large the cast (engine/cast_fit.py): the
     # author's own mark for a main character.
     keep_whole: bool = False
+    # Played by their own model, as an additional player (the trial, Nov
+    # 2026): after each passage, the model named here answers it as this
+    # character — what they think or want to do next, blind to what the
+    # others answered — and the storyteller works that in with the author's
+    # next turn, treating it as intention, not fact. None: the storyteller
+    # writes them, exactly as before.
+    own_model: str | None = None
