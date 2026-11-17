@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.gui.sizing import size_to_screen
+from sealedlore.gui.start_players import StartPlayers
 from sealedlore.gui.start_presence import StartPresence
 from sealedlore.models.character import Character
 from sealedlore.models.lore import LoreEntry
@@ -46,10 +47,13 @@ class StartDialog(QDialog):
         *,
         without_pictures: tuple[Sequence[Character], Sequence[LoreEntry]] = ((), ()),
         kept: Kept | None = None,
+        browse_models: Callable[..., str | None] | None = None,
     ) -> None:
         """`without_pictures`: the characters and lore entries the models may
         see that have no picture yet; when there are any, a picture of each
-        is offered (a plot file or premise often brings none)."""
+        is offered (a plot file or premise often brings none).
+        `browse_models`: the window's model list, for Choose beside an own
+        model (gui/start_players.py)."""
         super().__init__(parent)
         self.setWindowTitle(f"Start — {story.title}")
         self.setMinimumWidth(460)
@@ -78,6 +82,12 @@ class StartDialog(QDialog):
             description.setWordWrap(True)
             layout.addWidget(description)
         layout.addLayout(form)
+        # Who a model of their own plays (the trial), for every new story.
+        self.players: StartPlayers | None = None
+        if cast:
+            self.players = StartPlayers(cast, browse_models)
+            layout.addWidget(self.players)
+            self.play_as.currentIndexChanged.connect(self._lock_players)
         # Here as well as in Setup: a new story's cast is often made after
         # its Setup, so this is the first place it can be chosen.
         self.presence: StartPresence | None = None
@@ -128,9 +138,26 @@ class StartDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.Cancel)
         start = buttons.addButton("Start", QDialogButtonBox.AcceptRole)
         start.setDefault(True)
+        self.start_button = start
+        if self.players is not None:
+            self.players.changed.connect(self._sync_start)
+            self._lock_players()
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _lock_players(self) -> None:
+        if self.players is not None:
+            self.players.lock(self.play_as.currentData())
+
+    def _sync_start(self) -> None:
+        """Start waits for a model for everyone ticked."""
+        if self.players is not None and hasattr(self, "start_button"):
+            self.start_button.setEnabled(not self.players.missing())
+
+    def own_models(self) -> dict[str, str | None]:
+        """Character id → the model now playing them (None: taken away)."""
+        return self.players.chosen() if self.players is not None else {}
 
     def _lock_rows(self) -> None:
         if self.presence is None:

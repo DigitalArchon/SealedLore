@@ -66,13 +66,13 @@ def test_each_card_says_which_kind_and_offers_the_other(app):
     panel.select_character(jane.id)
     assert panel.role_title.text() == MAIN
     assert panel.move_button.text() == MAKE_SUPPORTING
-    assert not panel.role_box.isHidden() and panel._form.isRowVisible(panel.played_by)
+    assert not panel.role_box.isHidden() and not panel.played_by_box.isHidden()
 
     panel.select_character(marcus.id)
     assert panel.role_title.text() == SUPPORTING
     assert panel.move_button.text() == MAKE_MAIN
     # A supporting character's flags reach no prompt: nothing to choose.
-    assert not panel._form.isRowVisible(panel.played_by)
+    assert panel.played_by_box.isHidden()
 
     moved: list[str] = []
     panel.promote_requested.connect(moved.append)

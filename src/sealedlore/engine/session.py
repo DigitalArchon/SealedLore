@@ -1709,6 +1709,9 @@ class StorySession(
             )
             try:
                 yield from self.read_after_turn()
+                # Characters played by their own model answer it as they
+                # answer any passage (a generated opening does, through send).
+                yield from self.react_after_turn()
             finally:
                 self.last_result = None
             # Written while the author reads the opening, for the first turn.

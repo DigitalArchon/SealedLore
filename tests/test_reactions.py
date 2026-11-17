@@ -221,6 +221,22 @@ def test_a_passage_after_direction_or_narration_is_answered(tmp_path: Path) -> N
         assert [r.model for r in round_calls(session)] == [MAELA_MODEL], speaker
 
 
+@pytest.mark.parametrize("mode", ["as_written", "generate"])
+def test_the_opening_is_answered_however_it_is_made(tmp_path: Path, mode: str) -> None:
+    """The opening is the first passage they answer. One used as written
+    makes no call and went past the round."""
+    story = a_story()
+    story.held_character_id = None
+    story.setup.opening_text = "The undercroft door stands shut."
+    story.setup.opening_mode = mode
+    story.setup.starting_scene = story.scene.model_copy(deep=True)
+    replies = ["I try the lock."] if mode == "as_written" else ["The door is shut.", "I try it."]
+    session = make_session(tmp_path, replies, story=story)
+    list(session.begin("char-serrik"))
+    assert [r.model for r in round_calls(session)] == [MAELA_MODEL]
+    assert [a.character_id for a in session.path()[-1].meta.reactions] == ["char-maela"]
+
+
 def test_no_round_in_a_private_scene(tmp_path: Path) -> None:
     session = make_session(tmp_path, ["The door gives.", "I reach for my picks."])
     play(session, turn())

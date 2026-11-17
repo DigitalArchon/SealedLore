@@ -465,7 +465,6 @@ class CastPanel(QWidget):
         form.addRow("Voice", self.voice_notes)
         form.addRow("Competence", self.competence)
         form.addRow("Skills", skills_box)
-        form.addRow(PLAYED_BY, self.played_by)
         form.addRow(self.keep_whole)
         form.addRow("Condensed", self.condensed_box)
         self._form = form
@@ -519,6 +518,18 @@ class CastPanel(QWidget):
         role_layout.addWidget(self.role_title)
         role_layout.addWidget(self.role_about)
         role_layout.addWidget(self.move_button, 0, Qt.AlignLeft)
+        # Who plays a main character, in the box that says what they are
+        # (the author, Nov 18 2026: as the form's last row, under the
+        # skills, it was below the fold on a real card and went unseen).
+        self.played_by_box = QWidget()
+        played_layout = QVBoxLayout(self.played_by_box)
+        played_layout.setContentsMargins(0, 6, 0, 0)
+        played_layout.setSpacing(4)
+        played_heading = QLabel(PLAYED_BY)
+        played_heading.setObjectName("roleTitle")
+        played_layout.addWidget(played_heading)
+        played_layout.addWidget(self.played_by)
+        role_layout.addWidget(self.played_by_box)
         self.role_box.hide()
         fields_layout.insertWidget(0, self.role_box)
         self.link_box.hide()
@@ -671,7 +682,6 @@ class CastPanel(QWidget):
             self.voice_notes,
             self.competence,
             self._skills_box,
-            self.played_by,
             self.keep_whole,
             self.condensed_box,
         ):
@@ -870,9 +880,7 @@ class CastPanel(QWidget):
         self.move_button.setText(MAKE_MAIN if supporting else MAKE_SUPPORTING)
         self.move_button.setToolTip(MAKE_MAIN_TIP if supporting else MAKE_SUPPORTING_TIP)
         self.role_box.setVisible(character is not None and not self._chat)
-        self._form.setRowVisible(
-            self.played_by, character is not None and not supporting and not self._chat
-        )
+        self.played_by_box.setVisible(character is not None and not supporting and not self._chat)
 
     def _is_supporting(self, character: Character | None) -> bool:
         return character is not None and any(c is character for c in self._supporting)

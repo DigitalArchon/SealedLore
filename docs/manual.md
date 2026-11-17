@@ -1049,8 +1049,11 @@ Everything else keeps its default and is in Setup and on the cast board;
   [Models](#models)).
 
 **Story → Start story…** asks who you're playing and who is there at the start
-(the same choice as Setup's, so a new story can have its cast made first), and
-runs the opening, so your first turn is in character.
+(the same choice as Setup's, so a new story can have its cast made first),
+and which main characters another model plays from the first passage (see
+"Characters played by their own model (a trial)"): tick one and name its model,
+or press **Choose**. Then it runs the opening, so your first turn is in
+character.
 
 The opening and starting scene are where a story *begins*. To change how a
 story already under way began (say, the other character is the one stranded),
@@ -1879,7 +1882,8 @@ picture is shown the same way on the Lore page.
 
 ![A character's card: the list of characters, each with a small portrait, and the selected character's portrait at the left with the buttons that draw or change it, and the fields of their card at the right](screenshots/cast-page.webp)
 
-**Played by**, on a main character's card, decides who writes them:
+**Played by**, at the top of a main character's card in the box that says
+they are a main character, decides who writes them:
 
 - **You or the storyteller** (the default) — you can play them, and the
   storyteller writes them on the turns you play someone else.
@@ -1894,7 +1898,10 @@ picture is shown the same way on the Lore page.
   player. Name it in the field under the choice, or press **Choose**: any
   model your endpoints offer, including a local or fine-tuned one on an
   endpoint of its own (`Endpoint::model`). They leave the *Playing* list while
-  their model plays them.
+  their model plays them. A new story offers the same in its Start dialog,
+  under **Played by their own model (a trial)**, so they play from the opening
+  on; the guide's characters step and Setup's Characters tab show the card's
+  Played by too.
 
 A supporting character is always the storyteller's, so their card has no
 **Played by**. Your characters' cards have it too, for the stories they join

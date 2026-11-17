@@ -104,6 +104,7 @@ from sealedlore.gui.speed_test import speed_tests
 from sealedlore.gui.stage import Stage
 from sealedlore.gui.start_dialog import StartDialog
 from sealedlore.gui.start_page import NewDialog, StartChooser
+from sealedlore.gui.start_players import apply_chosen
 from sealedlore.gui.status import NoticeStatusBar, StatusStrip, WaitCounter
 from sealedlore.gui.stories import StoryListPanel
 from sealedlore.gui.story_map import StoryMap
@@ -2032,9 +2033,11 @@ class MainWindow(
             parent=self,
             without_pictures=offered,
             kept=kept,
+            browse_models=self._browse_models,
         )
         accepted = dialog.exec() == StartDialog.Accepted
         held = dialog.held_character_id()
+        own_models = dialog.own_models()
         kept_wanted = kept is not None and dialog.kept_wanted()
         pinned = dialog.pinned()
         pictures_wanted = dialog.pictures_wanted()
@@ -2044,6 +2047,11 @@ class MainWindow(
             return
         if kept_wanted:
             self._add_kept_pictures(kept)
+        # Who a model of their own plays, before the opening: its passage is
+        # the first they answer.
+        if apply_chosen(self.session.cast, own_models):
+            self._on_cast_changed()
+            self.refresh_panels()
         # Before holding: pinning resets the roster the held character joins.
         if pinned is not None:
             self.session.pin_at_start(*pinned)

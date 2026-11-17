@@ -216,3 +216,100 @@ def test_cancelling_an_edit_changes_nothing(app, tmp_path: Path, story, cast, mo
     assert passage.meta.reactions[0].text == "I pick the lock."
     assert passage.meta.reactions[0].edited_at is None
     window.close()
+
+
+# --- where it is chosen ------------------------------------------------------
+
+
+def test_played_by_stands_at_the_top_of_a_main_character_s_card(
+    app, tmp_path: Path, story, cast
+) -> None:
+    """In the box that says they are a main character, above the fields: as
+    the form's last row, under the skills, a real card had it below the fold."""
+    window = _window(tmp_path, story, cast, [])
+    panel = window.cast_panel
+    panel.select_character("char-maela")
+    assert panel.played_by.parent() is panel.played_by_box
+    assert panel.played_by_box.parent() is panel.role_box
+    assert panel._form.indexOf(panel.played_by) == -1
+    window.close()
+
+
+def _start_window(tmp_path: Path, story, cast):
+    from sealedlore.gui.main_window import MainWindow
+    from sealedlore.storage.repository import StoryBundle, save_story_bundle
+
+    story.held_character_id = None
+    story.active_leaf_id = None
+    save_story_bundle(StoryBundle(story=story, cast=cast), root=tmp_path)
+    window = MainWindow(root=tmp_path, use_mock=True)
+    window.config.scene_reads = "manual"
+    window.config.suggest_characters = False
+    window.open_story(story.id)
+    return window
+
+
+def test_start_offers_a_model_of_their_own_for_every_main_character(
+    app, tmp_path: Path, story, cast
+) -> None:
+    from sealedlore.gui.start_dialog import StartDialog
+
+    dialog = StartDialog(story, cast)
+    players = dialog.players
+    assert set(players.rows) == {c.id for c in cast}
+    dialog.play_as.setCurrentIndex(dialog.play_as.findData("char-serrik"))
+    # The character played can't be one.
+    serrik_tick, _ = players.rows["char-serrik"]
+    assert not serrik_tick.isEnabled() and not serrik_tick.isChecked()
+    tick, model = players.rows["char-maela"]
+    assert not model.isEnabled()
+    tick.setChecked(True)
+    # Ticked with no model: Start waits for one, and says so.
+    assert not dialog.start_button.isEnabled()
+    assert "Maela Orr" in players.problem.text()
+    model.setText(MODEL)
+    assert dialog.start_button.isEnabled()
+    assert dialog.own_models() == {"char-maela": MODEL}
+    # Choosing to play someone with a model of their own takes it away.
+    dialog.play_as.setCurrentIndex(dialog.play_as.findData("char-maela"))
+    assert dialog.own_models() == {}
+    dialog.deleteLater()
+
+
+def test_a_model_chosen_at_start_plays_them_from_the_opening(
+    app, tmp_path: Path, story, cast, monkeypatch
+) -> None:
+    from sealedlore.gui import main_window as window_module
+
+    window = _start_window(tmp_path, story, cast)
+
+    def run(dialog) -> int:
+        dialog.play_as.setCurrentIndex(dialog.play_as.findData("char-serrik"))
+        tick, model = dialog.players.rows["char-maela"]
+        tick.setChecked(True)
+        model.setText(MODEL)
+        return QDialog.Accepted
+
+    monkeypatch.setattr(window_module.StartDialog, "exec", run)
+    window.start_story()
+    maela = next(c for c in window.session.cast if c.id == "char-maela")
+    assert played_by(maela) == OWN and maela.own_model == MODEL
+    playing = [window.composer.held.itemData(i) for i in range(window.composer.held.count())]
+    assert "char-maela" not in playing
+    window.close()
+
+
+def test_unticking_at_start_hands_them_back(app, tmp_path: Path, story, cast) -> None:
+    from sealedlore.gui.start_dialog import StartDialog
+    from sealedlore.gui.start_players import apply_chosen
+
+    cast[1].own_model = MODEL
+    cast[1].is_player_available = False
+    dialog = StartDialog(story, cast)
+    tick, model = dialog.players.rows["char-maela"]
+    assert tick.isChecked() and model.text() == MODEL
+    tick.setChecked(False)
+    assert dialog.own_models() == {"char-maela": None}
+    apply_chosen(cast, dialog.own_models())
+    assert played_by(cast[1]) == "either" and cast[1].own_model is None
+    dialog.deleteLater()
