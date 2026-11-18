@@ -985,7 +985,8 @@ that trying other hosts would mean playing outside private mode.
 Where a model is chosen for a use (the story model, a character's own model,
 the scene, plot and lore models), **Choose** beside the field lists the models
 measured best for that use, each with what was found, and the field shows
-**★** and its tag (default, recommended, premium, budget) beside one of them. The full
+**★** and its tag (default, recommended, premium, budget, or *also good* for one
+that isn't the first choice) beside one of them. The full
 model list that **Browse all models…** opens has a **SealedLore** column saying
 the same for every model, and typing *recommended* or *tuned* in its search
 finds them. Claude models chosen from those lists are reached on Anthropic's
@@ -1001,6 +1002,15 @@ prompt is worded for that use, or **· tuned** for the rest, and its tooltip
 says what is done; the story model button in the status bar says so too. A
 text you edit under File → Prompts (advanced)… stays yours for every model; the
 editor says which models get their own wording of a text.
+
+A text is worded for a model only where blind judges preferred what that model
+wrote with it. Other wordings of the storyteller's prompt were tried for Claude
+Opus 5.5, Claude Sonnet 4.6, GLM 5.3, MiMo V2.6 Pro and DeepSeek V3.2, each aimed
+at what that model gets wrong, and none did better than the usual one without
+bringing a new fault, so those models are sent it as it is. Of the five as
+storytellers, Claude Opus 5.5 ranked first, GLM 5.3 and Claude Sonnet 4.6 next
+(GLM 5.3 ahead over many turns, at a fraction of the cost), then MiMo V2.6 Pro
+and DeepSeek V3.2.
 
 **Help → Models SealedLore recommends and adjusts for…** lists both: the
 recommended models for each use, and every adjustment with why.

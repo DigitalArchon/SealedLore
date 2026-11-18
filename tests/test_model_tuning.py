@@ -233,3 +233,14 @@ def test_the_character_list_recommends_opus_on_anthropic_and_a_cheap_one() -> No
     first, *rest = RECOMMENDED_TEXT_MODELS["character"]
     assert bare(first.id) == "claude-opus-5-5" and first.tag == "recommended"
     assert any(choice.tag == "budget" for choice in rest)
+
+
+def test_a_recommendation_with_no_tag_is_marked_also_good(app) -> None:
+    from sealedlore.gui.model_picker import ALSO_GOOD, ModelField
+    from sealedlore.models.config import RECOMMENDED_TEXT_MODELS
+
+    choices = RECOMMENDED_TEXT_MODELS["character"]
+    field = ModelField("Anthropic::claude-opus-5-5", recommended=choices, role="character")
+    assert field.recommended_mark.text() == "★ recommended"
+    field.setText("moonshotai/kimi-k3")
+    assert field.recommended_mark.text() == f"★ {ALSO_GOOD}"

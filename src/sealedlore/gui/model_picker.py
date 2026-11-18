@@ -712,6 +712,9 @@ TUNED_LABEL = "· tuned"
 TUNED_PROMPTS_LABEL = "· tuned prompts"
 # Beside a model recommended for this use: its tag ("default", "premium").
 RECOMMENDED_MARK = "★ {tag}"
+# The mark for a recommendation with no tag of its own: one of the models
+# measured good for the use, not its first choice ("recommended", "default").
+ALSO_GOOD = "also good"
 BROWSE_ALL = "Browse all models…"
 
 
@@ -904,7 +907,7 @@ class ModelField(QWidget):
         if choice is None:
             self.recommended_mark.hide()
             return
-        self.recommended_mark.setText(RECOMMENDED_MARK.format(tag=choice.tag or "recommended"))
+        self.recommended_mark.setText(RECOMMENDED_MARK.format(tag=choice.tag or ALSO_GOOD))
         self.recommended_mark.setToolTip(
             plain_tip(f"Recommended for this: {choice.label}. {choice.note}")
         )

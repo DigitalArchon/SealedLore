@@ -172,13 +172,17 @@ RECOMMENDED_TEXT_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
             tag="default",
             note="Best on price for quality: 2-3¢ a turn on a long story with a warm cache. "
             "It keeps the rules (no held character written and no shortcut in 128 judged "
-            "passages), and made a few errors fewer than Opus over whole stories.",
+            "passages), and made a few errors fewer than Opus over whole stories. Third of five "
+            "storytellers ranked blind: over many turns it lets a scene stall more than Opus "
+            "5.5 or GLM 5.3, and on a long story it repeats its own habits more. The quickest "
+            "to start writing, under a second.",
         ),
         RecommendedModel(
             id="anthropic/claude-opus-5.5",
             label="Claude Opus 5.5",
             tag="premium",
-            note="The better writer on every blind judge, Claude and not: preferred in about 9 "
+            note="The best storyteller of five ranked blind, with the fewest faults, and the "
+            "better writer on every blind judge, Claude and not: preferred in about 9 "
             "turns of 10 by the Claude judges and more often than not by DeepSeek, with more "
             "specific detail and fuller answers. About 2.4 times Sonnet's cost (~5¢ a turn "
             "on a long story), longer passages, and no fewer errors over whole stories. It "
@@ -187,9 +191,11 @@ RECOMMENDED_TEXT_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
         RecommendedModel(
             id="z-ai/glm-5.3",
             label="GLM 5.3",
-            note="Included in a NanoGPT subscription, and the model most of SealedLore's own "
-            "testing plays on. Not ranked against Sonnet or Opus; sent its lowest reasoning "
-            "level.",
+            note="Second of five storytellers ranked blind, behind Opus 5.5 and level with "
+            "Sonnet 4.6 turn by turn, ahead of it over many turns (a non-Claude judge put it "
+            "first), at about a quarter of Sonnet's cost and included in a NanoGPT "
+            "subscription. Now and then a slip in where people are, and twice in its test "
+            "runs text that wasn't the story. Sent its lowest reasoning level.",
         ),
     ),
     # A character played by their own model (the trial; Played by on their
