@@ -628,6 +628,7 @@ class MainWindow(
         self.cast_panel.remove_requested.connect(self._remove_character)
         self.cast_panel.lore_from = self._lore_from_their_book
         # A main character's own model (the trial): Choose lists the endpoints' models.
+        self.cast_panel.own_prompt_requested.connect(self._show_character_prompt)
         self.cast_panel.played_by.set_browse(
             self._browse_models,
             browse_route=self._browse_models_and_route,
@@ -1974,6 +1975,8 @@ class MainWindow(
         self.session.save()
         self._refresh_scene_panel()
         self.composer.set_default_agency(self.session.story.defaults.agency_mode)
+        # When characters played by their own model answer may have changed.
+        self._sync_answers_action()
         # Setup's Style tab replaced the style: the Style page must edit the new one.
         self.style_panel.set_style(
             self.session.story.style, started=bool(self.session.nodes), texts=self.session.texts
@@ -2044,6 +2047,7 @@ class MainWindow(
         accepted = dialog.exec() == StartDialog.Accepted
         held = dialog.held_character_id()
         own_models = dialog.own_models()
+        round_order = dialog.round_order()
         kept_wanted = kept is not None and dialog.kept_wanted()
         pinned = dialog.pinned()
         pictures_wanted = dialog.pictures_wanted()
@@ -2055,9 +2059,14 @@ class MainWindow(
             self._add_kept_pictures(kept)
         # Who a model of their own plays, before the opening: its passage is
         # the first they answer.
+        if round_order is not None:
+            self.session.story.defaults.round_order = round_order
         if apply_chosen(self.session.cast, own_models):
             self._on_cast_changed()
             self.refresh_panels()
+        elif round_order is not None:
+            self.session.save()
+        self._sync_answers_action()
         # Before holding: pinning resets the roster the held character joins.
         if pinned is not None:
             self.session.pin_at_start(*pinned)

@@ -1587,6 +1587,18 @@ _text(
     (("skills", "the card's skill tiers and notes"),),
 )
 
+# Not measured: the author's own words to the model (the author, Nov 18 2026:
+# their personality should be fixed largely from what their model is told).
+_text(
+    "characters.own.notes",
+    OWN,
+    "A character's own prompt: the author's notes for their model",
+    "After their card in the character's own system prompt, when the author has written "
+    "notes for their model (Played by → What their model is sent…).",
+    "HOW TO PLAY {name}, FROM THE AUTHOR\n\n{notes}",
+    (("name", "the character's name"), ("notes", "the author's notes for their model")),
+)
+
 _text(
     "characters.own.setting",
     OWN,
@@ -1719,6 +1731,20 @@ _text(
     (("names", "the names of everyone else present"),),
 )
 
+# Not measured: the "after" order's ask (the author, Nov 18 2026: they see how
+# the author responds and decide how to respond, as another human player would).
+_text(
+    "characters.own.ask.after",
+    OWN,
+    "A character's own prompt: the ask, after the author's turn",
+    "Last in the character's own prompt when the story has them answer after the "
+    "author's turn (Story → Setup… → About), in place of the usual ask.",
+    "That is where things stand. {player} has just taken their turn, last above: what "
+    "they say is said, and what they try hasn't happened yet; the storyteller will "
+    "write what comes of it. {name}, what do you say, do or mean to do now?",
+    (("name", "the character's name"), ("player", "the author's character, or the author")),
+)
+
 _text(
     "characters.own.ask",
     OWN,
@@ -1769,6 +1795,25 @@ _text(
         ("answers", "'answer' or 'answers'"),
         ("names", "the names of the characters who answered"),
     ),
+)
+
+# Not measured: the "after" order's note, worded as `turn.round` but for
+# answers given having seen the author's turn (the author, Nov 18 2026).
+_text(
+    "turn.round.after",
+    OWN,
+    "The other players' intentions, after the author's turn (storyteller)",
+    "In place of the note above when the story has these characters answer after the "
+    "author's turn (Story → Setup… → About), having seen it. Their answers follow it.",
+    "Some characters are played by players of their own: {names}. They answered after "
+    "the author's turn, having seen it but not each other's answers. Each answer is what "
+    "that character means to do, not something that has happened; nor has anything in "
+    "the author's turn happened yet beyond what they say. Work them in with the author's "
+    "turn: decide what actually happens when these intentions meet, and write it. Keep "
+    "each of them true to what they meant; where intentions clash, or one assumes "
+    "something the others' actions change, resolve it as the world would. Write nothing "
+    "for the author's character beyond their own turn.",
+    (("names", "the names of the characters who answered"),),
 )
 
 _text(

@@ -145,6 +145,8 @@ class CastPanel(QWidget):
     collection_add_requested = Signal()
     collection_save_requested = Signal(str)
     link_requested = Signal(str)
+    # What the model playing this character is sent (Played by's button).
+    own_prompt_requested = Signal(str)
     # Another character is shown ("" for none).
     current_changed = Signal(str)
     # (character id, or "" for every card waiting) a condensed card written.
@@ -424,6 +426,9 @@ class CastPanel(QWidget):
         self.aliases.textChanged.connect(self._apply_edits)
         self.canon.textChanged.connect(self._apply_edits)
         self.played_by.changed.connect(self._apply_edits)
+        self.played_by.prompt_requested.connect(
+            lambda: self._current and self.own_prompt_requested.emit(self._current.id)
+        )
         self.keep_whole.toggled.connect(self._apply_edits)
         self.condensed.textChanged.connect(self._condensed_edited)
 

@@ -519,13 +519,16 @@ class MessageWidget(QFrame):
         else:
             self.layout_.insertWidget(index, note)
 
-    def add_answers(self, answers: Sequence[Reaction], *, hidden: bool) -> None:
+    def add_answers(
+        self, answers: Sequence[Reaction], *, hidden: bool, after: bool = False
+    ) -> None:
         """What each character played by their own model answered this
         passage with (the trial, engine/reactions.py): their intention, which
         the storyteller works in with the author's next turn. `hidden` while
         the round is still open and the author hasn't asked to see them (the
         author: answers that come in early are invisible to the others,
-        unless shown as a spoiler)."""
+        unless shown as a spoiler). `after`: under the author's turn, which
+        they answered having seen it (`StoryDefaults.round_order` "after")."""
         if not answers:
             return
         box = QFrame(self)
@@ -548,11 +551,16 @@ class MessageWidget(QFrame):
                 edited = " · edited" if answer.edited_at else ""
                 head = QLabel(f"{answer.name.upper()} MEANS TO{edited}")
                 head.setObjectName("answersHead")
+                by = answer.model or "their own model"
                 head.setToolTip(
                     plain_tip(
-                        f"Answered by {answer.model or 'their own model'}, without seeing your "
-                        "turn or the others' answers. The storyteller is given it with your "
-                        "next turn as what they mean to do, and decides what comes of it."
+                        f"Answered by {by}, having seen your turn but not the others' "
+                        "answers. The storyteller is given it with your turn as what they "
+                        "mean to do, and decides what comes of it."
+                        if after
+                        else f"Answered by {by}, without seeing your turn or the others' "
+                        "answers. The storyteller is given it with your next turn as what "
+                        "they mean to do, and decides what comes of it."
                     )
                 )
                 row.addWidget(head)
@@ -2291,6 +2299,10 @@ class TranscriptView(QScrollArea):
             # Nothing after the passage yet: the round is open, and its
             # answers are the others' secret until the author sends.
             widget.add_answers(node.meta.reactions, hidden=reply is None and not self.answers_shown)
+        elif self._answers_here and node.kind == "user" and node.meta.reactions:
+            # The story has them answer after the author's turn: given having
+            # seen it, so nothing to keep from the author, who sent it.
+            widget.add_answers(node.meta.reactions, hidden=False, after=True)
         # The private scene it was written in, and a passage's turn's, for ⋯.
         own = node.meta.private_span
         answered = turn.meta.private_span if turn is not None and node.kind == "assistant" else own

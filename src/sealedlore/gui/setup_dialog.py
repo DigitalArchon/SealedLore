@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.routing import config_role_model
+from sealedlore.gui.character_roles import ROUND_ORDER_LABEL, round_order_combo
 from sealedlore.gui.composer import (
     AGENCY_LABELS,
     AGENCY_TIPS,
@@ -537,6 +538,14 @@ class SetupDialog(QDialog):
                 "someone arriving, an earlier choice catching up."
             )
         )
+        self.round_order = round_order_combo(self.story.defaults.round_order)
+        form.addRow(ROUND_ORDER_LABEL, self.round_order)
+        form.addRow(
+            _hint(
+                "For characters played by their own model (a trial; Played by on their "
+                "card): when they answer."
+            )
+        )
         self.picture_style = PictureStyleField(
             self.story.picture_style,
             self.story.image_style,
@@ -921,6 +930,7 @@ class SetupDialog(QDialog):
         setup.description = self.description.toPlainText().strip() or None
         story.defaults.agency_mode = self.agency.currentData()
         story.defaults.world_activity = self.world_activity.currentData()
+        story.defaults.round_order = self.round_order.currentData()
         story.style = self.style
         story.picture_style, story.image_style = self.picture_style.value()
         story.private_prompt.mode = self.private_mode.currentData()

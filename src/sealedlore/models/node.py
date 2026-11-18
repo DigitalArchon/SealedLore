@@ -184,6 +184,10 @@ class NodeMeta(BaseModel):
     # with, in the order they were asked (engine/reactions.py). Every reader
     # of the history sees them, rendered as that character's intention.
     reactions: list[Reaction] = Field(default_factory=list)
+    # On an author's turn sent with the story's round after it ("after"):
+    # its round ran, so `reactions` here (perhaps none) are what the
+    # storyteller is given with it, never the passage before's.
+    round_after: bool = False
 
 
 class Reaction(BaseModel):

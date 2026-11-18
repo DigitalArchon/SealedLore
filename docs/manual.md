@@ -1919,7 +1919,16 @@ do next. None of them sees the others' answers or your next turn. You answer
 the passage too, with your turn as usual. The storyteller then gets your turn
 and every character's answer, and writes what happens when all of it meets:
 an answer is what that character means to do, not something that has
-happened, so the storyteller decides how it turns out. The storyteller is also
+happened, so the storyteller decides how it turns out.
+
+That is the default, and the quicker one: nobody waits for anyone. A story can
+have them answer after your turn instead, with **They answer** under Story →
+Setup… → About (the Start dialog offers it too). You send first; each of them
+then answers having seen your turn, though still not each other's, as another
+player at the table would; then the storyteller writes. Each turn then waits
+for their answers before the storyteller starts.
+
+The storyteller is also
 asked to put their words into the passage as dialogue, rather than report
 them; with Claude Opus 5.5, which never needed it and wrote a little worse for
 it, that request is left out (see "Models SealedLore adjusts for").
@@ -1932,11 +1941,19 @@ answers. The most recent of it goes whole. What they saw before that, they
 are given as their own memory of it: a few notes in their own words for each
 older stretch, written by the summarisation model the first time it is
 needed, and again for a stretch you edit or a branch that goes another way.
+Notes of your own on how to play them go to their model too, after their card.
 They are also told to say so when something comes up that they don't
 remember, rather than make it up. A character's model never sees a
 Direction, another character's answer or the storyteller's notes. A
 character who isn't in the scene isn't asked. Nothing runs in a private
 scene or a simple chat.
+
+**What their model is sent…**, under Played by on their card, shows their
+model's next request as it stands, section by section. It also has your
+**Notes for their model** (how to play them, beyond what the card says; the
+storyteller never sees them) and **What they remember**, each memory note
+yours to change. The rest is changed where it lives: their card on the Card
+tab, the wording under File → Prompts (advanced)…, the story by editing it.
 
 The answers to the latest passage are hidden under it until you send your
 turn, so you answer it as they did. **View → Show the characters' answers**
@@ -1946,7 +1963,9 @@ version with your next turn. Edit an older one and the passage that followed
 it is written again from your version, as a new take, with the one there now
 kept (‹ ›). Their calls show under *Own-model characters* (and their memories
 under *Own-model characters' memories*) in Story → Usage and cost…, and Stop
-skips them.
+skips them. Answered after your turn, they show under your turn, never
+hidden, with the same **Edit**: the passage after it is written again from
+your version.
 
 ### When the cast's cards don't fit
 

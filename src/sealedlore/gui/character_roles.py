@@ -24,7 +24,7 @@ import weakref
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QComboBox, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QComboBox, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from sealedlore.gui.model_picker import ModelField
 from sealedlore.gui.plain_text import plain_tip
@@ -86,12 +86,31 @@ OWN = "own"
 OWN_CHOICE = (
     OWN,
     "Their own model (a trial)",
-    "A model of their own plays them, as another player: after each passage it says what "
-    "they mean to do, without seeing your turn, and the storyteller works that in with your "
-    "turn. You can't play them while it does. A local or fine-tuned model works, named as "
-    "Endpoint::model. This is a trial: how well it plays isn't known yet.",
+    "A model of their own plays them, as another player: it says what they mean to do, and "
+    "the storyteller works that in with your turn. Whether they answer at the same time as "
+    "you or after your turn is the story's choice (Story → Setup… → About). You can't play "
+    "them while it does. A local or fine-tuned model works, named as Endpoint::model. This "
+    "is a trial: how well it plays isn't known yet.",
 )
 OWN_MODEL_HINT = "The model that plays them, e.g. Local::maela-lora"
+OWN_PROMPT_LABEL = "What their model is sent…"
+# When they answer (`StoryDefaults.round_order`), in Setup → About and Start.
+ROUND_ORDER_LABEL = "They answer"
+ROUND_ORDER_LABELS = {
+    "together": "At the same time as you (faster)",
+    "after": "After your turn, having seen it",
+}
+ROUND_ORDER_TIPS = {
+    "together": (
+        "Each answers the storyteller's passage while you write your turn, without seeing "
+        "it; the storyteller writes everything together when you send. Nobody waits."
+    ),
+    "after": (
+        "You send first; each then answers having seen your turn (not each other's), as "
+        "another player at the table would, and the storyteller writes. Each turn waits for "
+        "their answers before the storyteller starts."
+    ),
+}
 OWN_MODEL_MISSING = (
     "Name the model that plays them. Until then the storyteller writes them in full."
 )
@@ -120,6 +139,17 @@ def apply_played_by(
     own = value == OWN and bool(model.strip())
     character.own_model = model.strip() if own else None
     character.own_route = route if own and route is not None and route.paid else None
+
+
+def round_order_combo(value: str) -> QComboBox:
+    """The choice of when they answer, set to `value`."""
+    combo = QComboBox()
+    for order, label in ROUND_ORDER_LABELS.items():
+        combo.addItem(label, order)
+        combo.setItemData(combo.count() - 1, plain_tip(ROUND_ORDER_TIPS[order]), Qt.ToolTipRole)
+    combo.setCurrentIndex(max(combo.findData(value), 0))
+    combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+    return combo
 
 
 def _held(helper: Callable) -> Callable[[], Callable | None]:
@@ -203,6 +233,8 @@ class PlayedBy(QWidget):
     stories they join and a model of their own isn't offered."""
 
     changed = Signal()
+    # What their model is sent… (gui/character_prompt_dialog.py).
+    prompt_requested = Signal()
 
     def __init__(self, *, in_a_story: bool = True) -> None:
         super().__init__()
@@ -227,6 +259,12 @@ class PlayedBy(QWidget):
         layout.setSpacing(4)
         layout.addWidget(self.combo, 0, Qt.AlignLeft)
         layout.addWidget(self.model)
+        self.prompt_button = QPushButton(OWN_PROMPT_LABEL)
+        self.prompt_button.setToolTip(
+            "Their model's next request, your notes for it, and what they remember"
+        )
+        self.prompt_button.clicked.connect(self.prompt_requested)
+        layout.addWidget(self.prompt_button, 0, Qt.AlignLeft)
         layout.addWidget(self.about)
         self.combo.currentIndexChanged.connect(self._chosen)
         self._say()
@@ -282,6 +320,7 @@ class PlayedBy(QWidget):
     def _say(self) -> None:
         own = self.value() == OWN
         self.model.setVisible(own)
+        self.prompt_button.setVisible(own and bool(self.model.text().strip()))
         choices = (*CHOICES, OWN_CHOICE)
         about = dict((value, words) for value, _label, words in choices)[self.value()]
         if own and not self.model.text().strip():

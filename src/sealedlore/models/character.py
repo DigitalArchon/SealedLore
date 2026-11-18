@@ -99,3 +99,7 @@ class Character(BaseModel):
     # role's route does; None is NanoGPT's own routing. Sent only while the
     # model is on NanoGPT and not in an enclave (engine/routing.py).
     own_route: ModelRoute | None = None
+    # The author's own instructions to that model, in their system prompt
+    # after the card (`characters.own.notes`): how to play them, beyond what
+    # the card says. Never sent to the storyteller.
+    own_notes: str | None = None

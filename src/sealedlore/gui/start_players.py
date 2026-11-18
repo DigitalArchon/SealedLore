@@ -13,18 +13,25 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QCheckBox, QGridLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QCheckBox, QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
-from sealedlore.gui.character_roles import OWN, ModelHelpers, apply_played_by, played_by
+from sealedlore.gui.character_roles import (
+    OWN,
+    ROUND_ORDER_LABEL,
+    ModelHelpers,
+    apply_played_by,
+    played_by,
+    round_order_combo,
+)
 from sealedlore.gui.model_picker import ModelField
 from sealedlore.models.character import Character
 from sealedlore.models.route import ModelRoute
 
 HEADING = "Played by their own model (a trial)"
 ABOUT = (
-    "Another model plays them, as another player: after each passage it says what they "
-    "mean to do, and the storyteller works that in with your turn. Any model your "
-    "endpoints offer, a local one too. Change it later under Played by on their card."
+    "Another model plays them, as another player: it says what they mean to do, and the "
+    "storyteller works that in with your turn. Any model your endpoints offer, a local one "
+    "too. Change it later under Played by on their card."
 )
 NEEDS_MODEL = "Name the model that plays {names}, or untick them."
 
@@ -39,6 +46,7 @@ class StartPlayers(QWidget):
         cast: Sequence[Character],
         browse: Callable[..., str | None] | None = None,
         routes: tuple[Callable, Callable, Callable] | None = None,
+        round_order: str = "together",
     ) -> None:
         """`routes`: the window's Choose with a route, the endpoint a model
         is on, and a model's hosts (`ModelHelpers.lend`)."""
@@ -82,6 +90,13 @@ class StartPlayers(QWidget):
                 ((character.own_model or "").strip(), character.own_route) if own else ("", None)
             )
             self._names[character.id] = character.name
+        # When they answer: the story's setting (Setup → About too).
+        order_row = QHBoxLayout()
+        order_row.addWidget(QLabel(ROUND_ORDER_LABEL))
+        self.round_order = round_order_combo(round_order)
+        order_row.addWidget(self.round_order)
+        order_row.addStretch(1)
+        layout.addLayout(order_row)
         self.problem = QLabel()
         self.problem.setObjectName("hintLabel")
         self.problem.setWordWrap(True)
@@ -107,6 +122,9 @@ class StartPlayers(QWidget):
         )
         self.problem.setVisible(bool(missing))
         self.changed.emit()
+
+    def order(self) -> str:
+        return str(self.round_order.currentData())
 
     def missing(self) -> list[str]:
         """Ticked with no model named: Start waits for one."""

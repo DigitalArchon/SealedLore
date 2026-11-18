@@ -67,6 +67,7 @@ from sealedlore.models.node import (
     Difficulty,
     Node,
     NpcScope,
+    Reaction,
     ResponseStyle,
     Roll,
 )
@@ -159,6 +160,11 @@ class TurnRequest:
     # the story's card with the map's word on who is where
     # (engine/map_presence.py); None for the story's own.
     scene: SceneState | None = None
+    # The own-model round that answered this turn, when the story has them
+    # answer after the author (`StoryDefaults.round_order` "after"): those
+    # answers, and the storyteller told they saw the turn. None: the round
+    # that answered the passage before it, as before.
+    round_answers: tuple[Reaction, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -391,8 +397,10 @@ def assemble_prompt(
     )
     # Who answered the passage before this turn with their own model (the trial):
     # their words go in as dialogue, on the directives and the REMEMBER line.
-    answers = (
-        history_nodes[-1].meta.reactions
+    answers: Sequence[Reaction] = (
+        turn.round_answers
+        if turn.round_answers is not None
+        else history_nodes[-1].meta.reactions
         if history_nodes and history_nodes[-1].kind == "assistant"
         else ()
     )
@@ -457,7 +465,7 @@ def assemble_prompt(
         # turn answers, so Regenerate sends them again, edited if edited.
         (
             SECTION_ROUND,
-            render_round_block(answers, texts),
+            render_round_block(answers, texts, after=turn.round_answers is not None),
         ),
         (SECTION_RETAKE_NOTE, render_retake_note(turn.retake_note, texts)),
         (

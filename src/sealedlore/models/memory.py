@@ -27,5 +27,8 @@ class Recollection(BaseModel):
     fingerprint: str
     content: str
     model: str | None = None
+    # Changed by the author (the character's prompt dialog): their words
+    # stand, and are sent while the messages it covers are as they were.
+    edited_at: str | None = None
     usage: Usage = Field(default_factory=Usage)
     created_at: str = Field(default_factory=utc_now_iso)

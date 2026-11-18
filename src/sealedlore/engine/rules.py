@@ -778,7 +778,9 @@ def round_clause(names: Sequence[str], texts: PromptTexts = DEFAULT_TEXTS) -> st
     )
 
 
-def render_round_block(reactions: Sequence[Reaction], texts: PromptTexts = DEFAULT_TEXTS) -> str:
+def render_round_block(
+    reactions: Sequence[Reaction], texts: PromptTexts = DEFAULT_TEXTS, *, after: bool = False
+) -> str:
     """The own-model round's answers to the passage just before the author's
     turn, for the storyteller's tail only (the trial, engine/reactions.py).
 
@@ -786,7 +788,9 @@ def render_round_block(reactions: Sequence[Reaction], texts: PromptTexts = DEFAU
     and to each other's: the storyteller works them all in with the author's
     turn and decides what actually happens (the author's ruling). Never in
     the history: once a passage has resolved them they are spent, and no
-    read, summary or later turn reads them as something that happened."""
+    read, summary or later turn reads them as something that happened.
+    `after`: they answered once the author had sent, having seen the turn
+    (`StoryDefaults.round_order` "after"), and the note says so."""
     answers = [
         texts.fill("turn.round.answer", name=reaction.name, text=reaction.text.strip())
         for reaction in reactions
@@ -796,7 +800,11 @@ def render_round_block(reactions: Sequence[Reaction], texts: PromptTexts = DEFAU
         return ""
     names = ", ".join(reaction.name for reaction in reactions if reaction.text.strip())
     return "\n\n".join(
-        ["# WHAT THE OTHER PLAYERS INTEND", texts.fill("turn.round", names=names), *answers]
+        [
+            "# WHAT THE OTHER PLAYERS INTEND",
+            texts.fill("turn.round.after" if after else "turn.round", names=names),
+            *answers,
+        ]
     )
 
 

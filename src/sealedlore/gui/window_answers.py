@@ -17,6 +17,7 @@ from __future__ import annotations
 from PySide6.QtGui import QAction
 
 from sealedlore.engine.reactions import independent_cast
+from sealedlore.gui.character_prompt_dialog import show_character_prompt
 from sealedlore.gui.note_dialog import NoteDialog
 
 SHOW_ANSWERS = "Show the characters' &answers"
@@ -32,6 +33,10 @@ EDIT_REDO = "Save and write the next passage again"
 EDIT_HINT_OPEN = (
     "The storyteller is given this with your next turn, as what they mean to do, and decides "
     "what comes of it."
+)
+EDIT_HINT_TURN = (
+    "They answered your turn, which has no passage yet: the storyteller is given this with "
+    "it when the passage is written (Regenerate)."
 )
 EDIT_HINT_REDO = (
     "The passage after it was written from their answer as it was. Saving writes that passage "
@@ -51,10 +56,15 @@ class AnswersWindow:
         view_menu.addAction(self.answers_action)
 
     def _sync_answers_action(self) -> None:
-        """Offered in a story with a character played by their own model."""
+        """Offered in a story with a character played by their own model,
+        answering at the same time as the author (after it, there is nothing
+        to keep hidden)."""
         session = self.session
         offered = (
-            session is not None and not session.story.chat and bool(independent_cast(session.cast))
+            session is not None
+            and not session.story.chat
+            and session.story.defaults.round_order == "together"
+            and bool(independent_cast(session.cast))
         )
         self.answers_action.setVisible(offered)
 
@@ -84,7 +94,11 @@ class AnswersWindow:
             title=EDIT_TITLE.format(name=answer.name),
             asks=EDIT_ASKS.format(name=answer.name),
             button=EDIT_REDO if after is not None else EDIT_KEEP,
-            hint=EDIT_HINT_REDO if after is not None else EDIT_HINT_OPEN,
+            hint=EDIT_HINT_REDO
+            if after is not None
+            else EDIT_HINT_TURN
+            if path[index].kind == "user"
+            else EDIT_HINT_OPEN,
             text=answer.text,
         )
         try:
@@ -105,3 +119,17 @@ class AnswersWindow:
             self._regenerate_node(after.id)
         else:
             self._reload_unless_editing()
+
+    def _show_character_prompt(self, character_id: str) -> None:
+        """Played by → What their model is sent…: their request, your notes
+        for their model, their memory (gui/character_prompt_dialog.py)."""
+        session = self.session
+        if session is None:
+            return
+        if self._busy or session.in_private:
+            self.statusBar().showMessage(
+                "Their model's prompt opens once the story is idle, outside a private scene.",
+                8000,
+            )
+            return
+        show_character_prompt(self._dialog_parent(), session, character_id)

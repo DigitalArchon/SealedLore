@@ -1639,6 +1639,11 @@ class StorySession(
         turn = replace(turn, turn_node_id=user_node.id)
 
         turn = yield from self.direct_turn(turn, user_node, history)
+        if self.story.defaults.round_order == "after" and not self.story.chat:
+            # Characters played by their own model answer this turn, having
+            # seen it, before the storyteller writes (engine/session_reactions.py).
+            yield from self.react_to_turn(user_node, history)
+            turn = replace(turn, round_answers=tuple(user_node.meta.reactions))
         # A rebuild the author asked for goes in before this turn's prompt,
         # and so do cards condensed since the last.
         for text in [*self.adopt_rebuild(), *self.adopt_condensed()]:
@@ -2185,6 +2190,9 @@ class StorySession(
             length_hint=user_node.meta.length_hint,
             dice_domain=user_node.meta.dice_domain,
             difficulty=user_node.meta.difficulty or "standard",
+            # Answered after it (the story's round "after"): the same answers
+            # again, edited if the author edited one.
+            round_answers=(tuple(user_node.meta.reactions) if user_node.meta.round_after else None),
         )
 
     def _explained(self, turn: TurnRequest) -> TurnRequest:

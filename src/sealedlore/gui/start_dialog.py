@@ -88,7 +88,9 @@ class StartDialog(QDialog):
         # Who a model of their own plays (the trial), for every new story.
         self.players: StartPlayers | None = None
         if cast:
-            self.players = StartPlayers(cast, browse_models, routes)
+            self.players = StartPlayers(
+                cast, browse_models, routes, round_order=story.defaults.round_order
+            )
             layout.addWidget(self.players)
             self.play_as.currentIndexChanged.connect(self._lock_players)
         # Here as well as in Setup: a new story's cast is often made after
@@ -157,6 +159,10 @@ class StartDialog(QDialog):
         """Start waits for a model for everyone ticked."""
         if self.players is not None and hasattr(self, "start_button"):
             self.start_button.setEnabled(not self.players.missing())
+
+    def round_order(self) -> str | None:
+        """When they answer, as chosen here; None with no cast to choose for."""
+        return self.players.order() if self.players is not None else None
 
     def own_models(self) -> dict[str, tuple[str, ModelRoute | None] | None]:
         """Character id → the model now playing them and its route (None:

@@ -369,3 +369,112 @@ def test_start_s_rows_take_a_route_too(app, story, cast) -> None:
     apply_chosen(cast, dialog.own_models())
     assert cast[1].own_route == route
     dialog.deleteLater()
+
+
+# --- they answer after the author's turn -------------------------------------
+
+
+def test_after_the_turn_their_answers_stand_under_it_in_the_open(
+    app, tmp_path: Path, story, cast
+) -> None:
+    story.defaults.round_order = "after"
+    window = own_window(tmp_path, story, cast, ["MAELA-HOLDS-THE-LAMP", "The door gives.", "{}"])
+    # Nothing to keep hidden: they answer what the author has sent.
+    assert not window.answers_action.isVisible()
+    _send(window, "I put my shoulder to the door.")
+    wait_for(app, lambda: not window._busy)
+    turn_node, passage = window.session.path()[-2:]
+    assert turn_node.meta.round_after and not passage.meta.reactions
+    assert "MAELA-HOLDS-THE-LAMP" in " ".join(answer_texts(window, turn_node.id))
+    window.close()
+
+
+def test_setup_and_start_choose_when_they_answer(
+    app, tmp_path: Path, story, cast, monkeypatch
+) -> None:
+    from sealedlore.gui import main_window as window_module
+    from sealedlore.gui.setup_dialog import SetupDialog
+
+    dialog = SetupDialog(story, cast)
+    assert dialog.round_order.currentData() == "together"
+    dialog.round_order.setCurrentIndex(dialog.round_order.findData("after"))
+    dialog._save()
+    assert story.defaults.round_order == "after"
+    dialog.deleteLater()
+
+    story.defaults.round_order = "together"
+    window = _start_window(tmp_path, story, cast)
+
+    def run(start) -> int:
+        start.players.round_order.setCurrentIndex(start.players.round_order.findData("after"))
+        return QDialog.Accepted
+
+    monkeypatch.setattr(window_module.StartDialog, "exec", run)
+    window.start_story()
+    assert window.session.story.defaults.round_order == "after"
+    window.close()
+
+
+# --- what their model is sent, and the author's say in it --------------------
+
+
+def test_their_model_s_prompt_can_be_seen_and_changed(app, tmp_path: Path, story, cast) -> None:
+    from sealedlore.engine.reactions import fingerprint, seen_entries
+    from sealedlore.gui.character_prompt_dialog import CharacterPromptDialog
+    from sealedlore.models.memory import Recollection
+
+    window = own_window(tmp_path, story, cast, ["The door gives.", "{}", "I pick the lock."])
+    _send(window, "I put my shoulder to the door.")
+    wait_for(app, lambda: not window._busy)
+    session = window.session
+    maela = next(c for c in session.cast if c.id == "char-maela")
+    # A memory note over what she has seen so far.
+    seen = seen_entries(
+        session.path(), maela, session.visible_cast(), start=story.setup.starting_scene
+    )
+    session.bundle.memories.append(
+        Recollection(
+            character_id=maela.id,
+            covered_node_ids=[node_id for node_id, _ in seen],
+            fingerprint=fingerprint(seen),
+            content="I saw the door give.",
+        )
+    )
+    # The card's button opens it, for a character with a model named.
+    window.cast_panel.select_character(maela.id)
+    assert window.cast_panel.played_by.prompt_button.isVisibleTo(window.cast_panel.played_by)
+
+    dialog = CharacterPromptDialog(session, maela.id)
+    assert "You are Maela Orr" in dialog.sent.toPlainText()
+    assert "I saw the door give." in dialog.sent.toPlainText()
+    dialog.notes.setPlainText("Never trusts the watch.")
+    [(memory_id, box)] = dialog.memories
+    box.setPlainText("I saw the door give, and Serrik push.")
+    assert dialog.save()
+    assert maela.own_notes == "Never trusts the watch."
+    memory = next(m for m in session.bundle.memories if m.id == memory_id)
+    assert memory.content == "I saw the door give, and Serrik push." and memory.edited_at
+    # The view follows, and her next request carries both.
+    shown = dialog.sent.toPlainText()
+    assert "HOW TO PLAY Maela Orr, FROM THE AUTHOR" in shown and "Serrik push" in shown
+    dialog.deleteLater()
+    window.close()
+
+
+def test_closing_with_changes_asks_first(app, tmp_path: Path, story, cast, monkeypatch) -> None:
+    from PySide6.QtWidgets import QMessageBox
+
+    from sealedlore.gui.character_prompt_dialog import CharacterPromptDialog
+
+    window = own_window(tmp_path, story, cast, [])
+    dialog = CharacterPromptDialog(window.session, "char-maela")
+    dialog.notes.setPlainText("Something typed.")
+    asked, closed = [], []
+    dialog.finished.connect(closed.append)
+    monkeypatch.setattr(
+        QMessageBox, "question", lambda *a, **k: asked.append(a) or QMessageBox.Cancel
+    )
+    dialog.reject()
+    assert asked and not closed  # kept open: Cancel
+    dialog.deleteLater()
+    window.close()

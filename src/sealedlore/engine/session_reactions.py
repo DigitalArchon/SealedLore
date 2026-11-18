@@ -66,8 +66,10 @@ class ReactionRuntime:
 
     def react_after_turn(self) -> Iterator[SessionNotice]:
         """The round after a passage: each character played by a model of
-        their own answers it, blind to the others and to the author's turn."""
-        if self.story.chat or self.in_private:
+        their own answers it, blind to the others and to the author's turn.
+        Not when the story has them answer after the author's turn instead
+        (`react_to_turn`)."""
+        if self.story.chat or self.in_private or self.story.defaults.round_order == "after":
             return
         result = self.last_result
         if result is None or result.unread or result.node is None:
@@ -75,17 +77,37 @@ class ReactionRuntime:
         passage = result.node
         if passage.kind != "assistant":
             return
-        history = self.path()
+        yield from self._round(self.path(), passage)
+
+    def react_to_turn(self, turn_node, history) -> Iterator[SessionNotice]:
+        """The round after the author's turn (`StoryDefaults.round_order`
+        "after"): each character played by a model of their own answers it,
+        having seen it, blind to the others; before the storyteller writes,
+        which is given their answers with the turn (`TurnRequest.round_answers`).
+        Kept on the turn, marked as answered so (`round_after`) even with none,
+        so Regenerate sends the same and never the passage before's."""
+        turn_node.meta.round_after = True
+        turn_node.meta.reactions = []
+        if self.story.chat or self.in_private:
+            return
+        held = self._character(turn_node.meta.controlled_character_id)
+        player = held.name if held is not None else "The author"
+        yield from self._round([*history, turn_node], turn_node, after_turn_of=player)
+
+    def _round(self, history, store_on, *, after_turn_of: str | None = None):
+        """One round: everyone in the scene who has a model of their own
+        answers what `history` ends on; kept on `store_on`."""
         cast = self.visible_cast(history)
         characters = reacting_characters(
             cast, self.story.scene, held_character_id=self.story.held_character_id
         )
         if not characters:
             return
-        # The passage as it now stands is what this round answers: a round
-        # after a Continue or a change replaces the earlier one's, and a Stop
-        # (which skips the round) leaves none rather than stale ones.
-        passage.meta.reactions = []
+        # What the round answers as it now stands: a round after a Continue
+        # or a change replaces the earlier one's, and a Stop (which skips the
+        # round) leaves none rather than stale ones.
+        store_on.meta.reactions = []
+        passage = store_on
 
         def count(text: str) -> int:
             return self.estimator.estimate(text)
@@ -110,6 +132,7 @@ class ReactionRuntime:
                     count=count,
                     budget=reactions.HISTORY_TOKENS,
                     recollections=self.bundle.memories,
+                    after_turn_of=after_turn_of,
                 ),
                 params=self.side_params(model),
                 # The character's own route: a route is otherwise a role's,
@@ -180,8 +203,10 @@ class ReactionRuntime:
         if answers:
             names = ", ".join(answer.name for answer in answers)
             yield SessionNotice(
-                f"{names} answered. The storyteller gets their answers with your next turn, "
-                "as what they mean to do."
+                f"{names} answered your turn. The storyteller works their answers in with it."
+                if after_turn_of is not None
+                else f"{names} answered. The storyteller gets their answers with your next "
+                "turn, as what they mean to do."
             )
 
     def _recollect_due(self, characters, history, cast, count) -> Iterator[SessionNotice]:
@@ -311,6 +336,67 @@ class ReactionRuntime:
             for thread in threads:
                 thread.join()
         return boxes
+
+    def character_prompt(self, character_id: str) -> list:
+        """What the model playing this character would be sent if their round
+        ran now (the character's prompt dialog): the same request as
+        `_round` builds, on the path as it stands, with the memory notes
+        already written (none is written for a look)."""
+        history = self.path()
+        cast = self.visible_cast(history)
+        character = next((c for c in cast if c.id == character_id), None)
+        if character is None:
+            raise ValueError("no such character in the story")
+        after = None
+        if self.story.defaults.round_order == "after":
+            held = self._character(self.story.held_character_id)
+            after = held.name if held is not None else "The author"
+        return reaction_messages(
+            story=self.story,
+            cast=cast,
+            character=character,
+            history=history,
+            texts=self.texts,
+            count=self.estimator.estimate,
+            budget=reactions.HISTORY_TOKENS,
+            recollections=self.bundle.memories,
+            after_turn_of=after,
+        )
+
+    def memories_of(self, character_id: str) -> list[Recollection]:
+        """Their memory notes in force on this path, oldest first."""
+        history = self.path()
+        cast = self.visible_cast(history)
+        character = next((c for c in cast if c.id == character_id), None)
+        if character is None:
+            return []
+        seen = seen_entries(
+            history, character, cast, start=self.story.setup.starting_scene, texts=self.texts
+        )
+        chain, _covered = memory_chain(self.bundle.memories, character_id, seen)
+        return list(chain)
+
+    def edit_memory(self, memory_id: str, text: str) -> None:
+        """The author's words for one of a character's memory notes: they
+        stand while the messages it covers are as they were."""
+        self._refuse_in_private("Editing a character's memory")
+        memory = next((m for m in self.bundle.memories if m.id == memory_id), None)
+        if memory is None:
+            raise ValueError("no such memory")
+        if not text.strip():
+            raise ValueError("a memory can't be empty")
+        memory.content = text.strip()
+        memory.edited_at = utc_now_iso()
+        self.save()
+
+    def set_own_notes(self, character_id: str, notes: str) -> None:
+        """The author's notes for the model playing a character."""
+        self._refuse_in_private("Changing a character's notes")
+        character = self._character(character_id)
+        if character is None:
+            raise ValueError("no such character")
+        character.own_notes = notes.strip() or None
+        self.save()
 
     def edit_reaction(self, node_id: str, character_id: str, text: str) -> None:
         """The author's edit of what a character answered a passage with.

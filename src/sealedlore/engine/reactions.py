@@ -104,7 +104,12 @@ def _entry(
     # note: that is to the storyteller.
     speaker = cast_by_id.get(node.speaker_id)
     tag = render_speaker_tag(node.speaker_id, speaker, texts)
-    return f"{tag}\n{node.content.strip()}" if node.content.strip() else ""
+    lines = [f"{tag}\n{node.content.strip()}" if node.content.strip() else ""]
+    # Their own answer to this turn, when the story has them answer after the
+    # author's (`round_after`), as after a passage.
+    own = [r for r in node.meta.reactions if r.character_id == character.id]
+    lines += [texts.fill("characters.own.answered", text=r.text.strip()) for r in own]
+    return "\n\n".join(line for line in lines if line)
 
 
 def seen_entries(
@@ -294,12 +299,16 @@ def reaction_messages(
     budget: int = HISTORY_TOKENS,
     recollections: Sequence[Recollection] = (),
     unsure: bool = True,
+    after_turn_of: str | None = None,
 ) -> list[PromptMessage]:
     """One character's request: their card and the setting in the system
     message (the same every round, so a model that caches can), what they
     remember of older scenes (`recollections`, those still matching), the
     recent story as they saw it ending on the passage they answer, then the
     ask. `unsure`: told to say so when they don't remember something.
+    `after_turn_of`: the story has them answer after the author's turn, the
+    last of `history`; who took it (the author's character, or "the author"),
+    for the ask that says so (`characters.own.ask.after`).
 
     `cast` is the cast models may see (plot-hidden cards left out)."""
     system = [texts.fill("characters.own.system", name=character.name, card=_card(character))]
@@ -308,6 +317,10 @@ def reaction_messages(
     skills = render_competence_line(character).removeprefix("Competence: ")
     if skills:
         system.append(texts.fill("characters.own.skills", skills=skills))
+    if (character.own_notes or "").strip():
+        system.append(
+            texts.fill("characters.own.notes", name=character.name, notes=character.own_notes)
+        )
     if (story.world_bible or "").strip():
         system.append(texts.fill("characters.own.setting", setting=story.world_bible.strip()))
     system.append(texts.fill("characters.own.rules", name=character.name))
@@ -328,7 +341,12 @@ def reaction_messages(
     body.append("\n\n".join(recent))
     scene = scene_at(history, story.scene, cast_ids=[c.id for c in cast])
     body.append(_scene_lines(scene, cast, character, texts))
-    body.append(texts.fill("characters.own.ask", name=character.name))
+    if after_turn_of is not None:
+        body.append(
+            texts.fill("characters.own.ask.after", name=character.name, player=after_turn_of)
+        )
+    else:
+        body.append(texts.fill("characters.own.ask", name=character.name))
     return [
         # Marked for the cache at its end: the system message is the same
         # every round, so a model that caches reads it back.

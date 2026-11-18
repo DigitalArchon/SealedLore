@@ -83,6 +83,13 @@ class StoryDefaults(BaseModel):
     agency_mode: AgencyMode = "contested"
     npc_scope: NpcScope = "all"
     world_activity: WorldActivity = DEFAULT_WORLD_ACTIVITY
+    # When characters played by their own model answer (the trial,
+    # engine/reactions.py): "together", each passage, at the same time as the
+    # author and blind to their turn (the author's first ruling, and faster:
+    # nobody waits); "after", once the author has sent, having seen their
+    # turn, before the storyteller writes (the author, Nov 18 2026: as
+    # another human player would).
+    round_order: Literal["together", "after"] = "together"
     # The author's testing (Sept 2026): Sonnet 4.5/4.6 storytelling degrades
     # quickly past ~60k tokens of context, so 60k is the ceiling as well as
     # the default. Existing stories keep what they were saved with.

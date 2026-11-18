@@ -262,6 +262,72 @@ def test_their_own_route_goes_with_their_answer_on_nanogpt(tmp_path: Path) -> No
         assert [c.extra_body for c in round_calls(session)] == [{}], model
 
 
+# --- the round after the author's turn (StoryDefaults.round_order "after") ------
+
+
+def _after(tmp_path: Path, responses: list[str]) -> StorySession:
+    story = a_story()
+    story.defaults.round_order = "after"
+    return make_session(tmp_path, responses, story=story)
+
+
+def test_after_the_turn_they_answer_it_before_the_storyteller_writes(tmp_path: Path) -> None:
+    session = _after(tmp_path, ["I hold the lamp for him.", "The door gives under you both."])
+    play(session, turn("I put my shoulder to the door."))
+    models = [r.model for r in session.provider.requests]
+    assert models == [MAELA_MODEL, "story-model"]  # theirs first, then the passage
+    asked = sent(round_calls(session)[0])
+    # They saw the author's turn, and are told it hasn't happened yet.
+    assert "I put my shoulder to the door." in asked
+    assert "has just taken their turn" in asked
+    user_node, passage = session.path()[-2:]
+    assert user_node.meta.round_after and passage.meta.reactions == []
+    assert [a.text for a in user_node.meta.reactions] == ["I hold the lamp for him."]
+    block = session.last_prompt.section(SECTION_ROUND).text
+    assert "[Maela Orr] I hold the lamp for him." in block
+    assert "having seen it" in block
+
+
+def test_after_the_turn_no_round_follows_the_passage(tmp_path: Path) -> None:
+    session = _after(tmp_path, ["Lamp up.", "The door gives.", "I go first.", "It's dark."])
+    play(session, turn())
+    play(session, turn("I go in."))
+    # One round a turn, each before its passage: none after a passage.
+    assert [r.model for r in session.provider.requests] == [
+        MAELA_MODEL,
+        "story-model",
+        MAELA_MODEL,
+        "story-model",
+    ]
+    # Their earlier answer is in their own history, after the turn it answered.
+    assert "(You answered: Lamp up.)" in sent(round_calls(session)[1])
+
+
+def test_regenerate_sends_the_same_answers_without_asking_again(tmp_path: Path) -> None:
+    session = _after(tmp_path, ["Lamp up.", "The door gives.", "It swings wide."])
+    play(session, turn())
+    list(session.regenerate())
+    assert [r.model for r in session.provider.requests] == [
+        MAELA_MODEL,
+        "story-model",
+        "story-model",
+    ]
+    assert "[Maela Orr] Lamp up." in session.last_prompt.section(SECTION_ROUND).text
+
+
+def test_a_turn_nobody_answered_never_sends_the_passage_before_s_answers(
+    tmp_path: Path,
+) -> None:
+    """Switched to "after" with answers on the last passage from before: the
+    turn's own round (here, nobody in the scene) is what goes."""
+    session = make_session(tmp_path, ["The door gives.", "I pick it.", "It opens."])
+    play(session, turn())  # "together": Maela answers the passage
+    session.story.defaults.round_order = "after"
+    session.story.scene.present_character_ids = ["char-serrik"]
+    play(session, turn("I go in alone."))
+    assert session.last_prompt.section(SECTION_ROUND) is None
+
+
 def test_no_round_in_a_private_scene(tmp_path: Path) -> None:
     session = make_session(tmp_path, ["The door gives.", "I reach for my picks."])
     play(session, turn())
