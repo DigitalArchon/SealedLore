@@ -654,6 +654,8 @@ class ModelField(QWidget):
     """A model id: typed, or chosen from the endpoint's list with Choose."""
 
     textChanged = Signal(str)
+    # The route was chosen or taken away (Route… or Choose with a route).
+    routeChanged = Signal()
 
     def __init__(
         self,
@@ -861,6 +863,7 @@ class ModelField(QWidget):
     def set_route(self, route: ModelRoute | None) -> None:
         self.route = route if route is not None and route.paid else None
         self._show_route()
+        self.routeChanged.emit()
 
     def _can_route(self) -> bool:
         """A model in the field (a blank one takes its fallback's route),

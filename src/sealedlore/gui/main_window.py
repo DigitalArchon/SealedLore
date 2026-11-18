@@ -628,7 +628,12 @@ class MainWindow(
         self.cast_panel.remove_requested.connect(self._remove_character)
         self.cast_panel.lore_from = self._lore_from_their_book
         # A main character's own model (the trial): Choose lists the endpoints' models.
-        self.cast_panel.played_by.set_browse(self._browse_models)
+        self.cast_panel.played_by.set_browse(
+            self._browse_models,
+            browse_route=self._browse_models_and_route,
+            route_endpoint=self._route_endpoint_of,
+            hosts_of=self._hosts_of,
+        )
         self.cast_panel.promote_requested.connect(self._promote_character)
         self.cast_panel.demote_requested.connect(self._demote_character)
         self.cast_panel.accept_requested.connect(self._accept_suggestion)
@@ -2034,6 +2039,7 @@ class MainWindow(
             without_pictures=offered,
             kept=kept,
             browse_models=self._browse_models,
+            routes=(self._browse_models_and_route, self._route_endpoint_of, self._hosts_of),
         )
         accepted = dialog.exec() == StartDialog.Accepted
         held = dialog.held_character_id()

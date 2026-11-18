@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from sealedlore.ids import new_id
 from sealedlore.models.collection import CardLink, CollectionInfo
 from sealedlore.models.image import ImageRef
+from sealedlore.models.route import ModelRoute
 from sealedlore.models.tavern import TavernFields
 
 CompetenceTier = Literal["none", "poor", "competent", "skilled", "expert", "legendary"]
@@ -94,3 +95,7 @@ class Character(BaseModel):
     # next turn, treating it as intention, not fact. None: the storyteller
     # writes them, exactly as before.
     own_model: str | None = None
+    # Which of NanoGPT's hosts serves `own_model` (models/route.py), as a
+    # role's route does; None is NanoGPT's own routing. Sent only while the
+    # model is on NanoGPT and not in an enclave (engine/routing.py).
+    own_route: ModelRoute | None = None

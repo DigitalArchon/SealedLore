@@ -269,7 +269,7 @@ def test_start_offers_a_model_of_their_own_for_every_main_character(
     assert "Maela Orr" in players.problem.text()
     model.setText(MODEL)
     assert dialog.start_button.isEnabled()
-    assert dialog.own_models() == {"char-maela": MODEL}
+    assert dialog.own_models() == {"char-maela": (MODEL, None)}
     # Choosing to play someone with a model of their own takes it away.
     dialog.play_as.setCurrentIndex(dialog.play_as.findData("char-maela"))
     assert dialog.own_models() == {}
@@ -312,4 +312,60 @@ def test_unticking_at_start_hands_them_back(app, tmp_path: Path, story, cast) ->
     assert dialog.own_models() == {"char-maela": None}
     apply_chosen(cast, dialog.own_models())
     assert played_by(cast[1]) == "either" and cast[1].own_model is None
+    dialog.deleteLater()
+
+
+NANO = "https://nano-gpt.com/api/v1"
+ROUTE_MODEL = "z-ai/glm-5.3"
+
+
+def _routed():
+    from sealedlore.models.route import ModelRoute
+
+    helpers = dict(
+        route_endpoint=lambda model: NANO,
+        hosts_of=lambda model: ("one-host", "another-host"),
+    )
+    return ModelRoute(priority="speed"), helpers
+
+
+def test_the_card_s_own_model_takes_a_route_and_keeps_it(app) -> None:
+    """Every model field with a route offers one; their own model's too."""
+    route, helpers = _routed()
+    played = PlayedBy()
+    played.set_browse(lambda current: None, **helpers)
+    character = Character(name="Maela Orr")
+    played.combo.setCurrentIndex(played.combo.findData(OWN))
+    played.model.setText(ROUTE_MODEL)
+    assert played.model.route_button.isVisibleTo(played)
+    saved = []
+    played.changed.connect(lambda: saved.append(True))
+    played.model.set_route(route)
+    assert saved  # a route chosen is an edit, saved as one
+    played.apply_to(character)
+    assert character.own_model == ROUTE_MODEL and character.own_route == route
+    # Shown again, and taken away with the model.
+    other = PlayedBy()
+    other.set_browse(lambda current: None, **helpers)
+    other.show_character(character)
+    assert other.model.route == route
+    other.combo.setCurrentIndex(other.combo.findData("either"))
+    other.apply_to(character)
+    assert character.own_model is None and character.own_route is None
+
+
+def test_start_s_rows_take_a_route_too(app, story, cast) -> None:
+    from sealedlore.gui.start_dialog import StartDialog
+    from sealedlore.gui.start_players import apply_chosen
+
+    route, helpers = _routed()
+    routes = (lambda current, r: None, helpers["route_endpoint"], helpers["hosts_of"])
+    dialog = StartDialog(story, cast, routes=routes)
+    tick, model = dialog.players.rows["char-maela"]
+    tick.setChecked(True)
+    model.setText(ROUTE_MODEL)
+    model.set_route(route)
+    assert dialog.own_models() == {"char-maela": (ROUTE_MODEL, route)}
+    apply_chosen(cast, dialog.own_models())
+    assert cast[1].own_route == route
     dialog.deleteLater()

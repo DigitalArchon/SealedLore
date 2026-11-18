@@ -1898,10 +1898,12 @@ they are a main character, decides who writes them:
   player. Name it in the field under the choice, or press **Choose**: any
   model your endpoints offer, including a local or fine-tuned one on an
   endpoint of its own (`Endpoint::model`). They leave the *Playing* list while
-  their model plays them. A new story offers the same in its Start dialog,
-  under **Played by their own model (a trial)**, so they play from the opening
-  on; the guide's characters step and Setup's Characters tab show the card's
-  Played by too.
+  their model plays them. On NanoGPT, the route button beside the field (or
+  **Choose**, which picks a model and its route together) chooses which host
+  serves their model, as for any other model. A new story offers the same in
+  its Start dialog, under **Played by their own model (a trial)**, so they
+  play from the opening on; the guide's characters step and Setup's
+  Characters tab show the card's Played by too.
 
 A supporting character is always the storyteller's, so their card has no
 **Played by**. Your characters' cards have it too, for the stories they join

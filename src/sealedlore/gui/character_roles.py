@@ -29,6 +29,7 @@ from PySide6.QtWidgets import QComboBox, QLabel, QVBoxLayout, QWidget
 from sealedlore.gui.model_picker import ModelField
 from sealedlore.gui.plain_text import plain_tip
 from sealedlore.models.character import Character
+from sealedlore.models.route import ModelRoute
 
 MAIN = "Main character"
 SUPPORTING = "Supporting character"
@@ -109,12 +110,91 @@ def played_by(character: Character) -> str:
     return "either"
 
 
-def apply_played_by(character: Character, value: str, model: str = "") -> None:
-    """`model` is the own model's reference, for `OWN`; any other choice
-    takes the own model away."""
+def apply_played_by(
+    character: Character, value: str, model: str = "", route: ModelRoute | None = None
+) -> None:
+    """`model` is the own model's reference, for `OWN`, and `route` the
+    NanoGPT host chosen for it; any other choice takes both away."""
     character.is_player_available = value not in ("storyteller", OWN)
     character.author_only = value == "author"
-    character.own_model = (model.strip() or None) if value == OWN else None
+    own = value == OWN and bool(model.strip())
+    character.own_model = model.strip() if own else None
+    character.own_route = route if own and route is not None and route.paid else None
+
+
+def _held(helper: Callable) -> Callable[[], Callable | None]:
+    """A window's method, held weakly; anything else as it is."""
+    if hasattr(helper, "__self__"):
+        return weakref.WeakMethod(helper)
+    return lambda: helper
+
+
+class ModelHelpers:
+    """The window's model list and route helpers, held weakly, for a field
+    naming a character's own model (the card's Played by, the Start
+    dialog's rows): Choose, and the NanoGPT host beside it as every model
+    field with a route has (gui/model_picker.py `ModelField`). Until the
+    window lends them, Choose does nothing and no route is offered."""
+
+    def __init__(self) -> None:
+        self._held: dict[str, Callable[[], Callable | None]] = {}
+
+    def lend(
+        self,
+        browse: Callable[..., str | None] | None,
+        *,
+        browse_route: Callable | None = None,
+        route_endpoint: Callable | None = None,
+        hosts_of: Callable | None = None,
+    ) -> None:
+        self._held = {
+            name: _held(helper)
+            for name, helper in (
+                ("browse", browse),
+                ("browse_route", browse_route),
+                ("route_endpoint", route_endpoint),
+                ("hosts_of", hosts_of),
+            )
+            if helper is not None
+        }
+
+    def _get(self, name: str) -> Callable | None:
+        held = self._held.get(name)
+        return held() if held is not None else None
+
+    def field(self) -> ModelField:
+        """A model field using them (the field holds these methods weakly:
+        keep this object as long as the field)."""
+        field = ModelField(
+            "",
+            self.browse_models,
+            route_endpoint=self.route_endpoint,
+            browse_route=self.browse_route,
+            hosts_of=self.hosts_of,
+        )
+        field.setPlaceholderText(OWN_MODEL_HINT)
+        return field
+
+    def browse_models(self, current: str) -> str | None:
+        browse = self._get("browse")
+        return browse(current) if browse is not None else None
+
+    def browse_route(self, current: str, route: ModelRoute | None):
+        """Choose: the model and its route where the window offers both,
+        else the model alone, its route kept."""
+        browse_route = self._get("browse_route")
+        if browse_route is not None:
+            return browse_route(current, route)
+        picked = self.browse_models(current)
+        return (picked, route) if picked else None
+
+    def route_endpoint(self, model: str) -> str | None:
+        getter = self._get("route_endpoint")
+        return getter(model) if getter is not None else None
+
+    def hosts_of(self, model: str) -> tuple[str, ...] | None:
+        getter = self._get("hosts_of")
+        return getter(model) if getter is not None else None
 
 
 class PlayedBy(QWidget):
@@ -127,7 +207,8 @@ class PlayedBy(QWidget):
     def __init__(self, *, in_a_story: bool = True) -> None:
         super().__init__()
         self._in_a_story = in_a_story
-        self._browse: Callable[[], Callable[..., str | None] | None] | None = None
+        self._showing = False
+        self.helpers = ModelHelpers()
         self.combo = QComboBox()
         choices = (*CHOICES, OWN_CHOICE) if in_a_story else CHOICES
         for value, label, about in choices:
@@ -137,9 +218,10 @@ class PlayedBy(QWidget):
         self.about = QLabel()
         self.about.setObjectName("hintLabel")
         self.about.setWordWrap(True)
-        self.model = ModelField("", self._browse_models)
-        self.model.setPlaceholderText(OWN_MODEL_HINT)
+        # NanoGPT's host for it too, with the window's helpers (`set_browse`).
+        self.model = self.helpers.field()
         self.model.textChanged.connect(self._model_typed)
+        self.model.routeChanged.connect(self._route_chosen)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
@@ -149,36 +231,44 @@ class PlayedBy(QWidget):
         self.combo.currentIndexChanged.connect(self._chosen)
         self._say()
 
-    def set_browse(self, browse: Callable[..., str | None]) -> None:
-        """The window's model list, for the own model's Choose. Held weakly:
-        the window holds this widget."""
-        self._browse = (
-            weakref.WeakMethod(browse) if hasattr(browse, "__self__") else (lambda: browse)
-        )
+    def set_browse(self, browse: Callable[..., str | None], **routes: Callable) -> None:
+        """The window's model list, for the own model's Choose, and its
+        route helpers (`ModelHelpers.lend`). Held weakly: the window holds
+        this widget."""
+        self.helpers.lend(browse, **routes)
+        self._showing = True
+        self.model.set_route(self.model.route)  # its button, now it can be shown
+        self._showing = False
 
-    def _browse_models(self, current: str) -> str | None:
-        browse = self._browse() if self._browse is not None else None
-        return browse(current) if browse is not None else None
+    def _route_chosen(self) -> None:
+        if not self._showing and self.value() == OWN:
+            self.changed.emit()
 
     def value(self) -> str:
         return str(self.combo.currentData())
 
-    def set_value(self, value: str, model: str = "") -> None:
+    def set_value(self, value: str, model: str = "", route: ModelRoute | None = None) -> None:
         """Shown without saying so (`changed` is for the author's choice)."""
         index = self.combo.findData(value)
+        self._showing = True
         self.combo.blockSignals(True)
         self.model.blockSignals(True)
-        self.combo.setCurrentIndex(max(index, 0))
-        self.model.setText(model)
-        self.model.blockSignals(False)
-        self.combo.blockSignals(False)
+        try:
+            self.combo.setCurrentIndex(max(index, 0))
+            self.model.setText(model)
+        finally:
+            self.model.blockSignals(False)
+            self.combo.blockSignals(False)
+        # After the text: the route button shows for the model in the field.
+        self.model.set_route(route)
+        self._showing = False
         self._say()
 
     def show_character(self, character: Character) -> None:
-        self.set_value(played_by(character), character.own_model or "")
+        self.set_value(played_by(character), character.own_model or "", character.own_route)
 
     def apply_to(self, character: Character) -> None:
-        apply_played_by(character, self.value(), self.model.text())
+        apply_played_by(character, self.value(), self.model.text(), self.model.effective_route())
 
     def _chosen(self) -> None:
         self._say()

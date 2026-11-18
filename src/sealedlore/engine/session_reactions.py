@@ -36,6 +36,7 @@ from sealedlore.engine.reactions import (
     recollect_messages,
     seen_entries,
 )
+from sealedlore.engine.routing import routable, route_body
 from sealedlore.engine.session_plot import SessionNotice
 from sealedlore.ids import utc_now_iso
 from sealedlore.models.memory import Recollection
@@ -51,6 +52,18 @@ from sealedlore.threads import BackgroundThread
 
 
 class ReactionRuntime:
+    def own_route_body(self, character) -> dict[str, Any]:
+        """The request fields for the route chosen for a character's own
+        model: none in a private scene, off NanoGPT, or for a TEE or encrypted
+        model (engine/routing.py `routable`), as for a role's."""
+        model = (character.own_model or "").strip()
+        if self.open_span is not None or not model:
+            return {}
+        provider = self.config.endpoint_for(model)
+        if provider is None or not routable(provider.base_url, model, provider.api):
+            return {}
+        return route_body(character.own_route, model)
+
     def react_after_turn(self) -> Iterator[SessionNotice]:
         """The round after a passage: each character played by a model of
         their own answers it, blind to the others and to the author's turn."""
@@ -99,9 +112,9 @@ class ReactionRuntime:
                     recollections=self.bundle.memories,
                 ),
                 params=self.side_params(model),
-                # No route: a route is a role's (models/route.py), and a
-                # character's own model is no role's.
-                extra_body={},
+                # The character's own route: a route is otherwise a role's,
+                # and their model is no role's.
+                extra_body=self.own_route_body(character),
                 use_cache_control=self._cache_control_for(model),
                 cache_ttl=self.config.cache_ttl,
             )

@@ -20,6 +20,7 @@ from sealedlore.gui.start_players import StartPlayers
 from sealedlore.gui.start_presence import StartPresence
 from sealedlore.models.character import Character
 from sealedlore.models.lore import LoreEntry
+from sealedlore.models.route import ModelRoute
 from sealedlore.models.story import Story
 from sealedlore.storage.template_pictures import Kept
 
@@ -48,12 +49,14 @@ class StartDialog(QDialog):
         without_pictures: tuple[Sequence[Character], Sequence[LoreEntry]] = ((), ()),
         kept: Kept | None = None,
         browse_models: Callable[..., str | None] | None = None,
+        routes: tuple[Callable, Callable, Callable] | None = None,
     ) -> None:
         """`without_pictures`: the characters and lore entries the models may
         see that have no picture yet; when there are any, a picture of each
         is offered (a plot file or premise often brings none).
         `browse_models`: the window's model list, for Choose beside an own
-        model (gui/start_players.py)."""
+        model (gui/start_players.py), and `routes` its route helpers (Choose
+        with a route, the endpoint a model is on, a model's hosts)."""
         super().__init__(parent)
         self.setWindowTitle(f"Start — {story.title}")
         self.setMinimumWidth(460)
@@ -85,7 +88,7 @@ class StartDialog(QDialog):
         # Who a model of their own plays (the trial), for every new story.
         self.players: StartPlayers | None = None
         if cast:
-            self.players = StartPlayers(cast, browse_models)
+            self.players = StartPlayers(cast, browse_models, routes)
             layout.addWidget(self.players)
             self.play_as.currentIndexChanged.connect(self._lock_players)
         # Here as well as in Setup: a new story's cast is often made after
@@ -155,8 +158,9 @@ class StartDialog(QDialog):
         if self.players is not None and hasattr(self, "start_button"):
             self.start_button.setEnabled(not self.players.missing())
 
-    def own_models(self) -> dict[str, str | None]:
-        """Character id → the model now playing them (None: taken away)."""
+    def own_models(self) -> dict[str, tuple[str, ModelRoute | None] | None]:
+        """Character id → the model now playing them and its route (None:
+        taken away)."""
         return self.players.chosen() if self.players is not None else {}
 
     def _lock_rows(self) -> None:

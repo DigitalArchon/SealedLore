@@ -237,6 +237,31 @@ def test_the_opening_is_answered_however_it_is_made(tmp_path: Path, mode: str) -
     assert [a.character_id for a in session.path()[-1].meta.reactions] == ["char-maela"]
 
 
+def test_their_own_route_goes_with_their_answer_on_nanogpt(tmp_path: Path) -> None:
+    """A route is a role's, and their model is no role's: theirs is on the
+    card, and sent only where a route can be (NanoGPT, not in an enclave)."""
+    from sealedlore.engine.routing import route_body
+    from sealedlore.models.route import ModelRoute
+
+    route = ModelRoute(priority="speed")
+    cast = a_cast()
+    cast[1].own_model = "z-ai/glm-5.3"
+    cast[1].own_route = route
+    session = make_session(tmp_path / "nano", ["The door gives.", "I pick it."], cast=cast)
+    play(session, turn())
+    [call] = round_calls(session)
+    assert call.extra_body == route_body(route, "z-ai/glm-5.3") != {}
+    # Elsewhere, and for an encrypted model, nothing is sent.
+    for model in (MAELA_MODEL, "TEE/glm-5.3"):
+        cast = a_cast()
+        cast[1].own_model = model
+        cast[1].own_route = route
+        where = tmp_path / model.replace("/", "_").replace(":", "_")
+        session = make_session(where, ["The door gives.", "I pick it."], cast=cast)
+        play(session, turn())
+        assert [c.extra_body for c in round_calls(session)] == [{}], model
+
+
 def test_no_round_in_a_private_scene(tmp_path: Path) -> None:
     session = make_session(tmp_path, ["The door gives.", "I reach for my picks."])
     play(session, turn())
