@@ -407,7 +407,9 @@ def assemble_prompt(
     round_names = [answer.name for answer in answers if answer.text.strip()]
     # The dialogue sentence on the directives and REMEMBER, unless the model is
     # one it was measured hurting (engine/model_tuning.py): the answers still go.
-    clause_names = [] if "turn.round.remember" in left_out(opts.model) else round_names
+    clause_names = (
+        [] if "turn.round.remember" in left_out(opts.model, "storyteller") else round_names
+    )
 
     tail_specs = [
         # The story's own past, fuller than its chapters (engine/recall.py).

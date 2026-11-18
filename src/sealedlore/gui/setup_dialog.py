@@ -360,6 +360,7 @@ class SetupDialog(QDialog):
                     f"{role}_model" if role != "story" else role, ()
                 ),
                 qualify_recommended=models.qualify,
+                role=(("chat" if story.chat else "storyteller") if role == "story" else role),
             )
             field.setPlaceholderText(config_role_model(models.config, role)[1])
             field.setToolTip(tip)

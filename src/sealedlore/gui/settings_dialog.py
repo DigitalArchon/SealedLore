@@ -95,6 +95,7 @@ from sealedlore.models.config import (
     rebind_keys,
     recommended_model,
     recommended_models,
+    recommended_reference,
     require_https,
     sealed_service,
     shown,
@@ -633,10 +634,9 @@ class SettingsDialog(QDialog):
     def _qualify_recommended(self, model_id: str) -> str:
         """A recommended id as a field should hold it: named with the NanoGPT
         endpoint when that isn't the default (models/config.py)."""
-        nano = self._nanogpt_endpoint()
-        if nano is None:
-            return model_id
-        return qualify(nano.name, model_id, self._default_endpoint().name)
+        return recommended_reference(
+            model_id, self._endpoints_as_typed(), self._default_endpoint().name
+        )
 
     def _store_endpoint_fields(self) -> None:
         """The fields into the selected endpoint's copy. Unvalidated (a
@@ -1275,6 +1275,9 @@ class SettingsDialog(QDialog):
             hosts_of=self._hosts_of,
             recommended=RECOMMENDED_TEXT_MODELS.get(role, ()),
             qualify_recommended=self._qualify_recommended,
+            # The story model plays the storyteller, whose prompt SealedLore
+            # words its own way for some models; no other role's is.
+            role="storyteller" if role == "story" else (role or "side"),
         )
 
     def _hosts_of(self, model: str) -> tuple[str, ...] | None:
@@ -2089,7 +2092,11 @@ class SettingsDialog(QDialog):
             )
 
         self.private_model = ModelField(
-            existing.model if existing else "", browse, privacy_of=self._private_field_privacy
+            existing.model if existing else "",
+            browse,
+            privacy_of=self._private_field_privacy,
+            # It plays the storyteller in a private scene.
+            role="storyteller",
         )
         self.private_model.setPlaceholderText(PRIVATE_MODEL_HINTS[shown_service])
         self.private_service_note = _note_label()
@@ -2144,7 +2151,10 @@ class SettingsDialog(QDialog):
         form.addRow("Model", self.private_model)
         form.addRow(self.private_service_note)
         self.private_look_model = ModelField(
-            self.config.private_look_model, browse, privacy_of=self._private_field_privacy
+            self.config.private_look_model,
+            browse,
+            privacy_of=self._private_field_privacy,
+            role="look",
         )
         self.private_look_model.setPlaceholderText("the scene's own model")
         self.private_look_model.setToolTip(

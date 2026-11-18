@@ -217,7 +217,10 @@ class VideoDialog(QDialog):
         self.write_button.clicked.connect(self._write)
         # Labelled by its endpoint: a private scene's on the scene's own.
         self.writer = ModelField(
-            self.session.prompt_writer_chosen(), self._browse, privacy_of=self.session.privacy
+            self.session.prompt_writer_chosen(),
+            self._browse,
+            privacy_of=self.session.privacy,
+            role="image_prompt",
         )
         self.writer.setPlaceholderText(self.session.model or "the story's model")
         if self.session.in_private:

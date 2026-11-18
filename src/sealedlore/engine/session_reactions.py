@@ -27,6 +27,7 @@ from collections.abc import Generator, Iterator
 from typing import Any
 
 from sealedlore.engine import reactions
+from sealedlore.engine.model_tuning import tuned_texts
 from sealedlore.engine.reactions import (
     due_to_recollect,
     fingerprint,
@@ -128,7 +129,8 @@ class ReactionRuntime:
                     cast=cast,
                     character=character,
                     history=history,
-                    texts=self.texts,
+                    # Their model's own wording, where SealedLore adjusts for it.
+                    texts=tuned_texts(self.texts, model, "character"),
                     count=count,
                     budget=reactions.HISTORY_TOKENS,
                     recollections=self.bundle.memories,
@@ -356,7 +358,7 @@ class ReactionRuntime:
             cast=cast,
             character=character,
             history=history,
-            texts=self.texts,
+            texts=tuned_texts(self.texts, character.own_model, "character"),
             count=self.estimator.estimate,
             budget=reactions.HISTORY_TOKENS,
             recollections=self.bundle.memories,

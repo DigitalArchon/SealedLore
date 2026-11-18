@@ -40,6 +40,8 @@ from sealedlore.engine.authoring import describe, stale_voicing_notes
 from sealedlore.engine.branches import next_branch_name, unique_branch_name
 from sealedlore.engine.chronicle import format_clock
 from sealedlore.engine.export import markdown_user_name, render_markdown
+from sealedlore.engine.model_tuning import is_tuned
+from sealedlore.engine.model_tuning import summary as tuning_summary
 from sealedlore.engine.plot_md import PLOT_SUFFIX, ParsedPlotFile, parse_plot_markdown
 from sealedlore.engine.prompt import TurnRequest, as_shown
 from sealedlore.engine.prompt_edits import texts_in_force
@@ -78,6 +80,7 @@ from sealedlore.gui.model_picker import (
     ModelCatalog,
     pick_model,
     pick_model_and_route,
+    recommended_for,
     route_label,
 )
 from sealedlore.gui.model_trouble import (
@@ -90,6 +93,7 @@ from sealedlore.gui.model_tuning_dialog import show_model_tuning
 from sealedlore.gui.new_story_guide import NewStoryGuide
 from sealedlore.gui.people_page import PeoplePage, chat_view, people_view
 from sealedlore.gui.phone_status import PhoneStatusButton
+from sealedlore.gui.plain_text import plain_tip
 from sealedlore.gui.plot_editor import PlotEditorWindow
 from sealedlore.gui.plot_panel import ClockDialog, PlotPanel
 from sealedlore.gui.prompt_editor import PromptEditorDialog
@@ -151,7 +155,13 @@ from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.ids import utc_now_iso
 from sealedlore.models.authoring import SettingsChange, SettingsReview
 from sealedlore.models.character import Character
-from sealedlore.models.config import model_label, on_nanogpt, split_model
+from sealedlore.models.config import (
+    RECOMMENDED_TEXT_MODELS,
+    model_label,
+    on_nanogpt,
+    recommended_reference,
+    split_model,
+)
 from sealedlore.models.node import DIRECTOR_SPEAKER_ID, Node
 from sealedlore.models.prompt_edit import PROMPT_SET_FORMAT
 from sealedlore.models.route import ROUTE_ROLES, ModelRoute
@@ -634,6 +644,7 @@ class MainWindow(
             browse_route=self._browse_models_and_route,
             route_endpoint=self._route_endpoint_of,
             hosts_of=self._hosts_of,
+            qualify=self._qualify_recommended,
         )
         self.cast_panel.promote_requested.connect(self._promote_character)
         self.cast_panel.demote_requested.connect(self._demote_character)
@@ -1055,10 +1066,10 @@ class MainWindow(
         )
         worse_action.triggered.connect(lambda: self.open_model_trouble("worse"))
         trouble_menu.addAction(worse_action)
-        tuning_action = QAction("Models SealedLore adjusts &for…", self)
+        tuning_action = QAction("Models SealedLore recommends and adjusts &for…", self)
         tuning_action.setStatusTip(
-            "Every model SealedLore treats differently: what it changes in the prompt or the "
-            "request, and why"
+            "The models measured best for each use, and every model SealedLore treats "
+            "differently: what it changes in the prompt or the request, and why"
         )
         tuning_action.triggered.connect(lambda: show_model_tuning(self))
         help_menu.addAction(tuning_action)
@@ -2043,6 +2054,7 @@ class MainWindow(
             kept=kept,
             browse_models=self._browse_models,
             routes=(self._browse_models_and_route, self._route_endpoint_of, self._hosts_of),
+            qualify=self._qualify_recommended,
         )
         accepted = dialog.exec() == StartDialog.Accepted
         held = dialog.held_character_id()
@@ -4870,8 +4882,9 @@ class MainWindow(
     def _qualify_recommended(self, model_id: str) -> str:
         """A recommended id (NanoGPT's) as a field holds it: named with the
         NanoGPT endpoint when that isn't the default (models/config.py)."""
-        nano = next((p for p in self.config.providers if on_nanogpt(p.base_url)), None)
-        return self.config.qualify(nano.name, model_id) if nano is not None else model_id
+        return recommended_reference(
+            model_id, self.config.providers, self.config.active_provider_name
+        )
 
     def _nanogpt_url(self) -> str | None:
         """A NanoGPT endpoint's address, the default's first: the hosts
@@ -4993,7 +5006,11 @@ class MainWindow(
         # with its endpoint when that isn't the default: "opus-5-5 · Anthropic".
         endpoint, bare = split_model(model)
         short = bare.rsplit("/", 1)[-1] or "no model"
-        self.model_button.setText(f"{short}{f' · {endpoint}' if endpoint else ''} ▾")
+        # A story's storyteller SealedLore words its prompt for says so, as a
+        # model field does ("· tuned prompts"); a chat's prompt is its own.
+        tuned = bool(model) and not self.in_chat and is_tuned(model, "storyteller")
+        mark = " · tuned" if tuned else ""
+        self.model_button.setText(f"{short}{f' · {endpoint}' if endpoint else ''}{mark} ▾")
         shown = model_label(model) if model else "none set"
         if self.session is None or self.in_chat:
             tip = f"Storyteller model: {shown}. Click to choose another."
@@ -5007,7 +5024,13 @@ class MainWindow(
                 f"Storyteller model: {shown}, as in Settings. Click to choose another for "
                 "this story alone."
             )
-        self.model_button.setToolTip(tip)
+        if tuned:
+            tip += "\n\n" + tuning_summary(model, role="storyteller")
+        choice = recommended_for(model, RECOMMENDED_TEXT_MODELS.get("story", ()))
+        if choice is not None and not self.in_chat:
+            tip += f"\n\nRecommended as the storyteller ({choice.tag or 'recommended'}): "
+            tip += choice.note
+        self.model_button.setToolTip(plain_tip(tip))
         self.model_button.setVisible(self.session is not None)
         self.model_button.setEnabled(self.session is not None and not self._busy)
 

@@ -280,7 +280,9 @@ def test_the_recommended_ids_name_the_nanogpt_endpoint_when_it_isnt_the_default(
     assert "NanoGPT::" in dialog.recommended_note.text()
     premium = next(a for a in dialog.model.button.menu().actions() if "(premium)" in a.text())
     premium.trigger()
-    assert dialog.model.text() == "NanoGPT::anthropic/claude-opus-5.5"
+    # A Claude model goes to Anthropic's own API where there is one (here the
+    # default, so bare); anything else to NanoGPT, named.
+    assert dialog.model.text() == "claude-opus-5-5"
     # With NanoGPT the default, bare as before.
     cfg.active_provider_name = "NanoGPT"
     plain = SettingsDialog(cfg, None)
@@ -317,7 +319,9 @@ def test_the_model_button_and_the_session_line_name_the_endpoint(app, tmp_path: 
     window.open_story(story.id)
     window.session.story.defaults.main_model = "Anthropic::claude-opus-5-5"
     window._refresh_model_button()
-    assert window.model_button.text() == "claude-opus-5-5 · Anthropic ▾"
+    # SealedLore words the storyteller's prompt for Opus 5.5: the button says so.
+    assert window.model_button.text() == "claude-opus-5-5 · Anthropic · tuned ▾"
+    assert "SealedLore adjusts for this model" in window.model_button.toolTip()
     assert "claude-opus-5-5 · Anthropic" in window.model_button.toolTip()
     line = window.session_line.label.text()
     assert "claude-opus-5-5 · Anthropic" in line and "via api.anthropic.com" in line

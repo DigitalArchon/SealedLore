@@ -29,6 +29,7 @@ from PySide6.QtWidgets import QComboBox, QLabel, QPushButton, QVBoxLayout, QWidg
 from sealedlore.gui.model_picker import ModelField
 from sealedlore.gui.plain_text import plain_tip
 from sealedlore.models.character import Character
+from sealedlore.models.config import RECOMMENDED_TEXT_MODELS
 from sealedlore.models.route import ModelRoute
 
 MAIN = "Main character"
@@ -176,6 +177,7 @@ class ModelHelpers:
         browse_route: Callable | None = None,
         route_endpoint: Callable | None = None,
         hosts_of: Callable | None = None,
+        qualify: Callable | None = None,
     ) -> None:
         self._held = {
             name: _held(helper)
@@ -184,6 +186,7 @@ class ModelHelpers:
                 ("browse_route", browse_route),
                 ("route_endpoint", route_endpoint),
                 ("hosts_of", hosts_of),
+                ("qualify", qualify),
             )
             if helper is not None
         }
@@ -201,6 +204,11 @@ class ModelHelpers:
             route_endpoint=self.route_endpoint,
             browse_route=self.browse_route,
             hosts_of=self.hosts_of,
+            # The models measured for playing a character, and what
+            # SealedLore adjusts for a model in that use.
+            recommended=RECOMMENDED_TEXT_MODELS.get("character", ()),
+            qualify_recommended=self.qualify,
+            role="character",
         )
         field.setPlaceholderText(OWN_MODEL_HINT)
         return field
@@ -225,6 +233,11 @@ class ModelHelpers:
     def hosts_of(self, model: str) -> tuple[str, ...] | None:
         getter = self._get("hosts_of")
         return getter(model) if getter is not None else None
+
+    def qualify(self, model: str) -> str:
+        """A recommended id as the field holds it (the window's)."""
+        qualify = self._get("qualify")
+        return qualify(model) if qualify is not None else model
 
 
 class PlayedBy(QWidget):

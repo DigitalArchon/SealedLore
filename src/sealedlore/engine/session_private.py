@@ -634,12 +634,15 @@ class PrivateRuntime:
             return replace(
                 self.assembly_options(), token_budget=self.config.private_budget, model=model
             )
-        full = story_rules_sections(self.story, texts=self.texts)
+        # The private model's own wording, where SealedLore adjusts for it.
+        texts = self.storyteller_texts(model)
+        full = story_rules_sections(self.story, texts=texts)
         return replace(
             self.assembly_options(),
             model=model,
+            texts=texts,
             token_budget=self.config.private_budget,
-            rules_override=tuple(private_rules_sections(self.story, full, texts=self.texts)),
+            rules_override=tuple(private_rules_sections(self.story, full, texts=texts)),
             # The cast's room at the private budget; a card with no condensed
             # text yet goes short, since nothing is written while a scene is
             # open (CastRuntime condenses for this room beforehand).

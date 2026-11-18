@@ -9,7 +9,7 @@ local server (§7).
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from ipaddress import ip_address, ip_network
 from typing import Any, Literal, NamedTuple
 from urllib.parse import urlparse
@@ -749,6 +749,22 @@ def qualify(endpoint_name: str | None, model_id: str, default: str | None = None
     if not model_id or endpoint_name is None or endpoint_name == default:
         return model_id
     return f"{endpoint_name}{ENDPOINT_SEPARATOR}{model_id}"
+
+
+def recommended_reference(
+    model_id: str, providers: Sequence[ProviderConfig], default: str | None
+) -> str:
+    """A recommended id (NanoGPT's, as the lists hold them) as a field should
+    hold it: a Claude model on an endpoint speaking Anthropic's own API when
+    there is one ("anthropic/claude-opus-5.5" → "Anthropic::claude-opus-5-5":
+    the author's ruling, Claude through Anthropic), else on the NanoGPT
+    endpoint, named when that isn't the default."""
+    if model_id.startswith("anthropic/claude-"):
+        direct = next((p for p in providers if p.speaks() == "anthropic"), None)
+        if direct is not None:
+            return qualify(direct.name, model_id.split("/", 1)[1].replace(".", "-"), default)
+    nano = next((p for p in providers if on_nanogpt(p.base_url)), None)
+    return qualify(nano.name, model_id, default) if nano is not None else model_id
 
 
 def model_label(ref: str) -> str:

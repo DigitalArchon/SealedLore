@@ -132,7 +132,7 @@ class GenerateDialog(QDialog):
         self.choose_button.clicked.connect(self._choose_characters)
         self.choose_button.setVisible(choose is not None)
 
-        self.model = ModelField(model, browse, privacy_of=privacy_of)
+        self.model = ModelField(model, browse, privacy_of=privacy_of, role="authoring")
         self.model.setPlaceholderText(default_model or "the story's model")
         model_hint = QLabel(
             "Blank uses your chat model. A stronger one (e.g. anthropic/claude-opus-5) "

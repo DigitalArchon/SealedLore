@@ -170,7 +170,7 @@ class ReviewRequestDialog(QDialog):
             "questions. Long, and seldom the cause."
         )
 
-        self.model = ModelField(model, browse, privacy_of=privacy_of)
+        self.model = ModelField(model, browse, privacy_of=privacy_of, role="authoring")
         self.model.setPlaceholderText(default_model or "the story's model")
 
         self.size_label = QLabel()

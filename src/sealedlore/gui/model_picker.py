@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.catalog import ModelInfo, chat_models, matches, short_count
+from sealedlore.engine.model_tuning import bare, is_tuned
 from sealedlore.engine.model_tuning import summary as tuning_summary
 from sealedlore.engine.routing import describe, routable, route_body
 from sealedlore.gui.fields import line_edit, set_field_text
@@ -45,7 +46,13 @@ from sealedlore.gui.plain_text import plain_tip
 from sealedlore.gui.route_dialog import RouteDialog
 from sealedlore.gui.sizing import adjustable_columns, size_to_screen
 from sealedlore.gui.workers import run_detached
-from sealedlore.models.config import ProviderConfig, RecommendedModel, chat_api, split_model
+from sealedlore.models.config import (
+    RECOMMENDED_TEXT_MODELS,
+    ProviderConfig,
+    RecommendedModel,
+    chat_api,
+    split_model,
+)
 from sealedlore.models.route import ModelRoute
 from sealedlore.providers.base import ChatProvider
 from sealedlore.providers.privacy import (
@@ -111,6 +118,8 @@ COLUMNS = (
     "Model",
     "Provider",
     "Name",
+    # What SealedLore recommends it for and tunes it for (`advice`).
+    "SealedLore",
     "Privacy",
     "Context",
     "In $/M",
@@ -216,6 +225,44 @@ class _Row(QTreeWidgetItem):
 
 def _price(value: float | None) -> str:
     return "" if value is None else f"{value:g}"
+
+
+# The uses a model may be recommended for, as the list names them.
+ADVICE_ROLES = {
+    "story": "story",
+    "character": "character",
+    "scene_model": "scene",
+    "plot_model": "plot",
+    "lore_model": "lore",
+}
+# Prompt adjustments' uses, as the list names them.
+TUNED_ROLES = {"storyteller": "storyteller", "character": "character"}
+
+
+def advice(model_id: str) -> tuple[str, str]:
+    """What SealedLore says of a model, short for the list and whole for its
+    tooltip: the uses it is recommended for (Settings → Models' Choose
+    lists, with their tags) and those it words its prompts for
+    (engine/model_tuning.py). ("", "") for most models."""
+    if not model_id.strip():
+        return "", ""
+    marks, lines = [], []
+    for role, words in ADVICE_ROLES.items():
+        choice = recommended_for(model_id, RECOMMENDED_TEXT_MODELS.get(role, ()))
+        if choice is None:
+            continue
+        tag = f" ({choice.tag})" if choice.tag else ""
+        marks.append(f"★ {words}{tag}")
+        lines.append(f"Recommended for the {words} model{tag}: {choice.note}")
+    tuned = [words for role, words in TUNED_ROLES.items() if is_tuned(model_id, role)]
+    if tuned:
+        marks.append("tuned prompts")
+        lines.append(
+            "SealedLore words its prompt its own way for this model as the "
+            + " and as ".join(tuned)
+            + " (Help → Models SealedLore recommends and adjusts for…)."
+        )
+    return " · ".join(marks), "\n\n".join(lines)
 
 
 def _hosts(info: ModelInfo, privacy: Privacy) -> str:
@@ -390,6 +437,7 @@ class ModelPickerDialog(QDialog):
                 split_model(info.id)[1],
                 info.endpoint,
                 info.name,
+                advice(info.id)[0],
                 privacy,
                 short_count(info.context_length),
                 _price(info.prompt_price),
@@ -412,6 +460,8 @@ class ModelPickerDialog(QDialog):
             tip += f"\n\nWrites up to {info.max_output_tokens:,} tokens per reply."
         for column in range(len(COLUMNS)):
             row.setToolTip(column, note if column == _COL["Privacy"] and note else tip)
+        if advice(info.id)[1]:
+            row.setToolTip(_COL["SealedLore"], advice(info.id)[1])
         row.setToolTip(_COL["Hosts"], _hosts_tip(info, kind))
         if info.endpoint:
             row.setToolTip(
@@ -430,7 +480,9 @@ class ModelPickerDialog(QDialog):
             words = "tee private encrypted e2ee end-to-end"
         else:
             words = "tee" if label else ""
-        haystack = f"{info.id} {info.name} {info.owner} {info.endpoint} {words}".lower()
+        # "recommended" or "tuned" find what SealedLore says of a model.
+        said = advice(info.id)[0].replace("★", "recommended")
+        haystack = f"{info.id} {info.name} {info.owner} {info.endpoint} {words} {said}".lower()
         return matches(info, query) or all(word in haystack for word in query.lower().split())
 
     def _judge(self, model_id: str) -> Privacy:
@@ -591,11 +643,22 @@ class ModelPickerDialog(QDialog):
             self.accept()
 
 
+def recommended_for(model: str, choices: tuple[RecommendedModel, ...]) -> RecommendedModel | None:
+    """The recommendation `model` is, however it is reached: on NanoGPT
+    ("anthropic/claude-opus-5.5") or its maker's own API
+    ("Anthropic::claude-opus-5-5") alike."""
+    if not model.strip():
+        return None
+    name = bare(model)
+    return next((choice for choice in choices if bare(choice.id) == name), None)
+
+
 def choose_menu(
     parent: QWidget,
     choices: tuple[RecommendedModel, ...],
     choose: Callable[[str], None],
     browse: Callable[[], None] | None,
+    role: str | None = None,
 ) -> QMenu | None:
     """ "Choose ▾": every model the endpoints offer (Browse all models…),
     then the models recommended for a role, each with its note under its
@@ -619,6 +682,8 @@ def choose_menu(
     menu.addAction(heading)
     for index, choice in enumerate(choices):
         label = choice.label + (f" ({choice.tag})" if choice.tag else "")
+        if is_tuned(choice.id, role):
+            label += f"  {TUNED_PROMPTS_LABEL}"
         action = menu.addAction(label)
         action.setToolTip(choice.note)
         action.setStatusTip(choice.note)
@@ -643,6 +708,10 @@ def choose_menu(
 CHOOSE_LABEL = "Choose"
 # Beside a model field when SealedLore adjusts its prompt or requests for it.
 TUNED_LABEL = "· tuned"
+# Beside a model whose prompt SealedLore words its own way for this use.
+TUNED_PROMPTS_LABEL = "· tuned prompts"
+# Beside a model recommended for this use: its tag ("default", "premium").
+RECOMMENDED_MARK = "★ {tag}"
 BROWSE_ALL = "Browse all models…"
 
 
@@ -669,8 +738,12 @@ class ModelField(QWidget):
         qualify_recommended: Qualify | None = None,
         pictures: Callable[[str], tuple[str, str]] | None = None,
         privacy_of: PrivacyOf | None = None,
+        role: str | None = None,
     ) -> None:
-        """`route_endpoint` (held weakly) gives the field a route: NanoGPT's
+        """`role`: what the model is chosen for ("storyteller", "character",
+        "chat", a Settings role's name…), so "· tuned" names only what
+        SealedLore adjusts for it there (engine/model_tuning.py); None, every
+        use. `route_endpoint` (held weakly) gives the field a route: NanoGPT's
         host for its model, chosen from the label beside it; `browse_route`
         is then Browse…, and returns the route with the model. `hosts_of`
         (held weakly): a model's hosts from the endpoints' list, None while
@@ -685,6 +758,8 @@ class ModelField(QWidget):
         it, judged by the route's address, else by the id alone."""
         super().__init__()
         self.route: ModelRoute | None = None
+        self.role = role
+        self._recommended = tuple(recommended)
         self._route_endpoint = _weak(route_endpoint) if route_endpoint else None
         self._hosts_of = _weak(hosts_of) if hosts_of else None
         self._browse_route = _weak(browse_route) if browse_route else None
@@ -697,7 +772,11 @@ class ModelField(QWidget):
         can_browse = browse is not None or browse_route is not None
         self.button = QToolButton()
         menu = choose_menu(
-            self, recommended, self._choose_recommended, self._open if can_browse else None
+            self,
+            recommended,
+            self._choose_recommended,
+            self._open if can_browse else None,
+            role=role,
         )
         if menu is None:
             self.button.setText(f"{CHOOSE_LABEL}…")
@@ -726,6 +805,11 @@ class ModelField(QWidget):
         self.tuned = QLabel(TUNED_LABEL)
         self.tuned.setObjectName("hintLabel")
         self.tuned.hide()
+        # Says, beside the field, when the model is one recommended for this
+        # use (the list under Choose); the tooltip is why.
+        self.recommended_mark = QLabel()
+        self.recommended_mark.setObjectName("hintLabel")
+        self.recommended_mark.hide()
         # An image model: whether it can be given a picture (the author, Oct
         # 18 2026: "the UI should show if it supports adding an image or not").
         self.picture_note = QLabel()
@@ -742,6 +826,7 @@ class ModelField(QWidget):
         layout.addWidget(self.edit, 1)
         layout.addWidget(self.endpoint_label)
         layout.addWidget(self.privacy)
+        layout.addWidget(self.recommended_mark)
         layout.addWidget(self.tuned)
         layout.addWidget(self.picture_note)
         layout.addWidget(self.route_button)
@@ -810,9 +895,20 @@ class ModelField(QWidget):
 
     def _show_tuning(self, text: str) -> None:
         model = text.strip()
-        words = tuning_summary(model, anthropic_api=self._anthropic_api(model)) if model else ""
+        api = self._anthropic_api(model) if model else None
+        words = tuning_summary(model, anthropic_api=api, role=self.role) if model else ""
+        self.tuned.setText(TUNED_PROMPTS_LABEL if is_tuned(model, self.role) else TUNED_LABEL)
         self.tuned.setToolTip(plain_tip(words))
         self.tuned.setVisible(bool(words))
+        choice = recommended_for(model, self._recommended)
+        if choice is None:
+            self.recommended_mark.hide()
+            return
+        self.recommended_mark.setText(RECOMMENDED_MARK.format(tag=choice.tag or "recommended"))
+        self.recommended_mark.setToolTip(
+            plain_tip(f"Recommended for this: {choice.label}. {choice.note}")
+        )
+        self.recommended_mark.show()
 
     def _show_privacy(self, text: str) -> None:
         privacy = self.model_privacy(text)

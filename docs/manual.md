@@ -980,15 +980,30 @@ to another host. Those models usually have one host, so the check offers
 their equally private alternatives on the built-in prompt instead, or says
 that trying other hosts would mean playing outside private mode.
 
-## Models SealedLore adjusts for
+## Models SealedLore recommends and adjusts for
 
-SealedLore sends every model the same story, but for a few models it leaves a
-text out of the prompt, where testing showed it made that model's writing
-worse, or shapes the request the way the model's own service requires (how
-Claude models are asked to think on Anthropic's own API, cache markers for
-Claude, the form NanoGPT's encrypted models need). A model field shows
-**· tuned** beside a model any of these apply to, and its tooltip says what is
-done. **Help → Models SealedLore adjusts for…** lists all of them, with why.
+Where a model is chosen for a use (the story model, a character's own model,
+the scene, plot and lore models), **Choose** beside the field lists the models
+measured best for that use, each with what was found, and the field shows
+**★** and its tag (default, recommended, premium) beside one of them. The full
+model list that **Browse all models…** opens has a **SealedLore** column saying
+the same for every model, and typing *recommended* or *tuned* in its search
+finds them. Claude models chosen from those lists are reached on Anthropic's
+own API when you have that endpoint.
+
+SealedLore sends every model the same story, but for some models it words a
+text of the prompt its own way, or leaves one out, where testing showed it made
+that model's writing better, and for some it shapes the request the way the
+model's own service requires (how Claude models are asked to think on
+Anthropic's own API, cache markers for Claude, the form NanoGPT's encrypted
+models need). A model field shows **· tuned prompts** beside a model whose
+prompt is worded for that use, or **· tuned** for the rest, and its tooltip
+says what is done; the story model button in the status bar says so too. A
+text you edit under File → Prompts (advanced)… stays yours for every model; the
+editor says which models get their own wording of a text.
+
+**Help → Models SealedLore recommends and adjusts for…** lists both: the
+recommended models for each use, and every adjustment with why.
 
 ## Setting up a story
 
@@ -1931,7 +1946,7 @@ for their answers before the storyteller starts.
 The storyteller is also
 asked to put their words into the passage as dialogue, rather than report
 them; with Claude Opus 5.5, which never needed it and wrote a little worse for
-it, that request is left out (see "Models SealedLore adjusts for").
+it, that request is left out (see "Models SealedLore recommends and adjusts for").
 
 Each character's model is given their card (summary, description,
 personality, voice and skills) and the story's setting. It also gets the

@@ -100,6 +100,7 @@ class NewChatDialog(QDialog):
             browse_route=browse_route,
             hosts_of=hosts_of,
             privacy_of=self._privacy_of,
+            role="chat",
         )
         self.prompt = QPlainTextEdit()
         self.prompt.setTabChangesFocus(True)

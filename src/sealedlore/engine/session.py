@@ -102,6 +102,7 @@ from sealedlore.engine.lore_pick import (
     pick_candidates,
     scene_line,
 )
+from sealedlore.engine.model_tuning import tuned_texts
 from sealedlore.engine.pricing import estimate_cost
 from sealedlore.engine.prompt import (
     SECTION_REMINDER,
@@ -934,13 +935,21 @@ class StorySession(
         author's edits for every story over them, this story's over those."""
         return texts_in_force(self.config.prompt_edits, self.story.prompt_edits)
 
+    def storyteller_texts(self, model: str | None = None) -> PromptTexts:
+        """The texts in force for the storyteller: the story model's own
+        wording where SealedLore adjusts for it (engine/model_tuning.py),
+        under the author's edits. `model`: another model playing the
+        storyteller (a private scene's)."""
+        return tuned_texts(self.texts, model or self.model, "storyteller")
+
     def assembly_options(self) -> AssemblyOptions:
         return AssemblyOptions(
             token_budget=self.story.defaults.context_token_budget,
             min_cacheable_tokens=self.config.min_cacheable_tokens,
             cache_exchanges_outside_prefix=self.config.cache_exchanges_outside_prefix,
             cast_token_cap=self.config.cast_cap(self.story.defaults.context_token_budget),
-            texts=self.texts,
+            # A chat's prompts are its own, never a story's tuned for a model.
+            texts=self.texts if self.story.chat else self.storyteller_texts(),
             chapter_days=self.chapter_days(),
             model=self.model,
             prose_reminders=self.config.prose_reminders,
@@ -1091,7 +1100,7 @@ class StorySession(
             turn = replace(
                 turn,
                 story_time=render_story_time_block(
-                    plot, chronicle_at(nodes, plot), texts=self.texts
+                    plot, chronicle_at(nodes, plot), texts=self.storyteller_texts()
                 ),
             )
         prompt = assemble_prompt(
@@ -4584,7 +4593,9 @@ class StorySession(
             # them, and nothing the character doesn't know (the author, Oct 29
             # 2026: a Question in a plot story was told none).
             story_time=(
-                render_story_time_block(plot, chronicle_at(history, plot), texts=self.texts)
+                render_story_time_block(
+                    plot, chronicle_at(history, plot), texts=self.storyteller_texts()
+                )
                 if plot is not None
                 else ""
             ),

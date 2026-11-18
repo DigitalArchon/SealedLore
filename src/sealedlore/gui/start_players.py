@@ -47,6 +47,7 @@ class StartPlayers(QWidget):
         browse: Callable[..., str | None] | None = None,
         routes: tuple[Callable, Callable, Callable] | None = None,
         round_order: str = "together",
+        qualify: Callable[[str], str] | None = None,
     ) -> None:
         """`routes`: the window's Choose with a route, the endpoint a model
         is on, and a model's hosts (`ModelHelpers.lend`)."""
@@ -54,7 +55,11 @@ class StartPlayers(QWidget):
         self.helpers = ModelHelpers()
         browse_route, route_endpoint, hosts_of = routes or (None, None, None)
         self.helpers.lend(
-            browse, browse_route=browse_route, route_endpoint=route_endpoint, hosts_of=hosts_of
+            browse,
+            browse_route=browse_route,
+            route_endpoint=route_endpoint,
+            hosts_of=hosts_of,
+            qualify=qualify,
         )
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)

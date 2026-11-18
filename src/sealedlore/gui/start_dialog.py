@@ -50,6 +50,7 @@ class StartDialog(QDialog):
         kept: Kept | None = None,
         browse_models: Callable[..., str | None] | None = None,
         routes: tuple[Callable, Callable, Callable] | None = None,
+        qualify: Callable[[str], str] | None = None,
     ) -> None:
         """`without_pictures`: the characters and lore entries the models may
         see that have no picture yet; when there are any, a picture of each
@@ -89,7 +90,11 @@ class StartDialog(QDialog):
         self.players: StartPlayers | None = None
         if cast:
             self.players = StartPlayers(
-                cast, browse_models, routes, round_order=story.defaults.round_order
+                cast,
+                browse_models,
+                routes,
+                round_order=story.defaults.round_order,
+                qualify=qualify,
             )
             layout.addWidget(self.players)
             self.play_as.currentIndexChanged.connect(self._lock_players)
