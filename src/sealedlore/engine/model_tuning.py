@@ -75,6 +75,19 @@ def _opus_5_5(model: str) -> bool:
     return bare(model).startswith("claude-opus-5-5")
 
 
+def _glm_5_3(model: str) -> bool:
+    """GLM 5.3 on any endpoint, its TEE and encrypted forms too; not Flash,
+    which was not measured."""
+    return bare(model) == "glm-5-3"
+
+
+# GLM 5.3's character ask ends with this (measured, `glm-5-3-character-ask`).
+_GO_BY_THE_STORY = (
+    "If someone asks what you said or did, go by the story above alone: if it doesn't "
+    "show you saying or doing it, you didn't, and you say so."
+)
+
+
 def _claude(model: str) -> bool:
     return bare(model).startswith("claude-")
 
@@ -129,6 +142,39 @@ TUNINGS: tuple[ModelTuning, ...] = (
         applies=_opus_5_5,
         role="storyteller",
         texts_left_out=frozenset({"turn.round.remember"}),
+    ),
+    ModelTuning(
+        key="glm-5-3-character-ask",
+        models="GLM 5.3",
+        kind="prompt",
+        what=(
+            "Characters played by their own model (a trial): the question each answers "
+            "ends by telling them to go by the story alone when asked what they said or did "
+            "(prompt texts characters.own.ask and characters.own.ask.after)."
+        ),
+        why=(
+            'Measured on leading questions ("what did you tell her?" when nothing was said): '
+            "GLM 5.3 invented an answer 9 times in 12 with the usual wording and 4 with this, "
+            "on both blind judges, and was preferred on ordinary rounds. Other models keep the "
+            "usual wording: Opus 5.5 doesn't invent unasked, and the sentence made DeepSeek "
+            "V4.1 Flash and Kimi K3 worse."
+        ),
+        applies=_glm_5_3,
+        role="character",
+        texts_replaced=MappingProxyType(
+            {
+                "characters.own.ask": (
+                    "That is where things stand. {name}, what do you say, do or mean to do "
+                    "now? " + _GO_BY_THE_STORY
+                ),
+                "characters.own.ask.after": (
+                    "That is where things stand. {player} has just taken their turn, last "
+                    "above: what they say is said, and what they try hasn't happened yet; the "
+                    "storyteller will write what comes of it. {name}, what do you say, do or "
+                    "mean to do now? " + _GO_BY_THE_STORY
+                ),
+            }
+        ),
     ),
     ModelTuning(
         key="anthropic-thinking",

@@ -985,7 +985,7 @@ that trying other hosts would mean playing outside private mode.
 Where a model is chosen for a use (the story model, a character's own model,
 the scene, plot and lore models), **Choose** beside the field lists the models
 measured best for that use, each with what was found, and the field shows
-**★** and its tag (default, recommended, premium) beside one of them. The full
+**★** and its tag (default, recommended, premium, budget) beside one of them. The full
 model list that **Browse all models…** opens has a **SealedLore** column saying
 the same for every model, and typing *recommended* or *tuned* in its search
 finds them. Claude models chosen from those lists are reached on Anthropic's
@@ -1942,6 +1942,17 @@ Setup… → About (the Start dialog offers it too). You send first; each of the
 then answers having seen your turn, though still not each other's, as another
 player at the table would; then the storyteller writes. Each turn then waits
 for their answers before the storyteller starts.
+
+**Which model plays them.** Choose beside their model under Played by lists
+the models measured best at it. Claude Opus 5.5 plays a character best, and is
+the one model tried that doesn't make up what it said or did when a question
+takes it for granted ("what did you tell her?" when nothing was said); passages
+written from its answers came out best too. Kimi K3 comes next, GLM 5.3 close
+behind it and quicker, and DeepSeek V4.1 Flash nearly as well as those at a
+small part of the cost, and quickest of all. GLM 5.3 is told, at the end of
+what it is asked, to go by the story alone when someone asks what it said or
+did, which halved what it made up; the other models are asked as usual, since
+the same sentence made some of them worse.
 
 The storyteller is also
 asked to put their words into the passage as dialogue, rather than report

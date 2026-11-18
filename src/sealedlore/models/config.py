@@ -192,6 +192,42 @@ RECOMMENDED_TEXT_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
             "level.",
         ),
     ),
+    # A character played by their own model (the trial; Played by on their
+    # card). Measured on 28 replayed rounds with leading questions, two blind
+    # judges (SealedLoreDocs design/own-models.md, Nov 18 2026).
+    "character": (
+        RecommendedModel(
+            id="anthropic/claude-opus-5.5",
+            label="Claude Opus 5.5",
+            tag="recommended",
+            note="Plays a character best on both blind judges: in their own voice, at the "
+            "length asked, with the fewest rules broken, and the only model tried that doesn't "
+            "invent what it said or did when a question takes it for granted. Passages written "
+            "from its answers came first most often. About 2¢ a round on a short story, 9¢ on "
+            "a long one, about 4s.",
+        ),
+        RecommendedModel(
+            id="moonshotai/kimi-k3",
+            label="Kimi K3",
+            note="Second on both judges, but it invents what it said when asked a leading "
+            "question, as most models do. Under 1¢ a round; about 6s.",
+        ),
+        RecommendedModel(
+            id="z-ai/glm-5.3",
+            label="GLM 5.3",
+            note="Close behind Kimi K3 and about twice as quick (3s), included in a NanoGPT "
+            "subscription. Given its own wording of the question it answers, which halved its "
+            "inventions under leading questions.",
+        ),
+        RecommendedModel(
+            id="deepseek/deepseek-v4.1-flash",
+            label="DeepSeek V4.1 Flash",
+            tag="budget",
+            note="Third or fourth on quality and the cleanest answers after Opus, at about a "
+            "hundredth of its cost (0.02-0.06¢ an answer) and the quickest to start (about 1s). "
+            "Every instruction tried on top made it worse, so it keeps SealedLore's wording.",
+        ),
+    ),
     "scene_model": (
         RecommendedModel(
             id=RECOMMENDED_MODELS["scene_model"],

@@ -42,12 +42,12 @@ def test_anthropic_only_shaping_is_left_off_another_endpoint() -> None:
 
 
 def test_private_and_tee_models_are_described() -> None:
-    assert {t.key for t in tunings_for("private/glm-5-3")} == {
+    assert {t.key for t in tunings_for("private/glm-5-3", role="storyteller")} == {
         "private-mode-families",
         "private-lowest-reasoning",
     }
     assert [t.key for t in tunings_for("TEE/deepseek-v3.2")] == ["private-lowest-reasoning"]
-    assert summary("z-ai/glm-5.3") == ""
+    assert summary("z-ai/glm-5.3", role="scene_model") == ""
     assert "left out" in summary(OPUS)
 
 
@@ -83,7 +83,7 @@ def app():
 def test_a_model_field_says_when_a_model_is_tuned(app) -> None:
     from sealedlore.gui.model_picker import TUNED_LABEL, TUNED_PROMPTS_LABEL, ModelField
 
-    field = ModelField("z-ai/glm-5.3")
+    field = ModelField("mistralai/mistral-medium-3.1")
     assert not field.tuned.isVisibleTo(field)
     field.setText(OPUS)
     assert field.tuned.isVisibleTo(field) and field.tuned.text() == TUNED_PROMPTS_LABEL
@@ -201,3 +201,35 @@ def test_a_recommended_claude_goes_to_anthropic_s_own_api_when_there_is_one() ->
     assert recommended_reference("z-ai/glm-5.3", [nano, direct], "Anthropic") == (
         "NanoGPT::z-ai/glm-5.3"
     )
+
+
+@pytest.mark.parametrize(
+    "ref", ["z-ai/glm-5.3", "TEE/glm-5.3", "private/glm-5-3", "glm-5.3:thinking"]
+)
+def test_glm_5_3_playing_a_character_is_told_to_go_by_the_story(ref: str) -> None:
+    from sealedlore.engine.model_tuning import is_tuned, tuned_texts
+    from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
+
+    told = tuned_texts(DEFAULT_TEXTS, ref, "character")
+    for key in ("characters.own.ask", "characters.own.ask.after"):
+        assert told[key].startswith(DEFAULT_TEXTS[key])  # the usual ask, then the sentence
+        assert told[key].endswith(
+            "if it doesn't show you saying or doing it, you didn't, and you say so."
+        )
+    assert "{player}" in told["characters.own.ask.after"]
+    assert is_tuned(ref, "character") and not is_tuned(ref, "storyteller")
+    # As the storyteller, and for any other model, the usual wording.
+    assert tuned_texts(DEFAULT_TEXTS, ref, "storyteller") is DEFAULT_TEXTS
+    for other in ("z-ai/glm-5.3-flash", "deepseek/deepseek-v4.1-flash", OPUS):
+        assert tuned_texts(DEFAULT_TEXTS, other, "character") is DEFAULT_TEXTS
+    # The author's own ask stands.
+    mine = PromptTexts({"characters.own.ask": "MY ASK, {name}."})
+    assert tuned_texts(mine, ref, "character")["characters.own.ask"] == "MY ASK, {name}."
+
+
+def test_the_character_list_recommends_opus_on_anthropic_and_a_cheap_one() -> None:
+    from sealedlore.models.config import RECOMMENDED_TEXT_MODELS
+
+    first, *rest = RECOMMENDED_TEXT_MODELS["character"]
+    assert bare(first.id) == "claude-opus-5-5" and first.tag == "recommended"
+    assert any(choice.tag == "budget" for choice in rest)
