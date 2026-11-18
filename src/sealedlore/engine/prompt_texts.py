@@ -1763,6 +1763,42 @@ _text(
     (),
 )
 
+# Which paragraphs of a passage that moves each character on their own model
+# was there for (engine/reactions.py `passage_views`): a passage counted whole
+# for anyone in the scene at either end, so one that went from the street into
+# a closed office gave the street the office's talk. On the scene model.
+# Measured Nov 18 2026 on the 18 passages of two long test stories that move
+# for someone (27 cases), against a blind Claude judge's labels: taken whole,
+# they were given 59 paragraphs of scenes they weren't in; with GLM 5.3's
+# marks, 2 (on both of two runs), and 4-7 paragraphs they did see left out,
+# mostly where the prose never says whether they were in the room.
+_text(
+    "characters.own.views",
+    OWN,
+    "Who saw which part of a passage",
+    "Asks the scene model, after a passage that moves while a character played by their own "
+    "model is in it at one end only, which paragraphs each was there to see or hear.",
+    "Below is one passage of a story, in numbered paragraphs, with where the scene was and who "
+    "was in it when the passage began and when it ended. The scene may move during the passage: "
+    "people come and go, it goes somewhere else, or it cuts away to another place for a while.\n\n"
+    "For each person under ASK, list the paragraphs they were there to see or hear: in the same "
+    "place at that moment, or listening through a channel the passage shows them on (a comm, a "
+    "call, a speaker). Leave out what happens before they arrive, after they leave, or anywhere "
+    "they are not. A paragraph counts if they were there for most of it.\n\n"
+    "WHEN THE PASSAGE BEGAN: {before}\n"
+    "WHEN IT ENDED: {after}\n"
+    "ASK: {names}\n\n"
+    "THE PASSAGE:\n{passage}\n\n"
+    "Reply with JSON only, every name under ASK, an empty list for someone who saw or heard "
+    'none of it:\n{"Name": [1, 2]}',
+    (
+        ("before", "where the scene was and who was in it when the passage began"),
+        ("after", "the same when it ended"),
+        ("names", "the characters to say for"),
+        ("passage", "the passage in numbered paragraphs"),
+    ),
+)
+
 # What a character remembers of the scenes older than their recent window
 # (models/memory.py). The memory probe (design/own-models.md): past the window
 # their model invented an answer to 12 of 12 questions about their own past,

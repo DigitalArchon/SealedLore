@@ -194,6 +194,13 @@ class NodeMeta(BaseModel):
     # said in confidence, which no model but the keeper is ever shown.
     public_record: list[str] | None = None
     public_notes: list[str] | None = None
+    # On a passage that moves while a character played by their own model is
+    # in it at one end only (or that cuts away): the paragraphs (from 1) each
+    # was there to see or hear, by character id, read by the scene model
+    # (engine/reactions.py `apply_views`), for the text `seen_parts_of` holds
+    # the sha256 of. Edited since, the whole passage counts again.
+    seen_parts: dict[str, list[int]] | None = None
+    seen_parts_of: str | None = None
 
 
 class Reaction(BaseModel):

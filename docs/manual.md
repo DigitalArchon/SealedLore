@@ -1987,6 +1987,13 @@ starts, nor another character's answer or the storyteller's notes. A
 character who isn't in the scene isn't asked. Nothing runs in a private
 scene or a simple chat.
 
+A passage that moves while they are in it (from the street into an office
+they don't follow into, or one they walk into halfway, or a cutaway to
+somewhere else) is read once by the scene model, which marks the paragraphs
+each of them was there to see or hear; they are given only those. Where it
+can't tell, or the read fails, they get the whole passage, as before; edit
+the passage and it is read again.
+
 **The public record.** A character who was away still hears the news. After
 every passage a cheap model keeps a short record of what everyone where the
 story is set knows by now: announcements, what a crowd saw, what the papers

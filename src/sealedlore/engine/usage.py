@@ -33,6 +33,7 @@ KIND_LABELS: dict[str, str] = {
     "look_response": "Looks",
     "lore_pick_response": "Lore picks",
     "record_response": "Public record",
+    "views_response": "Who saw what",
     "lore_decision_response": "Lore picks (Jev)",
     # The plot's calls: missing here, a story's total left out every one of them.
     "chronicle_response": "Plot: clock and facts",

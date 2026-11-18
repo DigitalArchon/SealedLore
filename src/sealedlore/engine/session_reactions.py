@@ -80,6 +80,7 @@ class ReactionRuntime:
             return
         history = self.path()
         yield from self.keep_public_record(history)
+        yield from self.mark_views(history)
         yield from self._round(history, passage)
 
     def react_to_turn(self, turn_node, history) -> Iterator[SessionNotice]:
@@ -96,6 +97,7 @@ class ReactionRuntime:
         held = self._character(turn_node.meta.controlled_character_id)
         player = held.name if held is not None else "The author"
         yield from self.keep_public_record(history)
+        yield from self.mark_views(history)
         yield from self._round([*history, turn_node], turn_node, after_turn_of=player)
 
     def _round(self, history, store_on, *, after_turn_of: str | None = None):

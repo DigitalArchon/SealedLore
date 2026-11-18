@@ -188,6 +188,7 @@ from sealedlore.engine.session_rebuild import RebuildRuntime
 from sealedlore.engine.session_recall import RecallRuntime
 from sealedlore.engine.session_record import RecordRuntime
 from sealedlore.engine.session_suggest import SuggestRuntime
+from sealedlore.engine.session_views import ViewsRuntime
 from sealedlore.engine.story_plot import plot_uses, take_out_character
 from sealedlore.engine.tokens import TokenEstimator, updated_correction_factor
 from sealedlore.engine.validators import locate_quote, mentions
@@ -583,6 +584,7 @@ class StorySession(
     SuggestRuntime,
     ReactionRuntime,
     RecordRuntime,
+    ViewsRuntime,
 ):
     def __init__(
         self,

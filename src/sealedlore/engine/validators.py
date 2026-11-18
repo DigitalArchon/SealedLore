@@ -122,6 +122,16 @@ _FAR_SHIFT = re.compile(
 )
 
 
+def far_shift(paragraph: str) -> bool:
+    """Whether a paragraph opens somewhere else beyond doubt (a far opener)."""
+    return bool(_FAR_SHIFT.match(paragraph))
+
+
+def scene_break_ends(paragraph: str) -> bool:
+    """Whether a paragraph ends on a scene break (---, * * *)."""
+    return bool(_SCENE_BREAK.search(paragraph.rstrip()[-12:]))
+
+
 def opens_elsewhere(text: str, start: int, in_scene: Sequence[Character]) -> bool:
     """Whether the paragraph holding text[start] is a cutaway, for the scene read.
 

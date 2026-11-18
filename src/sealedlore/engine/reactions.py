@@ -31,6 +31,7 @@ measured, and a story that names no character's own model is unchanged.
 from __future__ import annotations
 
 import hashlib
+import re
 from collections.abc import Callable, Sequence
 
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
@@ -42,6 +43,7 @@ from sealedlore.engine.rules import (
     summary_repeated,
 )
 from sealedlore.engine.scene_state import same_person, scene_at
+from sealedlore.engine.validators import far_shift, scene_break_ends
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.character import Character
 from sealedlore.models.memory import Recollection
@@ -140,8 +142,10 @@ def seen_entries(
 
     A message counts when the character was in the scene before it or after
     it (a snapshot on a node is the scene after it), so the passage they
-    arrive in, and the one they leave in, are both theirs. `history` is the
-    path as models may see it: a private scene is already gone from it.
+    arrive in, and the one they leave in, are both theirs; of a passage that
+    moves, only the paragraphs the scene model found them there for
+    (`passage_views`). `history` is the path as models may see it: a private
+    scene is already gone from it.
     """
     cast_by_id = {c.id: c for c in cast}
     seen: list[Entry] = []
@@ -160,6 +164,8 @@ def seen_entries(
             continue
         if opening:
             text = f"{texts['characters.own.opening']}\n{node.content.strip()}"
+        elif (part := seen_part(node, character)) is not None:
+            text = part
         else:
             text = _entry(node, character, cast_by_id, texts)
         if text:
@@ -388,3 +394,135 @@ def reaction_messages(
         ),
         PromptMessage(role="user", parts=tuple(ContentPart(text=t) for t in body if t.strip())),
     ]
+
+
+# --- Who saw which part of a passage that moves ---------------------------------
+#
+# A passage counts for anyone in the scene at either end of it, so one that
+# goes from the street into a closed office gave those left in the street the
+# office's talk (live, Brasshaven: Silas knew Lady Ashcombe's private offer).
+# After such a passage the scene model is asked which paragraphs each was
+# there for. Measured Nov 18 2026 (design/own-models.md, "Who saw which part of
+# a passage").
+
+VIEW_CATCH_UP = 12  # the newest passages a round looks back over for views
+
+
+def paragraphs(text: str) -> list[str]:
+    return [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+
+
+def content_sha(text: str) -> str:
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def cuts_away(parts: Sequence[str]) -> bool:
+    """Whether a paragraph after the first is somewhere else: a scene break
+    before it, or an opener that can only mean another place."""
+    return any(
+        far_shift(part) or scene_break_ends(parts[i - 1]) for i, part in enumerate(parts[1:], 1)
+    )
+
+
+def needs_view(
+    character: Character, before: SceneState | None, after: SceneState | None, node: Node
+) -> bool:
+    """Whether this passage moves for `character`: in the scene at one end
+    only, or at both with a cutaway inside."""
+    a, z = in_scene(character, before), in_scene(character, after)
+    if a != z:
+        return True
+    return a and cuts_away(paragraphs(node.content))
+
+
+def seen_part(node: Node, character: Character) -> str | None:
+    """The part of a passage this character saw, when it was read for them
+    and the text is still what was read; None to take it whole."""
+    if node.kind != "assistant" or not node.meta.seen_parts:
+        return None
+    wanted = node.meta.seen_parts.get(character.id)
+    if wanted is None or node.meta.seen_parts_of != content_sha(node.content):
+        return None
+    parts = paragraphs(node.content)
+    return "\n\n".join(parts[n - 1] for n in sorted(set(wanted)) if 1 <= n <= len(parts))
+
+
+def passage_views(
+    history: Sequence[Node], characters: Sequence[Character], *, start: SceneState
+) -> list[tuple[Node, SceneState | None, SceneState | None, list[Character]]]:
+    """The newest `VIEW_CATCH_UP` passages of `history` that move for one of
+    `characters` and haven't been read for them as they stand: each with the
+    scene before and after it and whom to ask about."""
+    found = []
+    scene: SceneState | None = start
+    left = sum(1 for node in history if node.kind == "assistant" and node.content.strip())
+    for node in history:
+        before = scene
+        if node.meta.scene is not None:
+            scene = node.meta.scene
+        if node.kind != "assistant" or not node.content.strip():
+            continue
+        left -= 1
+        if left >= VIEW_CATCH_UP:
+            continue
+        current = node.meta.seen_parts_of == content_sha(node.content)
+        done = node.meta.seen_parts or {} if current else {}
+        ask = [c for c in characters if c.id not in done and needs_view(c, before, scene, node)]
+        if ask:
+            found.append((node, before, scene, ask))
+    return found
+
+
+def scene_words(scene: SceneState | None, cast: Sequence[Character]) -> str:
+    if scene is None:
+        return "(not known)"
+    names = [c.name for c in cast if c.id in scene.present_character_ids]
+    names += list(scene.present_others)
+    return f"{scene.location or 'somewhere'}; there: {', '.join(names) or 'nobody named'}"
+
+
+def view_prompt(
+    node: Node,
+    before: SceneState | None,
+    after: SceneState | None,
+    ask: Sequence[Character],
+    cast: Sequence[Character],
+    texts: PromptTexts = DEFAULT_TEXTS,
+) -> str:
+    passage = "\n\n".join(f"[{n}] {p}" for n, p in enumerate(paragraphs(node.content), 1))
+    return texts.fill(
+        "characters.own.views",
+        before=scene_words(before, cast),
+        after=scene_words(after, cast),
+        names=", ".join(c.name for c in ask),
+        passage=passage,
+    )
+
+
+def apply_views(reply: str, node: Node, ask: Sequence[Character]) -> bool:
+    """Keep what the reply says each was there for; False when it can't be
+    read (the passage then counts whole for them, as before)."""
+    from sealedlore.engine.jsonreply import extract_json
+
+    try:
+        data = extract_json(reply, dict, "views")
+    except ValueError:
+        return False
+    count = len(paragraphs(node.content))
+    sha = content_sha(node.content)
+    kept = dict(node.meta.seen_parts or {}) if node.meta.seen_parts_of == sha else {}
+    got = False
+    for character in ask:
+        numbers = next(
+            (v for k, v in data.items() if isinstance(k, str) and same_person(k, character)), None
+        )
+        if not isinstance(numbers, list) or not all(
+            isinstance(n, int) and not isinstance(n, bool) for n in numbers
+        ):
+            continue
+        kept[character.id] = sorted({n for n in numbers if 1 <= n <= count})
+        got = True
+    if got:
+        node.meta.seen_parts = kept
+        node.meta.seen_parts_of = sha
+    return got
