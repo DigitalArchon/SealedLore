@@ -1995,8 +1995,9 @@ yours to change. The rest is changed where it lives: their card on the Card
 tab, the wording under File → Prompts (advanced)…, the story by editing it.
 
 The answers to the latest passage are hidden under it until you send your
-turn, so you answer it as they did. **View → Show the characters' answers**
-shows them anyway. Once you've sent, they show under their passage, each with
+turn, so you answer it as they did. **Show** beside that line, or **View →
+Show the characters' answers**, shows them anyway. On the People page their
+card is marked MAIN · OWN MODEL. Once you've sent, they show under their passage, each with
 **Edit**. Edit an answer to the latest passage and the storyteller gets your
 version with your next turn. Edit an older one and the passage that followed
 it is written again from your version, as a new take, with the one there now
