@@ -52,7 +52,14 @@ from PySide6.QtWidgets import (
 from sealedlore.engine.looks import look_words, shown_picture
 from sealedlore.engine.scene_state import same_person
 from sealedlore.gui import theme
-from sealedlore.gui.character_roles import MAIN_ABOUT, MAIN_TAG, SUPPORTING_ABOUT, SUPPORTING_TAG
+from sealedlore.gui.character_roles import (
+    MAIN_ABOUT,
+    MAIN_TAG,
+    OWN_TAG,
+    OWN_TAG_TIP,
+    SUPPORTING_ABOUT,
+    SUPPORTING_TAG,
+)
 from sealedlore.gui.expression_set import SET_LABEL
 from sealedlore.models.character import Character
 from sealedlore.models.scene import SceneState
@@ -134,6 +141,8 @@ class Person:
     playable: bool = False
     # "main" or "supporting" (said over their name), "" in a chat.
     role: str = ""
+    # The model that plays them, when one of their own does (the trial).
+    own_model: str = ""
     # Where they are, when it is known and not here.
     note: str = ""
     # Their pictures to be shown as, (picture id, words), the portrait first;
@@ -198,6 +207,7 @@ def _person(
         you=character.id == held_id,
         playable=character.is_player_available,
         role=role,
+        own_model=(character.own_model or "").strip() if role == "main" else "",
         note=note,
         looks=tuple(
             (ref.id, PORTRAIT_WORDS if number == 1 else look_words(ref, number))
@@ -384,6 +394,10 @@ class PersonCard(QFrame):
             tag = QLabel(MAIN_TAG if person.role == "main" else SUPPORTING_TAG)
             tag.setObjectName("personRole")
             tag.setToolTip(MAIN_ABOUT if person.role == "main" else SUPPORTING_ABOUT)
+            if person.own_model:
+                # Played by a model of their own: said where they are seen.
+                tag.setText(f"{MAIN_TAG} · {OWN_TAG}")
+                tag.setToolTip(OWN_TAG_TIP.format(model=person.own_model))
             words.addWidget(tag)
         self.name = QLabel(person.name)
         self.name.setObjectName("personName")

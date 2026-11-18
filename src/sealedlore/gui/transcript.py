@@ -294,7 +294,12 @@ def _retakeable_ids(nodes: Sequence[Node]) -> set[str]:
 # Over a passage's answers while its round is open (`add_answers`).
 ANSWERS_HIDDEN = (
     "{names} answered this passage. Hidden until you send your turn, so you answer it as "
-    "they did, without seeing theirs (View → Show the characters' answers)."
+    "they did, without seeing theirs."
+)
+ANSWERS_SHOW = "Show"
+ANSWERS_SHOW_TIP = (
+    "See what they answered before you send your turn (the same as View → Show the "
+    "characters' answers, which hides them again)"
 )
 
 
@@ -327,6 +332,9 @@ class MessageWidget(QFrame):
     # (passage id, character id): edit what a character's own model answered it
     # with (engine/reactions.py, the trial).
     answer_edit_requested = Signal(str, str)
+    # The hidden answers' Show: the window turns View → Show the characters'
+    # answers on.
+    answers_show_requested = Signal()
 
     def __init__(
         self,
@@ -543,7 +551,16 @@ class MessageWidget(QFrame):
             head.setTextFormat(Qt.PlainText)
             head.setObjectName("answersHidden")
             head.setWordWrap(True)
-            lines.addWidget(head)
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            row.addWidget(head, 1)
+            show = QToolButton()
+            show.setText(ANSWERS_SHOW)
+            show.setObjectName("messageAction")
+            show.setToolTip(ANSWERS_SHOW_TIP)
+            show.clicked.connect(self.answers_show_requested)
+            row.addWidget(show, 0, Qt.AlignTop)
+            lines.addLayout(row)
         else:
             for answer in answers:
                 row = QHBoxLayout()
@@ -1685,6 +1702,9 @@ def sent_mark(message: Node, reply: Node | None) -> str | None:
 class TranscriptView(QScrollArea):
     regenerate_requested = Signal(str)
     answer_edit_requested = Signal(str, str)
+    # The hidden answers' Show: the window turns View → Show the characters'
+    # answers on.
+    answers_show_requested = Signal()
     regenerate_note_requested = Signal(str)
     revise_requested = Signal(str)
     continue_requested = Signal(str)
@@ -1933,6 +1953,7 @@ class TranscriptView(QScrollArea):
         )
         widget.keep_full_requested.connect(self.keep_full_requested)
         widget.answer_edit_requested.connect(self.answer_edit_requested)
+        widget.answers_show_requested.connect(self.answers_show_requested)
         widget.review_mark_requested.connect(self.review_mark_requested)
         widget.reroll_requested.connect(self.reroll_requested)
         widget.rewrite_committed.connect(self.rewrite_committed)

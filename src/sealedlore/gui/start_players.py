@@ -34,6 +34,8 @@ ABOUT = (
     "too. Change it later under Played by on their card."
 )
 NEEDS_MODEL = "Name the model that plays {names}, or untick them."
+PLAYING_TIP = "You play them (Play as above), so no model of their own does."
+ASIDE_TIP = "Set aside in this playthrough (you chose another of them), so they never appear."
 
 
 class StartPlayers(QWidget):
@@ -109,13 +111,17 @@ class StartPlayers(QWidget):
         self._locked: str | None = None
         self._sync()
 
-    def lock(self, held: str | None) -> None:
-        """The character played: never their own model's."""
+    def lock(self, held: str | None, aside: Sequence[str] = ()) -> None:
+        """The character played is never their own model's, and nor is one
+        set aside for this playthrough ("play one of these"): they never
+        appear."""
         self._locked = held
         for character_id, (tick, _model) in self.rows.items():
-            if character_id == held:
+            blocked = character_id == held or character_id in aside
+            if blocked:
                 tick.setChecked(False)
-            tick.setEnabled(character_id != held)
+            tick.setEnabled(not blocked)
+            tick.setToolTip(PLAYING_TIP if character_id == held else ASIDE_TIP if blocked else "")
         self._sync()
 
     def _sync(self) -> None:

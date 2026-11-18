@@ -158,7 +158,12 @@ class StartDialog(QDialog):
 
     def _lock_players(self) -> None:
         if self.players is not None:
-            self.players.lock(self.play_as.currentData())
+            self.players.lock(self.play_as.currentData(), self._aside())
+
+    def _aside(self) -> list[str]:
+        """Picking one of a "play one of these" choice sets the others aside."""
+        held = self.play_as.currentData()
+        return [i for i in self._choose_one_of if i != held] if held in self._choose_one_of else []
 
     def _sync_start(self) -> None:
         """Start waits for a model for everyone ticked."""
@@ -177,10 +182,7 @@ class StartDialog(QDialog):
     def _lock_rows(self) -> None:
         if self.presence is None:
             return
-        held = self.play_as.currentData()
-        # Picking one of a "play one of these" choice sets the others aside.
-        aside = [i for i in self._choose_one_of if i != held] if held in self._choose_one_of else []
-        self.presence.set_locked(held, aside)
+        self.presence.set_locked(self.play_as.currentData(), self._aside())
 
     def _sync_pictures(self) -> None:
         """The cards a picture is offered for, less whoever the choice of

@@ -59,6 +59,12 @@ MAKE_SUPPORTING_TIP = (
 # On the People page, over a card's name.
 MAIN_TAG = "MAIN"
 SUPPORTING_TAG = "SUPPORTING"
+# Beside MAIN for a character a model of their own plays (the trial).
+OWN_TAG = "OWN MODEL"
+OWN_TAG_TIP = (
+    "{model} plays them, as another player: it says what they mean to do after each "
+    "passage. Played by on their card changes it."
+)
 
 PLAYED_BY = "Played by"
 # (value, label, what it means). Mapped to the card's two flags by

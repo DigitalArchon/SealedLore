@@ -1330,6 +1330,12 @@ QCheckBox, QRadioButton {
   spacing: 8px;
 }
 
+/* A box that can't be ticked reads as one (its label stayed full white, and
+   looked as clickable as the rest). */
+QCheckBox:disabled, QRadioButton:disabled {
+  color: @text_disabled;
+}
+
 /* Qt's default indicators are dark-on-dark here: an unchecked box or radio
    was all but invisible, so draw them outright. */
 QCheckBox::indicator, QListView::indicator, QTreeView::indicator,

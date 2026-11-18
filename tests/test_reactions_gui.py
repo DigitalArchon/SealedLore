@@ -478,3 +478,49 @@ def test_closing_with_changes_asks_first(app, tmp_path: Path, story, cast, monke
     assert asked and not closed  # kept open: Cancel
     dialog.deleteLater()
     window.close()
+
+
+# --- found in the look-over before release (Nov 18 2026) ------------------------
+
+
+def test_the_hidden_answers_have_a_show_button(app, tmp_path: Path, story, cast) -> None:
+    from PySide6.QtWidgets import QToolButton
+
+    from sealedlore.gui.transcript import ANSWERS_SHOW
+
+    window = own_window(tmp_path, story, cast, ["The door gives.", "{}", "MAELA-PICKS-THE-LOCK"])
+    _send(window, "I put my shoulder to the door.")
+    wait_for(app, lambda: not window._busy)
+    passage = window.session.path()[-1]
+    box = window.transcript.message_widget(passage.id).answers_box
+    show = next(b for b in box.findChildren(QToolButton) if b.text() == ANSWERS_SHOW)
+    show.click()
+    assert window.answers_action.isChecked()
+    assert "MAELA-PICKS-THE-LOCK" in answer_texts(window, passage.id)
+    window.close()
+
+
+def test_the_people_page_says_who_their_own_model_plays(app) -> None:
+    from sealedlore.gui.character_roles import OWN_TAG
+    from sealedlore.gui.people_page import _person
+
+    maela = Character(id="m", name="Maela", own_model=MODEL)
+    assert _person(maela, None, role="main").own_model == MODEL
+    assert _person(maela, None, role="supporting").own_model == ""
+    assert _person(Character(id="s", name="Serrik"), None, role="main").own_model == ""
+    assert OWN_TAG
+
+
+def test_start_offers_no_model_to_whoever_is_played_or_set_aside(app) -> None:
+    from sealedlore.gui.start_players import ASIDE_TIP, PLAYING_TIP, StartPlayers
+
+    cast = [Character(id=i, name=i.title()) for i in ("john", "jane", "elena")]
+    players = StartPlayers(cast)
+    players.lock("john", ["jane"])
+    ticks = {i: tick for i, (tick, _model) in players.rows.items()}
+    assert not ticks["john"].isEnabled() and ticks["john"].toolTip() == PLAYING_TIP
+    assert not ticks["jane"].isEnabled() and ticks["jane"].toolTip() == ASIDE_TIP
+    assert ticks["elena"].isEnabled() and ticks["elena"].toolTip() == ""
+    # Another choice under Play as frees them again.
+    players.lock("jane", [])
+    assert ticks["john"].isEnabled() and not ticks["jane"].isEnabled()
