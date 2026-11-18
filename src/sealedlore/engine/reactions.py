@@ -14,7 +14,9 @@ What a character's model is given, by the author's rulings:
   perceive (the presence rule holds for them as for the storyteller);
 - in those scenes, the storyteller's passages (fact), the author's turns
   and Narration without their OOC notes, and their own earlier answers.
-  Never a Direction (it is to the storyteller alone), never another
+  Never a Direction (it is to the storyteller alone) but the one the story
+  opens with, for those present at the opening (the author, Nov 18 2026: a
+  fact only it states never reached them otherwise), never another
   character's answer (what someone means to do is their own), and never the
   storyteller's notes;
 - the most recent of it that fits `HISTORY_TOKENS`, and before it what they
@@ -89,6 +91,18 @@ def reacting_characters(
     ]
 
 
+def is_opening_direction(node: Node) -> bool:
+    """Whether `node` is the Direction a story opens with: the root of the
+    story, the author's (a generated opening, `StorySession.begin`, or one
+    rewritten as a new branch from the first message)."""
+    return (
+        node.parent_id is None
+        and node.kind == "user"
+        and node.speaker_id == DIRECTOR_SPEAKER_ID
+        and bool(node.content.strip())
+    )
+
+
 def _entry(
     node: Node, character: Character, cast_by_id: dict[str, Character], texts: PromptTexts
 ) -> str:
@@ -131,14 +145,22 @@ def seen_entries(
     cast_by_id = {c.id: c for c in cast}
     seen: list[Entry] = []
     scene: SceneState | None = start
-    for node in history:
+    for index, node in enumerate(history):
         before = scene
         if node.meta.scene is not None:
             scene = node.meta.scene
         mine = node.kind == "user" and node.speaker_id == character.id
-        if not (mine or in_scene(character, before) or in_scene(character, scene)):
+        present = mine or in_scene(character, before) or in_scene(character, scene)
+        opening = index == 0 and is_opening_direction(node)
+        if opening and not present and len(history) > 1:
+            # Placed by the opening passage itself (not pinned in Setup).
+            present = in_scene(character, history[1].meta.scene)
+        if not present:
             continue
-        text = _entry(node, character, cast_by_id, texts)
+        if opening:
+            text = f"{texts['characters.own.opening']}\n{node.content.strip()}"
+        else:
+            text = _entry(node, character, cast_by_id, texts)
         if text:
             seen.append((node.id, text))
     return seen

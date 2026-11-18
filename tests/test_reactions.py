@@ -5,8 +5,8 @@ character whose card names a model answers it at once, blind to the others;
 the storyteller gets the answers with the author's next turn and works them
 in as intentions, never facts. Each character sees only what they would
 know: the scenes they were in, the storyteller's passages and the author's
-turns without OOC notes, their own earlier answers, never a Direction and
-never another character's answer. Driven end to end against the mock.
+turns without OOC notes, never a Direction but the story's opening (for those
+present at it), never another character's answer. Driven end to end against the mock.
 """
 
 from __future__ import annotations
@@ -369,13 +369,81 @@ def test_a_character_sees_the_authors_turn_without_its_ooc_note(tmp_path: Path) 
 
 
 def test_a_character_never_sees_a_direction_but_sees_narration(tmp_path: Path) -> None:
-    session = make_session(tmp_path, ["The lamp gutters.", "Hm.", "Rain on the grate.", "Hm."])
+    session = make_session(
+        tmp_path,
+        ["The door gives.", "Hm.", "The lamp gutters.", "Hm.", "Rain on the grate.", "Hm."],
+    )
+    play(session, turn())
     play(session, turn("SECRET-DIRECTION: the lamp fails.", speaker_id=DIRECTOR_SPEAKER_ID))
     play(session, turn("NARRATED-RAIN begins to fall.", speaker_id=NARRATOR_SPEAKER_ID))
     text = sent(round_calls(session)[-1])
     assert "SECRET-DIRECTION" not in text
     assert "The lamp gutters." in text  # the storyteller's passage is fact
     assert "NARRATED-RAIN" in text
+
+
+OPENING = "OPENING-DIRECTION: Serrik and Maela reach the undercroft at dusk, hunted."
+
+
+def opened(tmp_path: Path, cast: list[Character] | None = None) -> StorySession:
+    """A story begun from a generated opening (a Direction at its root)."""
+    story = a_story()
+    story.held_character_id = None
+    story.setup.opening_text = OPENING
+    story.setup.opening_mode = "generate"
+    story.setup.starting_scene = story.scene.model_copy(deep=True)
+    session = make_session(
+        tmp_path, ["The door is shut.", "I try it.", "It opens.", "Hm."], story=story, cast=cast
+    )
+    list(session.begin("char-serrik"))
+    return session
+
+
+def test_those_present_at_the_opening_see_its_direction(tmp_path: Path) -> None:
+    """The author's ruling (Nov 18 2026): the opening Direction is seen by
+    whoever is there when the story starts, labelled as how it begins, and
+    stays in what they saw; no later Direction is."""
+    from sealedlore.engine.prompt_texts import DEFAULT_TEXTS
+
+    session = opened(tmp_path)
+    first = sent(round_calls(session)[0])
+    assert OPENING in first
+    assert DEFAULT_TEXTS["characters.own.opening"] in first
+    assert DEFAULT_TEXTS["turn.speaker.director"] not in first
+    play(session, turn("I go in."))
+    assert OPENING in sent(round_calls(session)[-1])
+
+
+def test_someone_away_at_the_opening_never_sees_it(tmp_path: Path) -> None:
+    session = opened(tmp_path, cast=a_cast(idris_model="Local::idris"))
+    idris = session.cast[2]
+    history = session.path()
+    seen, _ = character_history(
+        history, idris, session.cast, start=session.story.setup.starting_scene
+    )
+    assert not any(OPENING in text for text in seen)
+    # Arriving later, he sees what happens from then on, not how it began.
+    here = SceneState(location="The undercroft", present_character_ids=[c.id for c in session.cast])
+    later = history[-1].model_copy(deep=True, update={"id": "later", "parent_id": history[-1].id})
+    later.meta.scene = here
+    seen, _ = character_history(
+        [*history, later], idris, session.cast, start=session.story.setup.starting_scene
+    )
+    assert seen and not any(OPENING in text for text in seen)
+
+
+def test_someone_the_opening_passage_places_sees_it(tmp_path: Path) -> None:
+    """Not pinned in Setup, placed by the opening's own passage."""
+    session = opened(tmp_path, cast=a_cast(idris_model="Local::idris"))
+    idris = session.cast[2]
+    history = session.path()
+    start = session.story.setup.starting_scene
+    assert idris.id not in start.present_character_ids
+    history[1].meta.scene = SceneState(
+        location="The undercroft", present_character_ids=[c.id for c in session.cast]
+    )
+    seen, _ = character_history(history, idris, session.cast, start=start)
+    assert any(OPENING in text for text in seen)
 
 
 def test_a_character_sees_only_scenes_they_were_in(tmp_path: Path) -> None:

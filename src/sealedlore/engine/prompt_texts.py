@@ -1658,6 +1658,21 @@ _text(
     (),
 )
 
+# The author's ruling (Nov 18 2026): a Direction is the storyteller's alone,
+# except the one the story opens with, which those present at the opening see,
+# or a fact only it states (where they are, why) never reaches them. Not
+# measured.
+_text(
+    "characters.own.opening",
+    OWN,
+    "A character's own prompt: how the story begins",
+    "Labels the author's opening Direction in the story as a character saw it; only "
+    "characters present at the opening are shown it.",
+    "[How the story begins, as the author set it out for the storyteller: take it as where "
+    "things stand when the story starts]",
+    (),
+)
+
 # What a character remembers of the scenes older than their recent window
 # (models/memory.py). The memory probe (design/own-models.md): past the window
 # their model invented an answer to 12 of 12 questions about their own past,

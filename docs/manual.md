@@ -1982,7 +1982,8 @@ needed, and again for a stretch you edit or a branch that goes another way.
 Notes of your own on how to play them go to their model too, after their card.
 They are also told to say so when something comes up that they don't
 remember, rather than make it up. A character's model never sees a
-Direction, another character's answer or the storyteller's notes. A
+Direction, except the one the story opens with if they are there when it
+starts, nor another character's answer or the storyteller's notes. A
 character who isn't in the scene isn't asked. Nothing runs in a private
 scene or a simple chat.
 
