@@ -777,6 +777,35 @@ Models, the picture models on Settings → Images. Blank ones fall back as
 shown; the defaults marked ★ are NanoGPT model ids, so on another endpoint
 set them to one it lists (Choose).
 
+**Profiles.** The **Profile** row at the top of Settings → Models puts a whole set
+of models back with one choice, each job's model and its route. Three come with
+SealedLore:
+
+- **Default**: what a new setup starts with. Claude Sonnet 4.6 writes, and the
+  scene, plot and lore models are the small ones included in a NanoGPT
+  subscription.
+- **Recommended**: the best measured for each job, whatever it costs. Claude
+  Opus 5.5 writes (and so summarises, drafts and writes picture prompts), and
+  each other job has the premium choice of its list under **Choose**, or the
+  recommended one where nothing measured better. Several times the cost of
+  Default.
+- **Private**: end-to-end encrypted models for every job, on NanoGPT's Private
+  Mode (`private/glm-5-3` writes and reads the scene, `private/deepseek-v4-1-flash`
+  directs the plot and picks lore), or the same models on Tinfoil's own endpoint
+  when that is your default or you have no NanoGPT one. Filling it in says what still leaves your
+  computer unencrypted: lore sent for embeddings while semantic retrieval is on,
+  Jev if large lorebooks use it, and pictures and videos, whose endpoints are
+  their own.
+
+Default and Recommended are NanoGPT's model ids (Claude goes to Anthropic's own
+API when you have it as an endpoint); with no NanoGPT endpoint they say so. Mix
+and match the fields as you like: the row then says **Your own mix**, and **Save
+as…** keeps them under a name of your own, to choose again later. The same name
+replaces your earlier one (asked first); **Delete** takes yours away. Profiles,
+like the rest of the page, are kept when you press Save. **Story → Setup… →
+Models** has **Use a profile**, which fills in every field with a profile's
+models, so the story keeps them as its own whatever Settings has later.
+
 **A story's own models.** A story goes with Settings → Models and follows it when
 it changes. **Story → Setup… → Models** chooses any of the text models for that
 story alone, with its route; **Use the models in Settings** puts it back. The

@@ -19,6 +19,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -27,15 +28,18 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QRadioButton,
     QTabWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
+from sealedlore.engine.model_profiles import Profile, all_profiles, filled
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.routing import config_role_model
 from sealedlore.gui.character_roles import ROUND_ORDER_LABEL, round_order_combo
@@ -48,6 +52,7 @@ from sealedlore.gui.composer import (
 from sealedlore.gui.fields import line_edit, set_field_text
 from sealedlore.gui.model_picker import BrowseRoute, ModelField, Qualify, RouteEndpoint
 from sealedlore.gui.picture_style import PictureStyleField
+from sealedlore.gui.plain_text import plain_tip
 from sealedlore.gui.saved_prompts import SavedPrompts, SavedPromptsButton
 from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, size_to_screen
 from sealedlore.gui.start_presence import StartPresence
@@ -378,11 +383,56 @@ class SetupDialog(QDialog):
             "Empty every field here. Nothing is saved until you press Save."
         )
         self.reset_models.clicked.connect(self._use_settings_models)
-        form.addRow(self.reset_models)
+        if story.chat:
+            form.addRow(self.reset_models)
+        else:
+            form.addRow(self._models_buttons(models))
         self.models_note = _hint("")
         form.addRow(self.models_note)
         self._sync_models()
         return widget
+
+    def _models_buttons(self, models: ModelChoices) -> QWidget:
+        """Use the models in Settings, and a profile's (engine/model_profiles.py):
+        every job of it filled in, since a blank here follows Settings, not
+        the profile."""
+        config = models.config
+        self.use_profile = QToolButton()
+        self.use_profile.setText("Use a profile")
+        self.use_profile.setPopupMode(QToolButton.InstantPopup)
+        self.use_profile.setToolTip(
+            "Fill every field with a profile's models: Default, Recommended, Private, or one "
+            "you saved in Settings → Models. Nothing is saved until you press Save."
+        )
+        menu = QMenu(self.use_profile)
+        menu.setToolTipsVisible(True)
+        profiles = all_profiles(
+            config.model_profiles, config.providers, config.active_provider_name
+        )
+        for profile in profiles:
+            action = QAction(profile.name, menu)
+            action.setToolTip(plain_tip(profile.problem or profile.about or "One of your profiles"))
+            action.setEnabled(not profile.problem)
+            action.triggered.connect(lambda _on=False, chosen=profile: self._use_profile(chosen))
+            menu.addAction(action)
+        self.use_profile.setMenu(menu)
+        row = QWidget()
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.reset_models)
+        layout.addWidget(self.use_profile)
+        layout.addStretch(1)
+        return row
+
+    def _use_profile(self, profile: Profile) -> None:
+        for role, (model, route) in filled(profile).items():
+            field = self.model_fields.get(role)
+            if field is not None:
+                field.setText(model)
+                field.set_route(route)
+        self.models_note.setText(
+            f"{profile.name}'s models are filled in, every one this story's own. Save to keep them."
+        )
 
     def _own_route(self, role: str):
         defaults = self.story.defaults

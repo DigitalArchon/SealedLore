@@ -36,6 +36,8 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.attestation_check import testable
 from sealedlore.engine.image_variants import family_id, picture_support
+from sealedlore.engine.model_profiles import PRIVATE, Profile, built_in_profiles, from_saved
+from sealedlore.engine.model_profiles import renamed as renamed_profiles
 from sealedlore.engine.portraits import portrait_size
 from sealedlore.engine.reasoning import (
     LEVEL_LABELS,
@@ -60,6 +62,7 @@ from sealedlore.gui.model_picker import (
 )
 from sealedlore.gui.phone_dialog import PHONE_KEEPS
 from sealedlore.gui.plain_text import plain_tip
+from sealedlore.gui.profile_row import ProfileRow
 from sealedlore.gui.settings_pages import Fold, SettingsPages
 from sealedlore.gui.sizing import entered, size_to_screen
 from sealedlore.gui.speed_test import SpeedTestDialog
@@ -561,7 +564,11 @@ class SettingsDialog(QDialog):
         each, and the fields themselves are left out."""
         endpoints = [p.model_dump() for p in self._endpoints_as_typed()]
         shown = (self.provider_name, self.base_url, self.api_key, self.chat_api)
-        return endpoints, self._default_index, entered(self, leaving_out=shown)
+        # The profile combo follows the fields: what is kept is the list.
+        row = getattr(self, "profiles", None)
+        shown += (row.combo,) if row is not None else ()
+        profiles = [p.model_dump() for p in row.saved] if row is not None else []
+        return endpoints, self._default_index, entered(self, leaving_out=shown), profiles
 
     def reject(self) -> None:
         """Cancel, Esc or closing: what was typed or changed here is asked
@@ -727,6 +734,8 @@ class SettingsDialog(QDialog):
             if name == old and bare:
                 field.setText(qualify(new, bare, default))
                 carried.append(label)
+        if hasattr(self, "profiles"):
+            self.profiles.renamed(lambda saved: renamed_profiles(saved, old, new))
         self._named[index] = new
         was = self._origins[index] or old
         if new == was:
@@ -1489,6 +1498,7 @@ class SettingsDialog(QDialog):
         }
         for role, field in self._route_fields.items():
             field.set_route(self.config.model_routes.get(role))
+        self._profile_row(form)
         # A chat open: its own route is the Story field's, as its model is.
         self._route_at_open = self.model.effective_route()
         self.base_url.textChanged.connect(self._show_routes)
@@ -1500,6 +1510,71 @@ class SettingsDialog(QDialog):
             if self._fetch_models and any(on_nanogpt(p.base_url) for p in self._endpoints):
                 self._catalog.ensure(self._model_source)
         return widget
+
+    # --- model profiles ---------------------------------------------------
+
+    def _profile_row(self, form: QFormLayout) -> None:
+        """Profiles over the fields (gui/profile_row.py): choosing one fills
+        them, Save as… keeps them under a name; kept on Save."""
+
+        def default() -> str | None:
+            return self._default_endpoint().name
+
+        self.profiles = ProfileRow(
+            built_in=lambda: built_in_profiles(self._endpoints_as_typed(), default()),
+            saved=self.config.model_profiles,
+            fields=self._profile_fields,
+            default=default,
+            from_saved=lambda saved: from_saved(saved, default()),
+        )
+        self.profiles.chosen.connect(self._use_profile)
+        self._filling_profile = False
+        for field in self._route_fields.values():
+            field.textChanged.connect(self._profile_fields_changed)
+            field.routeChanged.connect(self._profile_fields_changed)
+        self.base_url.textChanged.connect(self._profile_fields_changed)
+        # Under the page's own words, over the fields it fills.
+        form.insertRow(1, "Profile", self.profiles)
+
+    def _profile_fields(self) -> tuple[dict[str, str], dict[str, ModelRoute | None]]:
+        fields = self._route_fields
+        return (
+            {role: field.text().strip() for role, field in fields.items()},
+            {role: field.effective_route() for role, field in fields.items()},
+        )
+
+    def _profile_fields_changed(self, *_args) -> None:
+        if not self._filling_profile and hasattr(self, "profiles"):
+            self.profiles.refresh()
+
+    def _use_profile(self, profile: Profile) -> None:
+        """A profile's models into the fields, as it holds them (a blank
+        stays blank: the job goes to the one it falls back to)."""
+        self._filling_profile = True
+        try:
+            for role, field in self._route_fields.items():
+                field.setText(profile.models.get(role, ""))
+                field.set_route(profile.routes.get(role))
+        finally:
+            self._filling_profile = False
+        note = f"{profile.name}'s models are filled in. Save to keep them."
+        if profile.name == PRIVATE and profile.built_in:
+            note += " " + self._still_unencrypted()
+        self.recommended_note.setText(note)
+        self.recommended_note.show()
+
+    def _still_unencrypted(self) -> str:
+        """What leaves this computer unencrypted with every text model
+        end-to-end encrypted, as the other pages stand."""
+        still = []
+        if self.embeddings_enabled.isChecked():
+            still.append(
+                "the lore sent for embeddings, while Lore → Retrieve lore semantically is on"
+            )
+        if self.lore_selector.currentData() == "jev":
+            still.append("what Jev is shown to pick lore, while Lore → Large lorebooks uses it")
+        still.append("pictures and videos, whose endpoints are their own")
+        return "Still sent unencrypted: " + "; ".join(still) + "."
 
     def speed_targets(self) -> list[SpeedTarget]:
         """Every distinct model the fields name, as they stand, each on the
@@ -3175,6 +3250,7 @@ class SettingsDialog(QDialog):
         self.config.lore_model = self._role_model(self.lore_model)
         self.config.record_model = self._role_model(self.record_model) or None
         self.config.public_record = self.public_record.isChecked()
+        self.config.model_profiles = [p.model_copy(deep=True) for p in self.profiles.saved]
 
         saved = self.config.generation
         stop = [item.strip() for item in self.stop.text().split(",") if item.strip()]

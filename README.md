@@ -37,6 +37,16 @@ fun to play. This app will remain focused on text based roleplay.
 
 ### New in version 3
 
+- **Model profiles**. Settings → Models keeps whole sets of models, each job's
+  model and its route, to put back with one choice: **Default** (what a new
+  setup starts with), **Recommended** (the best measured for each job,
+  whatever it costs: Claude Opus 5.5 writes) and **Private** (end-to-end
+  encrypted models for every job, on NanoGPT's Private Mode or Tinfoil), or
+  your own mix saved under a name. A story's Setup → Models can take a profile
+  as its own. Stories and settings now say which version of SealedLore's
+  layout they are saved in, so an older SealedLore no longer quietly loses
+  what a newer one saved: it asks before opening such a story, and doesn't
+  save over such settings.
 - **More end-to-end encrypted providers** (3.1.0b13, preliminary). Tinfoil's
   own API and Chutes work beside NanoGPT: Tinfoil's models are end-to-end
   encrypted to its attested router, and Chutes is an endpoint for all its
@@ -580,7 +590,9 @@ Windows offers weaker privacy on the machine itself (see
    cheap one. **Choose** beside it lists what the endpoint offers. On NanoGPT the small
    calls made on every turn (the scene, the plot, picking lore) start on
    cheaper models that measured well for them; **Use recommended models**
-   fills them in on a setup you already have, and **Test speed…** shows how
+   fills them in on a setup you already have, the **Profile** row above the
+   fields puts back a whole set (Default, Recommended, Private, or one you
+   saved), and **Test speed…** shows how
    quickly each model you have chosen answers. A field left blank falls back
    to the story model. For a model NanoGPT runs on several hosts, **Route…**
    beside its field can pick the fastest or cheapest host, or one host,

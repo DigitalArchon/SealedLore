@@ -1240,6 +1240,17 @@ class SavedPrompt(BaseModel):
     text: str
 
 
+class ModelProfile(BaseModel):
+    """A named set of the text models, one for each job (Settings → Models):
+    by job (`models/route.py` ROUTE_ROLES), each reference naming its
+    endpoint ("NanoGPT::z-ai/glm-5.3"); a job not listed is blank, going
+    to the one it falls back to. A route goes with its job's model."""
+
+    name: str
+    models: dict[str, str] = Field(default_factory=dict)
+    routes: dict[str, ModelRoute] = Field(default_factory=dict)
+
+
 class Config(BaseModel):
     @field_validator("text_scale")
     @classmethod
@@ -1322,6 +1333,10 @@ class Config(BaseModel):
     # it (blank: the scene model).
     public_record: bool = True
     record_model: str | None = None
+    # The author's own model profiles (engine/model_profiles.py), in the
+    # order kept; Default, Recommended and Private come with the app and are
+    # never stored.
+    model_profiles: list[ModelProfile] = Field(default_factory=list)
 
     # Caching (§6.2). "auto" applies cache_control blocks only to models whose
     # ID matches one of the patterns below; "on"/"off" force it either way.
