@@ -250,6 +250,8 @@ class StoryListPanel(QWidget):
                 label = f"{listing.title}\n{listing.kind} · {words}{mark}\n{_dates(listing)}"
             elif error == VISUAL_ELSEWHERE:
                 label = f"{listing.title}\nA Visual Story, not played here"
+            elif listing.newer:
+                label = f"{listing.title}\nSaved by a newer SealedLore"
             else:
                 # Shown rather than skipped: a story that vanished without a
                 # word can't be looked into or deleted. Opening it says why.

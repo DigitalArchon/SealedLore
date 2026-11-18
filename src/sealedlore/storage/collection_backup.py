@@ -36,6 +36,7 @@ from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage
 from sealedlore.storage.atomic import nests_deeper
 from sealedlore.storage.collection import files_of
+from sealedlore.storage.formats import STORY_FORMAT
 from sealedlore.storage.image_meta import (
     MetadataError,
     raster_kind,
@@ -121,6 +122,9 @@ def write_backup(
             manifest = {
                 "format": BACKUP_FORMAT,
                 "version": BACKUP_VERSION,
+                # The characters' own layout, a story folder's
+                # (storage/formats.py), which the backup's version doesn't cover.
+                "story_format": STORY_FORMAT,
                 "made_at": utc_now_iso(),
                 "characters": len(characters),
             }
@@ -200,6 +204,13 @@ def open_backup(path: Path) -> Iterator[Backup]:
             raise BackupError(
                 f"{name} was made by a newer SealedLore (version {version} of the backup): "
                 "update SealedLore to put it back."
+            )
+        found = manifest.get("story_format")
+        if isinstance(found, int) and found > STORY_FORMAT:
+            raise BackupError(
+                f"{name} was made by a newer SealedLore (story format {found}; this version "
+                f"reads up to {STORY_FORMAT}): update SealedLore to put it back. Put back "
+                "here, whatever this version doesn't know of would be lost."
             )
         try:
             characters = [Character.model_validate(c) for c in _json(archive, CHARACTERS, [])]

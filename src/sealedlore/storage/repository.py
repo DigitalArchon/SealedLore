@@ -42,6 +42,14 @@ from sealedlore.storage.atomic import (
     read_jsonl,
     sweep_temps,
 )
+from sealedlore.storage.formats import (
+    CONFIG_FORMAT,
+    STORY_FORMAT,
+    NewerStory,
+    format_of,
+    newer_config_words,
+    with_format,
+)
 from sealedlore.storage.images import (
     RECORD_FILES,
     copy_image_files,
@@ -103,8 +111,45 @@ def save_config(config: Config, root: Path | None = None) -> None:
     keychain refuses stays in the file this time, never lost; the next save
     tries again (`keychain.last_problem` says why)."""
     with CONFIG_LOCK:
+        if config_newer(root) is not None:
+            # A newer SealedLore's settings stand until the author says
+            # otherwise (`save_over_newer`): written here, what only it knows
+            # would be gone.
+            return
         ensure_data_home(root)
-        atomic_write_json(config_file(root), _as_written(config, root), mode=CONFIG_FILE_MODE)
+        written = with_format(_as_written(config, root), CONFIG_FORMAT)
+        atomic_write_json(config_file(root), written, mode=CONFIG_FILE_MODE)
+
+
+# config.json files saved by a newer SealedLore, by path, and their format:
+# read, never written over this run unless the author says (`save_over_newer`).
+_NEWER_CONFIG: dict[Path, int] = {}
+
+
+def _config_key(root: Path | None) -> Path:
+    return config_file(root).resolve()
+
+
+def config_newer(root: Path | None = None) -> int | None:
+    """The format of a config.json a newer SealedLore saved, read this run
+    and so not saved over; None when this version may save it."""
+    return _NEWER_CONFIG.get(_config_key(root))
+
+
+def save_over_newer(root: Path | None = None) -> None:
+    """The author's yes: from now on the settings are this version's to
+    save, and whatever only the newer one knew goes with the next save."""
+    _NEWER_CONFIG.pop(_config_key(root), None)
+
+
+def _note_format(data: Any, root: Path | None) -> str | None:
+    """Remembers a newer version's config.json, and says so."""
+    found = format_of(data)
+    if found <= CONFIG_FORMAT:
+        _NEWER_CONFIG.pop(_config_key(root), None)
+        return None
+    _NEWER_CONFIG[_config_key(root)] = found
+    return newer_config_words(found)
 
 
 # How often a copy is taken again when the GUI thread changed the config
@@ -305,7 +350,9 @@ def _fill_addresses(config: Config, root: Path | None) -> str | None:
 def _load_config(root: Path | None) -> tuple[Config, str | None]:
     data = read_json(config_file(root), default=None)
     config = Config() if data is None else Config.model_validate(data)
-    return config, _fill_keys(config, root)
+    newer = _note_format(data, root)
+    keys = _fill_keys(config, root)
+    return config, " ".join(note for note in (newer, keys) if note) or None
 
 
 def load_config(root: Path | None = None) -> Config:
@@ -353,6 +400,8 @@ def load_config_or_recover(root: Path | None = None) -> tuple[Config, str | None
         )
     config, dropped = _what_validates(data)
     notes: list[str] = []
+    if newer := _note_format(data, root):
+        notes.append(newer)
     if dropped:
         aside = _set_aside(path, raw)
         kept = f" The file as it was is kept as {aside.name}." if aside is not None else ""
@@ -469,7 +518,7 @@ def save_story_bundle(bundle: StoryBundle, root: Path | None = None) -> None:
         # A folder without it is no story at all: a first save cut short
         # still leaves one, and the second write below is skipped unless
         # something changed.
-        atomic_write_json(directory / "story.json", bundle.story.model_dump())
+        atomic_write_json(directory / "story.json", _story_json(bundle))
     for relative, data in bundle.pending_files.items():
         if relative not in RECORD_FILES:
             write_story_file(story_id, relative, data, root)
@@ -487,8 +536,12 @@ def save_story_bundle(bundle: StoryBundle, root: Path | None = None) -> None:
     atomic_write_json(directory / "asides.json", [a.model_dump() for a in bundle.asides])
     atomic_write_json(directory / "reviews.json", [r.model_dump() for r in bundle.reviews])
     atomic_write_json(directory / "memories.json", [m.model_dump() for m in bundle.memories])
-    atomic_write_json(directory / "story.json", bundle.story.model_dump())
+    atomic_write_json(directory / "story.json", _story_json(bundle))
     bundle.pending_files = {}
+
+
+def _story_json(bundle: StoryBundle) -> dict[str, Any]:
+    return with_format(bundle.story.model_dump(), STORY_FORMAT)
 
 
 # Why a Visual Story is listed and not opened: one played here before the
@@ -496,7 +549,12 @@ def save_story_bundle(bundle: StoryBundle, root: Path | None = None) -> None:
 VISUAL_ELSEWHERE = "A Visual Story: it is played in its own app now, not in SealedLore."
 
 
-def load_story_bundle(story_id: str, root: Path | None = None) -> StoryBundle:
+def load_story_bundle(
+    story_id: str, root: Path | None = None, *, newer_ok: bool = False
+) -> StoryBundle:
+    """The story folder as this version reads it. One a newer SealedLore saved
+    is NewerStory unless `newer_ok` (the author asked, knowing that what this
+    version doesn't know of goes with its first save)."""
     directory = story_dir(story_id, root)
 
     story_data = read_json(directory / "story.json")
@@ -504,6 +562,8 @@ def load_story_bundle(story_id: str, root: Path | None = None) -> StoryBundle:
         raise FileNotFoundError(f"no story.json found for story {story_id!r}")
     if isinstance(story_data, dict) and story_data.get("mode") == "visual":
         raise ValueError(VISUAL_ELSEWHERE)
+    if (found := format_of(story_data)) > STORY_FORMAT and not newer_ok:
+        raise NewerStory(found)
     if folder_lock.held(root):
         # No other process writes here: what writes cut short left can go.
         sweep_temps(directory)

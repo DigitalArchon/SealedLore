@@ -613,6 +613,17 @@ when they were last played, or by title. A Visual Story from a version before
 2.5 is listed greyed, as one not played here (Visual Stories moved to a game
 of their own); it can still be deleted.
 
+**A story saved by a newer SealedLore.** Every story says which version of
+SealedLore's layout it is saved in. One saved by a newer version than yours is
+listed greyed as **Saved by a newer SealedLore**, and opening it asks first:
+opened here, whatever this version doesn't know of would be lost from the story
+the first time it saves. Open it in the newer version, or say **Open** knowing
+that. A story backup or a backup of Your characters made by a newer version is
+refused for the same reason: update SealedLore to put it back. Settings saved by
+a newer version are used as far as this one understands them and aren't saved
+over: a change you make lasts until you quit, unless you save Settings and say
+to save over them.
+
 **Searching every story.** The box at the top of the list searches everything:
 every message on every branch, the chapters, your Questions, the world, the
 opening and the cards. A story is listed if it has all the words, with the

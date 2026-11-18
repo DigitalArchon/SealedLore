@@ -71,6 +71,7 @@ from sealedlore.storage.paths import (
 )
 from sealedlore.storage.repository import (
     StoryBundle,
+    config_newer,
     copy_story,
     delete_story,
     load_config,
@@ -152,6 +153,11 @@ def cmd_configure(args: argparse.Namespace) -> int:
     default only with `--make-default` or when it is the first)."""
     root: Path | None = args.data_dir
     config = load_config(root=root)
+    if (found := config_newer(root)) is not None:
+        raise SystemExit(
+            f"These settings were saved by a newer SealedLore (format {found}): configure "
+            "them there, or in the app's Settings, which asks before saving over them."
+        )
     if args.endpoint_name is not None and args.name is not None:
         raise SystemExit("Give --name (the default endpoint) or --endpoint-name, not both.")
     name = args.endpoint_name if args.endpoint_name is not None else (args.name or "default")

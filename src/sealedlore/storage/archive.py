@@ -36,6 +36,7 @@ from sealedlore.models.summary import Summary
 from sealedlore.models.supporting import SupportingCast
 from sealedlore.models.video import GeneratedVideo
 from sealedlore.storage.atomic import atomic_write_json, nests_deeper
+from sealedlore.storage.formats import STORY_FORMAT
 from sealedlore.storage.image_meta import stripped_or_same
 from sealedlore.storage.images import IMAGES_FILE, RECORD_FILES, VIDEOS_FILE, is_story_file
 from sealedlore.storage.paths import is_safe_story_id, story_dir
@@ -44,6 +45,7 @@ from sealedlore.storage.repository import StoryBundle, append_api_log, save_stor
 ARCHIVE_FORMAT = "sealedlore-archive"
 ARCHIVE_VERSION = 2
 ARCHIVE_SUFFIX = ".sealedlore-archive.json"
+STORY_FORMAT_KEY = "story_format"
 
 
 class ArchiveError(ValueError):
@@ -75,6 +77,9 @@ def archive_data(
     return {
         "format": ARCHIVE_FORMAT,
         "version": ARCHIVE_VERSION,
+        # The story folder's own layout (storage/formats.py), which the
+        # archive's version doesn't cover: its records are the folder's.
+        STORY_FORMAT_KEY: STORY_FORMAT,
         "exported_at": utc_now_iso(),
         "story": bundle.story.model_dump(),
         "cast": [character.model_dump() for character in bundle.cast],
@@ -186,6 +191,13 @@ def read_archive(path: Path) -> tuple[StoryBundle, list[dict[str, Any]]]:
         raise ArchiveError(
             f"{name} is archive format version {version}; this SealedLore reads up to "
             f"version {ARCHIVE_VERSION}."
+        )
+    found = data.get(STORY_FORMAT_KEY)
+    if isinstance(found, int) and found > STORY_FORMAT:
+        raise ArchiveError(
+            f"{name} was made by a newer SealedLore (story format {found}; this version reads "
+            f"up to {STORY_FORMAT}): update SealedLore to put it back. Put back here, whatever "
+            "this version doesn't know of would be lost."
         )
     # Everything checked before anything is written (`restore_archive`).
     try:

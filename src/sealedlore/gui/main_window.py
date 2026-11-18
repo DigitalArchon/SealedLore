@@ -186,17 +186,20 @@ from sealedlore.storage.archive import (
     write_archive,
 )
 from sealedlore.storage.collection_backup import BACKUP_SUFFIX, is_backup
+from sealedlore.storage.formats import NewerStory
 from sealedlore.storage.images import is_video_file, reference_files, without_videos
 from sealedlore.storage.paths import data_home, hidden_by_store_python, samples_dir, story_dir
 from sealedlore.storage.prompt_sets import PROMPT_SET_SUFFIX
 from sealedlore.storage.repository import (
     StoryBundle,
+    config_newer,
     copy_story,
     load_config_or_recover,
     load_story_bundle,
     read_api_log,
     read_api_log_since,
     save_config,
+    save_over_newer,
     save_story_bundle,
 )
 from sealedlore.storage.repository import delete_story as remove_story
@@ -2154,23 +2157,32 @@ class MainWindow(
         # and let go only once the story to open has been read.
         if self.session is not None and not self._private_may_close():
             return
-        try:
-            session = StorySession.load(
-                story_id,
-                self.config,
-                self._current_provider(),
-                root=self.root,
-                estimator=self.estimator,
-                learn_corrections=not self.use_mock,
-                embeddings=self._current_embeddings(),
-            )
-        except (FileNotFoundError, ValueError) as exc:
-            # Nothing has changed yet: the window is as it was. The view used
-            # to be switched first, and a story that couldn't be read left an
-            # empty transcript under a greyed composer where the start page
-            # had been, with no way back but opening and closing another.
-            self._warn_plain("Could not open story", str(exc))
-            return
+        newer_ok = False
+        while True:
+            try:
+                session = StorySession.load(
+                    story_id,
+                    self.config,
+                    self._current_provider(),
+                    root=self.root,
+                    estimator=self.estimator,
+                    learn_corrections=not self.use_mock,
+                    embeddings=self._current_embeddings(),
+                    newer_ok=newer_ok,
+                )
+                break
+            except NewerStory as exc:
+                if newer_ok or not self._open_newer_anyway(exc):
+                    return
+                newer_ok = True
+            except (FileNotFoundError, ValueError) as exc:
+                # Nothing has changed yet: the window is as it was. The view
+                # used to be switched first, and a story that couldn't be read
+                # left an empty transcript under a greyed composer where the
+                # start page had been, with no way back but opening and
+                # closing another.
+                self._warn_plain("Could not open story", str(exc))
+                return
         if self.session is not None:
             self._discard_edits(leaving=True)
             self._discard_memory_scene()
@@ -2185,6 +2197,39 @@ class MainWindow(
             self.session.close(wait_seconds=0)
         self.session = session
         self._after_open()
+
+    def _open_newer_anyway(self, exc: NewerStory) -> bool:
+        """A story a newer SealedLore saved: opened here only if the author
+        says so, knowing what goes (storage/formats.py)."""
+        answer = QMessageBox.question(
+            self,
+            "Saved by a newer SealedLore",
+            f"{exc}\n\nOpen it here anyway? Whatever this version doesn't know of is lost "
+            "from the story the first time it saves, and the newer version finds it without.",
+            QMessageBox.Open | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        )
+        return answer == QMessageBox.Open
+
+    def _may_save_settings(self) -> bool:
+        """Before the author's own save of Settings or the prompts: settings a
+        newer SealedLore saved are written over only if they say so."""
+        found = config_newer(self.root)
+        if found is None:
+            return True
+        answer = QMessageBox.question(
+            self,
+            "Save over a newer version's settings?",
+            f"These settings were saved by a newer SealedLore (format {found}). Saved here, "
+            "whatever only it knows of is lost from them. Your changes apply either way until "
+            "you quit.\n\nSave over them?",
+            QMessageBox.Save | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        )
+        if answer != QMessageBox.Save:
+            return False
+        save_over_newer(self.root)
+        return True
 
     def _after_open(self) -> None:
         """Everything that follows a story being opened, from disk or (a
@@ -5680,7 +5725,8 @@ class MainWindow(
         embeddings renewed, the open story saved and reassembled, the lists and
         controls brought up to date. On Save and Close, and on Save, which keeps
         the dialog open."""
-        save_config(self.config, root=self.root)
+        if self._may_save_settings():
+            save_config(self.config, root=self.root)
         if keychain.last_problem and self.config.key_storage == "keychain":
             self.statusBar().showMessage(
                 f"API keys are in config.json for now: {keychain.last_problem}.", 20000
@@ -5726,7 +5772,8 @@ class MainWindow(
         dialog.deleteLater()  # read, then freed: kept, every one opened stayed
         if not accepted:
             return
-        save_config(self.config, root=self.root)
+        if self._may_save_settings():
+            save_config(self.config, root=self.root)
         if self.session is not None:
             # Undo restores the story's settings wholesale; after a save here
             # it would take these edits with it.

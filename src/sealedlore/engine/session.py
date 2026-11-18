@@ -679,8 +679,9 @@ class StorySession(
         estimator: TokenEstimator | None = None,
         learn_corrections: bool = True,
         embeddings: EmbeddingBackend | None = None,
+        newer_ok: bool = False,
     ) -> StorySession:
-        bundle = load_story_bundle(story_id, root=root)
+        bundle = load_story_bundle(story_id, root=root, newer_ok=newer_ok)
         session = cls(
             bundle,
             config,

@@ -13,6 +13,7 @@ from pathlib import Path
 
 from sealedlore.models.story import STORY_MODEL_FIELDS
 from sealedlore.storage.atomic import read_json
+from sealedlore.storage.formats import STORY_FORMAT, format_of, newer_story_words
 from sealedlore.storage.paths import is_safe_story_id, stories_dir
 from sealedlore.storage.repository import VISUAL_ELSEWHERE
 
@@ -35,6 +36,9 @@ class StoryListing:
     played: str = ""
     # This story's own models, by role: blank ones go with the settings.
     models: dict[str, str] = field(default_factory=dict)
+    # Saved by a newer SealedLore (storage/formats.py): `error` says so, and
+    # opening it asks first.
+    newer: bool = False
 
     @property
     def kind(self) -> str:
@@ -81,6 +85,18 @@ def story_listings(root: Path | None = None) -> list[StoryListing]:
                         0,
                         str(story.get("updated_at") or ""),
                         error=VISUAL_ELSEWHERE,
+                    )
+                )
+                continue
+            if (found := format_of(story)) > STORY_FORMAT:
+                out.append(
+                    StoryListing(
+                        entry.name,
+                        str(story.get("title") or entry.name),
+                        0,
+                        str(story.get("updated_at") or ""),
+                        error=newer_story_words(found),
+                        newer=True,
                     )
                 )
                 continue
