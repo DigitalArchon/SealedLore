@@ -1936,8 +1936,10 @@ it, that request is left out (see "Models SealedLore adjusts for").
 Each character's model is given their card (summary, description,
 personality, voice and skills) and the story's setting. It also gets the
 story as they saw it: the scenes they were in, the storyteller's passages,
-your turns without their out-of-character notes, and their own earlier
-answers. The most recent of it goes whole. What they saw before that, they
+and your turns without their out-of-character notes. Not their own earlier
+answers: an answer is only what they meant to do, and the passages say what
+came of it, so nothing they meant to do and never did, or made up, stays with
+them as if it had happened. The most recent of it goes whole. What they saw before that, they
 are given as their own memory of it: a few notes in their own words for each
 older stretch, written by the summarisation model the first time it is
 needed, and again for a stretch you edit or a branch that goes another way.

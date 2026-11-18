@@ -94,22 +94,23 @@ def _entry(
 ) -> str:
     """One message as this character saw it, or "" for one they never see."""
     if node.kind == "assistant":
-        lines = [node.content.strip()]
-        own = [r for r in node.meta.reactions if r.character_id == character.id]
-        lines += [texts.fill("characters.own.answered", text=r.text.strip()) for r in own]
-        return "\n\n".join(line for line in lines if line)
+        # The passage alone: never their own earlier answer to it, which is
+        # only what they meant to do. Measured Nov 18 2026 (design/own-models.md,
+        # "Answer length and what they remember"): with their answers in their
+        # history, trap questions about intentions the story never carried out
+        # or facts they made up were answered as if true 51 times in 96; with
+        # them left out (from their memory notes too), 20. A "(You meant to:)"
+        # label barely helped; a memory rule halved the errors at best.
+        return node.content.strip()
     if node.speaker_id == DIRECTOR_SPEAKER_ID:
         return ""  # Direction is to the storyteller alone
     # The author's turn, or Narration (in-story prose, true), without its OOC
     # note: that is to the storyteller.
     speaker = cast_by_id.get(node.speaker_id)
     tag = render_speaker_tag(node.speaker_id, speaker, texts)
-    lines = [f"{tag}\n{node.content.strip()}" if node.content.strip() else ""]
-    # Their own answer to this turn, when the story has them answer after the
-    # author's (`round_after`), as after a passage.
-    own = [r for r in node.meta.reactions if r.character_id == character.id]
-    lines += [texts.fill("characters.own.answered", text=r.text.strip()) for r in own]
-    return "\n\n".join(line for line in lines if line)
+    # Their own answers to this turn (the story's round "after") are left
+    # out, as after a passage.
+    return f"{tag}\n{node.content.strip()}" if node.content.strip() else ""
 
 
 def seen_entries(

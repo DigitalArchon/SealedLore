@@ -1609,6 +1609,14 @@ _text(
     (("setting", "the story's setting text"),),
 )
 
+# Its last sentences measured Nov 18 2026 (design/own-models.md, "Answer
+# length and what they remember"; kit tools/testbed/data/own_models/round2):
+# "A few sentences." gave answers as long as the passages (median 160-210
+# words), some in third person narrating, which blind judges found too much to
+# weave in. Five wordings on 9 real rounds, MiMo V2.6 Pro, Sonnet 4.6, Opus
+# 5.5: this one ranked first on both judges (median 82-93 words, none too
+# much); "under about 60 words" was too little to use. The present tense and
+# "I say… / I mean to…" stopped MiMo copying the history's third person.
 _text(
     "characters.own.rules",
     OWN,
@@ -1625,7 +1633,10 @@ say (in quotation marks), what you do or mean to do next, and briefly what
 you think or feel. It is your intention, not something that has happened
 yet: the storyteller decides what comes of it, alongside what the others
 do. Never write another character's words, actions or thoughts, and never
-narrate what happens. A few sentences.""",
+narrate what happens. Under about 80 words, all of it your own: what you say
+and what you mean to do, in the present tense ("I say…", "I mean to…"). No
+description of the place or of anyone else, no narration, nothing told as if
+it had already happened.""",
     (("name", "the character's name"),),
 )
 
@@ -1674,12 +1685,11 @@ _text(
     "remember of it.",
     """\
 You keep the memory of {name}, a character in a collaborative story. Below
-are scenes {name} was in, as {name} saw them; where {name} answered a passage,
-their answer is marked. Write what {name} will remember of them, in the first
-person, as {name}: what happened in front of them, what was said to them and
-by them, what they did, decided, promised or found out, and how they stand
-with the people in it. Keep the names, places, numbers and exact words that
-matter. Only what {name} saw, heard or was told: nothing that happened
+are scenes {name} was in, as {name} saw them. Write what {name} will
+remember of them, in the first person, as {name}: what happened in front of
+them, what was said to them and by them, what they did, decided, promised or
+found out, and how they stand with the people in it. Keep the names, places,
+numbers and exact words that matter. Only what {name} saw, heard or was told: nothing that happened
 elsewhere. About {words} words, plain notes, no story-telling.""",
     (("name", "the character's name"), ("words", "about how many words")),
 )
@@ -1697,16 +1707,6 @@ _text(
     "If something comes up that isn't in what you remember or in the story below, you don't "
     "remember it: say so, as {name} would, rather than make it up.",
     (("name", "the character's name"),),
-)
-
-_text(
-    "characters.own.answered",
-    OWN,
-    "A character's own prompt: what they answered before",
-    "After a passage in the character's own history: what they answered it with then. Only "
-    "their own answers, never another character's.",
-    "(You answered: {text})",
-    (("text", "what they answered then"),),
 )
 
 _text(

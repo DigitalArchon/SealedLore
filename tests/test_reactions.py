@@ -299,8 +299,8 @@ def test_after_the_turn_no_round_follows_the_passage(tmp_path: Path) -> None:
         MAELA_MODEL,
         "story-model",
     ]
-    # Their earlier answer is in their own history, after the turn it answered.
-    assert "(You answered: Lamp up.)" in sent(round_calls(session)[1])
+    # Their earlier answer isn't in their history: only what the passage made of it.
+    assert "Lamp up." not in sent(round_calls(session)[1])
 
 
 def test_regenerate_sends_the_same_answers_without_asking_again(tmp_path: Path) -> None:
@@ -354,7 +354,9 @@ def test_answers_are_blind_to_each_other_in_a_round_and_after(tmp_path: Path) ->
     play(session, turn("I go in."))
     idris_two, maela_two = round_calls(session)[2:]
     assert "MAELA-ONE" not in sent(idris_two)  # another's intention is theirs alone
-    assert "IDRIS-ONE" in sent(idris_two)  # their own earlier answer is theirs
+    # Nor their own: an answer is only what they meant to do, and their
+    # history keeps what the passages show happened (measured, Nov 18 2026).
+    assert "IDRIS-ONE" not in sent(idris_two)
     assert "IDRIS-ONE" not in sent(maela_two)
 
 
@@ -404,7 +406,7 @@ def test_older_scenes_give_way_to_the_budget(tmp_path: Path) -> None:
         cast=session.cast,
         character=maela,
         history=session.path(),
-        budget=20,
+        budget=10,  # room for the newest only
     )
     text = "\n".join(p.text for m in messages for p in m.parts)
     assert "NEWEST passage." in text  # the passage they answer always stays
