@@ -2608,9 +2608,14 @@ class StorySession(
         self._last_completed = completed
         # An end-to-end encrypted reply: opened with the attested enclave's key.
         self._last_sealed = completed is not None and completed.sealed
-        if self.story.chat and span is None and self.last_result is not None:
-            # A TEE chat's reply: signed by the enclave that was attested?
-            self._check_tee(self.last_result.node)
+        if span is None and self.last_result is not None:
+            if self.story.chat:
+                # A TEE chat's reply: signed by the enclave that was attested?
+                self._check_tee(self.last_result.node)
+            elif self._last_sealed:
+                # A story's passage on an end-to-end encrypted model: opened
+                # with the attested key, marked so (the scene's is, below).
+                self._check_tee(self.last_result.node)
         # A model caught reasoning though asked for nothing: said at once, and
         # kept under the passage, so the slow start reads as the model's.
         written = self.last_result.node if self.last_result is not None else None

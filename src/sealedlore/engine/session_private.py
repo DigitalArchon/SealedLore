@@ -999,10 +999,13 @@ class PrivateRuntime:
         much of it came. A TEE/ model whose replies are checked is "unchecked"
         until its check says otherwise. A TEE/ model with "Check TEE models"
         off is just a model, and its passages unmarked, as before."""
-        if span is None and not self.story.chat:
-            return None
+        # A story's passage on an end-to-end encrypted model is marked too
+        # (the author, Nov 19 2026, once the Private profile made every job
+        # one): its reply is as proved as a scene's.
         if self.privacy(model).sealed:
             return "encrypted"
+        if span is None and not self.story.chat:
+            return None
         return "unchecked" if self.private_tee is not None else None
 
     def _check_tee(self, node: Node | None) -> None:
