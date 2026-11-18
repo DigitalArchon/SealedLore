@@ -536,6 +536,7 @@ def test_settings_tests_the_fields_as_they_stand(app, tmp_path: Path, story):
     dialog.plot_model.setText("")
     dialog.lore_model.setText("")
     dialog.image_prompt_model.setText("")
+    dialog.record_model.setText("")
     dialog.private_url.setText("http://localhost:11434/v1")
     dialog.private_model.setText("local/model")
 
@@ -543,7 +544,7 @@ def test_settings_tests_the_fields_as_they_stand(app, tmp_path: Path, story):
     assert [(t.model, t.roles) for t in targets] == [
         ("big/storyteller", ("Story", "Summarisation", "Authoring", "Image prompt writer")),
         ("this/story", ("This story",)),
-        ("small/reader", ("Scene", "Plot", "Lore")),
+        ("small/reader", ("Scene", "Plot", "Lore", "Public record")),
         ("local/model", ("Private",)),
     ]
     assert targets[0].settings.api_key == "typed-key"

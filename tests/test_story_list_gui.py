@@ -307,7 +307,15 @@ def test_setup_lists_the_story_s_models_blank_with_the_settings_in_grey(app):
     dialog = SetupDialog(story, [], models=choices(scene_model="s/scene"))
     assert "Models" in tab_names(dialog)
     fields = dialog.model_fields
-    assert set(fields) == {"story", "summarisation", "authoring", "scene", "lore", "image_prompt"}
+    assert set(fields) == {
+        "story",
+        "summarisation",
+        "authoring",
+        "scene",
+        "lore",
+        "image_prompt",
+        "record",
+    }
     assert fields["story"].text() == "" and fields["story"].placeholderText() == "m/settings"
     assert fields["scene"].placeholderText() == "s/scene"
     assert fields["authoring"].placeholderText() == "m/settings", "its fallback"

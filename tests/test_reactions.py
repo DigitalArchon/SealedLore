@@ -92,6 +92,7 @@ def make_session(
     cast: list[Character] | None = None,
     provider: MockChatProvider | None = None,
     reads: bool = False,
+    record: bool = False,
 ) -> StorySession:
     story = story or a_story()
     bundle = StoryBundle(story=story, cast=cast if cast is not None else a_cast())
@@ -104,6 +105,9 @@ def make_session(
     # Off unless a test is about the reads: then each turn's calls are the
     # passage, the scene read's JSON, then the round.
     config.scene_reads = "every_turn" if reads else "manual"
+    # The public record (tests/test_public_record.py) is a call of its own
+    # before each round: off here, where the round is what is tested.
+    config.public_record = record
     if provider is not None:
         provider.responses = list(responses)
     return StorySession(

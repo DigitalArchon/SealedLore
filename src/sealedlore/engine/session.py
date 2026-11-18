@@ -186,6 +186,7 @@ from sealedlore.engine.session_reactions import ReactionRuntime
 from sealedlore.engine.session_reasoning import ReasoningRuntime
 from sealedlore.engine.session_rebuild import RebuildRuntime
 from sealedlore.engine.session_recall import RecallRuntime
+from sealedlore.engine.session_record import RecordRuntime
 from sealedlore.engine.session_suggest import SuggestRuntime
 from sealedlore.engine.story_plot import plot_uses, take_out_character
 from sealedlore.engine.tokens import TokenEstimator, updated_correction_factor
@@ -581,6 +582,7 @@ class StorySession(
     CastRuntime,
     SuggestRuntime,
     ReactionRuntime,
+    RecordRuntime,
 ):
     def __init__(
         self,
@@ -891,6 +893,7 @@ class StorySession(
             "lore": defaults.lore_model or self.config.lore_model,
             "authoring": defaults.authoring_model or self.config.authoring_model,
             "image_prompt": defaults.image_prompt_model or self.config.image_prompt_model,
+            "record": defaults.record_model or self.config.record_model,
         }
         role = role_in_use(role, own)
         if self.tee_chat:

@@ -1987,6 +1987,21 @@ starts, nor another character's answer or the storyteller's notes. A
 character who isn't in the scene isn't asked. Nothing runs in a private
 scene or a simple chat.
 
+**The public record.** A character who was away still hears the news. After
+every passage a cheap model keeps a short record of what everyone where the
+story is set knows by now: announcements, what a crowd saw, what the papers
+printed, events too big to stay quiet, kept to how things stand now. Each
+character played by their own model is given it before the story as they saw
+it, so one who comes back after a week knows what the whole station heard
+meanwhile. What was said in a room among a few people, or in confidence,
+stays out of it: the keeper keeps notes of those for itself, so it knows to
+leave them out when they come up again, and no character ever sees the
+notes. It runs only while the story has a character played by their own
+model, on the **Public record model** (Settings → Models; blank, the scene
+model), and **Keep a public record for characters on their own models**
+there turns it off. What their
+model is sent… shows it as their model gets it.
+
 **What their model is sent…**, under Played by on their card, shows their
 model's next request as it stands, section by section. It also has your
 **Notes for their model** (how to play them, beyond what the card says; the

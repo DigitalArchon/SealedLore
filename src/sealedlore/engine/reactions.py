@@ -34,6 +34,7 @@ import hashlib
 from collections.abc import Callable, Sequence
 
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
+from sealedlore.engine.public_record import render_record
 from sealedlore.engine.rules import (
     full_description_text,
     render_competence_line,
@@ -323,6 +324,7 @@ def reaction_messages(
     recollections: Sequence[Recollection] = (),
     unsure: bool = True,
     after_turn_of: str | None = None,
+    public_record: Sequence[str] = (),
 ) -> list[PromptMessage]:
     """One character's request: their card and the setting in the system
     message (the same every round, so a model that caches can), what they
@@ -331,7 +333,10 @@ def reaction_messages(
     ask. `unsure`: told to say so when they don't remember something.
     `after_turn_of`: the story has them answer after the author's turn, the
     last of `history`; who took it (the author's character, or "the author"),
-    for the ask that says so (`characters.own.ask.after`).
+    for the ask that says so (`characters.own.ask.after`). `public_record`:
+    what everyone where the story is set knows by now (engine/public_record.py),
+    before the story as they saw it, so one who was away knows what they would
+    have heard.
 
     `cast` is the cast models may see (plot-hidden cards left out)."""
     system = [texts.fill("characters.own.system", name=character.name, card=_card(character))]
@@ -358,6 +363,7 @@ def reaction_messages(
     if chain:
         body.append(texts["characters.own.memory.heading"])
         body.append("\n\n".join(memory.content.strip() for memory in chain))
+    body.append(render_record(public_record, texts))
     body.append(texts["characters.own.history.heading"])
     if trimmed:
         body.append(texts["characters.own.trimmed"])

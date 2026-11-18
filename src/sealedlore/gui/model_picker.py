@@ -234,6 +234,7 @@ ADVICE_ROLES = {
     "scene_model": "scene",
     "plot_model": "plot",
     "lore_model": "lore",
+    "record_model": "record",
 }
 # Prompt adjustments' uses, as the list names them.
 TUNED_ROLES = {"storyteller": "storyteller", "character": "character"}

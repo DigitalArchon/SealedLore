@@ -188,6 +188,12 @@ class NodeMeta(BaseModel):
     # its round ran, so `reactions` here (perhaps none) are what the
     # storyteller is given with it, never the passage before's.
     round_after: bool = False
+    # On a passage the public record was kept after (engine/public_record.py):
+    # the record as it stood after it, a snapshot as `scene` is (the record
+    # anywhere is the nearest above), and the keeper's own notes of what was
+    # said in confidence, which no model but the keeper is ever shown.
+    public_record: list[str] | None = None
+    public_notes: list[str] | None = None
 
 
 class Reaction(BaseModel):

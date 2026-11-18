@@ -24,6 +24,7 @@ ROLE_NAMES = {
     "lore": "Lore picks",
     "authoring": "Authoring",
     "image_prompt": "Picture prompts",
+    "record": "Public record",
 }
 
 

@@ -67,6 +67,12 @@ USES = (
     ("scene_model", "Scene model", "", "Reads the scene after every passage."),
     ("plot_model", "Plot model", "", "Decides when the plot's events happen."),
     ("lore_model", "Lore model", "", "Picks the lore a turn needs, for a large lorebook."),
+    (
+        "record_model",
+        "Public record model",
+        "",
+        "Keeps what everyone knows, for characters played by their own model (a trial).",
+    ),
 )
 
 

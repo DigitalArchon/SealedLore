@@ -68,6 +68,7 @@ ROLE_NAMES = {
     "plot": "Plot",
     "lore": "Lore picks",
     "image_prompt": "Picture prompts",
+    "record": "Public record",
 }
 
 

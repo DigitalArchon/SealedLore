@@ -29,6 +29,9 @@ ROUTE_ROLES: dict[str, str | None] = {
     "plot": "scene",
     "lore": "scene",
     "image_prompt": "story",
+    # The public record for characters played by their own model
+    # (engine/public_record.py): after each passage, a cheap model.
+    "record": "scene",
 }
 
 

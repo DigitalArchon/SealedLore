@@ -78,7 +78,9 @@ class ReactionRuntime:
         passage = result.node
         if passage.kind != "assistant":
             return
-        yield from self._round(self.path(), passage)
+        history = self.path()
+        yield from self.keep_public_record(history)
+        yield from self._round(history, passage)
 
     def react_to_turn(self, turn_node, history) -> Iterator[SessionNotice]:
         """The round after the author's turn (`StoryDefaults.round_order`
@@ -93,6 +95,7 @@ class ReactionRuntime:
             return
         held = self._character(turn_node.meta.controlled_character_id)
         player = held.name if held is not None else "The author"
+        yield from self.keep_public_record(history)
         yield from self._round([*history, turn_node], turn_node, after_turn_of=player)
 
     def _round(self, history, store_on, *, after_turn_of: str | None = None):
@@ -135,6 +138,7 @@ class ReactionRuntime:
                     budget=reactions.HISTORY_TOKENS,
                     recollections=self.bundle.memories,
                     after_turn_of=after_turn_of,
+                    public_record=self.public_record(history),
                 ),
                 params=self.side_params(model),
                 # The character's own route: a route is otherwise a role's,
@@ -363,6 +367,7 @@ class ReactionRuntime:
             budget=reactions.HISTORY_TOKENS,
             recollections=self.bundle.memories,
             after_turn_of=after,
+            public_record=self.public_record(history),
         )
 
     def memories_of(self, character_id: str) -> list[Recollection]:

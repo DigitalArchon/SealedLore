@@ -91,6 +91,7 @@ def config_role_model(config: Config, role: str) -> tuple[str, str]:
         "lore": config.lore_model,
         "authoring": config.authoring_model,
         "image_prompt": config.image_prompt_model,
+        "record": config.record_model,
     }
     used = role_in_use(role, own)
     return used, (story_model if used == "story" else own[used] or story_model)
@@ -118,6 +119,7 @@ def config_route(config: Config, role: str, model: str) -> dict[str, Any]:
         "lore": config.lore_model,
         "authoring": config.authoring_model,
         "image_prompt": config.image_prompt_model,
+        "record": config.record_model,
     }
     return route_body(config.model_routes.get(role_in_use(role, own)), model)
 

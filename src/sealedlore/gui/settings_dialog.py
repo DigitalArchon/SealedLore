@@ -844,6 +844,7 @@ class SettingsDialog(QDialog):
             "plot": "Plot model",
             "lore": "Lore model",
             "image_prompt": "Image prompt writer",
+            "record": "Public record model",
         }
         return [(labels.get(role, role), field) for role, field in self._route_fields.items()]
 
@@ -1431,6 +1432,24 @@ class SettingsDialog(QDialog):
         )
         form.addRow("Image prompt writer", self.image_prompt_model)
 
+        self.record_model = self._routed_field(self.config.record_model or "", "record_model")
+        self.record_model.setPlaceholderText("blank: same as the scene model")
+        self.record_model.setToolTip(
+            "Keeps the public record for characters played by their own model (a trial): "
+            "after each passage, what everyone where the story is set knows by now, so a "
+            "character who was away knows what they would have heard. It reads one passage "
+            "at a time, so a cheap model does well here."
+        )
+        self.public_record = QCheckBox("Keep a public record for characters on their own models")
+        self.public_record.setChecked(self.config.public_record)
+        self.public_record.setToolTip(
+            "Only in a story with a character played by their own model (a trial): after each "
+            "passage, what everyone where the story is set knows by now, so one who was away "
+            "knows what they would have heard. Untick and they know only what they saw."
+        )
+        form.addRow(self.public_record)
+        form.addRow("Public record model", self.record_model)
+
         self.recommended = QPushButton("Use recommended models")
         self.recommended.setToolTip(
             "Fill in the models that measured well for the small calls made on every turn "
@@ -1466,6 +1485,7 @@ class SettingsDialog(QDialog):
             "plot": self.plot_model,
             "lore": self.lore_model,
             "image_prompt": self.image_prompt_model,
+            "record": self.record_model,
         }
         for role, field in self._route_fields.items():
             field.set_route(self.config.model_routes.get(role))
@@ -1520,6 +1540,7 @@ class SettingsDialog(QDialog):
             role("Plot", self.plot_model, "Scene"),
             role("Lore", self.lore_model, "Scene"),
             role("Image prompt writer", self.image_prompt_model, "Story"),
+            role("Public record", self.record_model, "Scene"),
         ]
         private = self._private_test_settings()
         if private is not None and private.model.strip():
@@ -3152,6 +3173,8 @@ class SettingsDialog(QDialog):
         config.lore_token_cap = kept(self.lore_cap, self.lore_cap.value(), config.lore_token_cap)
         self.config.lore_selector = self.lore_selector.currentData()
         self.config.lore_model = self._role_model(self.lore_model)
+        self.config.record_model = self._role_model(self.record_model) or None
+        self.config.public_record = self.public_record.isChecked()
 
         saved = self.config.generation
         stop = [item.strip() for item in self.stop.text().split(",") if item.strip()]

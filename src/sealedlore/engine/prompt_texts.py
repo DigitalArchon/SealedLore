@@ -1673,6 +1673,96 @@ _text(
     (),
 )
 
+# The public record (engine/public_record.py): what everyone where the story is
+# set knows by now, kept after every passage by a cheap model, so a character
+# who was away knows what they would have heard. Measured on two scripted
+# stories, every record graded blind (design/own-models.md, "A public record"):
+# a scene's privacy as a gate lost a city-wide event; edits-only replies only
+# ever added; "known to the command crew" let room talk in. This wording (only
+# what everyone would know, revise first, check against the private notes, the
+# whole record back) on GLM 5.3: 38 of 39 and 33 of 33 public events covered
+# over three runs, a confidence let in on 2 of 41 passages of one run, none in
+# the two since the notes check.
+_text(
+    "characters.own.record.keep",
+    OWN,
+    "The public record: the keeper's prompt",
+    "Asks the record keeper to bring the public record up to date with the latest passage: "
+    "only what everyone there would know, how things stand now, the old facts checked before "
+    "anything is added, and its own private notes so what was said in confidence stays out.",
+    """\
+You keep the public record of a story: what everyone where it is set (the \
+station, city or town) knows by now. Below are the record as it stands \
+(numbered), your private notes, and the story's {what}.
+
+PUBLIC means everyone there would know it by now: an announcement, something a \
+crowd saw, news printed or broadcast, an event too big to stay quiet. Test \
+every fact: would a stranger in the street, the corridor or the market have \
+heard it by now? If not, it is not public. So NOT public: what was said or \
+done among a few people in a room, even officers at work or friends in a \
+workshop, unless it is then announced to all; and anything said in private or \
+in confidence, however it comes up later. A scene's privacy mark says who was \
+in the room, not whether what happened there stayed in it.
+
+YOUR PRIVATE NOTES are yours alone, never shown to anyone: short notes of what \
+was said or done in private or in confidence, or among a few people (who knew \
+what). They are how you keep those things out of the record when they surface \
+later, however they are mentioned.
+
+Do it in this order:
+1. Check every fact already in the record against the story. Rewrite any it \
+makes untrue or out of date (a state that changed, a "now" or "tonight" that \
+has passed); drop what no longer matters. (Not "The guards seized her sword" \
+beside "the captain gave it back", but "She has her sword again: the guards \
+seized it after the brawl and the captain gave it back".)
+2. Then add what it made public.
+3. Last, check every fact you keep or add against your private notes: if it \
+repeats, hints at or depends on anything in them, leave it out.
+
+Each fact is one plain sentence: past tense for what happened, present tense \
+only for how things stand now. Who did what, named as the story names them. \
+Only what the story states: don't infer, count or embellish. Routine workings \
+are not news. At most {limit} facts: when it would run over, drop what \
+matters least.
+
+Reply with JSON only: the whole record as it now stands, and any new private notes:
+{"facts": ["...", "..."], "private": ["a new private note"]}
+
+THE RECORD NOW:
+{record}
+
+YOUR PRIVATE NOTES:
+{notes}
+
+{passages}""",
+    (
+        ("what", '"latest passage" or "latest N passages, oldest first"'),
+        ("limit", "the most facts the record holds"),
+        ("record", "the record now, numbered"),
+        ("notes", "the keeper's private notes, numbered"),
+        ("passages", "the passage or passages to read, each with its scene and mark"),
+    ),
+)
+
+_text(
+    "characters.own.record.heading",
+    OWN,
+    "A character's own prompt: the public record",
+    "Over the public record in a character's request, before the story as they saw it.",
+    "WHAT EVERYONE HERE KNOWS BY NOW: the public record of where the story is set, as it "
+    "stands today. What you saw yourself, below, is yours.",
+    (),
+)
+
+_text(
+    "characters.own.record.empty",
+    OWN,
+    "The public record: nothing yet",
+    "Stands for an empty record or empty notes in the keeper's prompt.",
+    "(nothing yet)",
+    (),
+)
+
 # What a character remembers of the scenes older than their recent window
 # (models/memory.py). The memory probe (design/own-models.md): past the window
 # their model invented an answer to 12 of 12 questions about their own past,

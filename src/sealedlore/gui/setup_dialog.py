@@ -86,6 +86,11 @@ MODEL_ROLES = (
     ("plot", "Plot model", "Decides when the plot's events happen."),
     ("lore", "Lore model", "Picks lore after each passage, when a lorebook is too large to send."),
     ("image_prompt", "Image prompt writer", "Writes the image prompt from the story."),
+    (
+        "record",
+        "Public record model",
+        "Keeps what everyone knows, for characters played by their own model (a trial).",
+    ),
 )
 # What a simple chat calls (engine/chat.py), and what it calls its own model.
 CHAT_MODEL_ROLES = ("story", "summarisation", "image_prompt")

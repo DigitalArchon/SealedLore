@@ -34,7 +34,10 @@ def app() -> QApplication:
 def own_window(tmp_path: Path, story, cast, responses: list[str]):
     cast[1].own_model = MODEL  # Maela, in the scene
     cast[1].is_player_available = False
-    return _window(tmp_path, story, cast, responses)
+    window = _window(tmp_path, story, cast, responses)
+    # The public record's own call is tested in tests/test_public_record.py.
+    window.config.public_record = False
+    return window
 
 
 def answer_texts(window, node_id: str) -> list[str]:

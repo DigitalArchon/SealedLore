@@ -295,6 +295,26 @@ RECOMMENDED_TEXT_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
             "7-9), with the fewest contradictions of the lore, but outside the subscription.",
         ),
     ),
+    # The public record (engine/public_record.py): five keepers compared on two
+    # scripted stories, blind judges (SealedLoreDocs design/own-models.md).
+    "record_model": (
+        RecommendedModel(
+            id="z-ai/glm-5.3",
+            label="GLM 5.3",
+            tag="recommended",
+            note="Kept the most complete record of five compared on two long stories: every "
+            "public event a returning character should know, on both, with a few small errors. "
+            "Included in a NanoGPT subscription, and the scene model too, so leaving this blank "
+            "uses it.",
+        ),
+        RecommendedModel(
+            id="anthropic/claude-opus-5.5",
+            label="Claude Opus 5.5",
+            tag="premium",
+            note="The cleanest record (nothing wrong, nothing private let in) but less complete, "
+            "and about 4¢ a passage, some 30 times the cost.",
+        ),
+    ),
 }
 
 
@@ -1295,6 +1315,13 @@ class Config(BaseModel):
     lore_selector: LoreSelector = "picker"
     lore_model: str = "deepseek/deepseek-v4.1-flash"
     lore_decision_model: str = "typesafe/jev-1.13"
+    # The public record for characters played by their own model
+    # (engine/public_record.py): what everyone where the story is set knows by
+    # now, kept after each passage while the story has such a character, so
+    # one who was away knows what they would have heard. `record_model` keeps
+    # it (blank: the scene model).
+    public_record: bool = True
+    record_model: str | None = None
 
     # Caching (§6.2). "auto" applies cache_control blocks only to models whose
     # ID matches one of the patterns below; "on"/"off" force it either way.

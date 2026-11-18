@@ -76,6 +76,7 @@ STORY_MODEL_FIELDS = {
     "plot": "plot_model",
     "lore": "lore_model",
     "image_prompt": "image_prompt_model",
+    "record": "record_model",
 }
 
 
@@ -106,6 +107,7 @@ class StoryDefaults(BaseModel):
     plot_model: str | None = None
     lore_model: str | None = None
     image_prompt_model: str | None = None
+    record_model: str | None = None
     # The route of each role with its own model here, by role: a route belongs
     # to its model, and a role following Settings takes Settings' route.
     model_routes: dict[str, ModelRoute] = Field(default_factory=dict)
