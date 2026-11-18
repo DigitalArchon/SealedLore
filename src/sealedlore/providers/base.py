@@ -29,6 +29,10 @@ class ChatRequest:
     # How long Anthropic keeps the cached prefix: "5m", or "1h" (see wire.py).
     cache_ttl: str = "5m"
     extra_body: dict[str, Any] = field(default_factory=dict)
+    # What the call is for, for the run's call log alone (call_log.py): the
+    # API log's kind of request ("scene_request"), set as it is logged. Never
+    # sent.
+    purpose: str = field(default="", compare=False, repr=False)
 
 
 @dataclass(frozen=True)

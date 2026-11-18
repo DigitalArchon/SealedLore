@@ -20,7 +20,8 @@ from typing import Any
 
 import httpx
 
-from sealedlore.providers.base import ProviderError, checked_key
+from sealedlore.call_log import CALLS, DECISION, plain_protection
+from sealedlore.providers.base import ProviderError, checked_key, parse_usage
 from sealedlore.providers.http import make_client, reply_json
 from sealedlore.providers.privacy import plain_refusal
 
@@ -107,6 +108,32 @@ class DecisionsClient:
         if refusal:
             raise ProviderError(refusal)
         payload = build_decisions_payload(model, state, questions)
+        # Kept in the run's call log (call_log.py), with nothing of the story.
+        call = CALLS.start(
+            DECISION,
+            model,
+            endpoint="Jev",
+            address=self.endpoint,
+            protection=plain_protection(self.endpoint),
+        )
+        try:
+            decisions = self._decided(model, payload, questions)
+        except Exception as exc:
+            CALLS.finish(call, "failed", detail=str(exc).splitlines()[0] if str(exc) else "")
+            raise
+        usage = parse_usage(decisions.raw_usage)
+        CALLS.finish(
+            call,
+            "done",
+            tokens_in=usage.prompt_tokens,
+            tokens_out=usage.completion_tokens,
+            cost=usage.cost if usage.cost_reported else None,
+        )
+        return decisions
+
+    def _decided(
+        self, model: str, payload: dict[str, Any], questions: Mapping[str, str]
+    ) -> Decisions:
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {checked_key(self.api_key, 'decisions')}"

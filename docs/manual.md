@@ -3134,7 +3134,9 @@ verifier:
 - the release must be the latest one on Tinfoil's GitHub, or the model
   button says "⚠ older release".
 
-Replies are marked "end-to-end encrypted", and the attestation is redone
+Replies are marked "end-to-end encrypted" (in a private scene, a chat, or a
+whole story played on such a model, as the Private profile does), and the
+attestation is redone
 every five minutes (time the computer spends asleep counts). Tinfoil's
 verifier, and the Sigstore library it checks the release with (Sigstore's
 public trust root included), follow no redirect off https, nor one from the
@@ -3630,6 +3632,21 @@ before Save (Choose, Test speed…, Test attestation and Detect use the keys
 as typed), and `sealedlore configure` warns; one sent to this computer itself
 (`localhost`, `127.0.0.1`) never leaves it. There is no telemetry, no update check and no
 crash reporting.
+
+**Seeing every call.** **View → AI calls this session…** lists every call
+SealedLore has made to a model since it started, newest first, and keeps up
+while it is open: what it was for (a passage, a scene read, a chapter, a
+picture…), the model, the endpoint and its host, and any NanoGPT route asked
+for (a host, or the fastest or cheapest), how its content travelled (end-to-end
+encrypted, and to which service, with the reply opened by the attested key; a
+TEE model; or HTTPS only, where the provider can read it), the tokens sent and
+received (with what was read from the cache), how long it took, its cost and
+whether it finished. A cost the endpoint stated is shown as it is; one it
+didn't is estimated from the model's listed prices and marked ~; with neither
+it says so. Nothing that was said is kept there, and the list is in memory
+only, gone when SealedLore closes: **Clear** empties it, **Copy** copies it as
+text. Calls a private scene or a memory-only chat makes are listed too, by
+model and cost alone, like the rest.
 
 - **The chat endpoints** (Settings → Endpoints) get every prompt: the world,
   cast, lore, the recent story and your turn; the chapter summaries, scene

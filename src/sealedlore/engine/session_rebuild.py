@@ -212,6 +212,7 @@ class RebuildRuntime:
                         messages=messages,
                         params=item.request.params,
                         extra_body=item.request.extra_body,
+                        purpose="merge_request" if item.is_part else "summary_request",
                     )
                     try:
                         item.reply = client.complete(item.request)

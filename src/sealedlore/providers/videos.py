@@ -40,9 +40,10 @@ from urllib.parse import urlparse
 
 import httpx
 
+from sealedlore.call_log import CALLS, MEDIA_SERVICES, VIDEO, plain_protection
 from sealedlore.models.config import _same_host, media_api
 from sealedlore.providers import wavespeed
-from sealedlore.providers.base import ProviderError
+from sealedlore.providers.base import ProviderError, StreamCancelled
 from sealedlore.providers.http import make_client, reply_json
 from sealedlore.providers.media_http import MediaHttp
 from sealedlore.providers.privacy import MEDIA_WAY_OUT, plain_refusal
@@ -592,7 +593,28 @@ class VideoClient:
     # -- submit ------------------------------------------------------------------------
 
     def submit(self, payload: dict[str, Any]) -> VideoJob:
-        """Send a request. Once this returns, the video is being made and paid for."""
+        """Send a request. Once this returns, the video is being made and paid
+        for: kept in the run's call log (call_log.py) as sent and accepted,
+        with what the endpoint charged where it says."""
+        call = CALLS.start(
+            VIDEO,
+            str(payload.get("model") or ""),
+            endpoint=MEDIA_SERVICES.get(self.api, self.api),
+            address=self.base_url,
+            protection=plain_protection(self.base_url),
+        )
+        try:
+            job = self._submitted(payload)
+        except StreamCancelled:
+            CALLS.finish(call, "stopped")
+            raise
+        except Exception as exc:
+            CALLS.finish(call, "failed", detail=str(exc).splitlines()[0] if str(exc) else "")
+            raise
+        CALLS.finish(call, "done", detail="accepted, being made", cost=job.charged)
+        return job
+
+    def _submitted(self, payload: dict[str, Any]) -> VideoJob:
         if self.api == "nanogpt":
             body = self.http.json(
                 "POST", f"{nanogpt_root(self.base_url)}/generate-video", json=payload, makes=True

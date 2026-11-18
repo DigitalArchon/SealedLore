@@ -17,6 +17,7 @@ from typing import Any
 
 import httpx
 
+from sealedlore.call_log import CALLS
 from sealedlore.models.config import on_chutes, on_nanogpt
 from sealedlore.providers.base import (
     ChatRequest,
@@ -119,6 +120,12 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
         return headers
 
     def build_payload(self, request: ChatRequest) -> dict[str, Any]:
+        """The body as sent, the request remembered for the call log
+        (call_log.py `built`)."""
+        CALLS.built(request)
+        return self._body(request)
+
+    def _body(self, request: ChatRequest) -> dict[str, Any]:
         return build_chat_payload(request, provider_extra_body=self.config.extra_body)
 
     # --- what a subclass may change about one request (providers/private_mode.py)
@@ -140,7 +147,7 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
             )
         return (
             self.endpoint,
-            self.build_payload(request),
+            self._body(request),
             {**self._headers(), **cache_headers(request)},
         )
 

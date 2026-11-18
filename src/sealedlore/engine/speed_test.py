@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlparse
 
+from sealedlore.call_log import CALLS, SPEED_TEST
 from sealedlore.engine.pricing import estimate_cost
 from sealedlore.engine.reasoning import CallKind
 from sealedlore.engine.tokens import TokenEstimator
@@ -312,6 +313,7 @@ def run_speed_test(
                 max_tokens=max_tokens, reasoning=reasoning or ReasoningConfig()
             ),
         )
+        CALLS.label(SPEED_TEST, model)
         sent = clock()
         first_reasoning = first_text = last_text = None
         reasoning_chars = 0

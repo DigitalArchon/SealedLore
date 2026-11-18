@@ -227,6 +227,7 @@ class ArchivalRuntime:
             scan = _Call(
                 request=ChatRequest(
                     model=model,
+                    purpose="characters_request",
                     messages=build_extraction_messages(
                         "\n\n".join(prose),
                         on_file=on_file,
@@ -254,6 +255,7 @@ class ArchivalRuntime:
                     previous = Summary(content=summary_text) if summary_text else None
                     chapter.summary.request = ChatRequest(
                         model=model,
+                        purpose="summary_request",
                         messages=build_summary_messages(
                             chunk,
                             cast,
@@ -270,6 +272,7 @@ class ArchivalRuntime:
                         chapter.ledger = _Call(
                             request=ChatRequest(
                                 model=model,
+                                purpose="ledger_request",
                                 messages=build_ledger_messages(
                                     ledger_text,
                                     text,

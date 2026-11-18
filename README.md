@@ -37,13 +37,18 @@ fun to play. This app will remain focused on text based roleplay.
 
 ### New in version 3
 
-- **Model profiles**. Settings → Models keeps whole sets of models, each job's
+- **Model profiles, and every call in view** (3.1.0b14). Settings → Models keeps whole sets of models, each job's
   model and its route, to put back with one choice: **Default** (what a new
   setup starts with), **Recommended** (the best measured for each job,
   whatever it costs: Claude Opus 5.5 writes) and **Private** (end-to-end
   encrypted models for every job, on NanoGPT's Private Mode or Tinfoil), or
   your own mix saved under a name. A story's Setup → Models can take a profile
-  as its own. Stories and settings now say which version of SealedLore's
+  as its own. **View → AI calls this session…** lists every call made to a
+  model since SealedLore started: what it was for, the model, the endpoint and
+  any host asked for, whether it was end-to-end encrypted, its tokens, time
+  and cost, never what was said, and only in memory. A story played on an
+  end-to-end encrypted model now marks its passages so, as a private scene
+  does. Stories and settings now say which version of SealedLore's
   layout they are saved in, so an older SealedLore no longer quietly loses
   what a newer one saved: it asks before opening such a story, and doesn't
   save over such settings.

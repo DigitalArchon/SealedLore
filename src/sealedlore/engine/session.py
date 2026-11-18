@@ -18,6 +18,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from sealedlore.call_log import CALLS
 from sealedlore.engine.archival import (
     PathSplit,
     build_summary_messages,
@@ -1303,6 +1304,7 @@ class StorySession(
                 pick.request = ChatRequest(
                     model=pick.model,
                     extra_body=pick.route,
+                    purpose="lore_pick_request",
                     messages=build_pick_messages(
                         pick.passage, pick.scene, pick.candidates, texts=pick.texts
                     ),
@@ -3065,6 +3067,7 @@ class StorySession(
         request = ChatRequest(
             model=self.summarization_model,
             extra_body=self.route_for("summarisation"),
+            purpose="ledger_request",
             messages=build_ledger_messages(
                 previous,
                 prose,
@@ -4803,6 +4806,12 @@ class StorySession(
         in between."""
         entry_id = new_id()
         entry = {"id": entry_id, "kind": kind, "at": utc_now_iso(), **body}
+        if kind.endswith("request"):
+            # What the call about to go is for, in the run's call log
+            # (call_log.py): the request is logged on the thread that sends it.
+            payload = body.get("payload")
+            model = payload.get("model") if isinstance(payload, dict) else body.get("model")
+            CALLS.label(kind, model if isinstance(model, str) else "")
         with self._closing:
             if self._closed:
                 return entry_id

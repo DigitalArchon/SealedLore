@@ -273,7 +273,7 @@ class PrivateModeProvider(SealedEhbpProvider):
         self._get_client()
         verified = self._verified
         assert verified is not None
-        payload = self.build_payload(request)
+        payload = self._body(request)
         size = len(json.dumps(payload).encode("utf-8"))
         scope, upstream = self._preflight(request.model, size)
         body = shape_body(payload, request, upstream)

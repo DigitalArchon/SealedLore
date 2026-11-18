@@ -18,6 +18,7 @@ from typing import Any, Protocol
 
 import httpx
 
+from sealedlore.call_log import CALLS, EMBEDDINGS, plain_protection
 from sealedlore.models.config import EmbeddingProviderConfig
 from sealedlore.models.node import Usage
 from sealedlore.providers.base import ProviderError, checked_key
@@ -158,6 +159,32 @@ class OpenAICompatibleEmbeddings:
         if refusal:
             raise ProviderError(refusal)
         payload = build_embedding_payload(batch, self.config)
+        # Kept in the run's call log (call_log.py), with nothing embedded.
+        call = CALLS.start(
+            EMBEDDINGS,
+            self.config.model,
+            endpoint="Embeddings",
+            address=self.endpoint,
+            protection=plain_protection(self.endpoint),
+        )
+        try:
+            body = self._sent(payload)
+        except Exception as exc:
+            CALLS.finish(call, "failed", detail=str(exc).splitlines()[0] if str(exc) else "")
+            raise
+        usage = body.get("usage")
+        tokens = usage.get("prompt_tokens") if isinstance(usage, dict) else None
+        cost = usage.get("cost") if isinstance(usage, dict) else None
+        CALLS.finish(
+            call,
+            "done",
+            detail=f"{len(batch)} text{'s' if len(batch) != 1 else ''}",
+            tokens_in=tokens if isinstance(tokens, int) else None,
+            cost=cost if isinstance(cost, (int, float)) else None,
+        )
+        return body
+
+    def _sent(self, payload: dict[str, Any]) -> dict[str, Any]:
         try:
             response = self._get_client().post(self.endpoint, json=payload, headers=self._headers())
         except httpx.HTTPError as exc:

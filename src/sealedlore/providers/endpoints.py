@@ -25,6 +25,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import replace
 from typing import Any
 
+from sealedlore.call_log import CALLS
 from sealedlore.models.config import Config, ProviderConfig, qualify, split_model
 from sealedlore.providers.base import (
     ChatProvider,
@@ -211,7 +212,10 @@ class EndpointsProvider(ChatProvider):
 
     def build_payload(self, request: ChatRequest) -> dict[str, Any]:
         provider, inner = self._forwarded(request)
-        return provider.build_payload(inner)
+        payload = provider.build_payload(inner)
+        # This request, not the copy the client was given, is the one sent.
+        CALLS.built(request)
+        return payload
 
     def stream(self, request: ChatRequest) -> Iterator[StreamEvent]:
         with self._lock:

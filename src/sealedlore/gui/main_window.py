@@ -67,6 +67,7 @@ from sealedlore.gui.bad_hosts import bad_hosts
 from sealedlore.gui.banners import HeldAwayBanner, OverBudgetBanner, StalenessBanner
 from sealedlore.gui.branch_bar import BranchBar, opening_words
 from sealedlore.gui.busy_lock import BusyLock
+from sealedlore.gui.call_log_view import CallLogDialog
 from sealedlore.gui.cast_panel import CastPanel
 from sealedlore.gui.composer import DEFAULT_SUFFIX, RETAKE_KEYS, RETAKE_TIPS, Composer
 from sealedlore.gui.fields import PageStack, install_wheel_guard
@@ -1035,6 +1036,13 @@ class MainWindow(
         )
         self.dice_rolls_action.toggled.connect(self.set_show_dice_rolls)
         view_menu.addAction(self.dice_rolls_action)
+        self.calls_action = QAction("&AI calls this session…", self)
+        self.calls_action.setStatusTip(
+            "Every call made to a model since SealedLore started: where it went, how it "
+            "travelled, its tokens and cost (nothing that was said)"
+        )
+        self.calls_action.triggered.connect(self.show_calls)
+        view_menu.addAction(self.calls_action)
         self._answers_action(view_menu)
         self._looks_actions(view_menu)
         self._board_action(view_menu)
@@ -2197,6 +2205,23 @@ class MainWindow(
             self.session.close(wait_seconds=0)
         self.session = session
         self._after_open()
+
+    def show_calls(self) -> None:
+        """View → AI calls this session…: one window, kept open beside the
+        story while wanted (gui/call_log_view.py)."""
+        view = getattr(self, "_calls_view", None)
+        if view is None:
+            view = CallLogDialog(lambda: self.config, self)
+            # Freed once closed (it keeps nothing worth keeping).
+            view.setAttribute(Qt.WA_DeleteOnClose)
+            view.destroyed.connect(self._calls_view_gone)
+            self._calls_view = view
+        view.show()
+        view.raise_()
+        view.activateWindow()
+
+    def _calls_view_gone(self, *_args) -> None:
+        self._calls_view = None
 
     def _open_newer_anyway(self, exc: NewerStory) -> bool:
         """A story a newer SealedLore saved: opened here only if the author

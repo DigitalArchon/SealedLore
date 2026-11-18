@@ -135,6 +135,7 @@ class CastRuntime:
         return ChatRequest(
             model=model,
             extra_body=self.route_for("authoring"),
+            purpose="condense_request",
             messages=build_condense_messages(
                 character, player=self.author_name_for(character), words=words, texts=self.texts
             ),

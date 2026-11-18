@@ -26,6 +26,7 @@ from typing import Any
 
 import httpx
 
+from sealedlore.call_log import CALLS
 from sealedlore.messages import PromptMessage
 from sealedlore.models.config import ProviderConfig, on_chutes
 from sealedlore.providers.anthropic_models import (
@@ -219,6 +220,12 @@ class AnthropicProvider(StreamingHttpProvider):
         return headers
 
     def build_payload(self, request: ChatRequest) -> dict[str, Any]:
+        """The body as sent, the request remembered for the call log
+        (call_log.py `built`)."""
+        CALLS.built(request)
+        return self._body(request)
+
+    def _body(self, request: ChatRequest) -> dict[str, Any]:
         return build_messages_payload(request, provider_extra_body=self.config.extra_body)
 
     def _prepare(self, request: ChatRequest) -> tuple[str, dict[str, Any], dict[str, str]]:
@@ -234,7 +241,7 @@ class AnthropicProvider(StreamingHttpProvider):
                 f"{request.model} is end-to-end encrypted and can only be sent through "
                 "the encrypted client; nothing was sent"
             )
-        payload = self.build_payload(request)
+        payload = self._body(request)
         if not payload["messages"] or payload["messages"][0]["role"] != "user":
             raise ProviderError(
                 "Anthropic's API needs the conversation to begin with a user message, and "

@@ -519,7 +519,7 @@ class TinfoilDirect(SealedEhbpProvider):
         efforts = None
         if entries is not None:
             efforts = list(entries[request.model].get("reasoning_efforts") or [])
-        body = direct_body(self.build_payload(request), request, efforts)
+        body = direct_body(self._body(request), request, efforts)
         body[CACHE_SECRET_FIELD] = self.enclave.cache_secret
         headers = {**self._headers(), "Accept": "text/event-stream"}
         return self.endpoint, body, headers

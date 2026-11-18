@@ -79,6 +79,7 @@ from typing import Any
 
 import httpx
 
+from sealedlore.call_log import CALLS
 from sealedlore.models.config import (
     CHUTES_E2EE_ORIGIN,
     CHUTES_KEY_ORIGINS,
@@ -1001,6 +1002,12 @@ class ChutesE2EEProvider(StreamingHttpProvider):
     # --- one request ------------------------------------------------------------------
 
     def build_payload(self, request: ChatRequest) -> dict[str, Any]:
+        """The body as sent, the request remembered for the call log
+        (call_log.py `built`)."""
+        CALLS.built(request)
+        return self._body(request)
+
+    def _body(self, request: ChatRequest) -> dict[str, Any]:
         """The body sealed to the instance (less our response key): plain text
         messages, streamed with the model server's usage at its end, only the
         fields vLLM's route takes. The app's
@@ -1027,7 +1034,7 @@ class ChutesE2EEProvider(StreamingHttpProvider):
             raise ProviderError(refusal)
         key = self._key()  # before anything is fetched: the address and the key may go there
         model, chute_id = self._chute_for(request.model)
-        body = self.build_payload(request)
+        body = self._body(request)
         instance, nonce = self._instance_and_nonce(model, chute_id)
         sealed = seal_request(instance.pubkey, body)
         opener = StreamOpener(sealed.response_key)

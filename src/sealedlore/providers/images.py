@@ -32,9 +32,10 @@ from typing import Any
 
 import httpx
 
+from sealedlore.call_log import CALLS, MEDIA_SERVICES, PICTURE, plain_protection
 from sealedlore.models.config import media_api
 from sealedlore.providers import wavespeed
-from sealedlore.providers.base import ProviderError
+from sealedlore.providers.base import ProviderError, StreamCancelled
 from sealedlore.providers.http import make_client, reply_json
 from sealedlore.providers.media_http import MediaHttp, MediaTimedOut
 from sealedlore.providers.privacy import MEDIA_WAY_OUT, plain_refusal
@@ -314,8 +315,29 @@ class ImageClient:
         self.http.close()
 
     def generate(self, payload: dict[str, Any]) -> ImageReply:
-        if self.api == "wavespeed":
-            return self._wavespeed(payload)
+        """The picture made, kept in the run's call log (call_log.py)."""
+        call = CALLS.start(
+            PICTURE,
+            str(payload.get("model") or ""),
+            endpoint=MEDIA_SERVICES.get(self.api, self.api),
+            address=self.base_url,
+            protection=plain_protection(self.base_url),
+        )
+        try:
+            reply = self._wavespeed(payload) if self.api == "wavespeed" else self._made(payload)
+        except StreamCancelled:
+            CALLS.finish(call, "stopped")
+            raise
+        except Exception as exc:
+            CALLS.finish(call, "failed", detail=str(exc).splitlines()[0] if str(exc) else "")
+            raise
+        count = len(reply.images)
+        CALLS.finish(
+            call, "done", detail=f"{count} picture{'s' if count != 1 else ''}", cost=reply.cost
+        )
+        return reply
+
+    def _made(self, payload: dict[str, Any]) -> ImageReply:
         response = self.http.request("POST", self.endpoint, json=payload, makes=True)
         try:
             body = reply_json(response)

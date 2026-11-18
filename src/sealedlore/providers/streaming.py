@@ -21,16 +21,18 @@ from typing import Any
 
 import httpx
 
+from sealedlore.call_log import CALLS, TEXT, plain_protection, route_words
 from sealedlore.models.config import ProviderConfig, sealed_service, shown
 from sealedlore.providers.base import (
     ChatProvider,
     ChatRequest,
     ProviderError,
     StreamCancelled,
+    StreamCompleted,
     StreamEvent,
 )
 from sealedlore.providers.http import ERROR_BODY_BYTES, make_client, traced_socket
-from sealedlore.providers.privacy import plain_refusal
+from sealedlore.providers.privacy import SERVICE_NAMES, plain_refusal, privacy_for
 
 # A rate limit or a momentary outage, before anything has streamed, is waited
 # out rather than failing the turn. Measured on nano-gpt's subscription: a
@@ -331,6 +333,58 @@ class StreamingHttpProvider(ChatProvider):
         """Send one request and yield its events, the last a StreamCompleted."""
 
     def stream(self, request: ChatRequest) -> Iterator[StreamEvent]:
+        """The request, sent: every call kept in the run's call log
+        (call_log.py), whatever becomes of it, with nothing that was said."""
+        call = CALLS.start(
+            TEXT,
+            request.model,
+            endpoint=self.config.name,
+            address=self.endpoint,
+            protection=self._protection(request),
+            route=route_words(request.extra_body.get("provider")),
+            purpose=request.purpose,
+        )
+        completed: StreamCompleted | None = None
+        try:
+            for event in self._sent(request):
+                if isinstance(event, StreamCompleted):
+                    completed = event
+                yield event
+        except StreamCancelled:
+            CALLS.finish(call, "stopped")
+            raise
+        except GeneratorExit:
+            # Closed early: a Stop keeping what came, or a caller done with it.
+            CALLS.finish(call, "stopped", **_counts(completed))
+            raise
+        except Exception as exc:
+            CALLS.finish(call, "failed", detail=str(exc).splitlines()[0] if str(exc) else "")
+            raise
+        if completed is None:
+            CALLS.finish(call, "stopped")
+            return
+        CALLS.finish(
+            call,
+            "done",
+            detail=completed.finish_reason or "",
+            protection=self._protection(request, completed),
+            **_counts(completed),
+        )
+
+    def _protection(self, request: ChatRequest, completed: StreamCompleted | None = None) -> str:
+        """How the call's content travels, as the call log says it."""
+        privacy = privacy_for(request.model, self.config)
+        name = SERVICE_NAMES.get(privacy.service, privacy.service)
+        if privacy.sealed:
+            words = f"End-to-end encrypted ({name})"
+            if completed is not None and completed.sealed:
+                words += ", the reply opened with the attested key"
+            return words
+        if privacy.private:
+            return f"TEE ({name}): over HTTPS to an enclave it attests separately"
+        return plain_protection(self.endpoint)
+
+    def _sent(self, request: ChatRequest) -> Iterator[StreamEvent]:
         with self._lock:
             if self._cancelled:
                 raise StreamCancelled()  # stopped before the request went out
@@ -361,3 +415,17 @@ class StreamingHttpProvider(ChatProvider):
         finally:
             with self._lock:
                 self._in_flight, self._socket = False, None
+
+
+def _counts(completed: StreamCompleted | None) -> dict[str, Any]:
+    """A reply's tokens and its stated cost, for the call log."""
+    if completed is None:
+        return {}
+    usage = completed.usage
+    return {
+        "tokens_in": usage.prompt_tokens,
+        "tokens_out": usage.completion_tokens,
+        "cache_read": usage.cache_read_tokens,
+        "cache_written": usage.cache_creation_tokens,
+        "cost": usage.cost if usage.cost_reported else None,
+    }
