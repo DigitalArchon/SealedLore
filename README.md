@@ -57,6 +57,18 @@ fun to play. This app will remain focused on text based roleplay.
   they are saved in, so an older SealedLore no longer quietly loses what a
   newer one saved: it asks before opening such a story, and doesn't save over
   such settings.
+- **Characters played by their own model** (3.1.0b14, a trial). A main
+  character can be played by a model of their own, as another player beside
+  you: after each passage they say what they mean to do, from only what they
+  have seen and remember, and the storyteller works their answers in with
+  your turn. Choose it under **Played by** on their card or when you start a
+  story; their answers show under the passage, hidden until you send unless
+  you ask, and each can be edited. A cheap model keeps a public record of
+  what everyone knows by now, so a character who was away still hears the
+  news, and a passage that moves is given to each of them only as far as
+  they were there for it. Every model field now says which models
+  are recommended for that use and which get prompts worded for them, with
+  the reasons under **Help → Models SealedLore recommends and adjusts for…**.
 - **More end-to-end encrypted providers** (3.1.0b13, preliminary). Tinfoil's
   own API and Chutes work beside NanoGPT: Tinfoil's models are end-to-end
   encrypted to its attested router, and Chutes is an endpoint for all its
