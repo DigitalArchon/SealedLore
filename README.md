@@ -47,8 +47,8 @@ fun to play. This app will remain focused on text based roleplay.
   → AI calls this session…** lists every call made to a model since SealedLore
   started: what it was for, the model, the endpoint and any host asked for,
   whether it was end-to-end encrypted, its tokens, time and cost, never what
-  was said, and only in memory. A story played on an end-to-end encrypted
-  model now marks its passages so, as a private scene does. In Your
+  was said, and only in memory. A story whose every model is end-to-end
+  encrypted now marks its passages so, as a private scene does. In Your
   characters, **Write with AI** expands a character's profile or writes it
   anew, as you ask (tougher, shyer, a criminal version) or from the world they
   come from, field by field for you to take; and a picture can be copied or

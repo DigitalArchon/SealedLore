@@ -279,15 +279,23 @@ def tuned_texts(texts: PromptTexts, model: str | None, role: str) -> PromptTexts
     return PromptTexts({**own, **texts.overrides})
 
 
+def _models_in_words(tunings) -> str:
+    return ", ".join(
+        f"{t.models} ({ROLE_WORDS[t.role]})" if ROLE_WORDS[t.role] else t.models for t in tunings
+    )
+
+
 def models_worded_for(key: str) -> str:
-    """The models, in words, that get their own wording of text `key` (or
-    have it left out), for the prompt editor; "" for none."""
-    names = [
-        f"{t.models} ({ROLE_WORDS[t.role]})" if ROLE_WORDS[t.role] else t.models
-        for t in TUNINGS
-        if key in t.texts_replaced or key in t.texts_left_out
-    ]
-    return ", ".join(names)
+    """The models, in words, that get SealedLore's own wording of text `key`
+    in place of the default, for the prompt editor; "" for none. The author's
+    edit of the text replaces theirs too (`tuned_texts`)."""
+    return _models_in_words(t for t in TUNINGS if key in t.texts_replaced)
+
+
+def models_left_out_for(key: str) -> str:
+    """The models, in words, that aren't sent text `key` at all (`left_out`),
+    edited or not; "" for none."""
+    return _models_in_words(t for t in TUNINGS if key in t.texts_left_out)
 
 
 def summary(model: str, *, anthropic_api: bool | None = None, role: str | None = None) -> str:

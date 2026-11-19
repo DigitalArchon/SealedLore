@@ -2621,9 +2621,9 @@ class StorySession(
             if self.story.chat:
                 # A TEE chat's reply: signed by the enclave that was attested?
                 self._check_tee(self.last_result.node)
-            elif self._last_sealed:
-                # A story's passage on an end-to-end encrypted model: opened
-                # with the attested key, marked so (the scene's is, below).
+            elif self._last_sealed and self.story_sealed(model):
+                # A story whose every model is end-to-end encrypted: its
+                # passage was opened with the attested key, and marked so.
                 self._check_tee(self.last_result.node)
         # A model caught reasoning though asked for nothing: said at once, and
         # kept under the passage, so the slow start reads as the model's.
@@ -2782,9 +2782,21 @@ class StorySession(
         self._carried_mark = (node.id, node.meta.tee)
         self._carried_upstream = (node.id, node.meta.tee_upstream)
         node.meta.tee_upstream = None
-        if node.meta.tee is not None:
+        if node.meta.tee is not None and self._is_story_passage(node):
+            # A story's passage keeps its mark only while everything the
+            # story sends is still sealed (`story_sealed`): carried on by a
+            # plain model, or with a plain model now reading it, it has none,
+            # nor has the author's turn, which just went again with it.
+            if not (node.meta.tee == "encrypted" and self.story_sealed(model)):
+                node.meta.tee = None
+                node.meta.tee_service = None
+                self._unmark_sent(node)
+        elif node.meta.tee is not None:
             sealed = node.meta.tee == "encrypted" and self.privacy(model).sealed
             node.meta.tee = "encrypted" if sealed else "unchecked"
+        # The answers its characters gave were to the passage as it stood: a
+        # round after this asks again, and a Stop leaves none.
+        node.meta.reactions = []
         kept = node.content.rstrip()
         # Where this continuation begins, beside those before it while the
         # text is still the one they were taken in: the next Continue sends

@@ -194,6 +194,10 @@ class NodeMeta(BaseModel):
     # said in confidence, which no model but the keeper is ever shown.
     public_record: list[str] | None = None
     public_notes: list[str] | None = None
+    # The passage's text as the keeper read it (its sha256): carried on by
+    # Continue or edited since, the passage is read again
+    # (engine/session_record.py). None on one kept before this: taken as read.
+    public_record_of: str | None = None
     # On a passage that moves while a character played by their own model is
     # in it at one end only (or that cuts away): the paragraphs (from 1) each
     # was there to see or hear, by character id, read by the scene model

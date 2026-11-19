@@ -60,6 +60,24 @@ def name_forms(character: Character) -> list[str]:
     return sorted(names, key=len, reverse=True)
 
 
+def named_only(written: str, character: Character) -> bool:
+    """Whether a name as written is this character's and nobody else's by its
+    words: their name or an alias whole, or every distinctive word of it one
+    of theirs ("Sergeant Hale" for Tom Hale; never "Mary Smith" for John
+    Smith, which `mentions` takes for him by the surname they share)."""
+    forms = {form.lower() for form in name_forms(character)}
+    if written.strip().lower() in forms:
+        return True
+    words = [
+        token.lower()
+        for token in re.findall(r"[\w’']+", written)
+        if len(token) >= MIN_NAME_PART
+        and token.lower() not in _NAME_PARTICLES
+        and token.lower() not in _TITLES
+    ]
+    return bool(words) and all(word in forms for word in words)
+
+
 def _name_pattern(name: str, *, allow_possessive: bool = False) -> str:
     # For violations, possessives are description rather than action: "Serrik's
     # shadow fell" is the world reacting, which the model may write. When

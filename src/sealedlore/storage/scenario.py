@@ -221,7 +221,12 @@ def write_scenario(path: Path, scenario: Scenario) -> None:
                 "so nothing was written. Replace it with another copy of the picture."
             ) from exc
         files[relative] = base64.b64encode(clean).decode("ascii")
-    data = scenario.model_dump()
+    # A scenario carries no models (they are a computer's own): nor the one
+    # that plays a character (`Character.forget_own_model`).
+    shared = scenario.model_copy(deep=True)
+    for character in (*shared.cast, *shared.supporting):
+        character.forget_own_model()
+    data = shared.model_dump()
     data["reference_files"] = files
     atomic_write_json(path, data)
 
@@ -259,7 +264,11 @@ def read_scenario(path: Path) -> Scenario:
             f"reads up to version {SCENARIO_VERSION}."
         )
     try:
-        return Scenario.model_validate(data)
+        scenario = Scenario.model_validate(data)
+        # Whoever made the file, the models are this computer's to choose.
+        for character in (*scenario.cast, *scenario.supporting):
+            character.forget_own_model()
+        return scenario
     except ValidationError as exc:
         problems = "; ".join(
             f"{'.'.join(str(part) for part in error['loc'])}: {error['msg']}"

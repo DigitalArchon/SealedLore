@@ -58,6 +58,7 @@ from sealedlore.ids import utc_now_iso
 from sealedlore.models.config import ProviderConfig, split_model
 from sealedlore.models.node import NARRATOR_SPEAKER_ID, Node, NodeMeta, Usage
 from sealedlore.models.private import PrivateKeep, PrivateSpan, TeeUpstream
+from sealedlore.models.route import ROUTE_ROLES
 from sealedlore.models.summary import Summary
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError, why_not_whole
 from sealedlore.providers.privacy import (
@@ -999,14 +1000,47 @@ class PrivateRuntime:
         much of it came. A TEE/ model whose replies are checked is "unchecked"
         until its check says otherwise. A TEE/ model with "Check TEE models"
         off is just a model, and its passages unmarked, as before."""
-        # A story's passage on an end-to-end encrypted model is marked too
-        # (the author, Nov 19 2026, once the Private profile made every job
-        # one): its reply is as proved as a scene's.
+        if span is None and not self.story.chat:
+            # A story's passage is marked only while everything the story
+            # sends goes end-to-end encrypted (`story_sealed`): the mark says
+            # the text was sealed, and a passage written on a sealed model
+            # then read by a plain scene model wasn't.
+            return "encrypted" if self.story_sealed(model) else None
         if self.privacy(model).sealed:
             return "encrypted"
-        if span is None and not self.story.chat:
-            return None
         return "unchecked" if self.private_tee is not None else None
+
+    def story_sealed(self, model: str | None = None) -> bool:
+        """Whether everything this story sends to a model goes end-to-end
+        encrypted (the author, Nov 19 2026: a story's passages are marked
+        "only when ALL models are end to end encrypted"): the storyteller
+        (`model`, else the story's), every job's model as it resolves (the
+        plot's only with a plot, the public record's only with someone to
+        keep it for), every character's own model, and no lore sent for
+        embeddings or to Jev. As the Private profile sets them
+        (engine/model_profiles.py). Pictures and videos are each approved,
+        their endpoint said, and aren't counted. Never a chat's or a private
+        scene's question: theirs is their one model's."""
+        if self.story.chat:
+            return False
+        own = [(c.own_model or "").strip() for c in self.bundle.cast]
+        own = [m for m in own if m]
+        models = {model or self.model, *own}
+        for role in ROUTE_ROLES:
+            if role == "story":
+                continue
+            if role == "plot" and self.story.plot is None:
+                continue
+            if role == "record" and not (own and self.config.public_record):
+                continue
+            models.add(self.role_model(role))
+        if not all(m and self.privacy(m).sealed for m in models):
+            return False
+        return self.embeddings is None and self.config.lore_selector != "jev"
+
+    def _is_story_passage(self, node: Node) -> bool:
+        """A passage of the story itself: no chat's, no private scene's."""
+        return not self.story.chat and node.meta.private_span is None
 
     def _check_tee(self, node: Node | None) -> None:
         """A TEE model's reply: was it signed by the enclave that was attested?
@@ -1017,7 +1051,10 @@ class PrivateRuntime:
             node.meta.tee_service = self._tee_service(node.meta.model or "")
             sealed_to = getattr(getattr(self, "_last_completed", None), "sealed_to", None)
             node.meta.tee_instance = sealed_to[:8] if isinstance(sealed_to, str) else None
-            self._mark_sent(node, "encrypted")
+            if node.meta.tee == "encrypted":
+                # Only with a passage wholly sealed: one carried on from a
+                # part with no mark was sent with its turn in the clear once.
+                self._mark_sent(node, "encrypted")
             return
         if node is None or self.private_tee is None:
             return
@@ -1063,6 +1100,14 @@ class PrivateRuntime:
         if before not in _MARK_ORDER or mark not in _MARK_ORDER:
             return None
         return max(before, mark, key=_MARK_ORDER.index)
+
+    def _unmark_sent(self, reply: Node) -> None:
+        """The author's message a reply answers, its mark taken off: it has
+        just gone again somewhere the mark doesn't hold for."""
+        parent = next((n for n in self.nodes if n.id == reply.parent_id), None)
+        if parent is not None and parent.kind == "user":
+            parent.meta.tee = None
+            parent.meta.tee_service = None
 
     def _mark_sent(self, reply: Node, how: str, *, keep_received: bool = False) -> None:
         """Mark the author's message a reply answers with how it was sent."""

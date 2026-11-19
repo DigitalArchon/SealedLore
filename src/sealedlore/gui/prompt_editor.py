@@ -35,7 +35,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from sealedlore.engine.model_tuning import models_worded_for
+from sealedlore.engine.model_tuning import models_left_out_for, models_worded_for
 from sealedlore.engine.prompt_edits import (
     copied,
     default_changed,
@@ -367,14 +367,21 @@ class PromptEditorDialog(QDialog):
         self.title.setText(text.title)
         # Models SealedLore words this text for in its own way: an edit here
         # still wins for them (engine/model_tuning.py `tuned_texts`).
-        worded = models_worded_for(key)
+        # and those it leaves the text out for, which an edit doesn't reach:
+        # said apart (it said "your edit replaces theirs too" of both).
+        worded, left_out = models_worded_for(key), models_left_out_for(key)
+        why = " (Help → Models SealedLore recommends and adjusts for… says why)."
         self.about.setText(
             text.about
             + (
                 f"\n\nSome models get SealedLore's own wording of this text instead of the "
-                f"default: {worded}. Your edit replaces theirs too (Help → Models SealedLore "
-                "recommends and adjusts for… says why)."
+                f"default: {worded}. Your edit replaces theirs too{why}"
                 if worded
+                else ""
+            )
+            + (
+                f"\n\nSome models aren't sent this text at all, edited or not: {left_out}{why}"
+                if left_out
                 else ""
             )
         )

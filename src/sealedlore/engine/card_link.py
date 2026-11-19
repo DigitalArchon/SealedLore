@@ -167,6 +167,8 @@ def story_copy(card: Character, characters: Sequence[Character], user: str | Non
     copy.tavern.assets = []
     copy.collection = None
     copy.reference_images = []
+    # Who plays them is this story's to say (`Character.forget_own_model`).
+    copy.forget_own_model()
     main = collection.main_of(card, characters)
     copy.linked = CardLink(
         card_id=card.id,
@@ -625,6 +627,7 @@ def version_from_story(
     user = link.user if link is not None else ""
     version = card.model_copy(deep=True)
     version.id = new_id()
+    version.forget_own_model()
     # The card's own text wherever the story has what the card gives it
     # (a blank voice stays blank, its examples its own); the story's,
     # names back as macros, where it changed.
@@ -650,6 +653,8 @@ def kept_from_story(character: Character, came_from: str) -> Character:
     kept.linked = None
     kept.plot_hidden = False
     kept.origin = "author"
+    # The model that played them was that story's choice, not the card's.
+    kept.forget_own_model()
     kept.collection = CollectionInfo(came_from=came_from)
     if kept.tavern is None:
         kept.tavern = TavernFields()

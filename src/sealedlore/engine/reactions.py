@@ -42,8 +42,8 @@ from sealedlore.engine.rules import (
     render_speaker_tag,
     summary_repeated,
 )
-from sealedlore.engine.scene_state import same_person, scene_at
-from sealedlore.engine.validators import far_shift, scene_break_ends
+from sealedlore.engine.scene_state import scene_at
+from sealedlore.engine.validators import far_shift, named_only, scene_break_ends
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.character import Character
 from sealedlore.models.memory import Recollection
@@ -73,12 +73,15 @@ def independent_cast(cast: Sequence[Character]) -> list[Character]:
 
 
 def in_scene(character: Character, scene: SceneState | None) -> bool:
-    """Whether the scene card has `character` in it, by id or by name."""
+    """Whether the scene card has `character` in it, by id or by name. By a
+    name that is theirs alone (`named_only`): matched on any shared word,
+    "Mary Smith" on the roster put an absent John Smith in the scene, his
+    model asked to answer it and given its passages."""
     if scene is None:
         return False
     if character.id in scene.present_character_ids:
         return True
-    return any(same_person(name, character) for name in scene.present_others)
+    return any(named_only(name, character) for name in scene.present_others)
 
 
 def reacting_characters(
@@ -312,7 +315,7 @@ def _scene_lines(
         )
     ]
     here = [c.name for c in cast if c.id in scene.present_character_ids and c.id != character.id]
-    here += [n.strip() for n in scene.present_others if n.strip() and not same_person(n, character)]
+    here += [n.strip() for n in scene.present_others if n.strip() and not named_only(n, character)]
     if here:
         lines.append(texts.fill("characters.own.present", names=", ".join(here)))
     return "\n".join(lines)
@@ -514,7 +517,7 @@ def apply_views(reply: str, node: Node, ask: Sequence[Character]) -> bool:
     got = False
     for character in ask:
         numbers = next(
-            (v for k, v in data.items() if isinstance(k, str) and same_person(k, character)), None
+            (v for k, v in data.items() if isinstance(k, str) and named_only(k, character)), None
         )
         if not isinstance(numbers, list) or not all(
             isinstance(n, int) and not isinstance(n, bool) for n in numbers

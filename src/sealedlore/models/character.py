@@ -103,3 +103,15 @@ class Character(BaseModel):
     # after the card (`characters.own.notes`): how to play them, beyond what
     # the card says. Never sent to the storyteller.
     own_notes: str | None = None
+
+    def forget_own_model(self) -> None:
+        """The model that plays them is one story's choice on one computer
+        (its endpoint's name, its route, the notes written for it): a copy
+        that leaves the story goes without it. Saved to Your characters,
+        joining another story or shared in a scenario file, it played them
+        there too, unasked and paid for, or named an endpoint that computer
+        hasn't. Restart, Duplicate and a story's backup keep it: they stay
+        the same story on the same computer."""
+        self.own_model = None
+        self.own_route = None
+        self.own_notes = None

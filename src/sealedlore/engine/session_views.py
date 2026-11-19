@@ -47,10 +47,12 @@ class ViewsRuntime:
                 params=self.side_params(model),
                 extra_body=self.route_for("scene", model),
             )
-            log_ref = self._log(
-                "views_request",
-                {"node_id": node.id, "payload": self.provider.build_payload(request)},
-            )
+            try:
+                payload = self.provider.build_payload(request)
+            except (ProviderError, ValueError) as exc:
+                yield SessionNotice(f"Couldn't work out who saw which part of a passage ({exc}).")
+                return
+            log_ref = self._log("views_request", {"node_id": node.id, "payload": payload})
             try:
                 text, completed = self.provider.complete(request)
             except ProviderError as exc:

@@ -107,12 +107,16 @@ class ReactionRuntime:
         characters = reacting_characters(
             cast, self.story.scene, held_character_id=self.story.held_character_id
         )
+        # What the round answers as it now stands: a round after a Continue
+        # or a change replaces the earlier one's. Before anything else: with
+        # nobody left to ask (the one who answered left as the passage went
+        # on), their answer to the shorter passage stayed, and went to the
+        # storyteller with the next turn as what they mean to do.
+        if store_on.meta.reactions:
+            store_on.meta.reactions = []
+            self.save()
         if not characters:
             return
-        # What the round answers as it now stands: a round after a Continue
-        # or a change replaces the earlier one's, and a Stop (which skips the
-        # round) leaves none rather than stale ones.
-        store_on.meta.reactions = []
         passage = store_on
 
         def count(text: str) -> int:
@@ -126,7 +130,29 @@ class ReactionRuntime:
         # character's view, so no answer can reach another's prompt.
         calls: list[tuple[Any, ChatRequest, str]] = []
         for character in characters:
-            model = (character.own_model or "").strip()  # "Endpoint::model", kept whole
+            call = yield from self._own_call(
+                character, cast, history, passage, count, after_turn_of
+            )
+            if call is not None:
+                calls.append(call)
+        if not calls:
+            return
+
+        boxes = yield from self._answer_side_by_side(
+            [request for _, request, _ in calls],
+            "Waiting for the characters played by their own model…",
+        )
+        yield from self._keep_answers(calls, boxes, passage, after_turn_of)
+
+    def _own_call(self, character, cast, history, passage, count, after_turn_of):
+        """One character's request, built and logged; None, with a notice,
+        when it can't be (their model names an endpoint that isn't set up: a
+        story from another computer, an endpoint renamed since). The round
+        never costs the turn: built outside any guard, that failed the whole
+        job, and with the round after the author's turn no passage could be
+        written until the card was changed."""
+        model = (character.own_model or "").strip()  # "Endpoint::model", kept whole
+        try:
             request = ChatRequest(
                 model=model,
                 messages=reaction_messages(
@@ -149,21 +175,20 @@ class ReactionRuntime:
                 use_cache_control=self._cache_control_for(model),
                 cache_ttl=self.config.cache_ttl,
             )
-            log_ref = self._log(
-                "own_request",
-                {
-                    "node_id": passage.id,
-                    "character": character.name,
-                    "payload": self.provider.build_payload(request),
-                },
+            payload = self.provider.build_payload(request)
+        except (ProviderError, ValueError) as exc:
+            yield SessionNotice(
+                f"{character.name}'s model ({model or 'none named'}) couldn't be asked: {exc}"
             )
-            calls.append((character, request, log_ref))
-
-        boxes = yield from self._answer_side_by_side(
-            [request for _, request, _ in calls],
-            "Waiting for the characters played by their own model…",
+            return None
+        log_ref = self._log(
+            "own_request",
+            {"node_id": passage.id, "character": character.name, "payload": payload},
         )
+        return character, request, log_ref
 
+    def _keep_answers(self, calls, boxes, passage, after_turn_of) -> Iterator[SessionNotice]:
+        """Each answer logged, priced and kept on the passage."""
         answers: list[Reaction] = []
         stopped = False
         for (character, request, log_ref), box in zip(calls, boxes, strict=True):
@@ -191,6 +216,10 @@ class ReactionRuntime:
                     "finish_reason": completed.finish_reason,
                 },
             )
+            # In the session's spend too, whatever came of it (the status
+            # bar's readout left every character's answers out).
+            usage = self.priced(completed.usage, request.model)
+            self.unreported_usage.append(usage)
             why = why_not_whole(completed) or ("it was empty" if not text.strip() else None)
             if why:
                 yield SessionNotice(f"{character.name}'s model gave no answer: {why}.")
@@ -201,7 +230,7 @@ class ReactionRuntime:
                     name=character.name,
                     text=text.strip(),
                     model=request.model,
-                    usage=self.priced(completed.usage, request.model),
+                    usage=usage,
                 )
             )
         passage.meta.reactions = answers
@@ -250,16 +279,22 @@ class ReactionRuntime:
             )
             for character, chunk in jobs
         ]
+        try:
+            payloads = [self.provider.build_payload(request) for request in requests]
+        except (ProviderError, ValueError) as exc:
+            # The round goes on, sending as much of the story whole as fits.
+            yield SessionNotice(f"What the characters remember couldn't be written: {exc}")
+            return
         refs = [
             self._log(
                 "recollect_request",
                 {
                     "character": character.name,
                     "node_ids": [node_id for node_id, _text in chunk],
-                    "payload": self.provider.build_payload(request),
+                    "payload": payload,
                 },
             )
-            for (character, chunk), request in zip(jobs, requests, strict=True)
+            for (character, chunk), payload in zip(jobs, payloads, strict=True)
         ]
         names = ", ".join(dict.fromkeys(character.name for character, _chunk in jobs))
         boxes = yield from self._answer_side_by_side(
@@ -283,6 +318,8 @@ class ReactionRuntime:
                 "recollect_response",
                 {"request_log_ref": ref, "text": text, "usage": completed.raw_usage},
             )
+            usage = self.priced(completed.usage, request.model)
+            self.unreported_usage.append(usage)
             why = why_not_whole(completed) or ("it was empty" if not text.strip() else None)
             if why:
                 yield SessionNotice(f"{character.name}'s memory wasn't written: {why}.")
@@ -302,7 +339,7 @@ class ReactionRuntime:
                     fingerprint=fingerprint(chunk),
                     content=text.strip(),
                     model=request.model,
-                    usage=self.priced(completed.usage, request.model),
+                    usage=usage,
                 )
             )
             written += 1

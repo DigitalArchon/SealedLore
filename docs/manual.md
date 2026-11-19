@@ -1993,7 +1993,10 @@ they are a main character, decides who writes them:
 A supporting character is always the storyteller's, so their card has no
 **Played by**. Your characters' cards have it too, for the stories they join
 as main characters, without the trial's choice: which model plays someone is
-up to each story.
+up to each story. A character saved to Your characters, joining another
+story, or shared in a scenario file goes without the model that played them
+(and its route and your notes for it); Restart, Duplicate and a story backup
+keep it.
 
 #### Characters played by their own model (a trial)
 
@@ -3158,9 +3161,13 @@ verifier:
 - the release must be the latest one on Tinfoil's GitHub, or the model
   button says "⚠ older release".
 
-Replies are marked "end-to-end encrypted" (in a private scene, a chat, or a
-whole story played on such a model, as the Private profile does), and the
-attestation is redone
+Replies are marked "end-to-end encrypted" in a private scene and a chat, and
+in a story only while everything the story sends goes end-to-end encrypted, as
+the Private profile sets it: the storyteller, every other job's model, any
+character's own model, and no lore sent for embeddings or to Jev. With one
+ordinary model among them the story's passages carry no mark, since that
+model reads them in the clear (**View → AI calls this session…** shows how
+each call travelled either way). The attestation is redone
 every five minutes (time the computer spends asleep counts). Tinfoil's
 verifier, and the Sigstore library it checks the release with (Sigstore's
 public trust root included), follow no redirect off https, nor one from the

@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 
 from sealedlore.engine.public_record import RecordState, apply_reply, keeper_prompt, record_at
-from sealedlore.engine.reactions import independent_cast
+from sealedlore.engine.reactions import content_sha, independent_cast
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.node import Node
 from sealedlore.providers.base import ChatRequest, ProviderError
@@ -57,14 +57,21 @@ class RecordRuntime:
             (i for i, node in enumerate(history) if node.meta.public_record is not None),
             default=-1,
         )
+        # Where reading begins: after the newest passage read, or at it when
+        # its text has changed since (Continue wrote more of it, or it was
+        # edited): read once, what was added never reached the record, a
+        # public event in it with it.
+        start = last + 1
+        if last >= 0:
+            read_as = history[last].meta.public_record_of
+            if read_as is not None and read_as != content_sha(history[last].content):
+                start = last
         behind = [
-            node
-            for node in history[last + 1 :]
-            if node.kind == "assistant" and node.content.strip()
+            node for node in history[start:] if node.kind == "assistant" and node.content.strip()
         ]
         if not behind:
             return
-        state = record_at(history[: last + 1])
+        state = record_at(history[:start])
         older, recent = behind[:-ONE_BY_ONE], behind[-ONE_BY_ONE:]
         steps: list[list[Node]] = []
         chunk: list[Node] = []
@@ -93,13 +100,14 @@ class RecordRuntime:
                 params=self.side_params(model),
                 extra_body=self.route_for("record", model),
             )
-            log_ref = self._log(
-                "record_request",
-                {
-                    "node_id": passages[-1].id,
-                    "payload": self.provider.build_payload(request),
-                },
-            )
+            try:
+                payload = self.provider.build_payload(request)
+            except (ProviderError, ValueError) as exc:
+                # A model that can't be reached at all (its endpoint not set
+                # up) is said like any failure: never the round's, or the turn's.
+                yield SessionNotice(f"Couldn't keep the public record ({exc}).")
+                return
+            log_ref = self._log("record_request", {"node_id": passages[-1].id, "payload": payload})
             try:
                 text, completed = self.provider.complete(request)
             except ProviderError as exc:
@@ -131,3 +139,4 @@ class RecordRuntime:
     def _keep_record(self, node: Node, state: RecordState) -> None:
         node.meta.public_record = list(state.facts)
         node.meta.public_notes = list(state.notes)
+        node.meta.public_record_of = content_sha(node.content)
