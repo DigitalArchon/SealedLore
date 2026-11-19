@@ -1403,6 +1403,26 @@ to or taken off:
 
 ![A character's card in Your characters, on the first of its six tabs: Professor Adelaide Quill from Brasshaven, her portrait with the buttons that draw or change it, her name, aliases, summary, description and voice, and above them Chat with them…, Draft a story with them…, Add to the story, Export and More](screenshots/your-characters-card.webp)
 
+**Writing their profile with AI.** **Write with AI** above the card has two
+choices, both on the authoring model (Settings → Models):
+
+- **Expand character profile…** fills in what the card is missing from what
+  it says, and keeps what is written.
+- **Generate character profile…** writes the whole profile anew, taking the
+  card as a starting point where it fits.
+
+Each first asks how: say it in your own words, or start from **Ideas**
+("make them tougher", "shy and quiet", "a criminal version of themselves") and
+change it; Expand changes what is written only as far as you ask. Tick **They
+come from an existing world** and name it (Shakespeare's Hamlet, the Arthurian
+legends) to have them filled in from that world's lore, as **Fill with lore
+characters…** does for a story: make a character called Hamlet, name the
+play, and Generate writes him as it has him. What comes back is shown
+field by field (name, aliases, where they come from, summary, description,
+personality, voice, what they can do, and for chats a scenario, a greeting,
+example messages and tags), each with what it was, to untick or change
+first: nothing goes on the card until **Put on the card**.
+
 Every field of a SillyTavern V3 card is kept, so a card imported and exported
 again comes back as it was. (The note SillyTavern puts at a depth in a chat
 becomes the end of the description.)
@@ -2242,8 +2262,12 @@ gap, draws the ones chosen), Delete removes a picture, F2 changes its labels. A 
 for ×2"); one that fits no place is listed above the sheet, to draw as the
 story put it or to add to the sheet. Right-click a picture to see it whole,
 show them like that in the story, make it their portrait, change its labels,
-change it or draw it again. **Back to the story** (or Esc) puts the window
-back as it was.
+change it or draw it again, or give it to someone else: **Copy to another
+character…** puts the same picture, labels and all, on another character's
+card too, and **Move to another character…** puts it there and takes it off
+this one's (versions of one character can share the pictures that still fit
+them; in Your characters a version is listed with its own name). **Back to
+the story** (or Esc) puts the window back as it was.
 
 **Keeping them for new stories.** Every picture, label and sheet goes with a
 story wherever it goes: a scenario file (Story → Export → Scenario…), Restart,

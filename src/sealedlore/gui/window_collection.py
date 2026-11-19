@@ -22,12 +22,15 @@ from pathlib import Path
 from PySide6.QtCore import QFile, Qt, QTimer
 from PySide6.QtWidgets import QApplication, QInputDialog, QMessageBox
 
+from sealedlore.engine.card_fill import EXPAND, GENERATE, FillMode, apply_changes
 from sealedlore.engine.look_sheet import keep_order, label_key
 from sealedlore.engine.looks import look_words
+from sealedlore.engine.picture_move import give_picture
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.usage import usage_report
 from sealedlore.gui import file_dialogs
 from sealedlore.gui.card_files_form import TYPES, link_problem
+from sealedlore.gui.card_fill import write_profile
 from sealedlore.gui.collection_page import (
     ADD_TO_STORY,
     BACKUP,
@@ -35,11 +38,13 @@ from sealedlore.gui.collection_page import (
     DELETE,
     DRAFT,
     DUPLICATE,
+    EXPAND_PROFILE,
     EXPORT_CHARX,
     EXPORT_JSON,
     EXPORT_PNG,
     EXPRESSIONS,
     FROM_STORY,
+    GENERATE_PROFILE,
     IMPORT,
     LINK,
     NEW,
@@ -54,6 +59,7 @@ from sealedlore.gui.collection_page import (
 )
 from sealedlore.gui.fill_gaps import ask_fill_gaps
 from sealedlore.gui.image_codec import encoded
+from sealedlore.gui.picture_choose import choose_character, given_words
 from sealedlore.gui.picture_labels import edit_labels
 from sealedlore.gui.ref_images import PICTURE_FILTER, clean_incoming, image_of, store_reference
 from sealedlore.ids import new_id
@@ -624,12 +630,39 @@ class CollectionWindow:
             ADD_TO_STORY: lambda: self._add_shown_to_story(card_id),
             CHAT: lambda: self.chat_with_kept(card_id),
             DRAFT: lambda: self.draft_with_kept(card_id),
+            EXPAND_PROFILE: lambda: self._write_kept_profile(card_id, EXPAND),
+            GENERATE_PROFILE: lambda: self._write_kept_profile(card_id, GENERATE),
             BACKUP: lambda: self._backup_collection(),
             RESTORE: lambda: self.restore_collection(),
         }
         action = actions.get(what)
         if action is not None:
             action()
+
+    def _write_kept_profile(self, card_id: str, mode: FillMode) -> None:
+        """Write with AI → Expand / Generate character profile… (gui/card_fill.py):
+        what the author takes goes on the card, kept as any edit is."""
+        card = self._kept_card(card_id)
+        if card is None:
+            return
+        if self.session is not None and self.session.in_private:
+            # While a private scene is open nothing else is called.
+            self._warn_plain(
+                "Writing a profile",
+                "A private scene is open in the story: nothing else is sent to a model until "
+                "it ends.",
+            )
+            return
+        taken = write_profile(self._dialog_parent(), self._collection_session(), card, mode)
+        if not taken or self._kept_card(card_id) is not card:
+            return
+        apply_changes(card, taken)
+        self._collection_changed(card_id)
+        self.collection_page.card_changed(card_id)
+        self.statusBar().showMessage(
+            f"{card.name}: {len(taken)} part{'s' if len(taken) != 1 else ''} of the card written.",
+            8000,
+        )
 
     def _collection_from_story(self) -> None:
         """Import → Characters from the open story…: the story's characters
@@ -1480,6 +1513,14 @@ class CollectionWindow:
             )
         elif what in ("edit", "again", "set"):
             self._on_card_picture(card_id, ref_id, what, session=self._collection_session())
+        elif what in ("copy", "move"):
+            others = [c for c in self._kept() if c.id != card.id]
+            target = choose_character(self, card, others, move=what == "move", kept=self._kept())
+            if target is not None:
+                give_picture(card, target, ref_id, move=what == "move")
+                self._collection_pictures_changed(card_id)
+                self._collection_pictures_changed(target.id)
+                self.statusBar().showMessage(given_words(card, target, what == "move"), 8000)
         elif what == "labels":
             # Their sheet's rows and columns kept where they are first.
             keep_order(card)

@@ -44,6 +44,7 @@ KIND_LABELS: dict[str, str] = {
     "map_art_response": "Map art",
     "competence_response": "Skill suggestions",
     "lore_cast_response": "Lore characters",
+    "card_fill_response": "Character profiles",
     "condense_response": "Condensed cards",
     # The own-model trial: a character's own model's answer to a passage.
     "own_response": "Own-model characters",

@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.gui import text_size, theme
 from sealedlore.gui.card_files_form import FilesForm
+from sealedlore.gui.card_fill import EXPAND_LABEL, GENERATE_LABEL
 from sealedlore.gui.card_form import AboutForm, CharacterForm, ChatForm
 from sealedlore.gui.cast_board import CastBoard, Thumbs, scaled_font
 from sealedlore.gui.lorebook_form import LorebookForm
@@ -80,6 +81,8 @@ DUPLICATE, VERSION, RENAME_VERSION, DELETE = "duplicate", "version", "rename_ver
 STORY_FROM_CARD = "story_from_card"
 ADD_TO_STORY = "add_to_story"
 CHAT, DRAFT = "chat", "draft"
+# Their profile written by a model (gui/card_fill.py).
+EXPAND_PROFILE, GENERATE_PROFILE = "expand_profile", "generate_profile"
 BACKUP, RESTORE = "backup", "restore"
 # The open story's characters saved here (gui/save_characters.py).
 FROM_STORY = "from_story"
@@ -360,6 +363,28 @@ class CollectionPage(QWidget):
         export_menu.setToolTipsVisible(True)
         self.export_button.setMenu(export_menu)
         self.export_button.setToolTip("This character as a SillyTavern card")
+        self.write_button = QToolButton()
+        self.write_button.setText("Write with AI")
+        self.write_button.setPopupMode(QToolButton.InstantPopup)
+        write_menu = QMenu(self.write_button)
+        self.expand_action = write_menu.addAction(EXPAND_LABEL)
+        self.expand_action.setToolTip(
+            "Fill in what their card is missing from what it says, as you say: expanded as it "
+            "is, or changed (tougher, shyer, a criminal version of themselves), or from the "
+            "world they come from"
+        )
+        self.expand_action.triggered.connect(lambda: self._act(EXPAND_PROFILE))
+        self.generate_action = write_menu.addAction(GENERATE_LABEL)
+        self.generate_action.setToolTip(
+            "Write their whole profile anew, as you say, or from the world they come from "
+            "(give them a name, like Hamlet, and say where from)"
+        )
+        self.generate_action.triggered.connect(lambda: self._act(GENERATE_PROFILE))
+        write_menu.setToolTipsVisible(True)
+        self.write_button.setMenu(write_menu)
+        self.write_button.setToolTip(
+            "Their profile written by the authoring model, for you to take field by field"
+        )
         self.more_button = QToolButton()
         self.more_button.setText("More")
         self.more_button.setPopupMode(QToolButton.InstantPopup)
@@ -392,7 +417,7 @@ class CollectionPage(QWidget):
         self.version_label = QLabel("Version")
         header.add_group([self.version_label, self.version])
         header.add_group([self.chat_button, self.draft_button, self.add_button])
-        header.add_group([self.export_button, self.more_button])
+        header.add_group([self.write_button, self.export_button, self.more_button])
         header.add_group([self.back_button], right=True)
         self.stats = QLabel()
         self.stats.setObjectName("hintLabel")

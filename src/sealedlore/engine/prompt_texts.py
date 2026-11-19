@@ -4392,6 +4392,99 @@ where each <character> is:
     ),
 )
 
+# Expand and Generate in Your characters (engine/card_fill.py; the author,
+# Nov 19 2026): one character's profile written by the authoring model, from
+# what the card says, the author's wishes and the world they come from. Not
+# measured.
+_text(
+    "characters.fill",
+    CHARACTERS,
+    "Writing a character's profile",
+    "The system prompt of Expand character profile… and Generate character profile… in "
+    "Your characters. The program reads its JSON reply: keep the field names.",
+    """\
+You write character cards for SealedLore, an app for roleplay stories with a
+model as the storyteller. A card is all the storyteller is told of a
+character: it brings them in, voices them, and keeps them as the card says,
+in any story the author puts them in. Write so that a storyteller could play
+them well from the card alone.
+
+Reply with one JSON object and nothing else:
+
+{
+  "name": "their name",
+  "aliases": ["other names they go by: a nickname, an epithet; never a title others share"],
+  "canon": "the published work they come from, or null if they are original",
+  "summary": "one or two lines: who they are, at a glance",
+  "description": "the fuller card: looks, history, wants, fears, how they live now",
+  "personality": "a few words or a short line",
+  "voice": "how they speak: register, rhythm, habits, words they use",
+  "competence": "what they can and cannot do, in words",
+  "scenario": "a situation to meet them in, for a one-to-one chat, or null",
+  "greeting": "their first message in such a chat, in their voice, using {{char}} and {{user}}",
+  "examples": "two or three short exchanges, each starting <START>, as {{char}}: and {{user}}:",
+  "tags": ["a few short tags"],
+  "notes": "anything the author should know about what you did, or null"
+}
+
+Write in plain prose, specific rather than general. Give every field you are
+asked for. A character from a published work is that character as the work
+establishes them: their name, history and nature as the work has them, never
+invented in their place; what the work leaves open you may fill, consistent
+with it, and say so in notes. Never sexual content involving anyone under 18.""",
+)
+
+_text(
+    "characters.fill.card",
+    CHARACTERS,
+    "Writing a profile: the card as it stands",
+    "The request's first part: every field the card has written, as JSON.",
+    "The card as it stands now (blank fields left out):\n{card}",
+    (("card", "the card's written fields, as JSON"),),
+)
+
+_text(
+    "characters.fill.expand",
+    CHARACTERS,
+    "Writing a profile: Expand",
+    "What Expand character profile… asks for.",
+    """\
+Expand this card: give every field, writing those it leaves blank and
+building on those it has, from what it says. Keep what it says as it is,
+unless the author's wishes below ask for a change; then change only what they
+ask, and keep the rest. What it says of them is true: never contradict it.""",
+)
+
+_text(
+    "characters.fill.generate",
+    CHARACTERS,
+    "Writing a profile: Generate",
+    "What Generate character profile… asks for.",
+    """\
+Write this character's whole profile anew: give every field. Take what the
+card says as a starting point where it fits the author's wishes below, and
+write past it freely where it doesn't; their name stays theirs unless the
+author asks for another.""",
+)
+
+_text(
+    "characters.fill.world",
+    CHARACTERS,
+    "Writing a profile: the world they come from",
+    "When the author names a world the character comes from (as a published work's character).",
+    'They come from {world}: write them as that work establishes them, and put it in "canon".',
+    (("world", "the world, as the author named it"),),
+)
+
+_text(
+    "characters.fill.wishes",
+    CHARACTERS,
+    "Writing a profile: the author's wishes",
+    "When the author says how they want the profile written.",
+    "The author's wishes, which come first: {wishes}",
+    (("wishes", "what the author typed"),),
+)
+
 _text(
     "authoring.lore_cast.world",
     AUTHORING,

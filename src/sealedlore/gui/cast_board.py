@@ -105,6 +105,9 @@ from sealedlore.models.character import Character
 from sealedlore.models.image import ImageRef
 
 BOARD_LABEL = "Cast board"
+# A picture onto another character's card (engine/picture_move.py).
+COPY_TO = "Copy to another character…"
+MOVE_TO = "Move to another character…"
 SPOILERS_LABEL = "Show spoilers"
 # Pictures only, for the template the story came from (window_board.py):
 # "Keep for new stories…" read as keeping the characters themselves.
@@ -1669,6 +1672,8 @@ class CastBoard(QWidget):
         for words, what in (
             ("Make it their portrait", "portrait"),
             ("Labels…", "labels"),
+            (COPY_TO, "copy"),
+            (MOVE_TO, "move"),
             ("Remove…", "remove"),
         ):
             action = menu.addAction(words)
@@ -1717,6 +1722,15 @@ class CastBoard(QWidget):
                     f"The next picture here ({ahead + 1} of {len(cell.refs)})"
                 ).triggered.connect(lambda: self._turn(key, ahead))
             menu.addSeparator()
+            copy = menu.addAction(COPY_TO)
+            copy.setToolTip("The same picture on another character's card too, labels and all")
+            copy.setEnabled(self._can_change)
+            copy.triggered.connect(lambda: emit("copy", card_id, ref.id))
+            move = menu.addAction(MOVE_TO)
+            move.setToolTip("Onto another character's card, and off this one's")
+            move.setEnabled(self._can_change)
+            move.triggered.connect(lambda: emit("move", card_id, ref.id))
+            menu.setToolTipsVisible(True)
             remove = menu.addAction("Remove from their card…")
             remove.setEnabled(self._can_change)
             remove.triggered.connect(lambda: emit("remove", card_id, ref.id))

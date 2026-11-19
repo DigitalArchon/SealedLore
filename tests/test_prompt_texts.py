@@ -21,7 +21,7 @@ from sealedlore.models.story import (
     WorldActivity,
 )
 
-SLOT = re.compile(r"\{([a-z_]+)\}")
+SLOT = re.compile(r"(?<!\{)\{([a-z_]+)\}(?!\})")  # as the program reads them: never {{macros}}
 
 
 def test_every_text_is_in_a_known_group():

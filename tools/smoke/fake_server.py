@@ -110,6 +110,17 @@ def reply_for(body) -> str:
                 "happened": [],
             }
         )
+    if '"greeting": "their first message in such a chat' in text:
+        # Expand / Generate character profile (engine/card_fill.py).
+        return json.dumps(
+            {
+                "summary": f"A gate guard who keeps her own counsel. ({TAG})",
+                "personality": "Hard, patient.",
+                "voice": "Flat and clipped.",
+                "tags": ["guard", "lab"],
+                "notes": None,
+            }
+        )
     if '"directions"' in text:
         return json.dumps({"directions": []})
     if '"play_as": "a cast member\'s name"' in text:

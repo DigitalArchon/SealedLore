@@ -21,9 +21,11 @@ from PySide6.QtWidgets import QMessageBox
 
 from sealedlore.engine.look_sheet import keep_order, label_key, sheet_for, wanted_along
 from sealedlore.engine.looks import look_words
+from sealedlore.engine.picture_move import give_picture
 from sealedlore.gui import file_dialogs
 from sealedlore.gui.cast_board import BOARD_LABEL, SAVE_LABEL, CastBoard
 from sealedlore.gui.fill_gaps import Waiting, ask_fill_gaps
+from sealedlore.gui.picture_choose import choose_character, given_words
 from sealedlore.gui.picture_labels import edit_labels
 from sealedlore.gui.ref_images import PICTURE_FILTER, store_reference
 from sealedlore.gui.story_cast_page import PAGE_TITLE, StoryCastPage
@@ -329,6 +331,22 @@ class CastBoardWindow:
             self._on_card_picture(card_id, ref_id, what)
             return
         if self._board_refused():
+            return
+        if what in ("copy", "move"):
+            # Whom the board shows: a plot-hidden card only with spoilers.
+            session = self.session
+            everyone = (
+                (*session.cast, *session.supporting)
+                if self.config.show_plot_spoilers
+                else (*session.visible_cast(), *session.visible_supporting())
+            )
+            others = [c for c in everyone if c.id != card.id]
+            target = choose_character(self, card, others, move=what == "move")
+            if target is not None:
+                give_picture(card, target, ref_id, move=what == "move")
+                self._board_changed(card_id)
+                self._board_changed(target.id)
+                self.statusBar().showMessage(given_words(card, target, what == "move"), 8000)
             return
         # Their sheet's rows and columns kept where they are first.
         keep_order(card)

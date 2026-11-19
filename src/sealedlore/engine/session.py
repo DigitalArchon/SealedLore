@@ -58,6 +58,13 @@ from sealedlore.engine.branches import (
     next_branch_name,
     unique_branch_name,
 )
+from sealedlore.engine.card_fill import (
+    CARD_FILL_MAX_TOKENS,
+    CardFill,
+    FillMode,
+    build_card_fill_messages,
+    parse_card_fill,
+)
 from sealedlore.engine.catalog import ModelInfo, chat_models
 from sealedlore.engine.characters import (
     build_extraction_messages,
@@ -4099,6 +4106,50 @@ class StorySession(
         self.supporting.extend(result.supporting)
         self.save()
         return result
+
+    def fill_card(
+        self, character: Character, *, mode: FillMode, wishes: str = "", world: str = ""
+    ) -> CardFill:
+        """One character's profile written by the authoring model
+        (engine/card_fill.py): what it would have them be, for the author to
+        take field by field; nothing on the card changes here. Your
+        characters' own session makes it. Raises ProviderError or ValueError."""
+        self._refuse_in_private("Writing a character's profile")
+        model = self.authoring_model
+        request = ChatRequest(
+            model=model,
+            extra_body=self.route_for("authoring"),
+            messages=build_card_fill_messages(
+                character, mode=mode, wishes=wishes, world=world, texts=self.texts
+            ),
+            params=self.side_params(model, max_tokens=CARD_FILL_MAX_TOKENS),
+        )
+        log_ref = self._log(
+            "card_fill_request",
+            {
+                "character_id": character.id,
+                "mode": mode,
+                "payload": self.provider.build_payload(request),
+            },
+        )
+        text, completed = self.provider.complete(request)
+        self._log(
+            "card_fill_response",
+            {"request_log_ref": log_ref, "text": text, "usage": completed.raw_usage},
+        )
+        self.unreported_usage.append(self.priced(completed.usage, model))
+        unfit = why_not_whole(completed)
+        try:
+            fill = parse_card_fill(text)
+        except ValueError:
+            if unfit:
+                raise ValueError(f"the profile wasn't whole: {unfit}; ask again") from None
+            raise
+        if unfit:
+            fill.notes = (fill.notes + "\n\n" if fill.notes else "") + (
+                f"The reply wasn't whole ({unfit}): fields it didn't reach are left as they are."
+            )
+        return fill
 
     # --- settings review ------------------------------------------------------
 
