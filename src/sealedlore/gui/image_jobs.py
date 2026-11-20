@@ -30,6 +30,7 @@ from sealedlore.providers.images import (
     list_image_models,
     parse_image_models,
 )
+from sealedlore.providers.local_images import local_settings
 from sealedlore.providers.media_http import MediaTimedOut
 from sealedlore.storage.picture_store import DiskPictures, PictureStore
 from sealedlore.storage.repository import save_config
@@ -116,6 +117,7 @@ class ImageCatalog(QObject):
                     api_key=media.api_key,
                     wanted=wanted,
                     sealed_api=media.sealed_api,
+                    local=local_settings(media),
                 )
             )
 

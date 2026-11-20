@@ -60,6 +60,7 @@ from sealedlore.gui.model_picker import (
     pick_model,
     pick_model_and_route,
 )
+from sealedlore.gui.own_image_server import OwnImageServer, found_words
 from sealedlore.gui.phone_dialog import PHONE_KEEPS
 from sealedlore.gui.plain_text import plain_tip
 from sealedlore.gui.profile_row import ProfileRow
@@ -75,6 +76,8 @@ from sealedlore.models.config import (
     DEFAULT_EMBEDDING_MODEL,
     DEFAULT_STORY_MODEL,
     ENDPOINT_SEPARATOR,
+    LOCAL_IMAGE_ADDRESSES,
+    LOCAL_IMAGE_APIS,
     MEDIA_API_LABELS,
     RECOMMENDED_IMAGE_MODELS,
     RECOMMENDED_MODELS,
@@ -115,11 +118,12 @@ from sealedlore.models.route import ModelRoute
 from sealedlore.models.story import Story
 from sealedlore.phone.torrc import find_tor
 from sealedlore.providers import make_chat_provider
-from sealedlore.providers.base import ChatProvider
+from sealedlore.providers.base import ChatProvider, ProviderError
 from sealedlore.providers.chutes_provider import chutes_context
 from sealedlore.providers.context_probe import detect_context
 from sealedlore.providers.endpoints import EndpointsProvider, listing_key
-from sealedlore.providers.images import parse_image_models
+from sealedlore.providers.images import list_own_models, parse_image_models
+from sealedlore.providers.local_images import LocalSettings, where_drawn
 from sealedlore.providers.privacy import (
     PRIVACY_LEVELS,
     SERVICE_NAMES,
@@ -385,6 +389,10 @@ RECALL_CHOICES = (
     ("Questions: chapters and passages", "exchanges|questions"),
     ("Questions and turns: chapters and passages", "exchanges|everywhere"),
 )
+
+
+# How long Check the server waits for a server of one's own to answer.
+OWN_CHECK_SECONDS = 10.0
 
 
 class SettingsProblem(ValueError):
@@ -1573,7 +1581,15 @@ class SettingsDialog(QDialog):
             )
         if self.lore_selector.currentData() == "jev":
             still.append("what Jev is shown to pick lore, while Lore → Large lorebooks uses it")
-        still.append("pictures and videos, whose endpoints are their own")
+        api = self.image_api.currentData()
+        url = self.image_url.text().strip() or LOCAL_IMAGE_ADDRESSES.get(api, "")
+        drawn = where_drawn(api, url)
+        if drawn == "on this computer":
+            still.append("videos, whose endpoint is its own (pictures stay on this computer)")
+        elif drawn:
+            still.append("pictures, over your own network to their server; videos")
+        else:
+            still.append("pictures and videos, whose endpoints are their own")
         return "Still sent unencrypted: " + "; ".join(still) + "."
 
     def speed_targets(self) -> list[SpeedTarget]:
@@ -2339,9 +2355,7 @@ class SettingsDialog(QDialog):
         widget = QWidget()
         form = QFormLayout(widget)
         endpoint = self.config.image_endpoint
-        self.image_url, self.image_key, self.image_api = self._media_fields(endpoint)
-        self.image_url.setPlaceholderText("same as the chat endpoint")
-        self.image_key.setPlaceholderText("same as the chat key (same host only)")
+        self.image_url, self.image_key, self.image_api = self._media_fields(endpoint, pictures=True)
         form.addRow(_heading("Pictures of the story"))
         self._image_models = parse_image_models({"data": self.config.image_models})
         # Typed, or chosen with Browse… from a searchable table, as the text
@@ -2386,8 +2400,90 @@ class SettingsDialog(QDialog):
         where.add_row("API key", self.image_key)
         where.add_row(self._key_note())
         where.add_row("Service", self.image_api)
-        where.set_open(bool(endpoint.base_url.strip() or endpoint.api_key))
+        # A server of the author's own (ComfyUI, AUTOMATIC1111 / Forge): its
+        # own rows, shown while it is the service.
+        self.own_server = OwnImageServer(endpoint, self._check_own_server)
+        where.add_row(self.own_server)
+        self._image_fold = where
+        self.image_api.currentIndexChanged.connect(self._sync_own_server)
+        where.button.toggled.connect(self._sync_own_server)
+        where.set_open(
+            bool(endpoint.base_url.strip() or endpoint.api_key) or endpoint.api in LOCAL_IMAGE_APIS
+        )
+        self._sync_own_server()
         return widget
+
+    def _sync_own_server(self, *_args) -> None:
+        """The picture endpoint's rows as its service wants them: a server of
+        one's own starts where its program does and takes no chat key."""
+        api = self.image_api.currentData()
+        own = api in LOCAL_IMAGE_APIS
+        self.image_url.setPlaceholderText(
+            LOCAL_IMAGE_ADDRESSES[api] if own else "same as the chat endpoint"
+        )
+        self.image_key.setPlaceholderText(
+            (
+                "none, unless it asks for one (user:password for --api-auth)"
+                if api == "a1111"
+                else "none, unless something in front of it asks for one"
+            )
+            if own
+            else "same as the chat key (same host only)"
+        )
+        self.own_server.set_service(api)
+        # The fold shows its rows when it opens; this one only for its services.
+        self._image_fold.form.setRowVisible(self.own_server, own and self._image_fold.is_open())
+
+    def _check_own_server(self) -> None:
+        """Check the server: ask it, as typed, for its models. Quick (it is
+        on this computer or network), so on the GUI thread, as Detect is."""
+        api = self.image_api.currentData()
+        url = self.image_url.text().strip() or LOCAL_IMAGE_ADDRESSES.get(api, "")
+        key = self.image_key.text().strip()
+        try:
+            require_https(url)
+            settings = LocalSettings(**self.own_server.values())
+        except ValueError as exc:
+            self.own_server.show_check(f"⚠ {exc}")
+            return
+        if problem := key_problem(key, "pictures"):
+            self.own_server.show_check(f"⚠ {problem}")
+            return
+        if key and not self._may_send([SentPlain("Images", "pictures", url, key)]):
+            self.own_server.show_check("Not asked: its key would have gone unencrypted.")
+            return
+        self.own_server.check_button.setEnabled(False)
+        self.own_server.show_check("Asking the server…")
+        QApplication.processEvents()
+        try:
+            found = list_own_models(
+                url, api=api, api_key=key, local=settings, timeout_seconds=OWN_CHECK_SECONDS
+            )
+        except (ProviderError, ValueError) as exc:
+            self.own_server.show_check(f"⚠ {exc}")
+            return
+        finally:
+            self.own_server.check_button.setEnabled(True)
+        words = found_words(api, found)
+        if found:
+            self._image_models = found
+            self._fill_image_sizes()
+            ids = [model.id for model in found]
+            changed = []
+            for label, field in (
+                ("Image model", self.image_model),
+                ("Portrait model", self.portrait_model),
+            ):
+                if field.text().strip() not in ids:
+                    field.setText(ids[0])
+                    changed.append(label)
+                field.show_pictures()
+            if changed:
+                words += (
+                    f" {' and '.join(changed)} set to {ids[0]}: the models chosen "
+                    "weren't this server's (choose others with Browse… once saved)."
+                )
+        self.own_server.show_check(words)
 
     def _portrait_rows(self, form: QFormLayout) -> None:
         """Portraits of the characters (Story → Draw portraits…, the Cast
@@ -2434,18 +2530,27 @@ class SettingsDialog(QDialog):
             f"{model or 'No model'}: {price}." + (f" {known.note}" if known is not None else "")
         )
 
-    def _media_fields(self, endpoint: MediaEndpoint) -> tuple[QLineEdit, QLineEdit, QComboBox]:
-        """An address, a key and the service it speaks, for pictures or video."""
+    def _media_fields(
+        self, endpoint: MediaEndpoint, *, pictures: bool = False
+    ) -> tuple[QLineEdit, QLineEdit, QComboBox]:
+        """An address, a key and the service it speaks, for pictures or video
+        (a server of one's own draws pictures alone)."""
         url = QLineEdit(endpoint.base_url)
         key = QLineEdit(endpoint.api_key)
         key.setEchoMode(QLineEdit.Password)
         api = QComboBox()
         for value, label in MEDIA_API_LABELS.items():
-            api.addItem(label, value)
+            if pictures or value not in LOCAL_IMAGE_APIS:
+                api.addItem(label, value)
         api.setCurrentIndex(max(0, api.findData(endpoint.api)))
         api.setToolTip(
             "Which service the address is. From the address knows NanoGPT, OpenRouter "
             "and WaveSpeed; anything else is taken as OpenAI-compatible."
+            + (
+                " ComfyUI and AUTOMATIC1111 / Forge draw on a server of your own."
+                if pictures
+                else ""
+            )
         )
         return url, key, api
 
@@ -2732,6 +2837,7 @@ class SettingsDialog(QDialog):
                 base_url=self.image_url.text().strip(),
                 api_key=self.image_key.text().strip(),
                 api=self.image_api.currentData(),
+                **self._own_server_values(),
             ),
             video_endpoint=MediaEndpoint(
                 base_url=self.video_url.text().strip() or DEFAULT_BASE_URL,
@@ -2741,6 +2847,13 @@ class SettingsDialog(QDialog):
             private_provider=self._private_as_typed(),
             embedding_provider=self._embeddings_as_typed(embed_url),
         )
+
+    def _own_server_values(self) -> dict:
+        """A server of one's own's fields, as Save would write them."""
+        try:
+            return self.own_server.values()
+        except ValueError as exc:
+            raise SettingsProblem("Images", str(exc)) from exc
 
     def _private_as_typed(self) -> ProviderConfig | None:
         private_url = self.private_url.text().strip()

@@ -82,6 +82,7 @@ from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage, ImageRef, RefUse
 from sealedlore.models.lore import LoreEntry
 from sealedlore.providers.images import ImageModelInfo, parse_image_models
+from sealedlore.providers.local_images import where_drawn
 from sealedlore.storage.image_meta import picture_kind
 from sealedlore.storage.picture_store import file_name
 
@@ -276,6 +277,22 @@ class ImageDialog(QDialog):
                 "model below is not private. The prompt and any reference pictures are sent "
                 f"to it, and the picture and its prompt are {kept}."
             )
+        drawn = self._drawn_where()
+        if drawn:
+            # A server of the author's own: the picture never leaves.
+            kept = (
+                "kept in memory with the chat, never on disk"
+                if tee_chat and self.session.memory_only
+                else "saved with the " + ("chat" if tee_chat else "story on disk")
+            )
+            self.private_warning.setText(
+                ("TEE chat" if tee_chat else "Private scene")
+                + ": the prompt is written by "
+                + ("the chat's own model" if tee_chat else "your private model")
+                + f", and the picture is drawn {drawn}, by your own server: the prompt and "
+                f"any reference pictures go nowhere else. The picture and its prompt are {kept}."
+            )
+            self.private_warning.setObjectName("hintLabel")
         self.private_warning.setVisible(self.session.in_private or tee_chat)
 
         self.direction = GrowingText(lines=3, most=8)
@@ -880,6 +897,12 @@ class ImageDialog(QDialog):
             )
         return problems
 
+    def _drawn_where(self) -> str:
+        """ "on this computer" or "on your own network" when pictures are drawn
+        by a server of the author's own there (providers/local_images.py)."""
+        media = self.session.config.images()
+        return where_drawn(media.api, media.base_url) if media is not None else ""
+
     def _sent_refs(self) -> list[RefUse]:
         info = self._info()
         if info is not None and info.max_inputs == 0:
@@ -891,7 +914,11 @@ class ImageDialog(QDialog):
         size = self.size_choice.currentText().strip()
         n = self.count.value()
         price = info.price(size) if info is not None else None
-        if price is not None:
+        drawn = self._drawn_where()
+        if price == 0 and drawn:
+            self.price.setText(f"No charge: drawn {drawn}, by your own server.")
+            self.generate_button.setText(self._generate_word())
+        elif price is not None:
             self.price.setText(
                 f"${price:.3f} a picture × {n} = about ${price * n:.3f}, as listed by the endpoint"
             )

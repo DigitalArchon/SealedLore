@@ -2786,7 +2786,60 @@ Pictures go to the chat endpoint unless **Settings → Images** names another:
 an address, a key, and the service it is (NanoGPT, OpenRouter, WaveSpeed, or
 any OpenAI-compatible `/images/generations`; worked out from the address
 unless you choose). Left blank, the address is the chat endpoint's, and its
-key is used only when the address is the chat endpoint's own host.
+key is used only when the address is the chat endpoint's own host. Pictures
+can also be drawn by a server of your own (next section).
+
+### Drawing on your own computer: ComfyUI and AUTOMATIC1111 / Forge
+
+If you run ComfyUI, or AUTOMATIC1111 or one of its forks (Forge, reForge,
+SD.Next), SealedLore can draw every picture with it: nothing is charged, and
+the prompt and pictures never leave your computer (or your own network, for
+a server on another machine there). Open **Settings → Images**, open
+**Picture endpoint**, and choose **ComfyUI (your own)** or **AUTOMATIC1111 /
+Forge (your own)** as the **Service**. Leave the address blank for where the
+program starts by default (`http://127.0.0.1:8188` for ComfyUI,
+`http://127.0.0.1:7860` for AUTOMATIC1111); a server on another machine of
+your network may be plain `http://`, anything further away must be
+`https://`. AUTOMATIC1111 must be started with `--api` (and `--listen` to be
+reached from another machine); if it runs with `--api-auth`, put
+`user:password` in the API key field.
+
+**Check the server** asks it for its checkpoints, which are its models, and
+puts the first in the Image model and Portrait model fields if those named
+models of another service. Once saved, **Choose** beside each model field
+lists them. The sizes offered follow the checkpoint: SDXL and what came after
+it (Pony, Illustrious, FLUX…) around a megapixel, Stable Diffusion 1.5 at
+512. Every picture dialog says **No charge** for them.
+
+A picture sent with the prompt (a card's picture changed, an expression, a
+character in a scene) goes as image-to-image: **A picture may change** says
+how far (low keeps more of it; about 0.5-0.65 for a new expression or
+clothes). An ordinary checkpoint takes one picture and redraws it rather
+than following an instruction, so **Change this picture…** works best with an
+edit model through a ComfyUI workflow of your own (below). **Extra
+settings** takes JSON put into each request: for AUTOMATIC1111 its own
+fields (`{"steps": 30, "cfg_scale": 5, "sampler_name": "DPM++ 2M"}`; a FLUX
+checkpoint on Forge wants `{"cfg_scale": 1, "distilled_cfg_scale": 3.5}`),
+for ComfyUI's built-in workflow `steps`, `cfg`, `sampler_name`, `scheduler`
+and `negative_prompt`.
+
+ComfyUI draws with a built-in workflow for any ordinary checkpoint, one from
+words and one from a picture. For anything else (FLUX, Qwen Image, an edit
+model, your LoRAs) give it a workflow of your own: in ComfyUI use **Workflow →
+Export (API)** and paste the file into **Workflow, from words** or
+**Workflow, from a picture**, or **Load a file…**. Put placeholders where
+SealedLore's values go: `{{prompt}}`, `{{negative_prompt}}`, `{{width}}`,
+`{{height}}`, `{{seed}}`, `{{model}}` (then the models offered are the ones
+that node takes), `{{steps}}`, `{{cfg}}`, `{{sampler_name}}`, `{{scheduler}}`,
+`{{strength}}`, `{{batch}}`, and `{{image}}`, `{{image2}}`… for pictures sent
+with the prompt. The line under the box says what it found. A workflow with
+no `{{model}}` draws with the model it names, offered as "Your workflow". The
+built-in workflows only preview their pictures, so nothing collects in
+ComfyUI's output folder; a picture sent with the prompt is uploaded to its
+input folder, as anything uploaded to ComfyUI is. **Stop** also stops the
+server: AUTOMATIC1111's current picture, or SealedLore's own job in
+ComfyUI's queue (never someone else's). What the server writes into its
+pictures (the prompt and every setting) is removed before they are kept.
 
 ### Pictures of your own
 
@@ -3796,8 +3849,9 @@ model and cost alone, like the rest.
   picks also go to the chat endpoint (the lore model), or, with "Jev before
   each turn", to its `/decisions` route with the lore and recent story.
 - **The image endpoint** (Settings → Images; by default the chat
-  endpoint's host) gets the approved prompt and the reference pictures you
-  chose, and the picture comes back and is saved with the story (a reply that
+  endpoint's host, or a server of your own, ComfyUI or AUTOMATIC1111 / Forge,
+  where nothing leaves your computer or network) gets the approved prompt
+  and the reference pictures you chose, and the picture comes back and is saved with the story (a reply that
   names a download link is fetched from that link, which may be a content
   network, without the key). WaveSpeed takes pictures as links, so the
   reference pictures are uploaded to it first. A redirect of a request that

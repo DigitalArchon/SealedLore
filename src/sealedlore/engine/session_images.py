@@ -43,6 +43,7 @@ from sealedlore.models.node import Node
 from sealedlore.models.video import GeneratedVideo
 from sealedlore.providers.base import ChatRequest
 from sealedlore.providers.images import ImageClient, ImageModelInfo, parse_image_models
+from sealedlore.providers.local_images import local_settings
 from sealedlore.providers.videos import VideoClient
 from sealedlore.storage.image_meta import picture_kind
 from sealedlore.storage.images import IMAGES_DIR, clean_story_images
@@ -459,6 +460,7 @@ class ImageRuntime:
             api=media.api,
             key_withheld=media.key_withheld,
             sealed_api=media.sealed_api,
+            local=local_settings(media),
         )
 
     def clean_stored_images(self) -> None:

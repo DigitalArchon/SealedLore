@@ -923,14 +923,29 @@ class ProviderConfig(BaseModel):
 
 # The protocol a picture or video endpoint speaks. "auto" reads it from the
 # host (`media_api`); anything unknown is taken as OpenAI's own shape.
-MediaApi = Literal["auto", "nanogpt", "openai", "openrouter", "wavespeed"]
+# ComfyUI and AUTOMATIC1111 / Forge draw pictures on a server of the author's
+# own (providers/local_images.py), and make no video.
+MediaApi = Literal["auto", "nanogpt", "openai", "openrouter", "wavespeed", "comfyui", "a1111"]
 MEDIA_API_LABELS: dict[str, str] = {
     "auto": "From the address",
     "nanogpt": "NanoGPT",
     "openai": "OpenAI-compatible",
     "openrouter": "OpenRouter",
     "wavespeed": "WaveSpeed",
+    "comfyui": "ComfyUI (your own)",
+    "a1111": "AUTOMATIC1111 / Forge (your own)",
 }
+# The services that run on the author's own computer or server: pictures
+# only, and where nothing is said an address their own programs start on.
+LOCAL_IMAGE_APIS: tuple[str, ...] = ("comfyui", "a1111")
+LOCAL_IMAGE_ADDRESSES: dict[str, str] = {
+    "comfyui": "http://127.0.0.1:8188",
+    "a1111": "http://127.0.0.1:7860",
+}
+# How far a picture sent with the prompt may change on a server of one's own
+# (img2img's denoising strength): enough for a new expression or a change of
+# clothes, little enough to keep the face. Settings → Images.
+DEFAULT_PICTURE_STRENGTH = 0.6
 _MEDIA_HOSTS = {
     "nano-gpt.com": "nanogpt",
     "openrouter.ai": "openrouter",
@@ -970,6 +985,21 @@ class MediaEndpoint(BaseModel):
     key_declined_for: str = ""
     # Confirmed for plain http to another machine (`ProviderConfig.key_in_clear_for`).
     key_in_clear_for: str = ""
+    # A server of the author's own (LOCAL_IMAGE_APIS), pictures only. ComfyUI:
+    # a workflow of the author's, in ComfyUI's API format (Export (API)), to
+    # draw from words and to draw from a picture sent with the prompt; blank,
+    # the built-in ones (providers/local_images.py). Kept as text, so the
+    # settings stand on their own.
+    workflow: str = ""
+    workflow_edit: str = ""
+    # How far a picture sent with the prompt may change (img2img's denoising
+    # strength), for AUTOMATIC1111 / Forge and ComfyUI's built-in workflow.
+    strength: float = Field(default=DEFAULT_PICTURE_STRENGTH, ge=0.05, le=1.0)
+    # AUTOMATIC1111 / Forge: fields put into every request as they are
+    # (steps, cfg_scale, sampler_name, scheduler, negative_prompt…). ComfyUI's
+    # built-in workflows read steps, cfg, sampler_name, scheduler and
+    # negative_prompt from it.
+    extra_body: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("base_url")
     @classmethod
@@ -991,6 +1021,17 @@ class ResolvedMedia(BaseModel):
     # Why no key is sent (`key_withheld`): a request that would carry it
     # refuses in these words.
     key_withheld: str = ""
+    # A server of the author's own (`MediaEndpoint`): its workflows, how far
+    # a picture may change, and the fields put into each request.
+    workflow: str = ""
+    workflow_edit: str = ""
+    strength: float = DEFAULT_PICTURE_STRENGTH
+    extra_body: dict[str, Any] = Field(default_factory=dict)
+
+    @property
+    def local(self) -> bool:
+        """Drawn on a server of the author's own (ComfyUI, AUTOMATIC1111)."""
+        return self.api in LOCAL_IMAGE_APIS
 
 
 DEFAULT_EMBEDDING_MODEL = "BAAI/bge-m3"
@@ -1649,6 +1690,8 @@ class Config(BaseModel):
         None when there is nowhere to send them. `as_confirmed`: as
         `ProviderConfig.sendable`."""
         settings = self.image_endpoint
+        if settings.api in LOCAL_IMAGE_APIS:
+            return self._own_images(settings, as_confirmed=as_confirmed)
         chat = self._chat_to_inherit()
         base_url = settings.base_url or (chat.base_url if chat is not None else "")
         if not base_url:
@@ -1671,6 +1714,33 @@ class Config(BaseModel):
             api=media_api(base_url, settings.api),
             key_withheld=withheld,
             sealed_api=self.sealed_api_at(base_url),
+        )
+
+    def _own_images(self, settings: MediaEndpoint, *, as_confirmed: bool) -> ResolvedMedia:
+        """A server of the author's own: its address, or where its program
+        starts by default; nothing inherited from the chat endpoint, which is
+        somewhere else (its key above all)."""
+        base_url = settings.base_url or LOCAL_IMAGE_ADDRESSES[settings.api]
+        withheld = (
+            key_withheld(
+                settings.api_key,
+                settings.key_saved_for,
+                base_url,
+                "pictures",
+                None if as_confirmed else settings.key_in_clear_for,
+            )
+            or ""
+        )
+        return ResolvedMedia(
+            base_url=base_url,
+            api_key="" if withheld else settings.api_key,
+            api=settings.api,
+            key_withheld=withheld,
+            sealed_api=self.sealed_api_at(base_url),
+            workflow=settings.workflow,
+            workflow_edit=settings.workflow_edit,
+            strength=settings.strength,
+            extra_body=dict(settings.extra_body),
         )
 
     def videos(self, *, as_confirmed: bool = False) -> ResolvedMedia | None:

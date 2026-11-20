@@ -21,6 +21,9 @@ retention on, most picture models answered 404 ("ZDR violation").
 WaveSpeed (`providers/wavespeed.py`): a prediction, polled; references are
 uploaded first and sent as URLs. Built from its documentation (Sept 2026)
 and not yet checked live.
+
+ComfyUI and AUTOMATIC1111 / Forge (`providers/local_images.py`): a server of
+the author's own, its checkpoints listed as models, nothing charged.
 """
 
 from __future__ import annotations
@@ -33,10 +36,17 @@ from typing import Any
 import httpx
 
 from sealedlore.call_log import CALLS, MEDIA_SERVICES, PICTURE, plain_protection
-from sealedlore.models.config import media_api
+from sealedlore.models.config import LOCAL_IMAGE_APIS, media_api
 from sealedlore.providers import wavespeed
 from sealedlore.providers.base import ProviderError, StreamCancelled
 from sealedlore.providers.http import make_client, reply_json
+from sealedlore.providers.local_images import (
+    LocalDrawing,
+    LocalSettings,
+    auth_headers,
+    is_local,
+    list_models,
+)
 from sealedlore.providers.media_http import MediaHttp, MediaTimedOut
 from sealedlore.providers.privacy import MEDIA_WAY_OUT, plain_refusal
 
@@ -255,6 +265,13 @@ def build_image_payload(
         if references:
             payload["images"] = list(references)
         return payload
+    if api in LOCAL_IMAGE_APIS:
+        # What the request asks for, in the app's own terms: the server's
+        # own request is made from it (providers/local_images.py).
+        payload = {"model": model, "prompt": prompt, "size": size, "n": n}
+        if references:
+            payload["images"] = list(references)
+        return payload
     payload = {
         "model": model,
         "prompt": prompt,
@@ -287,10 +304,13 @@ class ImageClient:
         client: httpx.Client | None = None,
         key_withheld: str = "",
         sealed_api: str = "auto",
+        local: LocalSettings | None = None,
     ) -> None:
         self.base_url = base_url
         self.api_key = api_key
         self.api = api or media_api(base_url)
+        # A server of the author's own: its workflows and settings.
+        self.local = local or LocalSettings()
         self.http = MediaHttp(
             base_url,
             api_key,
@@ -324,7 +344,12 @@ class ImageClient:
             protection=plain_protection(self.base_url),
         )
         try:
-            reply = self._wavespeed(payload) if self.api == "wavespeed" else self._made(payload)
+            if self.api in LOCAL_IMAGE_APIS:
+                reply = self._own_server(payload)
+            elif self.api == "wavespeed":
+                reply = self._wavespeed(payload)
+            else:
+                reply = self._made(payload)
         except StreamCancelled:
             CALLS.finish(call, "stopped")
             raise
@@ -357,6 +382,15 @@ class ImageClient:
         return ImageReply(
             images=images, raw=raw, cost=float(cost) if isinstance(cost, (int, float)) else None
         )
+
+    def _own_server(self, payload: dict[str, Any]) -> ImageReply:
+        """ComfyUI or AUTOMATIC1111 / Forge: nothing charged on this computer
+        or its network; somewhere else, no price known."""
+        if self.http.key_withheld:
+            raise ProviderError(self.http.key_withheld)
+        drawing = LocalDrawing(self.api, self.http, self.base_url, self.api_key, self.local)
+        images, kept = drawing.draw(payload)
+        return ImageReply(images=images, raw=kept, cost=0.0 if is_local(self.base_url) else None)
 
     def _wavespeed(self, payload: dict[str, Any]) -> ImageReply:
         body = dict(payload)
@@ -428,10 +462,12 @@ def list_image_models(
     timeout_seconds: float = 30.0,
     sealed_api: str = "auto",
     wanted: str = "",
+    local: LocalSettings | None = None,
 ) -> list[ImageModelInfo]:
     """The endpoint's picture models. Empty if it has none or won't say.
     `wanted`: a model whose prices are fetched too where they are per model
-    (OpenRouter)."""
+    (OpenRouter). `local`: a server of the author's own's workflows (the
+    models a ComfyUI workflow takes are the ones offered)."""
     # Never from an end-to-end encrypted endpoint (providers/privacy.py),
     # by its host or what an endpoint at its address speaks (`sealed_api`,
     # `Config.sealed_api_at`): a plain listing would go to it in the clear,
@@ -461,6 +497,8 @@ def list_image_models(
                     if priced.status_code < 400 and isinstance(reply_json(priced), dict):
                         item["endpoints"] = reply_json(priced).get("endpoints") or []
             return parse_openrouter_image_models(items)
+        if api in LOCAL_IMAGE_APIS:
+            return list_own_models(base_url, api=api, api_key=api_key, client=http, local=local)
         if api == "wavespeed":
             media = MediaHttp(
                 base_url,
@@ -473,6 +511,36 @@ def list_image_models(
         return []
     except (httpx.HTTPError, ValueError, ProviderError):
         return []
+    finally:
+        if owned:
+            http.close()
+
+
+def list_own_models(
+    base_url: str,
+    *,
+    api: str,
+    api_key: str = "",
+    client: httpx.Client | None = None,
+    local: LocalSettings | None = None,
+    timeout_seconds: float = 30.0,
+) -> list[ImageModelInfo]:
+    """A server of the author's own's checkpoints, as picture models. Raises
+    ProviderError in words when it can't say (Settings → Images' Check),
+    where `list_image_models` gives an empty list."""
+    owned = client is None
+    http = client or make_client(base_url, timeout=httpx.Timeout(timeout_seconds))
+    headers = auth_headers(api, api_key, base_url)
+    try:
+        return list_models(
+            api,
+            base_url,
+            api_key,
+            local or LocalSettings(),
+            get=lambda url: http.get(url, headers=headers),
+        )
+    except httpx.HTTPError as exc:
+        raise ProviderError(f"Nothing answered at {base_url.rstrip('/')} ({exc})") from exc
     finally:
         if owned:
             http.close()

@@ -43,6 +43,8 @@ MEDIA_SERVICES = {
     "openrouter": "OpenRouter",
     "wavespeed": "WaveSpeed",
     "openai": "OpenAI-compatible",
+    "comfyui": "ComfyUI",
+    "a1111": "AUTOMATIC1111 / Forge",
 }
 # A label older than this, for a call whose model it can't check, isn't
 # taken: it is another call's.

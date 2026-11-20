@@ -406,6 +406,8 @@ story writes the prompt, using those portraits and any other reference
 pictures you give people, places and objects. You see the whole request
 before anything is sent. I recommend Seedream 5.0 Pro for this, which is the
 default. Every picture and video the story has made is on its Media page.
+Pictures can also be drawn for free on your own computer, by ComfyUI or
+AUTOMATIC1111 / Forge (Settings → Images): nothing then leaves it.
 
 It can make short videos of the story too (Seedance 2.5 by default), played
 in place in the story, from a prompt written for video and, if you like,
@@ -673,7 +675,8 @@ encrypts the whole way.
   or turn when recall searches for it.
 - **Pictures** go to the picture endpoint (Settings → Images; by default the
   chat endpoint): the prompt you approved and the reference pictures you
-  chose.
+  chose. Drawn by a server of your own (ComfyUI or AUTOMATIC1111 / Forge),
+  they never leave your computer or network.
 - **Videos** go to the video endpoint (Settings → Video, off until it has a
   key): the prompt you approved and the start and end pictures you chose.
 - **A private scene** goes to the private model alone. Checking a TEE model
