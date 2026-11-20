@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from sealedlore.ids import new_id, utc_now_iso
 from sealedlore.models.character import Character
 from sealedlore.models.image import ImageRef
+from sealedlore.models.lore import TavernWorldInfo
 from sealedlore.models.node import AgencyMode, NpcScope, ResponseStyle
 from sealedlore.models.plot import Plot
 from sealedlore.models.private import Attestation, PrivacyRecord, PrivatePrompt, PrivateSpan
@@ -92,6 +93,11 @@ class StoryDefaults(BaseModel):
     # turn, before the storyteller writes (the author, Nov 18 2026: as
     # another human player would).
     round_order: Literal["together", "after"] = "together"
+    # How the lore's entries are chosen each turn: SealedLore's own ways
+    # (Settings → Lore), or exactly as SillyTavern fires a lorebook's, with
+    # its own settings (engine/tavern_firing.py; the Lore page).
+    lore_firing: Literal["sealedlore", "sillytavern"] = "sealedlore"
+    tavern_world_info: TavernWorldInfo = Field(default_factory=TavernWorldInfo)
     # The author's testing (Sept 2026): Sonnet 4.5/4.6 storytelling degrades
     # quickly past ~60k tokens of context, so 60k is the ceiling as well as
     # the default. Existing stories keep what they were saved with.

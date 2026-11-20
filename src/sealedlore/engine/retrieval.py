@@ -29,7 +29,7 @@ from typing import Literal
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.node import Node
 
-Reason = Literal["always_on", "picked", "named", "matched", "semantic", "keyword"]
+Reason = Literal["always_on", "picked", "named", "matched", "semantic", "keyword", "tavern"]
 LoreMode = Literal["whole", "select"]
 
 # The order entries are offered to the room in (`fit_lore`). What the
@@ -44,6 +44,7 @@ REASON_ORDER: dict[Reason, int] = {
     "matched": 3,
     "semantic": 3,
     "keyword": 4,
+    "tavern": 0,
 }
 
 # How many just-missed entries to keep for the panel. Enough to see where the
@@ -61,6 +62,7 @@ REASON_LABELS: dict[Reason, str] = {
     "matched": "a best match for the turn",
     "semantic": "semantic match",
     "keyword": "keyword match",
+    "tavern": "fired as SillyTavern would",
 }
 
 
@@ -75,6 +77,8 @@ class Injection:
     whole: int | None = None
     # Its place among the turn's best matches (`turn_ranking`), 1 the best.
     rank: int | None = None
+    # Why SillyTavern's rules fired it (engine/tavern_firing.py).
+    why: str = ""
 
     @property
     def fitted(self) -> bool:
@@ -89,6 +93,8 @@ class Injection:
                 said += f" (similarity {self.score:.2f})"
         elif self.reason == "picked" and self.score is not None:
             said = f"picked by Jev ({self.score:.2f})"
+        elif self.reason == "tavern" and self.why:
+            said = f"fired as SillyTavern would: {self.why}"
         else:
             said = REASON_LABELS[self.reason]
         if self.whole is not None:
@@ -124,6 +130,12 @@ class RetrievalReport:
     # The near misses are the turn's next best matches (`turn_ranking`), not
     # the entries just under the similarity threshold.
     misses_ranked: bool = False
+    # Fired as SillyTavern fires (selector "sillytavern"): what didn't, and
+    # why, and the budget its rules gave the turn.
+    not_fired: tuple[tuple[LoreEntry, str], ...] = ()
+    tavern_budget: int = 0
+    # (the chat's length in messages, what fired): what the author's node keeps.
+    tavern_record: tuple[int, tuple[str, ...]] | None = None
 
     @property
     def entries(self) -> tuple[LoreEntry, ...]:

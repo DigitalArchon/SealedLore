@@ -11,6 +11,7 @@ from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
+    QComboBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -51,6 +52,19 @@ LIST_ROWS = 8
 REPORT_ROWS = 6
 
 
+FIRING_SEALEDLORE = "chosen SealedLore's way"
+FIRING_TAVERN = "fired exactly as SillyTavern does"
+FIRING_TIP = (
+    "SealedLore's way: a small lorebook is sent whole, a large one chosen per turn as "
+    "Settings → Lore says.\n\nExactly as SillyTavern does: each turn's entries fire by "
+    "SillyTavern's own rules and each entry's own settings from its lorebook (keys and "
+    "secondary keys, order, recursion, sticky, cooldown, delay, inclusion groups, "
+    "probability, its budget). A constant entry nothing can stop is sent with the world, "
+    "cached; the rest go with the turn, in SillyTavern's order. Entries written here "
+    "fire by their keywords."
+)
+
+
 class LorePanel(QWidget):
     changed = Signal()
     reembed_requested = Signal()
@@ -67,6 +81,10 @@ class LorePanel(QWidget):
     # (entry id, picture id or "", what): a picture drawn for the entry:
     # "new", or "again" or "edit" of that picture (as on the Cast page).
     picture_requested = Signal(str, str, str)
+    # How the entries are chosen each turn: "sealedlore" or "sillytavern"
+    # (engine/tavern_firing.py), and SillyTavern's settings asked for.
+    firing_changed = Signal(str)
+    tavern_settings_requested = Signal()
 
     def __init__(self, pictures: StoryPictures | None = None) -> None:
         super().__init__()
@@ -136,10 +154,30 @@ class LorePanel(QWidget):
             self.people_button,
         )
 
+        # How the entries are chosen each turn: SealedLore's ways (Settings →
+        # Lore), or exactly as SillyTavern fires a lorebook's.
+        self.firing = QComboBox()
+        self.firing.addItem(FIRING_SEALEDLORE, "sealedlore")
+        self.firing.addItem(FIRING_TAVERN, "sillytavern")
+        self.firing.setToolTip(FIRING_TIP)
+        self.firing.currentIndexChanged.connect(self._on_firing)
+        self.tavern_settings_button = QPushButton("SillyTavern settings…")
+        self.tavern_settings_button.setToolTip(
+            "SillyTavern's World Info settings for this story: scan depth, budget, recursion, "
+            "minimum activations, case, whole words, group scoring"
+        )
+        self.tavern_settings_button.clicked.connect(self.tavern_settings_requested)
+        firing_row = QHBoxLayout()
+        firing_row.setContentsMargins(0, 0, 0, 0)
+        firing_row.addWidget(QLabel("Entries"))
+        firing_row.addWidget(self.firing, 1)
+        firing_row.addWidget(self.tavern_settings_button)
+
         top = QWidget()
         top_layout = QVBoxLayout(top)
         top_layout.setContentsMargins(0, 0, 0, 0)
         top_layout.setSpacing(6)
+        top_layout.addLayout(firing_row)
         top_layout.addWidget(self.list, 1)
         top_layout.addLayout(buttons)
         self._top_layout = top_layout
@@ -289,10 +327,15 @@ class LorePanel(QWidget):
         return rows * row + 2 * view.frameWidth()
 
     def _list_height(self) -> int:
-        """The list as tall as its entries, three to eight, and its buttons."""
+        """The list as tall as its entries, three to eight, its buttons, and
+        the Entries row above it."""
         rows = min(max(self.list.count(), 3), LIST_ROWS)
         buttons = max(button.sizeHint().height() for button in self._list_buttons)
-        return self._rows_tall(self.list, rows) + self._top_layout.spacing() + buttons
+        firing = max(
+            self.firing.sizeHint().height(), self.tavern_settings_button.sizeHint().height()
+        )
+        spacing = self._top_layout.spacing()
+        return self._rows_tall(self.list, rows) + spacing + buttons + spacing + firing
 
     def _report_height(self) -> int:
         """The report as tall as what it says, its list six rows at most."""
@@ -402,6 +445,11 @@ class LorePanel(QWidget):
             self.injected.addItem(f"{injection.entry.title} — {injection.describe()}")
         for injection in report.dropped:
             self.injected.addItem(f"{injection.entry.title} — left out: no room left this turn")
+        # Fired as SillyTavern fires: what didn't, and SillyTavern's reason.
+        for entry, why in report.not_fired:
+            item = QListWidgetItem(f"{entry.title} — not fired: {why}")
+            item.setForeground(Qt.gray)
+            self.injected.addItem(item)
         # Similarity scores cluster, so the threshold can only be tuned by
         # seeing what sat just under it.
         for entry, score in report.near_misses:
@@ -415,6 +463,12 @@ class LorePanel(QWidget):
             self.injected.addItem(item)
 
         count = f"{len(report.injected)} entries, ~{report.tokens:,} tokens"
+        if report.selector == "sillytavern":
+            self.status.setText(
+                f"{count} · fired as SillyTavern would, within its budget of "
+                f"{report.tavern_budget:,} tokens"
+            )
+            return
         if report.selector == "picker":
             self.status.setText(
                 f"{count} · picked after the last passage, and what your turn names"
@@ -585,3 +639,17 @@ class LorePanel(QWidget):
             if item.data(Qt.UserRole) == entry_id:
                 self.list.setCurrentItem(item)
                 return
+
+    # --- how the entries fire ------------------------------------------------
+
+    def set_firing(self, mode: str) -> None:
+        """Show the story's choice without telling anyone it changed."""
+        self.firing.blockSignals(True)
+        self.firing.setCurrentIndex(max(0, self.firing.findData(mode)))
+        self.firing.blockSignals(False)
+        self.tavern_settings_button.setEnabled(mode == "sillytavern")
+
+    def _on_firing(self, _index: int) -> None:
+        mode = self.firing.currentData()
+        self.tavern_settings_button.setEnabled(mode == "sillytavern")
+        self.firing_changed.emit(mode)

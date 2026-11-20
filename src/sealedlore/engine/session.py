@@ -217,6 +217,7 @@ from sealedlore.engine.session_recall import RecallRuntime
 from sealedlore.engine.session_record import RecordRuntime
 from sealedlore.engine.session_story_suggestions import StorySuggestionsRuntime
 from sealedlore.engine.session_suggest import SuggestRuntime
+from sealedlore.engine.session_tavern import CONTINUE, NEW_TURN, RETAKE, TavernRuntime
 from sealedlore.engine.session_views import ViewsRuntime
 from sealedlore.engine.story_plot import plot_uses, take_out_character
 from sealedlore.engine.tokens import TokenEstimator, updated_correction_factor
@@ -615,6 +616,7 @@ class StorySession(
     RecordRuntime,
     ViewsRuntime,
     StorySuggestionsRuntime,
+    TavernRuntime,
 ):
     def __init__(
         self,
@@ -1165,6 +1167,7 @@ class StorySession(
         history: Sequence[Node],
         *,
         allow_network: bool = True,
+        trigger: Sequence[str] = NEW_TURN,
     ) -> RetrievalReport:
         """Choose this turn's lore, semantically when possible.
 
@@ -1177,6 +1180,10 @@ class StorySession(
         if layout.mode == "whole":
             # Nothing to choose: every entry is standing in the system block.
             return RetrievalReport(mode="whole", standing=layout.standing, query_text=query)
+        if self.fires_like_tavern:
+            # As SillyTavern fires a lorebook (engine/session_tavern.py).
+            report = self.tavern_select(layout.selectable, turn, history, trigger=trigger)
+            return replace(report, standing=layout.standing)
         report = self._select(layout.selectable, turn, history, query, allow_network=allow_network)
         return replace(report, standing=layout.standing)
 
@@ -1193,6 +1200,9 @@ class StorySession(
     def lore_layout(self, budget: int | None = None) -> LoreLayout:
         """Whether the lorebook goes whole into the system block or is selected from.
         `budget`: another than the story's (a private scene's model has its own)."""
+        if self.fires_like_tavern:
+            # SillyTavern fires a lorebook per turn, however small it is.
+            return self.tavern_layout()
         return lore_layout(
             self.visible_lore(),
             budget=budget or self.story.defaults.context_token_budget,
@@ -1293,7 +1303,7 @@ class StorySession(
         and `_finish_lore_pick` applies it; a provider without `detached` (the
         scripted mock) is asked there, in turn.
         """
-        if self.config.lore_selector != "picker" or self.story.chat:
+        if self.config.lore_selector != "picker" or self.story.chat or self.fires_like_tavern:
             return None
         result = self.last_result
         if result is None or result.node is None or result.unread:
@@ -1607,13 +1617,15 @@ class StorySession(
         return turn.user_text
 
     def _retrieve_for_turn(
-        self, turn: TurnRequest, history: Sequence[Node]
+        self, turn: TurnRequest, history: Sequence[Node], *, trigger: Sequence[str] = NEW_TURN
     ) -> tuple[LoreEntry, ...]:
-        """Retrieve for a turn about to be sent, and keep the report for the UI."""
+        """Retrieve for a turn about to be sent, and keep the report for the UI.
+        `trigger`: the kind of turn, for lore fired as SillyTavern fires it."""
         if self.story.chat:  # a simple chat has no lore
             self.last_retrieval = None
             return ()
-        report = self.retrieve(turn, history)
+        report = self.retrieve(turn, history, trigger=trigger)
+        self.record_tavern(turn, report)
         self.last_retrieval = report
         return report.entries
 
@@ -2236,7 +2248,7 @@ class StorySession(
             for text in [*self.adopt_rebuild(), *self.adopt_condensed()]:
                 yield SessionNotice(text)
             yield from self.archive_if_due(turn, history)
-            lore = self._retrieve_for_turn(turn, history)
+            lore = self._retrieve_for_turn(turn, history, trigger=RETAKE)
             recall = self._recall_for_turn(self._recall_query(turn, history), history)
             prompt = self.assemble(turn, history_nodes=history, lore=lore, recall=recall)
             yield from self._generate(prompt, turn, parent=user_node)
@@ -2363,7 +2375,7 @@ class StorySession(
                 provider, model = self.private_provider, span.model
             else:
                 turn = self._directed(turn, user_node.meta.direction, [*history, user_node])
-                lore = self._retrieve_for_turn(turn, history)
+                lore = self._retrieve_for_turn(turn, history, trigger=CONTINUE)
                 recall = self._recall_for_turn(self._recall_query(turn, history), history)
                 prompt = self.assemble(turn, history_nodes=history, lore=lore, recall=recall)
                 provider, model = None, None
@@ -2498,7 +2510,7 @@ class StorySession(
                 provider, model = self.private_provider, span.model
             else:
                 turn = self._directed(turn, user_node.meta.direction, [*history, user_node])
-                lore = self._retrieve_for_turn(turn, history)
+                lore = self._retrieve_for_turn(turn, history, trigger=RETAKE)
                 recall = self._recall_for_turn(self._recall_query(turn, history), history)
                 prompt = self.assemble(turn, history_nodes=history, lore=lore, recall=recall)
                 provider, model = None, None
@@ -2583,7 +2595,7 @@ class StorySession(
                 yield from self._private_turn(turn, user_node, history=history)
             else:
                 turn = self._directed(turn, user_node.meta.direction, [*history, user_node])
-                lore = self._retrieve_for_turn(turn, history)
+                lore = self._retrieve_for_turn(turn, history, trigger=RETAKE)
                 recall = self._recall_for_turn(self._recall_query(turn, history), history)
                 prompt = self.assemble(turn, history_nodes=history, lore=lore, recall=recall)
                 yield from self._generate(prompt, turn, parent=user_node)

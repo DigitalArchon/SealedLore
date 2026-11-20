@@ -101,6 +101,13 @@ class NodeMeta(BaseModel):
     # model picked for the passage after it (`Config.lore_selector` "picker"),
     # read in the background. None = not picked; [] = picked, and none needed.
     lore_picks: list[str] | None = None
+    # A story firing its lore as SillyTavern does (engine/tavern_firing.py):
+    # what fired for this author turn, and the chat's length in messages
+    # then, from which sticky, cooldown and delay are replayed along a path.
+    # Recorded on every such turn, fired or not: SillyTavern's timed effects
+    # move on each scan.
+    tavern_fired: list[str] | None = None
+    tavern_length: int | None = None
     # On an author's turn: what the plot's director told the storyteller
     # to do in the reply. Regenerate reuses it.
     direction: list[Direction] = Field(default_factory=list)

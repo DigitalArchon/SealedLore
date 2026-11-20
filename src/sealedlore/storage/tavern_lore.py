@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from sealedlore.models.lore import LoreEntry
+from sealedlore.models.lore import LoreEntry, TavernEntry
 from sealedlore.storage.atomic import NestedTooDeep, atomic_write_json, outside_json
 from sealedlore.storage.image_meta import PNG_SIGNATURE
 from sealedlore.storage.png_text import PngTextError, text_chunks
@@ -65,11 +65,17 @@ class LoreImport:
     left_out: Counter[str] = field(default_factory=Counter)
 
     def notes(self) -> list[str]:
-        """The left-out features in words, one line each."""
-        return [
+        """The left-out features in words, one line each; and, last, that
+        those SillyTavern's own rules use are kept with each entry
+        (`LoreEntry.tavern`) for a story whose lore fires as SillyTavern's
+        does (engine/tavern_firing.py)."""
+        said = [
             f"{_LEFT_OUT[kind]} ({count} {'entry' if count == 1 else 'entries'})"
             for kind, count in sorted(self.left_out.items(), key=lambda item: _ORDER[item[0]])
         ]
+        if any(kind in KEPT_FOR_FIRING for kind in self.left_out):
+            said.append(KEPT_NOTE)
+        return said
 
 
 _LEFT_OUT = {
@@ -88,6 +94,15 @@ _LEFT_OUT = {
     "empty": "entries with no content, not imported",
 }
 _ORDER = {kind: index for index, kind in enumerate(_LEFT_OUT)}
+# What SealedLore's own way leaves out but each entry keeps, for a story that
+# fires its lore exactly as SillyTavern does (Lore page, Entries).
+KEPT_FOR_FIRING = frozenset(
+    {"secondary", "regex", "probability", "timing", "group", "recursion", "filter"}
+)
+KEPT_NOTE = (
+    "Each entry keeps these settings: fired exactly as SillyTavern does (the Lore page's "
+    "Entries), the story uses them"
+)
 
 
 def _keys(value: Any) -> list[str]:
@@ -341,9 +356,30 @@ def lore_from_book(
                 always_on=always_on,
                 enabled=enabled,
                 came_from=came_from,
+                tavern=TavernEntry(
+                    numbered=numbered,
+                    fields=_as_fired(raw, fill, content),
+                    decorators=list(decorators),
+                ),
             )
         )
     return result
+
+
+def _as_fired(raw: Mapping[str, Any], fill: Callable[[str], str], content: str) -> dict[str, Any]:
+    """The entry's fields as a story firing its lore as SillyTavern does reads
+    them (engine/tavern_firing.py): as they came, with the names filled into
+    its keys as SillyTavern fills them before matching, and its text as the
+    story has it."""
+    kept = {key: value for key, value in raw.items() if key != "content"}
+    for name in ("key", "keys", "keysecondary", "secondary_keys"):
+        value = kept.get(name)
+        if isinstance(value, list):
+            kept[name] = [fill(str(key)) for key in value]
+        elif isinstance(value, str):
+            kept[name] = fill(value)
+    kept["content"] = content
+    return kept
 
 
 def _features(raw: Mapping[str, Any], numbered: bool) -> Iterable[str]:

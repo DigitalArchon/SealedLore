@@ -156,6 +156,7 @@ from sealedlore.gui.window_story_suggestions import (
 )
 from sealedlore.gui.window_story_suggestions import StorySuggestionsWindow
 from sealedlore.gui.window_tavern import TavernWindow
+from sealedlore.gui.window_tavern_firing import TavernFiringWindow
 from sealedlore.gui.window_text import TextSizeWindow
 from sealedlore.gui.window_videos import VideosWindow
 from sealedlore.gui.worker import GenerationWorker
@@ -393,6 +394,7 @@ class MainWindow(
     TextSizeWindow,
     LayoutWindow,
     StorySuggestionsWindow,
+    TavernFiringWindow,
     QMainWindow,
 ):
     generation_requested = Signal()
@@ -684,6 +686,8 @@ class MainWindow(
         self.lore_panel.changed.connect(self._on_lore_changed)
         self.lore_panel.reembed_requested.connect(self.reembed_lore)
         self.lore_panel.picture_requested.connect(self._on_card_picture)
+        self.lore_panel.firing_changed.connect(self._on_firing_changed)
+        self.lore_panel.tavern_settings_requested.connect(self._open_tavern_settings)
         self.style_panel = StylePanel()
         self.style_panel.changed.connect(self._on_style_changed)
         self.summaries_panel = SummariesPanel()
@@ -2375,6 +2379,7 @@ class MainWindow(
         # A card brought in or changed elsewhere may put the cast over its room.
         self._cast_changed_soon()
         self.lore_panel.set_entries(self.session.bundle.lore, hidden=hidden)
+        self.lore_panel.set_firing(self.session.story.defaults.lore_firing)
         self.lore_panel.set_embeddings_available(self.session.embeddings is not None)
         self.style_panel.set_style(
             story.style, started=bool(self.session.nodes), texts=self.session.texts

@@ -2731,6 +2731,50 @@ far back they reached. Your turn is the better guide: the story's own prose
 names its everyday people and places on every turn, and matching it all
 brought in far more than the scene needed.
 
+### Lore fired exactly as SillyTavern fires it
+
+A lorebook made for SillyTavern is tuned to SillyTavern's own rules: which
+entries fire on which messages, for how long, and how many at once. On the
+**Lore** page, **Entries** chooses how this story's entries are sent each
+turn: **chosen SealedLore's way** (the default; as Settings → Lore says) or
+**fired exactly as SillyTavern does**. Fired SillyTavern's way, each turn's
+entries come from SillyTavern 1.19's own rules and each entry's own settings,
+as the lorebook brought them:
+
+- keys and secondary keys (with their logic: and any, not all, not any, and
+  all), keys written /like this/ as patterns, case and whole words;
+- the scan depth (how many of the latest messages are searched, each as
+  "name: text"), an entry's own scan depth, and minimum activations reaching
+  further back;
+- constant entries, @@activate and @@dont_activate;
+- recursion (an entry's text firing others), with its exclude, prevent and
+  delay-until-recursion settings, and the most recursion steps;
+- inclusion groups (a sticky member first; the best match with group
+  scoring; one marked to win; else a weighted roll);
+- probability, sticky, cooldown and delay, counted in messages as
+  SillyTavern counts them;
+- triggers (a Regenerate counts as a swipe and a regenerate, Continue as a
+  continue), and a character filter, read against who is in the scene;
+- the budget: a share of the story's context, with its cap.
+
+**SillyTavern settings…** beside it sets SillyTavern's World Info settings
+for this story (scan depth, budget, recursion, minimum activations, case,
+whole words, group scoring, names): a lorebook doesn't carry them, so they
+start at SillyTavern's defaults. Set them as you have them in SillyTavern.
+
+Where the entries go is SealedLore's, so caching keeps working: a constant
+entry nothing can stop (no chance, timing, group, trigger or filter) is sent
+with the world, cached; every other entry that fires goes with the turn, in
+SillyTavern's order. Positions, depths and outlets aren't used. The Lore tab
+shows why each entry fired and why each other didn't ("on cooldown", "its
+40% chance didn't come up", "its group “x”: y won", "over the lore budget").
+Timed effects follow the story's branches: each of your turns keeps what
+fired then, so a branch, a take or a turn taken back has its own. Entries
+written here fire by their keywords, as a new SillyTavern entry would.
+Changing the choice changes what is cached with the world, so the next turn
+writes the cache afresh. Entries brought in before this version keep only
+their keywords: bring the lorebook in again to fire it with all its settings.
+
 ### Lore that hasn't happened yet
 
 The storyteller takes every entry it is sent as already true. An entry about
