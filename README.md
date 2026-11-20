@@ -582,6 +582,10 @@ py -3.12 -m venv .venv
 .venv\Scripts\pythonw -m sealedlore.gui.app
 ```
 
+The built-in embedding model (Settings → Lore) also needs Microsoft's
+Visual C++ Redistributable, which a fresh Windows doesn't have:
+`winget install -e --id Microsoft.VCRedist.2015+.x64 --source winget`.
+
 The manual's [Windows section](docs/manual.md#windows-from-source) goes
 through this step by step. It covers installing without winget or Git,
 making a desktop shortcut, updating, and what to do if something goes wrong.

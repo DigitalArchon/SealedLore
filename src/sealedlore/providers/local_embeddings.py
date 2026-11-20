@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import sys
 import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -199,12 +200,34 @@ _LOADED: dict[str, tuple[Any, Any]] = {}
 _LOAD_LOCK = threading.Lock()
 
 
+# onnxruntime's Windows wheels need Microsoft's C++ runtime (msvcp140.dll),
+# which Python doesn't bring and a fresh Windows 11 doesn't have: the lab's
+# VM, Nov 20 2026, where the import failed with "DLL load failed".
+VC_RUNTIME = (
+    "On Windows it needs Microsoft's Visual C++ Redistributable (x64), which this computer "
+    "doesn't have. Install it (in PowerShell: winget install -e --id "
+    "Microsoft.VCRedist.2015+.x64 --source winget) and start SealedLore again"
+)
+
+
+def runtime_problem(exc: BaseException) -> str:
+    """What to say when onnxruntime or tokenizers won't load here."""
+    text = str(exc).strip()
+    if sys.platform == "win32" and "DLL load failed" in text:
+        return f"the built-in embeddings model can't start. {VC_RUNTIME}."
+    first = text.splitlines()[0] if text else type(exc).__name__
+    return f"the built-in embeddings model can't start here: {first}"
+
+
 def _model(folder: Path) -> tuple[Any, Any]:
     with _LOAD_LOCK:
         found = _LOADED.get(str(folder))
         if found is None:
-            import onnxruntime
-            from tokenizers import Tokenizer
+            try:
+                import onnxruntime
+                from tokenizers import Tokenizer
+            except ImportError as exc:
+                raise ProviderError(runtime_problem(exc)) from exc
 
             tokenizer = Tokenizer.from_file(str(folder / "tokenizer.json"))
             tokenizer.enable_truncation(MAX_TOKENS)

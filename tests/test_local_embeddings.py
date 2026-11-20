@@ -302,3 +302,35 @@ def test_ollama_without_an_embedding_model_says_how_to_get_one():
     words = found_words([FoundServer("Ollama", "http://127.0.0.1:11434/v1", ("llama3:8b",))])
     assert "ollama pull bge-m3" in words
     assert found_words([]).startswith("No server answered")
+
+
+def test_on_windows_without_microsofts_runtime_it_says_what_to_install(tmp_path: Path, monkeypatch):
+    """A fresh Windows 11 has no msvcp140.dll, which onnxruntime's wheel
+    needs and Python doesn't bring: its import failed with "DLL load
+    failed", which says nothing about the fix (the lab's VM, Nov 20 2026)."""
+    import builtins
+    import sys
+
+    contents = stand_ins(monkeypatch)
+    download(tmp_path, client=hub(contents, []))
+    real_import = builtins.__import__
+
+    def refuse(name, *args, **kwargs):
+        if name == "onnxruntime":
+            raise ImportError(
+                "DLL load failed while importing onnxruntime_pybind11_state: "
+                "The specified module could not be found."
+            )
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", refuse)
+    monkeypatch.setattr(sys, "platform", "win32")
+    with pytest.raises(ProviderError) as raised:
+        LocalEmbeddings(tmp_path).embed(["a lantern"])
+    words = str(raised.value)
+    assert "Visual C++ Redistributable" in words and "Microsoft.VCRedist.2015+.x64" in words
+    assert CALLS.calls()[-1].status == "failed"
+    # Elsewhere the import's own words are said.
+    monkeypatch.setattr(sys, "platform", "linux")
+    with pytest.raises(ProviderError, match="can't start here: DLL load failed"):
+        LocalEmbeddings(tmp_path).embed(["a lantern"])
