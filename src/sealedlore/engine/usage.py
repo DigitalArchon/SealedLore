@@ -29,6 +29,7 @@ KIND_LABELS: dict[str, str] = {
     "ledger_response": "Story ledger",
     "merge_response": "Chapter merges",
     "characters_response": "Character scans",
+    "story_suggestions_response": "Lore and card suggestions",
     "scene_response": "Scene reads",
     "look_response": "Looks",
     "lore_pick_response": "Lore picks",

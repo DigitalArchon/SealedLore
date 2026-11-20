@@ -86,6 +86,9 @@ class _Chapter:
 class _ArchiveJob:
     chapters: list[_Chapter]
     scan: _Call | None
+    # What the stretch suggests for the lore and cards
+    # (engine/session_story_suggestions.py), beside the scan.
+    suggest: _Call | None = None
     done: threading.Event = field(default_factory=threading.Event)
     ready: list[_Chapter] = field(default_factory=list)
     error: str | None = None
@@ -238,7 +241,10 @@ class ArchivalRuntime:
                     extra_body=route,
                 )
             )
-        job = _ArchiveJob(chapters=chapters, scan=scan)
+        suggest = None
+        if self.suggests_changes():
+            suggest = _Call(request=self.story_suggestion_request("\n\n".join(prose)))
+        job = _ArchiveJob(chapters=chapters, scan=scan, suggest=suggest)
         first_ledger = ledger_on(on_path)
         earlier = "" if first_ledger else "\n\n".join(s.content for s in on_path)
         target_words = self.config.summary_target_words
@@ -305,8 +311,19 @@ class ArchivalRuntime:
                         )
                         ledger_text = chapter.ledger_text
                     job.ready.append(chapter)
-                if scan is not None and job.ready:
-                    _call(clients[0], scan)
+                if job.ready:
+                    # The scan and the suggestions side by side, each on a
+                    # client of its own.
+                    beside = None
+                    if suggest is not None:
+                        beside = BackgroundThread(
+                            target=_call, args=(clients[1], suggest), daemon=True
+                        )
+                        beside.start()
+                    if scan is not None:
+                        _call(clients[0], scan)
+                    if beside is not None:
+                        beside.join()
             finally:
                 job.done.set()
                 for client in clients:
@@ -442,6 +459,10 @@ class ArchivalRuntime:
             yield from self._adopt_scan(job.scan, scanned, turn=turn)
         elif job.scan is not None:
             self._log_dropped("characters", job.scan, reason)
+        if job.suggest is not None and adopted:
+            yield from self._adopt_suggestions(job.suggest, scanned, turn=turn)
+        elif job.suggest is not None:
+            self._log_dropped("story_suggestions", job.suggest, reason)
 
     def _log_dropped(self, kind: str, call: _Call, reason: str, **extra: Any) -> None:
         """A background reply that isn't used was paid for all the same."""
@@ -561,6 +582,44 @@ class ArchivalRuntime:
         if found:
             names = ", ".join(suggestion.name for suggestion in found)
             yield SessionNotice(f"New characters to consider, on the Cast board: {names}.")
+
+    def _adopt_suggestions(
+        self, call: _Call, archived: Sequence[Node], *, turn: TurnRequest | None = None
+    ) -> Iterator[SessionNotice]:
+        """What the archived stretch suggests for the lore and cards, read in
+        the background: kept as suggestions; a failure costs nothing more."""
+        log_ref = self._log(
+            "story_suggestions_request",
+            {
+                "node_ids": [node.id for node in archived],
+                "payload": self.provider.build_payload(call.request),
+                "background": True,
+            },
+        )
+        if call.reply is None:
+            self._log(
+                "story_suggestions_response", {"request_log_ref": log_ref, "error": call.error}
+            )
+            yield self._kept_notice(
+                f"Couldn't read the archived turns for lore and card changes ({call.error}).",
+                turn=turn,
+            )
+            return
+        text, completed = call.reply
+        self._log(
+            "story_suggestions_response",
+            {"request_log_ref": log_ref, "text": text, "usage": completed.raw_usage},
+        )
+        self.unreported_usage.append(self.priced(completed.usage, call.request.model))
+        try:
+            found = self.take_story_suggestions(text, archived)
+        except ValueError as exc:
+            yield self._kept_notice(
+                f"Couldn't read the archived turns for lore and card changes ({exc}).", turn=turn
+            )
+            return
+        if found:
+            yield self._suggestions_notice(found)
 
 
 def _call(client, call: _Call) -> None:  # noqa: ANN001

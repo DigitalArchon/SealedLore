@@ -175,6 +175,7 @@ def test_the_notes_reach_only_requests_that_carry_the_storytellers_system_block(
     for call in (
         session.merge_now,
         session.scan_recent,
+        lambda: list(session.suggest_from_recent()),
         session.suggest_scene,
         lambda: session.infer_competence(session.cast[0].id),
         lambda: session.condense_card(session.cast[0]),

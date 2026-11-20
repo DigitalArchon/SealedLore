@@ -101,6 +101,7 @@ def test_archive_now_in_the_window_uses_the_background_s_chapters(app, tmp_path:
     window = MainWindow(root=tmp_path, use_mock=True)
     window.config.auto_archive = True
     window.config.suggest_characters = False
+    window.config.suggest_story_changes = False
     window.config.scene_reads = "manual"
     provider = Storyteller(["A passage."], Background())
     window._provider = provider

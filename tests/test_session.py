@@ -1192,7 +1192,9 @@ def test_the_held_character_cannot_be_demoted(session: StorySession):
 def test_archival_looks_for_new_characters_and_never_fails_the_turn(session: StorySession):
     grow(session, 14)
     session.story.defaults.context_token_budget = 4_000
-    # Summary, then an unparseable character reply, then the turn itself.
+    # Summary, then an unparseable character reply, then the turn itself (the
+    # lore and card suggestions, read after it, have tests of their own).
+    session.config.suggest_story_changes = False
     session.provider = MockChatProvider(["A chapter.", "no list here", "The door holds."])
 
     notices = [e.text for e in session.send(turn()) if isinstance(e, SessionNotice)]
@@ -1205,6 +1207,7 @@ def test_archival_suggestions_can_be_switched_off(session: StorySession):
     grow(session, 14)
     session.story.defaults.context_token_budget = 4_000
     session.config.suggest_characters = False
+    session.config.suggest_story_changes = False
     session.provider = MockChatProvider(["A chapter.", "The door holds."])
 
     list(session.send(turn()))

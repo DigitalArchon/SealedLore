@@ -157,6 +157,7 @@ def test_nothing_from_a_private_scene_reaches_another_model(tmp_path: Path, keep
         pass
     for call in (
         lambda: list(session.scan_recent()),
+        lambda: list(session.suggest_from_recent()),
         session.suggest_scene,
         lambda: session.write_image_prompt(""),
         # Suggest my turn: the story as a Question sends it.
@@ -727,6 +728,7 @@ def test_a_long_story_after_the_scene_never_brings_it_back(tmp_path: Path, keep:
     for call in (
         session.merge_now,
         lambda: list(session.scan_recent()),
+        lambda: list(session.suggest_from_recent()),
         session.suggest_scene,
         lambda: session.write_image_prompt("the moment"),
     ):

@@ -1496,6 +1496,10 @@ class Config(BaseModel):
     # Look for newly named characters in each archived chunk: the moment their
     # prose is about to be compressed away is when a card is worth having.
     suggest_characters: bool = True
+    # Suggest new lore entries, changes to entries and additions to cards from
+    # each archived stretch (engine/story_suggestions.py): one more call on the
+    # summarisation model a run, beside the character scan.
+    suggest_story_changes: bool = True
     # Dice (§4.2): the roll chip in the transcript. Rolls are logged either way.
     show_dice_rolls: bool = True
     # View → Text size: every piece of text in the window, as a share of the

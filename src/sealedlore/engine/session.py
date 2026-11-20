@@ -215,6 +215,7 @@ from sealedlore.engine.session_reasoning import ReasoningRuntime
 from sealedlore.engine.session_rebuild import RebuildRuntime
 from sealedlore.engine.session_recall import RecallRuntime
 from sealedlore.engine.session_record import RecordRuntime
+from sealedlore.engine.session_story_suggestions import StorySuggestionsRuntime
 from sealedlore.engine.session_suggest import SuggestRuntime
 from sealedlore.engine.session_views import ViewsRuntime
 from sealedlore.engine.story_plot import plot_uses, take_out_character
@@ -613,6 +614,7 @@ class StorySession(
     ReactionRuntime,
     RecordRuntime,
     ViewsRuntime,
+    StorySuggestionsRuntime,
 ):
     def __init__(
         self,
@@ -3050,6 +3052,7 @@ class StorySession(
         # each is a paid call, and a deep catch-up takes several chunks.
         if archived:
             yield from self.suggest_characters_after_archive(archived, turn=turn)
+            yield from self.suggest_after_archive(archived, turn=turn)
 
     def _cannot_archive_notice(self, history: Sequence[Node]) -> str:
         """Why the budget can't be met, and which lever to reach for.

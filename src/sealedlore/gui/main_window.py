@@ -148,6 +148,13 @@ from sealedlore.gui.window_phone import PhoneWindow
 from sealedlore.gui.window_plot import PlotWindow
 from sealedlore.gui.window_private import PrivateWindow
 from sealedlore.gui.window_retakes import RetakesWindow
+from sealedlore.gui.window_story_suggestions import (
+    ACTION_TIP as SUGGESTIONS_TIP,
+)
+from sealedlore.gui.window_story_suggestions import (
+    ACTION_WORDS as SUGGESTIONS_WORDS,
+)
+from sealedlore.gui.window_story_suggestions import StorySuggestionsWindow
 from sealedlore.gui.window_tavern import TavernWindow
 from sealedlore.gui.window_text import TextSizeWindow
 from sealedlore.gui.window_videos import VideosWindow
@@ -385,6 +392,7 @@ class MainWindow(
     AnswersWindow,
     TextSizeWindow,
     LayoutWindow,
+    StorySuggestionsWindow,
     QMainWindow,
 ):
     generation_requested = Signal()
@@ -929,6 +937,11 @@ class MainWindow(
         )
         self.review_action.triggered.connect(self.review_settings)
         story_menu.addAction(self.review_action)
+        # What the story suggests for its lore and cards (gui/window_story_suggestions.py).
+        self.story_suggestions_action = QAction(SUGGESTIONS_WORDS, self)
+        self.story_suggestions_action.setStatusTip(SUGGESTIONS_TIP)
+        self.story_suggestions_action.triggered.connect(self.show_story_suggestions)
+        story_menu.addAction(self.story_suggestions_action)
         self.last_review_action = QAction("&Last review…", self)
         self.last_review_action.setStatusTip(
             "The last review's proposals, findings and what was applied"
@@ -3736,6 +3749,7 @@ class MainWindow(
             f"{numbers.get(summary.id) or chapter_number(self.session.summaries, summary)}"
         )
         yield from self.session.suggest_characters_after_archive(chunk)
+        yield from self.session.suggest_after_archive(chunk)
 
     def _rebuild_summary(self, summary_id: str) -> None:
         if self.session is None or self._busy:
@@ -4315,6 +4329,8 @@ class MainWindow(
             QTimer.singleShot(0, self, lambda: self.transcript.scroll_to_node(focus))
         self.refresh_summaries()
         self.refresh_retrieval()
+        # Suggestions an archive or Look over the recent story brought.
+        self._suggestions_job_done()
         # Card pictures that came back while the worker owned the story.
         self._take_card_pictures()
         # The board's cards may be changed again.
@@ -5942,8 +5958,10 @@ class MainWindow(
         self._update_private_controls()
         # What only a story has isn't shown in a chat: greyed for good, each
         # was one more item to read past (as Start story… once it has begun).
+        self._update_suggestions_action()
         for action in (
             self.review_action,
+            self.story_suggestions_action,
             self.import_plot_action,
             self.write_plot_action,
             self.edit_plot_action,

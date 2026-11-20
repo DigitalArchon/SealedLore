@@ -2762,6 +2762,17 @@ class SettingsDialog(QDialog):
             "The lore model is on the Models page."
         )
         form.addRow("Large lorebooks", self.lore_selector)
+        # What the story suggests for its lore and cards as it is archived
+        # (Story → Suggestions from the story…).
+        self.suggest_story = QCheckBox("Suggest lore and card changes from the story")
+        self.suggest_story.setChecked(self.config.suggest_story_changes)
+        self.suggest_story.setToolTip(
+            "As the story is archived into chapters, the summarisation model reads each "
+            "stretch for new lore entries, changes to entries and lasting changes to "
+            "characters, and suggests them under Story → Suggestions from the story…. One "
+            "call a stretch; nothing changes until you apply it."
+        )
+        form.addRow(self.suggest_story)
         form.addRow(self.embeddings_enabled)
         # Where the vectors are made: on this computer by the built-in model,
         # or by an endpoint (NanoGPT's bge-m3 by default, or a server of one's
@@ -3476,6 +3487,7 @@ class SettingsDialog(QDialog):
         config.lore_share = kept(self.lore_share, self.lore_share.value() / 100, config.lore_share)
         config.lore_token_cap = kept(self.lore_cap, self.lore_cap.value(), config.lore_token_cap)
         self.config.lore_selector = self.lore_selector.currentData()
+        self.config.suggest_story_changes = self.suggest_story.isChecked()
         self.config.lore_model = self._role_model(self.lore_model)
         self.config.record_model = self._role_model(self.record_model) or None
         self.config.public_record = self.public_record.isChecked()

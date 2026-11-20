@@ -29,7 +29,7 @@ FORMAT_KEY = "format_version"
 
 # The layout of a story folder: story.json, nodes.json, cast.json and every
 # other record in it (tests/test_file_formats.py lists the models).
-STORY_FORMAT = 1
+STORY_FORMAT = 2
 # The layout of config.json.
 CONFIG_FORMAT = 2
 # The layout of a lorebook kept in Lorebooks (storage/lorebooks.py).

@@ -2752,6 +2752,32 @@ marks it "held back" or "mentioned".
   settings review can suggest holding one back when a passage brings it in
   too early.
 
+### Suggestions from the story
+
+As the story is archived into chapters, the summarisation model also reads
+each stretch for what the lore and the cards should take in before that prose
+is gone:
+
+- **a new lore entry**, for a place, thing, group, custom or fact the story
+  has made part of its world;
+- **a change to an entry** the story has made untrue (a place destroyed, a
+  leader replaced), with the entry's whole new text;
+- **an addition to a character's card**, for a lasting change (an injury
+  that stays, a new allegiance, something gained or lost).
+
+Nothing changes on its own. **Story → Suggestions from the story…** (with
+how many are waiting) lists them, each with what in the story it rests on.
+Change anything before you apply it; **Not this** turns one down for good. A
+change to an entry shows the entry as it stands beside the new text, and
+says so when the new text keeps less than half of it. **Look over the recent
+story** asks for suggestions from the passages still in the window, without
+waiting for an archive. It is one more call to the summarisation model each
+time the story archives; turn it off with **Settings → Lore → Suggest lore and
+card changes from the story**. It never reads a private scene or a chat, and
+is never shown a character or entry the plot keeps hidden, nor lore held back
+until you mention it. In our tests about three suggestions in four were worth
+applying as they stood; the rest are easy to turn down.
+
 ## Pictures
 
 ![The picture dialog: a direction, the picture's style, the prompt the story's model wrote from it, the herbwife's and the ranger's portraits as the reference pictures, numbered, and the model, size and price, with Generate](screenshots/picture-dialog.png)

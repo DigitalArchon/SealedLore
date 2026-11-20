@@ -1473,6 +1473,67 @@ one new.""",
 
 
 _text(
+    "suggest_changes.rules",
+    LORE,
+    "Suggesting lore and card changes",
+    "The system prompt of the reading of each archived stretch that suggests new lore "
+    "entries, changes to entries and additions to characters' cards, for the author to "
+    "apply. The program reads its JSON reply: keep the fields it asks for.",
+    """\
+You keep the reference cards of a collaborative story up to date: its lorebook
+(entries about places, things, groups, customs and facts of its world) and its
+characters' cards. You are given a stretch of the story that is about to be
+summarised, the story's setting, the lorebook's titles, the text of the
+entries it names, and the cards of the characters it names. Suggest what the cards should take in so
+that, once this prose is gone, nothing the story has made lasting is lost.
+
+Suggest only what the prose itself establishes, and only what will still be
+true and matter in later chapters:
+- "lore_new": a place, object, group, custom or fact the story has made part
+  of its world and neither an entry nor the setting covers. Not a passing
+  event, a mood, or what anyone would assume of such a world. Never a person,
+  with a card or without: people are kept by another reading.
+- "lore_change": an entry the prose has made untrue or out of date (a place
+  destroyed, a leader replaced, a secret now widely known). Give the entry's
+  whole new text: every sentence still true kept word for word, only the
+  sentences the prose has made untrue changed, and a sentence added for
+  what is new.
+- "card_change": a lasting change to a character: an injury that stays, a
+  new allegiance or post, something they now have or have lost, a bond made
+  or broken. Not a state that passes: where they are, what they are doing,
+  being asleep, tired or hurt for a day. Give one or two sentences to add to
+  their card, saying how things stand now, in the card's own manner.
+
+Only what has happened by the end of the stretch: not what is planned,
+promised or still under way, and a claim as the claim of whoever made it
+("Lady Ashcombe says…"). Never join moments the prose keeps apart, and never
+add a detail it doesn't give (a place, a time, who was there). At most one
+change to any entry or card.
+
+Most stretches need nothing, or one thing: an empty list is a good answer.
+Suggest at most three things in all, the ones a later chapter would miss
+most.
+Never suggest anything already on a card or in an entry, anything listed as
+already suggested, or anything the prose doesn't state. For each, "why" is
+one sentence on what in the prose it rests on.
+
+Reply with one JSON object and nothing else:
+{"lore_new": [{"title": "...", "keywords": ["..."], "content": "...", "why": "..."}],
+ "lore_change": [{"title": "an entry's exact title", "content": "...", "why": "..."}],
+ "card_change": [{"name": "a card's name", "add": "...", "why": "..."}]}""",
+)
+
+_text(
+    "suggest_changes.already",
+    LORE,
+    "Suggesting lore and card changes: already suggested",
+    "Before the titles already waiting for the author or turned down, in the reading that "
+    "suggests lore and card changes.",
+    "ALREADY SUGGESTED OR TURNED DOWN (never suggest these again):",
+)
+
+
+_text(
     "ledger.system",
     CHAPTERS,
     "The story ledger",

@@ -38,6 +38,8 @@ class Background:
             if system == DEFAULT_TEXTS["chapters.summariser"]
             else "ledger"
             if system == DEFAULT_TEXTS["ledger.system"]
+            else "suggest"
+            if system == DEFAULT_TEXTS["suggest_changes.rules"]
             else "scan"
         )
         with self.lock:
@@ -47,11 +49,20 @@ class Background:
             "summary": f"Chapter written in the background {count}.",
             "ledger": ledger(),
             "scan": "[]",
+            "suggest": SUGGESTED,
         }[kind]
         return text, StreamCompleted(finish_reason="stop")
 
     def close(self) -> None:
         pass
+
+
+# What the archived stretch suggests for the lore, read beside the scan.
+SUGGESTED = (
+    '{"lore_new": [{"title": "The Undercroft", "keywords": ["undercroft"], '
+    '"content": "Vaults under the keep.", "why": "They went down."}], '
+    '"lore_change": [], "card_change": []}'
+)
 
 
 class Storyteller(MockChatProvider):
@@ -251,3 +262,28 @@ def test_archive_now_takes_the_chapters_the_background_wrote(session: StorySessi
     log = read_api_log(session.story.id, root=tmp_path)
     assert not [e for e in log if e["kind"] == "summary_response" and e.get("dropped")]
     assert len(session.provider.requests) == 1  # the passage; nothing summarised inline
+
+
+def test_the_story_suggestions_are_read_beside_the_scan_and_kept_with_the_chapters(
+    session: StorySession,
+):
+    list(session.send(turn()))
+    job = session._archive_job
+    assert job is not None and job.done.wait(5) and job.suggest is not None
+    assert session.story_suggestions == []  # nothing until the chapters are adopted
+    session.story.defaults.context_token_budget = int(session.assemble(turn()).full_total * 0.9)
+    said = notices(session.send(turn()))
+    assert any("The story suggests 1 for the lore" in text for text in said)
+    (suggestion,) = session.story_suggestions
+    assert suggestion.title == "The Undercroft" and suggestion.node_ids
+    assert session.provider.background.calls.count("suggest") == 1
+    log = read_api_log(session.story.id, root=session.root)
+    assert any(e["kind"] == "story_suggestions_request" and e.get("background") for e in log)
+
+
+def test_switched_off_the_archive_reads_no_suggestions(session: StorySession):
+    session.config.suggest_story_changes = False
+    list(session.send(turn()))
+    job = session._archive_job
+    assert job is not None and job.done.wait(5) and job.suggest is None
+    assert "suggest" not in session.provider.background.calls

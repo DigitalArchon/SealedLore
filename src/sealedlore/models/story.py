@@ -20,6 +20,7 @@ from sealedlore.models.private import Attestation, PrivacyRecord, PrivatePrompt,
 from sealedlore.models.prompt_edit import PromptEdit
 from sealedlore.models.route import ModelRoute
 from sealedlore.models.scene import SceneLogEntry, SceneState
+from sealedlore.models.story_suggestion import StorySuggestion
 
 NarrativePerson = Literal["first", "second", "third"]
 NarrativeTense = Literal["past", "present"]
@@ -211,6 +212,11 @@ class Story(BaseModel):
     scene: SceneState = Field(default_factory=SceneState)
     # Scenes that have ended, oldest first (see SceneLogEntry).
     scene_log: list[SceneLogEntry] = Field(default_factory=list)
+    # What the story suggests for its lore and cards, waiting for the author
+    # (engine/story_suggestions.py), and what was turned down, by
+    # `decline_key`, so it isn't offered again.
+    story_suggestions: list[StorySuggestion] = Field(default_factory=list)
+    suggestions_declined: list[str] = Field(default_factory=list)
     active_leaf_id: str | None = None
     # The story's first line of branches (the rest are named on their first
     # message, NodeMeta.branch_name).
