@@ -201,8 +201,10 @@ _LOAD_LOCK = threading.Lock()
 
 
 # onnxruntime's Windows wheels need Microsoft's C++ runtime (msvcp140.dll),
-# which Python doesn't bring and a fresh Windows 11 doesn't have: the lab's
-# VM, Nov 20 2026, where the import failed with "DLL load failed".
+# which Python doesn't bring and a fresh Windows 11 doesn't have: on the lab's
+# VM (Nov 20 2026) its import alone failed with "DLL load failed". PySide6's
+# shiboken6 carries the runtime, and loaded first it lends it to onnxruntime
+# (the window always has; the CLI hadn't). Said in words if it still fails.
 VC_RUNTIME = (
     "On Windows it needs Microsoft's Visual C++ Redistributable (x64), which this computer "
     "doesn't have. Install it (in PowerShell: winget install -e --id "
@@ -224,6 +226,8 @@ def _model(folder: Path) -> tuple[Any, Any]:
         found = _LOADED.get(str(folder))
         if found is None:
             try:
+                if sys.platform == "win32":
+                    import shiboken6  # noqa: F401  (its msvcp140.dll, above)
                 import onnxruntime
                 from tokenizers import Tokenizer
             except ImportError as exc:

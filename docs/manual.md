@@ -393,8 +393,8 @@ Your stories are not kept in the SealedLore folder (they are in
 - **"winget is not recognized"**: your Windows doesn't have winget. Use
   the manual way in Step 1.
 - **"The built-in embeddings model can't start"**: the built-in embedding
-  model (Settings → Lore → Made by) needs Microsoft's Visual C++
-  Redistributable, which a fresh Windows doesn't have. Paste
+  model (Settings → Lore → Made by) couldn't find Microsoft's Visual C++
+  runtime. Paste
   `winget install -e --id Microsoft.VCRedist.2015+.x64 --source winget`
   into PowerShell (or download "Visual C++ Redistributable for Visual Studio
   2015-2022, x64" from Microsoft), then start SealedLore again.
@@ -2691,10 +2691,7 @@ Embeddings are off by default. Turn them on under Settings → Lore
   few hundredths of a second, and a lorebook of 100 entries about 15 seconds
   the first time (each entry is embedded once). In our tests it retrieved
   lore as well as NanoGPT's bge-m3. Until it is downloaded, lore is matched
-  by keywords. On Windows it also needs Microsoft's Visual C++
-  Redistributable, which a fresh Windows doesn't have: without it the Lore
-  tab says so and lore is matched by keywords (see
-  [Windows](#if-something-goes-wrong)).
+  by keywords.
 - **An embeddings endpoint**: any OpenAI-compatible `/embeddings`. Leave the
   base URL and key blank to reuse the chat endpoint's (the chat key is only
   reused for the chat endpoint's own host, never sent to a different

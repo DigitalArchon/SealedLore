@@ -306,16 +306,21 @@ def test_ollama_without_an_embedding_model_says_how_to_get_one():
 
 def test_on_windows_without_microsofts_runtime_it_says_what_to_install(tmp_path: Path, monkeypatch):
     """A fresh Windows 11 has no msvcp140.dll, which onnxruntime's wheel
-    needs and Python doesn't bring: its import failed with "DLL load
-    failed", which says nothing about the fix (the lab's VM, Nov 20 2026)."""
+    needs and Python doesn't bring: alone, its import failed with "DLL load
+    failed", which says nothing about the fix (the lab's VM, Nov 20 2026).
+    PySide6's shiboken6 brings one and is loaded first; should that not do,
+    the words say what to install."""
     import builtins
     import sys
 
     contents = stand_ins(monkeypatch)
     download(tmp_path, client=hub(contents, []))
     real_import = builtins.__import__
+    asked: list[str] = []
 
     def refuse(name, *args, **kwargs):
+        if name in ("shiboken6", "onnxruntime"):
+            asked.append(name)
         if name == "onnxruntime":
             raise ImportError(
                 "DLL load failed while importing onnxruntime_pybind11_state: "
@@ -329,6 +334,8 @@ def test_on_windows_without_microsofts_runtime_it_says_what_to_install(tmp_path:
         LocalEmbeddings(tmp_path).embed(["a lantern"])
     words = str(raised.value)
     assert "Visual C++ Redistributable" in words and "Microsoft.VCRedist.2015+.x64" in words
+    # PySide6's own copy of the runtime is offered first.
+    assert asked == ["shiboken6", "onnxruntime"]
     assert CALLS.calls()[-1].status == "failed"
     # Elsewhere the import's own words are said.
     monkeypatch.setattr(sys, "platform", "linux")
