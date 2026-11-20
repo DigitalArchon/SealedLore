@@ -149,29 +149,52 @@ def choose_picked(
     scores: Mapping[str, float] | None = None,
     query: str = "",
     selector: str = "picker",
+    turn_hits: Sequence[tuple[str, float | None]] = (),
 ) -> RetrievalReport:
-    """The picks, then the entries the author's own turn names, fitted to the
-    room (`fit_lore`).
+    """The picks, then the entries the author's turn names, then the turn's
+    own best matches (`turn_hits`), fitted to the room (`fit_lore`).
 
     Picks go first, in the model's order (or by probability, for Jev), so
     keyword hits are cut or left out before anything a model chose.
     """
     by_id = {entry.id: entry for entry in entries}
-    ordered: list[tuple[LoreEntry, str]] = [(by_id[i], "picked") for i in picked if i in by_id]
-    seen = {entry.id for entry, _ in ordered}
-    for entry in entries:
-        if entry.id not in seen and turn_text.strip() and keyword_matches(turn_text, entry):
-            ordered.append((entry, "keyword"))
-            seen.add(entry.id)
     candidates = [
         Injection(
-            entry=entry,
-            reason=reason,  # type: ignore[arg-type]
-            tokens=count_tokens(render_entry(entry)),
-            score=(scores or {}).get(entry.id) if reason == "picked" else None,
+            entry=by_id[i],
+            reason="picked",
+            tokens=count_tokens(render_entry(by_id[i])),
+            score=(scores or {}).get(i),
         )
-        for entry, reason in ordered
+        for i in picked
+        if i in by_id
     ]
+    seen = {injection.entry.id for injection in candidates}
+    # What the author's turn names next, then the turn's own best matches
+    # (`turn_ranking`): the picks were made before the turn was written, from
+    # the passage before it.
+    for entry in entries:
+        if entry.id not in seen and turn_text.strip() and keyword_matches(turn_text, entry):
+            candidates.append(
+                Injection(
+                    entry=entry,
+                    reason="named" if turn_hits else "keyword",
+                    tokens=count_tokens(render_entry(entry)),
+                )
+            )
+            seen.add(entry.id)
+    for rank, (entry_id, score) in enumerate(turn_hits, 1):
+        if entry_id in by_id and entry_id not in seen:
+            entry = by_id[entry_id]
+            candidates.append(
+                Injection(
+                    entry=entry,
+                    reason="matched",
+                    tokens=count_tokens(render_entry(entry)),
+                    score=score,
+                    rank=rank,
+                )
+            )
+            seen.add(entry_id)
     injected, dropped = fit_lore(
         candidates,
         token_cap,

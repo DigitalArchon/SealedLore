@@ -156,7 +156,7 @@ def test_config_roundtrip():
             model="text-embedding-3-small",
             dimensions=1536,
         ),
-        lore_retrieval_k=5,
+        lore_retrieval_k=7,
     )
     assert roundtrip(config) == config
 
@@ -166,4 +166,4 @@ def test_config_defaults_when_empty():
     assert config.providers == []
     assert config.active_provider_name is None
     assert config.embedding_provider is None
-    assert config.lore_retrieval_k == 3
+    assert config.lore_retrieval_k == 5

@@ -154,6 +154,8 @@ from sealedlore.engine.retrieval import (
     lore_layout,
     query_text,
     select_lore,
+    turn_query,
+    turn_ranking,
 )
 from sealedlore.engine.revision import (
     NOT_REVISABLE,
@@ -1211,6 +1213,9 @@ class StorySession(
         if selector == "picker":
             last = history[-1] if history and history[-1].kind == "assistant" else None
             if last is not None and last.meta.lore_picks is not None:
+                ranked, _similar, _why, _text = self._turn_ranking(
+                    entries, turn, history, allow_network=allow_network
+                )
                 return choose_picked(
                     entries,
                     last.meta.lore_picks,
@@ -1218,6 +1223,7 @@ class StorySession(
                     token_cap=self._lore_room(),
                     count_tokens=self._count_lore_tokens,
                     query=query,
+                    turn_hits=ranked[: self.config.lore_retrieval_k],
                 )
             note = "no picks for the last passage"
         elif selector == "jev":
@@ -1229,7 +1235,9 @@ class StorySession(
                 except ProviderError as exc:
                     note = f"Jev failed: {exc}"
         keywords_over, reach = keyword_window(entries, turn.user_text, history)
-        report = self._similarity(entries, query, keywords_over, allow_network=allow_network)
+        report = self._similarity(
+            entries, keywords_over, turn, history, allow_network=allow_network, reach=reach
+        )
         report = replace(report, keyword_reach=reach)
         return replace(report, selector_note=note) if note else report
 
@@ -1421,48 +1429,25 @@ class StorySession(
         names = [c.name for c in self.cast if c.id in scene.present_character_ids]
         return names + list(scene.present_others)
 
-    def _similarity(
-        self,
-        entries: Sequence[LoreEntry],
-        query: str,
-        keyword_text: str,
-        *,
-        allow_network: bool,
-    ) -> RetrievalReport:
-        """Embeddings over the recent prose, keywords over the author's turn
-        (or the last few exchanges when it names nothing: `keyword_window`)."""
-
-        def keywords_only(reason: str | None) -> RetrievalReport:
-            return select_lore(
-                entries,
-                query=query,
-                keyword_text=keyword_text,
-                k=self.config.lore_retrieval_k,
-                threshold=self.config.lore_similarity_threshold,
-                token_cap=self._lore_room(),
-                count_tokens=self._count_lore_tokens,
-                used_embeddings=False,
-                fallback_reason=reason,
-            )
-
-        if not entries:
-            return keywords_only(None)
+    def _turn_similarity(
+        self, entries: Sequence[LoreEntry], text: str, *, allow_network: bool
+    ) -> tuple[dict[str, float] | None, str | None]:
+        """Each entry's similarity to `text` (the turn: `turn_query`), or None
+        with why there is none (no endpoint, a preview, a failure)."""
         if self.embeddings is None:
-            return keywords_only(None if self.config.embedding_provider is None else "no endpoint")
+            return None, None if self.config.embedding_provider is None else "no endpoint"
         if not allow_network:
-            return keywords_only("preview: not embedded")
-        if not query.strip():
-            return keywords_only(None)
-
+            return None, "preview: not embedded"
+        if not text.strip() or not entries:
+            return None, None
         try:
             vectors = self.ensure_lore_vectors()
-            target = self.query_vector(query)
+            target = self.query_vector(text)
         except ProviderError as exc:
-            return keywords_only(str(exc))
+            return None, str(exc)
         if target is None:
-            return keywords_only("endpoint returned no vector")
-
-        scored = [(entry_id, vector) for entry_id, vector in vectors.items()]
+            return None, "endpoint returned no vector"
+        scored = [(entry.id, vectors[entry.id]) for entry in entries if entry.id in vectors]
         try:
             similarities = cosine_scores(target, [vector for _, vector in scored])
         except ValueError as exc:
@@ -1470,21 +1455,59 @@ class StorySession(
             # width; drop them and let the next turn re-embed.
             self.bundle.embeddings.clear()
             self.save()
-            return keywords_only(str(exc))
+            return None, str(exc)
+        found = zip(scored, similarities, strict=True)
+        return {entry_id: score for (entry_id, _), score in found}, None
 
-        scores = {
-            entry_id: score for (entry_id, _), score in zip(scored, similarities, strict=True)
-        }
+    def _turn_ranking(
+        self,
+        entries: Sequence[LoreEntry],
+        turn: TurnRequest,
+        history: Sequence[Node],
+        *,
+        allow_network: bool,
+    ) -> tuple[list[tuple[str, float | None]], dict[str, float] | None, str | None, str]:
+        """The turn's best matches (`turn_ranking`): by similarity where the
+        embeddings endpoint answers, fused with keyword scoring over each
+        entry's whole text, which is all there is without one. With the
+        similarities, why there are none, and the text ranked by."""
+        text = turn_query(turn.user_text, history)
+        similarity, reason = self._turn_similarity(entries, text, allow_network=allow_network)
+        ranked = turn_ranking(
+            entries, text, similarity, threshold=self.config.lore_similarity_threshold
+        )
+        return ranked, similarity, reason, text
+
+    def _similarity(
+        self,
+        entries: Sequence[LoreEntry],
+        keyword_text: str,
+        turn: TurnRequest,
+        history: Sequence[Node],
+        *,
+        allow_network: bool,
+        reach: int = 0,
+    ) -> RetrievalReport:
+        """The entries whose keywords the author's turn names, then the turn's
+        best matches (`_turn_ranking`); when the turn names nothing, the
+        entries the last few exchanges name come after the matches
+        (`keyword_window`, `reach`)."""
+        ranked, similarity, reason, text = self._turn_ranking(
+            entries, turn, history, allow_network=allow_network
+        )
         return select_lore(
             entries,
-            query=query,
+            query=text,
             keyword_text=keyword_text,
-            scores=scores,
+            scores=similarity,
+            ranked=ranked,
             k=self.config.lore_retrieval_k,
             threshold=self.config.lore_similarity_threshold,
             token_cap=self._lore_room(),
             count_tokens=self._count_lore_tokens,
-            used_embeddings=True,
+            used_embeddings=similarity is not None,
+            fallback_reason=reason,
+            named_first=reach == 0,
         )
 
     def lore_without_vectors(self) -> list[LoreEntry]:

@@ -44,3 +44,20 @@ def bm25(query: Sequence[str], units: Sequence[Sequence[str]]) -> list[float]:
             score += idf * seen * 2.2 / (seen + 1.2 * (0.25 + 0.75 * len(unit) / average))
         out.append(score)
     return out
+
+
+# Endings taken off a word, longest first, so "chanting", "chanted" and
+# "chants" are one word, and "chantless" meets "chant" too.
+_ENDINGS = ("ing", "less", "ed", "es", "ly", "s")
+
+
+def stem(word: str) -> str:
+    """A word less one common ending, where at least four letters are left."""
+    for ending in _ENDINGS:
+        if len(word) >= len(ending) + 4 and word.endswith(ending):
+            return word[: -len(ending)]
+    return word
+
+
+def stemmed(text: str) -> list[str]:
+    return [stem(word) for word in words(text)]

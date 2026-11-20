@@ -117,9 +117,11 @@ def test_the_picker_picks_after_the_passage_for_the_next_turn(session: StorySess
     list(session.send(turn("Mind the lock.")))
     report = session.last_retrieval
     assert report.selector == "picker" and report.selector_note is None
+    # The lock: the turn names it by a keyword (and it is the turn's best
+    # match too); named, it comes right after the picks.
     assert [(i.entry.id, i.reason) for i in report.injected] == [
         (ACCORD, "picked"),
-        (LOCKS, "keyword"),
+        (LOCKS, "named"),
     ]
     assert [e.id for e in report.standing] == [HOUSE]
     kinds = [e["kind"] for e in read_api_log(session.story.id, root=session.root)]

@@ -142,6 +142,21 @@ def save_over_newer(root: Path | None = None) -> None:
     _NEWER_CONFIG.pop(_config_key(root), None)
 
 
+# The old default of `Config.lore_retrieval_k`, which every config.json saved
+# before CONFIG_FORMAT 2 holds whether it was chosen or not.
+_OLD_LORE_K = 3
+
+
+def _settle_older(config: Config, data: Any) -> None:
+    """What a config.json saved before this version's format means now: the
+    lore's best-match count of 3 was the default every file wrote down, and
+    is the new default (5) unless the file is of this format already."""
+    if not isinstance(data, dict) or format_of(data) >= 2:
+        return
+    if data.get("lore_retrieval_k") == _OLD_LORE_K:
+        config.lore_retrieval_k = Config.model_fields["lore_retrieval_k"].default
+
+
 def _note_format(data: Any, root: Path | None) -> str | None:
     """Remembers a newer version's config.json, and says so."""
     found = format_of(data)
@@ -350,6 +365,7 @@ def _fill_addresses(config: Config, root: Path | None) -> str | None:
 def _load_config(root: Path | None) -> tuple[Config, str | None]:
     data = read_json(config_file(root), default=None)
     config = Config() if data is None else Config.model_validate(data)
+    _settle_older(config, data)
     newer = _note_format(data, root)
     keys = _fill_keys(config, root)
     return config, " ".join(note for note in (newer, keys) if note) or None
@@ -399,6 +415,8 @@ def load_config_or_recover(root: Path | None = None) -> tuple[Config, str | None
             + (f" The old file is kept as {aside.name}." if aside is not None else "")
         )
     config, dropped = _what_validates(data)
+    if config is not None:
+        _settle_older(config, data)
     notes: list[str] = []
     if newer := _note_format(data, root):
         notes.append(newer)

@@ -405,7 +405,12 @@ class LorePanel(QWidget):
         # Similarity scores cluster, so the threshold can only be tuned by
         # seeing what sat just under it.
         for entry, score in report.near_misses:
-            item = QListWidgetItem(f"{entry.title} — below threshold ({score:.2f})")
+            if report.misses_ranked:
+                # The turn's next matches: what more entries per turn would send.
+                said = "a next match, not sent" + (f" (similarity {score:.2f})" if score else "")
+            else:
+                said = f"below threshold ({score:.2f})"
+            item = QListWidgetItem(f"{entry.title} — {said}")
             item.setForeground(Qt.gray)
             self.injected.addItem(item)
 

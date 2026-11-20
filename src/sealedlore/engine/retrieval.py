@@ -23,15 +23,28 @@ import hashlib
 import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
+from functools import lru_cache
 from typing import Literal
 
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.node import Node
 
-Reason = Literal["always_on", "picked", "semantic", "keyword"]
+Reason = Literal["always_on", "picked", "named", "matched", "semantic", "keyword"]
 LoreMode = Literal["whole", "select"]
 
-REASON_ORDER: dict[Reason, int] = {"always_on": 0, "picked": 1, "semantic": 2, "keyword": 3}
+# The order entries are offered to the room in (`fit_lore`). What the
+# author's own turn names by a keyword comes before the turn's ranked matches:
+# a name the author writes is the strongest sign an entry is needed, and
+# after them, on a 320-entry lorebook, five long matches filled the room and
+# left out "Saint" from the turn asking about Saint-rank magic (Nov 20 2026).
+REASON_ORDER: dict[Reason, int] = {
+    "always_on": 0,
+    "picked": 1,
+    "named": 2,
+    "matched": 3,
+    "semantic": 3,
+    "keyword": 4,
+}
 
 # How many just-missed entries to keep for the panel. Enough to see where the
 # threshold is falling, not so many that the list becomes the whole lorebook.
@@ -44,6 +57,8 @@ KEYWORD_LOOKBACK = 3
 REASON_LABELS: dict[Reason, str] = {
     "always_on": "always on",
     "picked": "picked by the lore model",
+    "named": "named in your turn",
+    "matched": "a best match for the turn",
     "semantic": "semantic match",
     "keyword": "keyword match",
 }
@@ -58,6 +73,8 @@ class Injection:
     # Sent in part (`fit_lore`): `entry` holds the parts sent, and `whole`
     # the tokens the entry has in all.
     whole: int | None = None
+    # Its place among the turn's best matches (`turn_ranking`), 1 the best.
+    rank: int | None = None
 
     @property
     def fitted(self) -> bool:
@@ -66,6 +83,10 @@ class Injection:
     def describe(self) -> str:
         if self.reason == "semantic" and self.score is not None:
             said = f"semantic match ({self.score:.2f})"
+        elif self.reason == "matched" and self.rank is not None:
+            said = f"the turn's match no. {self.rank}"
+            if self.score is not None:
+                said += f" (similarity {self.score:.2f})"
         elif self.reason == "picked" and self.score is not None:
             said = f"picked by Jev ({self.score:.2f})"
         else:
@@ -100,6 +121,9 @@ class RetrievalReport:
     # author's chosen method didn't this turn when it fell back.
     selector: str = "similarity"
     selector_note: str | None = None
+    # The near misses are the turn's next best matches (`turn_ranking`), not
+    # the entries just under the similarity threshold.
+    misses_ranked: bool = False
 
     @property
     def entries(self) -> tuple[LoreEntry, ...]:
@@ -155,6 +179,79 @@ def cosine_scores(query: Sequence[float], vectors: Sequence[Sequence[float]]) ->
     safe = np.where(norms == 0, 1.0, norms)
     scores = (matrix @ target) / (safe * target_norm)
     return [0.0 if norm == 0 else float(score) for score, norm in zip(scores, norms, strict=True)]
+
+
+# A turn with fewer words than this to rank by ("I nod.") is ranked with the
+# message before it as well.
+TURN_LEAST_WORDS = 2
+# Reciprocal-rank fusion's constant, as recall uses it.
+FUSE_K = 60
+
+
+def turn_query(user_text: str, history: Sequence[Node]) -> str:
+    """What the turn's best matches are ranked by: the author's own turn,
+    with the latest message before it only when the turn says too little to
+    rank on. Ranked by the last three messages and the turn together, the
+    entries a turn asked about came 31st-62nd at the median on a 320-entry
+    lorebook, Silent Spellcasting 116th-226th for "without chanting", the
+    recent prose's people crowding them out; by the turn, 3rd and 1st
+    (Nov 20 2026)."""
+    from sealedlore.engine.bm25 import words
+
+    turn = user_text.strip()
+    if len(words(turn)) >= TURN_LEAST_WORDS:
+        return turn
+    last = next((node.content.strip() for node in reversed(history) if node.content.strip()), "")
+    return f"{last}\n\n{turn}".strip()
+
+
+@lru_cache(maxsize=8192)
+def _terms(title: str, keywords: tuple[str, ...], content: str) -> tuple[str, ...]:
+    from sealedlore.engine.bm25 import stemmed
+
+    return tuple(stemmed(f"{title} {' '.join(keywords)} {content}"))
+
+
+def entry_terms(entry: LoreEntry) -> tuple[str, ...]:
+    """An entry's words for keyword scoring: its title, keywords and text,
+    stemmed (remembered while the entry is unchanged)."""
+    return _terms(entry.title, tuple(entry.keywords), entry.content)
+
+
+def turn_ranking(
+    entries: Sequence[LoreEntry],
+    text: str,
+    similarity: dict[str, float] | None = None,
+    *,
+    threshold: float = 0.0,
+) -> list[tuple[str, float | None]]:
+    """The entries best matching `text`, best first, each with its similarity
+    (None without one): the ranking by similarity and the ranking by keyword
+    scoring over each entry's whole text (BM25, stemmed, so "chanting" finds
+    an entry of "chantless") fused by reciprocal rank. An entry neither
+    reaches (no word of `text` in it, and below `threshold` in similarity)
+    is not ranked. Fused, the entries a turn needed were in the top five 18
+    times of 23, by today's similarity 5 (Nov 20 2026, offline)."""
+    from sealedlore.engine.bm25 import bm25, stemmed
+
+    live = [entry for entry in entries if entry.enabled]
+    if not live:
+        return []
+    keyword = bm25(stemmed(text), [list(entry_terms(entry)) for entry in live])
+    by_words = sorted((i for i in range(len(live)) if keyword[i] > 0), key=lambda i: -keyword[i])
+    fused: dict[str, float] = {}
+    for rank, i in enumerate(by_words, 1):
+        fused[live[i].id] = fused.get(live[i].id, 0.0) + 1.0 / (FUSE_K + rank)
+    similar = similarity or {}
+    if similar:
+        by_meaning = sorted(
+            (entry.id for entry in live if similar.get(entry.id, -1.0) >= threshold),
+            key=lambda entry_id: -similar[entry_id],
+        )
+        for rank, entry_id in enumerate(by_meaning, 1):
+            fused[entry_id] = fused.get(entry_id, 0.0) + 1.0 / (FUSE_K + rank)
+    order = sorted(fused, key=lambda entry_id: -fused[entry_id])
+    return [(entry_id, similar.get(entry_id)) for entry_id in order]
 
 
 # A word's plural or possessive ending, which a keyword still names.
@@ -290,8 +387,19 @@ def select_lore(
     count_tokens: Callable[[str], int],
     used_embeddings: bool = False,
     fallback_reason: str | None = None,
+    ranked: Sequence[tuple[str, float | None]] | None = None,
+    named_first: bool = False,
 ) -> RetrievalReport:
     """Choose the lore for one turn.
+
+    `named_first`: the keyword text is the author's own turn (not reaching
+    back over earlier exchanges), so its keyword hits are "named" and come
+    before the ranked matches.
+
+    `ranked`: the turn's best matches, best first (`turn_ranking`): the first
+    `k` go as "matched", in that order, and the next few are the near misses.
+    Without it (an older caller), the top `k` by `scores` above `threshold`
+    go as "semantic".
 
     `scores` maps entry id to cosine similarity; leave it out for the keyword
     path. Disabled entries never appear by any route.
@@ -308,13 +416,18 @@ def select_lore(
     scores = scores or {}
 
     semantic: dict[str, float] = {}
-    if scores:
-        ranked = sorted(
+    matched: dict[str, tuple[int, float | None]] = {}
+    if ranked is not None:
+        matched = {
+            entry_id: (rank, score) for rank, (entry_id, score) in enumerate(ranked[: max(k, 0)], 1)
+        }
+    elif scores:
+        by_score = sorted(
             ((entry, scores[entry.id]) for entry in live if entry.id in scores),
             key=lambda pair: pair[1],
             reverse=True,
         )
-        semantic = {entry.id: score for entry, score in ranked[: max(k, 0)] if score >= threshold}
+        semantic = {entry.id: score for entry, score in by_score[: max(k, 0)] if score >= threshold}
 
     matched_over = query if keyword_text is None else keyword_text
     chosen: dict[str, Injection] = {}
@@ -323,8 +436,15 @@ def select_lore(
         score: float | None = None
         # always_on wins the label when an entry qualifies twice: it would have
         # been injected regardless of what the query happened to look like.
+        rank: int | None = None
         if entry.always_on:
             reason = "always_on"
+        elif named_first and matched_over and keyword_matches(matched_over, entry):
+            reason = "named"
+            rank, score = matched.get(entry.id, (None, scores.get(entry.id)))
+        elif entry.id in matched:
+            reason = "matched"
+            rank, score = matched[entry.id]
         elif entry.id in semantic:
             reason, score = "semantic", semantic[entry.id]
         elif matched_over and keyword_matches(matched_over, entry):
@@ -338,6 +458,7 @@ def select_lore(
             reason=reason,
             tokens=count_tokens(render_entry(entry)),
             score=score,
+            rank=rank,
         )
 
     ordered = sorted(chosen.values(), key=_sort_key)
@@ -349,20 +470,30 @@ def select_lore(
     )
     used = sum(injection.tokens for injection in injected)
 
-    missed = sorted(
-        (
-            (entry, scores[entry.id])
-            for entry in live
-            if entry.id in scores and entry.id not in chosen
-        ),
-        key=lambda pair: pair[1],
-        reverse=True,
-    )
+    by_id = {entry.id: entry for entry in live}
+    if ranked is not None:
+        # The turn's next matches, in their order: what a deeper cut would send.
+        missed = [
+            (by_id[entry_id], score if score is not None else 0.0)
+            for entry_id, score in ranked
+            if entry_id in by_id and entry_id not in chosen
+        ]
+    else:
+        missed = sorted(
+            (
+                (entry, scores[entry.id])
+                for entry in live
+                if entry.id in scores and entry.id not in chosen
+            ),
+            key=lambda pair: pair[1],
+            reverse=True,
+        )
 
     return RetrievalReport(
         injected=tuple(injected),
         dropped=tuple(dropped),
         near_misses=tuple(missed[:NEAR_MISS_LIMIT]),
+        misses_ranked=ranked is not None,
         used_embeddings=used_embeddings,
         fallback_reason=fallback_reason,
         query_text=query,
@@ -521,10 +652,11 @@ def render_entry(entry: LoreEntry) -> str:
     return f"## {entry.title}\n{entry.content.strip()}"
 
 
-def _sort_key(injection: Injection) -> tuple[int, int, float, str]:
+def _sort_key(injection: Injection) -> tuple[int, int, int, float, str]:
     return (
         -injection.entry.priority,
         REASON_ORDER[injection.reason],
+        injection.rank if injection.rank is not None else 0,
         -(injection.score or 0.0),
         injection.entry.title.lower(),
     )

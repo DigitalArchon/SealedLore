@@ -1278,7 +1278,15 @@ class Config(BaseModel):
     keychain_slots: list[str] = Field(default_factory=list)
     # Lore retrieval (§7). Unconfigured means keyword matching only, silently.
     embedding_provider: EmbeddingProviderConfig | None = None
-    lore_retrieval_k: int = 3
+    # How many of the turn's best matches go (retrieval.turn_ranking: the
+    # author's turn, by similarity fused with keyword scoring over each
+    # entry's whole text). Three, by a similarity over the recent prose, until
+    # Nov 2026: on a 320-entry lorebook the entries a turn needed were in the
+    # top three 4-5 times of 23; ranked on the turn, fused, 15, in the top
+    # five 18, with about half of the five needed or useful (offline).
+    # Configs saved before then with the old 3 are moved to 5 once
+    # (storage/repository.py `_settle_older`).
+    lore_retrieval_k: int = 5
     # How many turns of the active path join the current message in the query
     # vector. Too few and the query loses the scene; too many and it drifts.
     lore_query_turns: int = 3

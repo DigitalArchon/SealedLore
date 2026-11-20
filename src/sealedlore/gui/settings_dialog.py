@@ -2587,6 +2587,12 @@ class SettingsDialog(QDialog):
         self.retrieval_k = QSpinBox()
         self.retrieval_k.setRange(0, 50)
         self.retrieval_k.setValue(self.config.lore_retrieval_k)
+        self.retrieval_k.setToolTip(
+            "How many of the best matches for your turn are sent: entries ranked by how "
+            "close they are in meaning to what you wrote, and by the words they share with "
+            "it anywhere in their text. Entries your turn names by a keyword come as well, "
+            "and so does whatever the lore model picked."
+        )
         self.similarity = QDoubleSpinBox()
         self.similarity.setRange(0.0, 1.0)
         self.similarity.setSingleStep(0.05)

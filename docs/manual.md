@@ -2680,10 +2680,21 @@ reused for the chat endpoint's own host, never sent to a different server).
 The default model is `BAAI/bge-m3` (1024 dimensions, 8k context, no prefixes
 needed).
 
+Each turn, the entries are ranked by how well they match what you just
+wrote: how close each is in meaning (with embeddings on), and which of your
+words appear anywhere in its title, keywords or text, endings aside, so
+"without chanting" finds an entry about chantless casting though it names no
+keyword. The five best go (**Entries per turn**, under Retrieval (advanced)
+in Settings → Lore), along with any entry whose keyword your turn names. A
+turn of a word or two ("I nod.") is matched together with the message before
+it. The Lore tab lists the matches sent, in order, and the next few, which a
+higher number would send too.
+
 Similarity scores are not comparable between models, so the threshold needs
 tuning: the Lore tab shows the score on every hit and on the near-misses that
-fell just under it. With embeddings off or the endpoint failing, retrieval
-falls back to keyword matching and the status bar says so.
+fell just under it. An entry below the threshold can still match by its
+words. With embeddings off or the endpoint failing, the ranking goes by the
+words alone and the status bar says so.
 
 The lore chosen for a turn has room for a tenth of the story's context budget
 (6,000 tokens of a 60,000 budget) by default; **Chosen lore may take**, under
