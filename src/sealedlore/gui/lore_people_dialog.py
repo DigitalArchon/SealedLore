@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QMessageBox,
     QPlainTextEdit,
@@ -138,7 +139,13 @@ class LorePeopleDialog(QDialog):
                 self.table.setCellWidget(row, GOES, _centred(keep))
             self._keeps.append(keep)
         self.table.resizeColumnsToContents()
-        self.table.horizontalHeader().setStretchLastSection(True)
+        header = self.table.horizontalHeader()
+        # The names take what is spare; the choices keep their width.
+        header.setSectionResizeMode(NAME, QHeaderView.Stretch)
+        header.setSectionResizeMode(ENTRY, QHeaderView.Interactive)
+        header.resizeSection(ENTRY, min(header.sectionSize(ENTRY), 220))
+        for column in range(WORDS, self.table.columnCount()):
+            header.setSectionResizeMode(column, QHeaderView.ResizeToContents)
         self.table.currentCellChanged.connect(lambda row, *_rest: self._preview(row))
 
         self.text = QPlainTextEdit()
@@ -172,8 +179,8 @@ class LorePeopleDialog(QDialog):
         split = QSplitter(Qt.Vertical)
         split.addWidget(upper)
         split.addWidget(self.text)
-        split.setStretchFactor(0, 3)
-        split.setStretchFactor(1, 2)
+        split.setStretchFactor(0, 4)
+        split.setStretchFactor(1, 1)
 
         layout = QVBoxLayout(self)
         layout.addWidget(heading)
@@ -195,7 +202,7 @@ class LorePeopleDialog(QDialog):
                     line = QLabel(f"• {words}")
                     layout.addWidget(line)
         if found.warnings:
-            notes = QLabel("Not found: " + "; ".join(found.warnings) + ".")
+            notes = QLabel("Notes: " + "; ".join(found.warnings) + ".")
             notes.setObjectName("hintLabel")
             notes.setWordWrap(True)
             layout.addWidget(notes)
