@@ -394,6 +394,20 @@ def workflow_for(settings: LocalSettings, *, with_picture: bool) -> tuple[dict[s
     return builtin_workflow(with_picture=with_picture), False
 
 
+# The " [e9476a1372]" AUTOMATIC1111 adds to a checkpoint's title once it has
+# hashed it.
+_HASH_SUFFIX = re.compile(r"\s*\[[0-9a-f]{8,}\]$")
+
+
+def checkpoint_name(title: str) -> str:
+    """An AUTOMATIC1111 checkpoint by its file's own name, as it stays: its
+    title gains " [hash]" once the server has hashed it (live, Forge, after
+    the first picture drawn with it), and a model chosen before then would
+    no longer be found. The server takes a checkpoint by its file name as by
+    its title."""
+    return _HASH_SUFFIX.sub("", title.strip())
+
+
 def _model_slot(workflow: dict[str, Any]) -> tuple[str, str] | None:
     """The node and input a workflow takes its model at ({{model}}), so the
     server can say which models it has for it."""
@@ -423,16 +437,12 @@ def list_models(
     local = is_local(base_url)
     if api == "a1111":
         body = _json(get(f"{root}/sdapi/v1/sd-models"), "AUTOMATIC1111 / Forge", hint=_A1111_HINT)
-        names = (
-            [
-                str(item.get("title") or item.get("model_name"))
-                for item in body
-                if isinstance(item, dict) and (item.get("title") or item.get("model_name"))
-            ]
-            if isinstance(body, list)
-            else []
-        )
-        return [_info(name, name, 1, local) for name in names]
+        names = [
+            checkpoint_name(str(item.get("title") or item.get("model_name")))
+            for item in (body if isinstance(body, list) else ())
+            if isinstance(item, dict) and (item.get("title") or item.get("model_name"))
+        ]
+        return [_info(name, name, 1, local) for name in dict.fromkeys(names)]
     # ComfyUI: the models the workflow drawing from words takes, at its
     # {{model}}; a workflow of the author's with none draws with its own.
     words, _own = workflow_for(settings, with_picture=False)
@@ -586,7 +596,7 @@ class LocalDrawing:
                     self.api, self.base_url, self.key, self.settings, get=self._get
                 )
             ]
-        if model not in names:
+        if checkpoint_name(model) not in {checkpoint_name(name) for name in names}:
             listed = ", ".join(names[:6]) + ("…" if len(names) > 6 else "")
             raise ProviderError(
                 f"{self.service} has no model called {model!r}. Choose one of its own in "
@@ -624,7 +634,7 @@ class LocalDrawing:
             "seed": -1,
             "send_images": True,
             "save_images": False,
-            "override_settings": {"sd_model_checkpoint": model},
+            "override_settings": {"sd_model_checkpoint": checkpoint_name(model)},
             # Kept loaded: put back after every request, the next one would
             # load it again (a checkpoint takes seconds to minutes).
             "override_settings_restore_afterwards": False,

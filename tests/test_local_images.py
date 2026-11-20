@@ -122,8 +122,11 @@ def request(model: str, *, size: str = "1024x1024", n: int = 1, refs=()) -> Imag
 
 def test_a_server_of_ones_own_starts_where_its_program_does_and_takes_no_chat_key():
     config = Config(
-        providers=[ProviderConfig(name="NanoGPT", base_url="https://nano-gpt.com/api/v1",
-                                  api_key="chat-key")],
+        providers=[
+            ProviderConfig(
+                name="NanoGPT", base_url="https://nano-gpt.com/api/v1", api_key="chat-key"
+            )
+        ],
         image_endpoint=MediaEndpoint(api="comfyui"),
     )
     media = config.images()
@@ -265,6 +268,20 @@ def test_a_model_the_server_hasnt_got_is_said_before_anything_is_drawn(tmp_path:
     assert "has no model called 'bytedance/seedream-v5.0-pro'" in str(caught.value)
     assert "Choose beside each model" in str(caught.value)
     assert not any(r.url.path.endswith("txt2img") for r in seen)
+
+
+def test_a_checkpoint_keeps_its_name_once_the_server_has_hashed_it(tmp_path: Path):
+    """Live, Forge listed "v1-5-pruned-emaonly-fp16.safetensors", then after
+    its first picture "v1-5-pruned-emaonly-fp16.safetensors [e9476a1372]"."""
+    seen: list[httpx.Request] = []
+    hashed = [f"{name} [e9476a1372]" for name in CHECKPOINTS]
+    http = httpx.Client(transport=httpx.MockTransport(a1111_server(seen, models=hashed)))
+    assert [m.id for m in list_own_models(A1111, api="a1111", client=http)] == CHECKPOINTS
+    image = client("a1111", a1111_server(seen, models=hashed))
+    run_image_request(image, request(CHECKPOINTS[0]), tmp_path)  # chosen before: still found
+    run_image_request(image, request(hashed[0]), tmp_path)  # or as the title said then
+    sent = [json.loads(r.content) for r in seen if r.url.path == "/sdapi/v1/txt2img"]
+    assert {s["override_settings"]["sd_model_checkpoint"] for s in sent} == {CHECKPOINTS[0]}
 
 
 def test_api_auth_is_basic_from_a_user_password_key():
@@ -476,8 +493,12 @@ def test_placeholders_are_listed_known_first_and_pictures_counted():
 
 
 def test_a_value_fills_a_whole_placeholder_as_it_is_and_a_part_as_text():
-    graph = {"1": {"class_type": "X", "inputs": {"a": "{{width}}", "b": "w={{width}}", "c": [
-        "{{seed}}"]}}}
+    graph = {
+        "1": {
+            "class_type": "X",
+            "inputs": {"a": "{{width}}", "b": "w={{width}}", "c": ["{{seed}}"]},
+        }
+    }
     filled = fill(graph, {"width": 832, "seed": 7})
     assert filled["1"]["inputs"] == {"a": 832, "b": "w=832", "c": [7]}
     # One with no value is left, for ComfyUI to say where it is.
@@ -511,8 +532,12 @@ def test_an_error_while_it_runs_is_said(tmp_path: Path):
         if req.url.path.startswith("/history/"):
             status = {
                 "status_str": "error",
-                "messages": [["execution_error", {"node_type": "KSampler",
-                                                  "exception_message": "out of memory"}]],
+                "messages": [
+                    [
+                        "execution_error",
+                        {"node_type": "KSampler", "exception_message": "out of memory"},
+                    ]
+                ],
             }
             return httpx.Response(200, json={"p1": {"outputs": {}, "status": status}})
         return base(req)
@@ -561,8 +586,9 @@ def test_the_check_refuses_a_workflow_model_where_a_workflow_wants_one():
     mine = {"1": {"class_type": "CLIPTextEncode", "inputs": {"text": "{{prompt}}"}}}
     drawing = LocalDrawing(
         "comfyui",
-        ImageClient(COMFY, "", api="comfyui", client=httpx.Client(
-            transport=httpx.MockTransport(Comfy()))).http,
+        ImageClient(
+            COMFY, "", api="comfyui", client=httpx.Client(transport=httpx.MockTransport(Comfy()))
+        ).http,
         COMFY,
         "",
         LocalSettings(workflow=json.dumps(mine)),
@@ -577,8 +603,13 @@ def test_the_check_refuses_a_workflow_model_where_a_workflow_wants_one():
 
 def test_the_log_names_the_pictures_and_the_call_log_the_server():
     payload = build_image_payload("m", "p", "1k", 1, ["data:image/png;base64,AA"], api="comfyui")
-    assert payload == {"model": "m", "prompt": "p", "size": "1k", "n": 1,
-                       "images": ["data:image/png;base64,AA"]}
+    assert payload == {
+        "model": "m",
+        "prompt": "p",
+        "size": "1k",
+        "n": 1,
+        "images": ["data:image/png;base64,AA"],
+    }
     assert loggable_payload(payload, ["Jane: a.png"])["images"] == ["<Jane: a.png>"]
     before = CALLS.version
     image = client("comfyui", Comfy())
