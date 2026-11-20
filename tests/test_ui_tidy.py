@@ -478,6 +478,22 @@ def _wheel(widget, notches: int = -1) -> None:
     QApplication.sendEvent(widget, event)
 
 
+def test_no_inspector_page_asks_for_more_than_its_floor(app, window: MainWindow):
+    """A page wider than the Inspector's floor widens the window: in one row
+    the Lore page's buttons asked 433px here, and with Windows' fonts the
+    window passed 1,282px (the lab's Windows 11, Nov 20 2026). Rows wrap."""
+    from sealedlore.gui.main_window import INSPECTOR_PAGES_FLOOR
+
+    needs_real_fonts()
+    tabs = window.right_tabs
+    for index in range(tabs.count()):
+        if tabs.isTabVisible(index):
+            tabs.setCurrentIndex(index)
+            settle(app)
+            width = tabs.widget(index).minimumSizeHint().width()
+            assert width <= INSPECTOR_PAGES_FLOOR, (tabs.tabText(index), width)
+
+
 def test_at_the_default_size_nothing_is_cut_off_at_the_side(app, window: MainWindow):
     from PySide6.QtWidgets import QScrollArea
 

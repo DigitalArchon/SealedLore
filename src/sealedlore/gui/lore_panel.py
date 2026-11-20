@@ -40,6 +40,7 @@ from sealedlore.gui.tavern_dialog import (
     LOREBOOK_LABEL,
     LOREBOOK_LINK_LABEL,
 )
+from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.models.lore import LoreEntry
 
 PEOPLE_LABEL = "Find the people…"
@@ -141,12 +142,13 @@ class LorePanel(QWidget):
         )
         self.people_button.clicked.connect(self.people_requested)
 
-        buttons = QHBoxLayout()
-        buttons.setContentsMargins(0, 0, 0, 0)
-        buttons.addWidget(add_button)
-        buttons.addWidget(self.remove_button)
-        buttons.addWidget(self.tavern_button)
-        buttons.addWidget(self.people_button)
+        # Wraps rather than widens the page: in one row, Find the people…
+        # held the Lore page 117px wider, and the window past 1,282px with
+        # Windows' fonts (the lab's Windows 11, Nov 20 2026).
+        buttons = WrapRow(spacing=6, group_spacing=6)
+        for button in (add_button, self.remove_button, self.tavern_button, self.people_button):
+            buttons.add_group([button])
+        self._buttons_row = buttons
         self._list_buttons = (
             add_button,
             self.remove_button,
@@ -167,11 +169,11 @@ class LorePanel(QWidget):
             "minimum activations, case, whole words, group scoring"
         )
         self.tavern_settings_button.clicked.connect(self.tavern_settings_requested)
-        firing_row = QHBoxLayout()
-        firing_row.setContentsMargins(0, 0, 0, 0)
-        firing_row.addWidget(QLabel("Entries"))
-        firing_row.addWidget(self.firing, 1)
-        firing_row.addWidget(self.tavern_settings_button)
+        # Wraps too: on one line it held the page ~90px wider than before.
+        firing_row = WrapRow(spacing=6, group_spacing=6)
+        firing_row.add_group([QLabel("Entries"), self.firing])
+        firing_row.add_group([self.tavern_settings_button])
+        self._firing_row = firing_row
 
         top = QWidget()
         top_layout = QVBoxLayout(top)
@@ -330,10 +332,8 @@ class LorePanel(QWidget):
         """The list as tall as its entries, three to eight, its buttons, and
         the Entries row above it."""
         rows = min(max(self.list.count(), 3), LIST_ROWS)
-        buttons = max(button.sizeHint().height() for button in self._list_buttons)
-        firing = max(
-            self.firing.sizeHint().height(), self.tavern_settings_button.sizeHint().height()
-        )
+        buttons = self._buttons_row.heightForWidth(max(self.list.width(), 1))
+        firing = self._firing_row.heightForWidth(max(self.list.width(), 1))
         spacing = self._top_layout.spacing()
         return self._rows_tall(self.list, rows) + spacing + buttons + spacing + firing
 
