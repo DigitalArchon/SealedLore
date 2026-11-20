@@ -2849,8 +2849,8 @@ class SettingsDialog(QDialog):
             field.setEnabled(on and not builtin)
         self.embed_where.setEnabled(on)
         self.builtin_row.setVisible(on and builtin)
-        if on and not builtin:
-            self.embeddings_fold.set_open(True)
+        # The endpoint's rows only for an endpoint: built in, they are put away.
+        self.embeddings_fold.set_open(on and not builtin)
 
     def _embedded_here(self) -> bool:
         """Lore embedded on this computer as the Lore page stands: the

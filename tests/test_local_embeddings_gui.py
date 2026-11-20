@@ -55,6 +55,7 @@ def test_made_by_this_computer_shows_the_model_and_puts_the_endpoint_away(app, t
     dialog.embed_where.setCurrentIndex(dialog.embed_where.findData("builtin"))
     assert not dialog.builtin_row.isHidden()
     assert not dialog.embed_base_url.isEnabled() and not dialog.find_server_button.isEnabled()
+    assert not dialog.embeddings_fold.is_open()  # the endpoint's rows put away
     assert "Not on this computer yet" in dialog.builtin_row.state.text()
     dialog.deleteLater()
 
