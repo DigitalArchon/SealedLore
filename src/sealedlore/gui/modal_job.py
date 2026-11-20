@@ -52,6 +52,10 @@ def run_with_progress(
     progress.show()
     thread.start()
     loop.exec()
+    # Closing a QProgressDialog emits canceled, which would mark every job
+    # that finished as stopped: Find the people then offered nothing and
+    # Write with AI showed no changes (the lab walk, Nov 20 2026).
+    progress.canceled.disconnect(stop)
     progress.close()
     progress.deleteLater()
     thread.wait()
