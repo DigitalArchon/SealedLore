@@ -9,8 +9,10 @@ import json
 from pathlib import Path
 
 import pytest
-from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtCore import QThread
+from PySide6.QtWidgets import QApplication, QDialog, QProgressDialog
 
+from sealedlore.engine.session import SessionNotice
 from sealedlore.gui import lore_people_dialog
 from sealedlore.gui.main_window import MainWindow
 from sealedlore.gui.modal_job import run_with_progress
@@ -72,4 +74,31 @@ def test_find_the_people_offers_whom_the_model_found(app, tmp_path: Path, monkey
     monkeypatch.setattr(lore_people_dialog.LorePeopleDialog, "exec", exec_)
     window.find_people_in_story()
     assert offered == [1]
+    window.close()
+
+
+def test_the_jobs_notices_reach_the_dialog_on_the_gui_thread(app, tmp_path: Path, monkeypatch):
+    """Set from the worker's thread, the label hung Find the people on Wayland
+    and Windows: only the GUI thread may touch the dialog."""
+    window = window_with_lore(tmp_path)
+    seen: list[tuple[str, bool]] = []
+    gui = app.thread()
+
+    def set_label(dialog, text: str) -> None:
+        seen.append((text, QThread.currentThread() is gui))
+
+    monkeypatch.setattr(QProgressDialog, "setLabelText", set_label)
+
+    def job():
+        yield SessionNotice("Reading part 1 of 2")
+        yield SessionNotice("Reading part 2 of 2")
+
+    result: dict = {}
+    run_with_progress(
+        window, window.session, "Working…", job, result, title="A job", follow_notices=True
+    )
+    assert seen == [
+        ("Working…\nReading part 1 of 2", True),
+        ("Working…\nReading part 2 of 2", True),
+    ]
     window.close()

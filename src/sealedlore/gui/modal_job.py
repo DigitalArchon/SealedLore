@@ -6,11 +6,28 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QEventLoop, Qt
+from PySide6.QtCore import QEventLoop, QObject, Qt, Slot
 from PySide6.QtWidgets import QProgressDialog, QWidget
 
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.gui.workers import WorkerThread
+
+
+class _Label(QObject):
+    """The progress dialog's label, set on the GUI thread, where the dialog
+    lives. A lambda connected to the worker's signal has no object to say
+    which thread it belongs to, so Qt ran it on the worker's, which touched
+    the dialog from there: Find the people hung on Wayland and on Windows
+    with the worker stuck in it (the lab walk, Nov 20 2026)."""
+
+    def __init__(self, progress: QProgressDialog, words: str) -> None:
+        super().__init__(progress)
+        self._progress = progress
+        self._words = words
+
+    @Slot(str)
+    def say(self, text: str) -> None:
+        self._progress.setLabelText(f"{self._words}\n{text}")
 
 
 def run_with_progress(
@@ -48,7 +65,7 @@ def run_with_progress(
 
     progress.canceled.connect(stop)
     if follow_notices:
-        worker.notice.connect(lambda text: progress.setLabelText(f"{words}\n{text}"))
+        worker.notice.connect(_Label(progress, words).say)
     progress.show()
     thread.start()
     loop.exec()
