@@ -127,9 +127,7 @@ def test_a_service_not_in_use_keeps_what_it_held_unchecked(app):
     dialog.deleteLater()
 
 
-def test_check_the_server_lists_its_models_and_puts_one_in_fields_that_werent_its(
-    app, monkeypatch
-):
+def test_check_the_server_lists_its_models_and_puts_one_in_fields_that_werent_its(app, monkeypatch):
     asked: list[dict] = []
     found = [_info("juggernautXL.safetensors", "juggernautXL.safetensors", 1, True)]
 
@@ -176,7 +174,7 @@ def test_a_workflow_is_described_under_its_box():
     assert describe_workflow('{"nodes": []}').startswith("⚠ This is the workflow")
 
 
-def test_the_picture_dialog_says_a_picture_on_ones_own_server_costs_nothing(app, window):
+def test_the_picture_dialog_says_a_picture_on_ones_own_server_costs_nothing(app, window):  # noqa: F811
     from sealedlore.gui.image_dialog import ImageDialog
     from sealedlore.gui.image_jobs import listing_entry
 
