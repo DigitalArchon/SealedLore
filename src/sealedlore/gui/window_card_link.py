@@ -179,10 +179,11 @@ class CardLinkWindow:
             return True
         return False
 
-    def add_from_collection(self, ticked: Sequence[str] = ()) -> None:
+    def add_from_collection(self, ticked: Sequence[str] = (), *, show: bool = True) -> None:
         """Characters from Your characters into the open story (the Cast
         page's From Your characters…; `ticked`, those chosen on Your
-        characters' page, ticked to begin with)."""
+        characters' page, ticked to begin with). `show`: the cast board on
+        the first of them afterwards (not for a story being made)."""
         if self._link_refused():
             return
         chat = self.session.story.chat
@@ -227,6 +228,7 @@ class CardLinkWindow:
             brought,
             left_out=0 if chat else total - brought,
             chose=with_lore,
+            show=show,
         )
 
     def _not_twice(self, cards: list[Character]) -> list[Character]:
@@ -415,6 +417,7 @@ class CardLinkWindow:
         *,
         left_out: int = 0,
         chose: bool = False,
+        show: bool = True,
     ) -> None:
         """Said once they are in: where they went, `lore`, how many lore
         entries their lorebooks brought, and `left_out`, how many stayed out:
@@ -427,7 +430,9 @@ class CardLinkWindow:
         self._refresh_scene_panel()
         self._refresh_composer()
         self._reassemble_inspector()
-        if not self.collection_shown():
+        if not show:
+            pass
+        elif not self.collection_shown():
             self.show_cast_page(added[0].id)
         else:
             self.cast_panel.select_character(added[0].id)

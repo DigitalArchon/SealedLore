@@ -100,6 +100,7 @@ class CastBoardWindow:
         if on:
             if not self.board_shown():
                 self.show_collection(False)
+                self.show_lorebooks(False)
                 self.close_find()
                 self.show_map(False)
                 self._board_away = [(w, w.isVisible()) for w in self._board_hides()]

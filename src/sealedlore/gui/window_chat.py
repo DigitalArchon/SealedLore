@@ -95,6 +95,7 @@ class ChatWindow:
         `files` and `log`: its pictures and log, from a backup."""
         # As `open_story`: nothing of the window's full pages stays over it.
         self.show_collection(False)
+        self.show_lorebooks(False)
         self.show_cast_board(False)
         self.show_map(False)
         if self.session is not None:

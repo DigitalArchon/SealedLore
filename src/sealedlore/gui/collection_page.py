@@ -84,6 +84,8 @@ CHAT, DRAFT = "chat", "draft"
 # Their profile written by a model (gui/card_fill.py).
 EXPAND_PROFILE, GENERATE_PROFILE = "expand_profile", "generate_profile"
 BACKUP, RESTORE = "backup", "restore"
+# Their own lorebook kept in Lorebooks, on its own (gui/window_lorebooks.py).
+BOOK_TO_LOREBOOKS = "book_to_lorebooks"
 # The open story's characters saved here (gui/save_characters.py).
 FROM_STORY = "from_story"
 FROM_STORY_LABEL = "Characters from the open story…"
@@ -395,6 +397,12 @@ class CollectionPage(QWidget):
             "world, a greeting as the opening, and you as the other character"
         )
         self.story_action.triggered.connect(lambda: self._act(STORY_FROM_CARD))
+        self.book_action = more_menu.addAction("Keep their lorebook in Lorebooks")
+        self.book_action.setToolTip(
+            "A copy of their own lorebook kept on its own, to start stories in its world with "
+            "anyone, or bring into a story's lore"
+        )
+        self.book_action.triggered.connect(lambda: self._act(BOOK_TO_LOREBOOKS))
         more_menu.addSeparator()
         more_menu.addAction("New version of this character…").triggered.connect(
             lambda: self._act(VERSION)

@@ -4522,6 +4522,119 @@ _text(
     (("names", "the names of the story's cards"),),
 )
 
+# The people in a lorebook (engine/lore_people.py, the Lore page's and
+# Lorebooks' Find the people…; the author, Nov 20 2026): which entries are
+# about one person, several, or are the storyteller's instructions. The cards
+# are cut from the entries in code, so the reply names and points, never
+# rewrites. Not measured beyond the two lorebooks it was built on.
+_text(
+    "lore_people.find",
+    AUTHORING,
+    "The people in a lorebook",
+    "The system prompt of Find the people… on the Lore page and in Lorebooks: which "
+    "entries are people, and which are instructions. The program reads its JSON reply: "
+    "keep the shape it asks for.",
+    """\
+You sort the entries of a lorebook for SealedLore, an app for collaborative
+roleplay stories. A storyteller model writes the story; the author plays a
+character inside it. The author wants the people the lorebook describes as
+character cards of their own, and its instructions for the storyteller told
+apart from its lore.
+
+For each entry you are shown its number, its title, how long it is, its
+keywords, its opening words and the headings inside it. Say which entries are
+about people and which are instructions:
+
+- "person": the entry is about one particular individual, someone who could
+  appear in the story and act in it, under a name of their own. A named god,
+  spirit, machine or creature who acts as a character counts.
+- "people": the entry describes several particular individuals, each in a
+  part of their own (a crew, a family, a party, a list of profiles).
+- "instructions": the entry tells the storyteller or the AI how to write or
+  run the story (a writing style, rules for dialogue, tone, combat or content,
+  how to make up characters, missions or events, what to do or never do),
+  rather than describing the world.
+
+Not people: a kind of being, a race, a species or a type of monster; a rank,
+a title, a class or a profession; a group, a faction or an organisation
+described as a whole; a place, an object, an event, a period of history; an
+entry that only mentions people while being about something else. Those are
+the world's lore: leave them out of your reply.
+
+For a "person", give:
+- "name": their name in full, as the entry gives it;
+- "aliases": the other names the entry or its keywords say they are called
+  by, never a title or a word that would fit others too ("the captain", "the
+  king", "mother");
+- "summary": who they are, in one line, from what the entry says.
+
+Reply with one JSON object in exactly this shape, and nothing else. List only
+the entries that are people or instructions:
+
+{"entries": [
+  {"n": 12, "kind": "person", "name": "...", "aliases": ["..."], "summary": "..."},
+  {"n": 3, "kind": "people"},
+  {"n": 7, "kind": "instructions"}
+]}""",
+)
+
+_text(
+    "lore_people.world",
+    AUTHORING,
+    "The people in a lorebook: its name",
+    "The first line of each request: the lorebook's name, or the story's title.",
+    "The lorebook: {world}",
+    (("world", "the lorebook's name, or the story's title"),),
+)
+
+_text(
+    "lore_people.find.entries",
+    AUTHORING,
+    "The people in a lorebook: the entries",
+    "The line before the entries shown.",
+    "Its entries:",
+)
+
+_text(
+    "lore_people.split",
+    AUTHORING,
+    "Several people in one entry",
+    "The system prompt for an entry the finder said holds several people: who each is, "
+    "and where their part begins, for the program to cut it out word for word.",
+    """\
+One entry of a lorebook describes several particular people, each in a part
+of their own. The author wants each of them as a character card of their own,
+made from their part of the entry exactly as it is written.
+
+Name everyone the entry gives a part of their own, in the order they come.
+For each:
+- "name": their name in full, as the entry gives it;
+- "aliases": the other names the entry calls them by, never a title or a word
+  that would fit others too ("the medic", "the captain");
+- "summary": who they are, in one line, from what the entry says;
+- "starts": the first words of their part, copied exactly from the entry:
+  five to twelve words, from the line their part begins on (their heading,
+  if it has one).
+
+Someone only mentioned in another person's part has no part of their own:
+leave them out.
+
+Reply with one JSON object in exactly this shape, and nothing else:
+
+{"people": [
+  {"name": "...", "aliases": ["..."], "summary": "...", "starts": "..."}
+]}""",
+)
+
+_text(
+    "lore_people.split.entry",
+    AUTHORING,
+    "Several people in one entry: the entry",
+    "The entry, whole.",
+    "The entry “{title}”:\n\n{content}",
+    (("title", "the entry's title"), ("content", "the entry's text")),
+)
+
 _text(
     "authoring.style_guide",
     AUTHORING,

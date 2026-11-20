@@ -44,6 +44,7 @@ from sealedlore.storage.paths import sample_stories
 OPEN, PREMISE, BLANK, CHAT, IMPORT, SAMPLE = "open", "premise", "blank", "chat", "import", "sample"
 LINK = "link"
 COLLECTION = "collection"
+LOREBOOKS = "lorebooks"
 # The ways to start one's own, in the order shown, with what each says.
 OWN: tuple[tuple[str, str, str], ...] = (
     (
@@ -74,6 +75,12 @@ OWN: tuple[tuple[str, str, str], ...] = (
         "Your characters",
         "Characters you keep for any story or chat: SillyTavern cards imported from files or "
         "links (Chub, RisuRealm), or your own, with their pictures.",
+    ),
+    (
+        LOREBOOKS,
+        "Lorebooks",
+        "Worlds' lore you keep for any story: SillyTavern lorebooks and others imported, or "
+        "your own. Start a story in one, with anyone from Your characters.",
     ),
 )
 SAMPLES_HEADING = "Play a sample story"

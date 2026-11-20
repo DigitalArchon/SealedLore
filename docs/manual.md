@@ -1584,6 +1584,86 @@ in this story, not in Your characters." with **Save them to Your characters**
 for that one alone, or where their card is. **Their card…** opens Your
 characters on a character whose story copy is in step with their card.
 
+## Lorebooks
+
+Lorebooks you keep for any story, outside every story: File → Lorebooks…, or
+**Lorebooks** on the start page. A lorebook here is a world's lore on its
+own, not a character's: start any number of stories in it, with whoever you
+like from Your characters, and change, export or bring it into a story's lore
+whenever you want. The page takes the whole window, as Your characters does;
+**Back to the story** (or Esc) brings the story back as it was.
+
+On the left is every lorebook you keep, with a search over its name and its
+entries' titles, and an order (by name, changed last, added last).
+**New lorebook** starts an empty one; **Import → Lorebooks from files…** takes
+SillyTavern's lorebook files and the ones SillyTavern imports from NovelAI,
+Agnai and RisuAI (see "SillyTavern cards and lorebooks"), or the lorebook on a
+character card; **Import → A lorebook from a link…** fetches one from Chub or
+a link to its file. Files dropped on the page are imported too. A lorebook is
+kept exactly as it came, every setting SillyTavern reads included, so
+**Export…** gives back a SillyTavern lorebook file with everything it had and
+anything you changed.
+
+On the right are its name, its size (entries, words, how many always sent)
+and where it came from, and every entry to read, change, add, copy, move or
+remove, as a character's own Lorebook tab has them. Titles are read as words:
+the marks some lorebooks dress them in ("[👤] John Hale",
+"═══[World]═══") are left off when a story takes them. **More** duplicates or
+deletes it (a copy goes to the Trash as a SillyTavern lorebook file; stories
+made from it keep their own lore).
+
+**New story from this lorebook…** makes a story set in its world. It asks
+the story's title, who you play (a name, and a line about them; blank, and you
+choose someone from the cast when it begins), whether to **Bring in
+characters from Your characters** next, and whether to **Find the people its
+lore describes, to make them characters** (below). The story takes a copy of
+every entry as its lore, always-sent ones still always sent, so what you
+change here afterwards reaches only stories made after; Setup opens next, then
+Start. A story already open can take a kept lorebook's entries too: **Add to
+the open story…** here, or **From Lorebooks…** in the Lore page's
+SillyTavern lorebook menu, lists them all to untick or change for that story
+alone. **Keep in Lorebooks…** in the same menu keeps the story's lore as a
+lorebook of its own, and Your characters' **More → Keep their lorebook in
+Lorebooks** keeps a character's own.
+
+File → Import… of a lorebook asks what to do with it: **Keep in Lorebooks**,
+**Start a new story** (kept too), or, with a story open, **Add to this
+story**.
+
+### The people a lorebook describes
+
+Many lorebooks carry a world's characters as entries of their own (a
+profile each: name, appearance, personality), or several in one (a ship's
+crew, a family), and instructions for the storyteller beside the lore (a
+writing style, rules for dialogue or combat). **Find the people…** reads them
+with the authoring model: on the Lore page for the story's lore, and on a
+kept lorebook's page. It is shown each entry's title, keywords, opening words
+and headings, a few dozen entries a call, and an entry about several people
+on its own; it only names and points, and each person's card is their part of
+the entry exactly as written, so nothing in the lorebook is lost and nothing
+is made up. A long lorebook takes a few calls (about seven for 300 entries).
+Someone with only a line in a list ("- Ben Ortiz: the mayor") stays in the
+lore, and the list of what was found says so.
+
+In a story you then say where each person goes: **Cast** (their whole card is
+sent every turn, and you can play them), **Supporting** (sent when the story
+names them; everyone starts here) or **Leave in the lore**. Someone the story
+already has a card for is offered **Has a card: take the entry out**. Their
+entries come out of the lore once they have a card, since the card has their
+words now; an entry that held several people keeps what was nobody's. Tick
+**Your characters** beside anyone to keep them there too, linked to the
+story's card. Entries of instructions are listed below the people, each with
+**Move into the style notes** to tick: unticked they stay lore, sent like any
+other entry; ticked they go into Style → Other notes (a hand-edited style
+block takes them in its own text), sent every turn. SealedLore's own rules
+stand either way.
+
+On a kept lorebook's page, the people you tick are kept in Your characters,
+each with their profile from the lorebook as their description and the
+lorebook's name as a tag, so any of them can join a story set in any world;
+the lorebook itself stays as it is. Its instructions are pointed out, to move
+when a story is made from it.
+
 ## SillyTavern cards and lorebooks
 
 SealedLore reads and writes the character cards and lorebooks SillyTavern
@@ -1663,7 +1743,9 @@ card exported from SealedLore comes back whole.
 adds a lorebook's entries to the story's lore (a card's own lorebook can be
 imported the same way), and **SillyTavern lorebook → Export the lore as a
 lorebook…** (or Story → Export → SillyTavern lorebook…) saves the story's
-lore as one. File → Import… of a lorebook adds it to the story that is open.
+lore as one. File → Import… of a lorebook keeps it in Lorebooks, starts a
+story with it, or adds it to the story that is open, as you choose (see
+"Lorebooks").
 An entry's keywords, content, whether it is constant (always on) and whether
 it is on come across. What SealedLore's lore has nothing like is left out
 and listed: second keywords and their logic, keywords written as regular

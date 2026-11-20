@@ -14,7 +14,7 @@ the one SillyTavern lists them in and a story takes them in.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
@@ -59,6 +59,32 @@ def _keys_text(keys: list[str]) -> str:
     return ", ".join(keys)
 
 
+class OnCard:
+    """A character's own lorebook, as the form holds a book: on their card's
+    SillyTavern fields (made when the first entry is added)."""
+
+    def __init__(self, character: Character) -> None:
+        self.character = character
+
+    @property
+    def character_book(self) -> dict[str, Any] | None:
+        tavern = self.character.tavern
+        return tavern.character_book if tavern is not None else None
+
+    @character_book.setter
+    def character_book(self, book: dict[str, Any] | None) -> None:
+        if self.character.tavern is None:
+            self.character.tavern = TavernFields()
+        self.character.tavern.character_book = book
+
+
+class BookHolder(Protocol):
+    """What the form edits: anything holding one lorebook as
+    `character_book` (a card's, OnCard; a kept one, gui/lorebooks_page.py)."""
+
+    character_book: dict[str, Any] | None
+
+
 def _order_of(value: Any) -> int:
     """An entry's order as the box can show it: its whole number (7.5 as 7,
     "40" as 40), and SillyTavern's own 100 for none."""
@@ -73,13 +99,25 @@ class LorebookForm(QWidget):
     # "import", "export" or "remove": the whole book, for the window.
     lorebook_requested = Signal(str)
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        intro_text: str = INTRO,
+        own_name: bool = True,
+        whose: str = "their",
+        book_buttons: bool = True,
+    ) -> None:
         super().__init__()
-        self._character: Character | None = None
+        self._holder: BookHolder | None = None
         self._entries: list[dict[str, Any]] = []
         self._loading = False
+        # Whose lorebook an entry is taken out of, as the question says it.
+        self._whose = whose
+        # The book's own name shown and edited here; a kept lorebook has a
+        # name of its own on its page.
+        self._own_name = own_name
 
-        intro = QLabel(INTRO)
+        intro = QLabel(intro_text)
         intro.setObjectName("hintLabel")
         intro.setWordWrap(True)
         self.book_name = QLineEdit()
@@ -211,11 +249,11 @@ class LorebookForm(QWidget):
         self.export_button.clicked.connect(lambda: self.lorebook_requested.emit("export"))
         self.remove_book = QPushButton("Remove the lorebook")
         self.remove_book.clicked.connect(lambda: self.lorebook_requested.emit("remove"))
-        book_buttons = QHBoxLayout()
-        book_buttons.setContentsMargins(0, 0, 0, 0)
+        buttons = QHBoxLayout()
+        buttons.setContentsMargins(0, 0, 0, 0)
         for button in (self.import_button, self.export_button, self.remove_book):
-            book_buttons.addWidget(button)
-        book_buttons.addStretch(1)
+            buttons.addWidget(button)
+        buttons.addStretch(1)
 
         entries = QWidget()
         # As tall as it is: spare height went to this row, a gap under it.
@@ -233,7 +271,13 @@ class LorebookForm(QWidget):
         form = QFormLayout(content)
         form.setContentsMargins(10, 10, 10, 0)
         form.addRow(intro)
-        form.addRow("", book_buttons)
+        if book_buttons:
+            form.addRow("", buttons)
+        else:
+            # A kept lorebook's page has its own Import, Export and Delete.
+            for button in (self.import_button, self.export_button, self.remove_book):
+                button.setParent(self)
+                button.hide()
         form.addRow("Book's name", self.book_name)
         form.addRow("Description", self.book_description)
         form.addRow("", self.book_rest)
@@ -248,18 +292,8 @@ class LorebookForm(QWidget):
     # --- the book ---------------------------------------------------------------------
 
     @property
-    def _tavern(self) -> TavernFields | None:
-        character = self._character
-        if character is None:
-            return None
-        if character.tavern is None:
-            character.tavern = TavernFields()
-        return character.tavern
-
-    @property
     def _book(self) -> dict[str, Any] | None:
-        tavern = self._tavern
-        return tavern.character_book if tavern is not None else None
+        return self._holder.character_book if self._holder is not None else None
 
     @property
     def _numbered(self) -> bool:
@@ -268,8 +302,12 @@ class LorebookForm(QWidget):
         return book is not None and lore.is_numbered(book)
 
     def load(self, character: Character | None, *, row: int = 0) -> None:
-        self._character = character
-        self.setEnabled(character is not None)
+        """A character's own lorebook (None: nobody's)."""
+        self.load_book(OnCard(character) if character is not None else None, row=row)
+
+    def load_book(self, holder: BookHolder | None, *, row: int = 0) -> None:
+        self._holder = holder
+        self.setEnabled(holder is not None)
         book = self._book
         self._entries = lore.book_entries(book) if book else []
         self._loading = True
@@ -278,7 +316,8 @@ class LorebookForm(QWidget):
         self.book_rest.set_value(lore.book_rest(book) if book else {})
         self._loading = False
         for widget in self._book_rows:
-            self._form.setRowVisible(widget, book is not None)
+            shown = book is not None and (self._own_name or widget is not self.book_name)
+            self._form.setRowVisible(widget, shown)
         self.export_button.setEnabled(bool(self._entries))
         self.remove_book.setEnabled(book is not None)
         self.empty.setVisible(book is None)
@@ -429,12 +468,12 @@ class LorebookForm(QWidget):
             self.changed.emit()
 
     def _add(self) -> None:
-        tavern = self._tavern
-        if tavern is None:
+        holder = self._holder
+        if holder is None:
             return
-        if tavern.character_book is None:
-            tavern.character_book = lore.new_book()
-        self._show_new(lore.add_entry(tavern.character_book))
+        if holder.character_book is None:
+            holder.character_book = lore.new_book()
+        self._show_new(lore.add_entry(holder.character_book))
         self.title.setFocus()
         self.changed.emit()
 
@@ -467,7 +506,7 @@ class LorebookForm(QWidget):
             return
         if lore.move_entry(book, raw, step):
             rows = lore.book_entries(book)
-            self.load(self._character, row=next(i for i, e in enumerate(rows) if e is raw))
+            self.load_book(self._holder, row=next(i for i, e in enumerate(rows) if e is raw))
             self.changed.emit()
 
     def _show_new(self, new: dict[str, Any]) -> None:
@@ -476,7 +515,7 @@ class LorebookForm(QWidget):
         a search left in the box cleared, which would hide it."""
         self.find.clear()
         rows = lore.book_entries(self._book or {})
-        self.load(self._character, row=next(i for i, e in enumerate(rows) if e is new))
+        self.load_book(self._holder, row=next(i for i, e in enumerate(rows) if e is new))
 
     def _remove(self) -> None:
         raw, book = self._current(), self._book
@@ -486,7 +525,7 @@ class LorebookForm(QWidget):
             answer = QMessageBox.question(
                 self,
                 "Remove this entry?",
-                f"Take “{self._line(raw)}” out of their lorebook?",
+                f"Take “{self._line(raw)}” out of {self._whose} lorebook?",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
@@ -494,5 +533,5 @@ class LorebookForm(QWidget):
                 return
         row = self.list.currentRow()
         lore.remove_entry(book, raw)
-        self.load(self._character, row=row)
+        self.load_book(self._holder, row=row)
         self.changed.emit()

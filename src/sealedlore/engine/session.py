@@ -99,6 +99,24 @@ from sealedlore.engine.lore_cast import (
     build_lore_cast_messages,
     parse_lore_cast,
 )
+from sealedlore.engine.lore_people import (
+    FIND_MAX_TOKENS,
+    SPLIT_MAX_TOKENS,
+    FoundPerson,
+    FoundRules,
+    LorePeople,
+    Placement,
+    Shown,
+    TakenApart,
+    batches,
+    find_messages,
+    parse_find,
+    parse_split,
+    shown_entries,
+    single,
+    split_messages,
+    take_apart,
+)
 from sealedlore.engine.lore_pick import (
     JEV_THRESHOLD,
     PICK_MAX_TOKENS,
@@ -3973,6 +3991,44 @@ class StorySession(
         self.story.updated_at = utc_now_iso()
         self.save()
 
+    def take_lore_people(
+        self,
+        people: Sequence[tuple[FoundPerson, Placement]],
+        rules: Sequence[FoundRules] = (),
+    ) -> TakenApart:
+        """The people found in the lore (`find_lore_people`) made the cast's
+        or supporting cards, their parts out of the entries they were in, and
+        the instructions chosen moved into the style's notes (a hand-edited
+        style block's own text, where it has one). Refused in a chat and a
+        private scene. Entries changed since they were read are left as they
+        are, and so is anyone found in one."""
+        self._refuse_in_chat("Taking people out of the lore")
+        self._refuse_in_private("Taking people out of the lore")
+        current = {entry.id: entry for entry in self.bundle.lore}
+        people = [
+            (person, placement)
+            for person, placement in people
+            if person.entry_id in current
+            and current[person.entry_id].content[person.start : person.end].strip() == person.text
+        ]
+        took = take_apart(self.bundle.lore, people, [r for r in rules if r.entry_id in current])
+        self.bundle.lore = took.lore
+        for card in took.cast:
+            self.cast.append(card)
+            for scene in self._all_scenes():
+                move_into_cast(scene, card)
+        self.supporting.extend(took.supporting)
+        if took.rules:
+            style = self.story.style
+            if style.detached and style.custom_text:
+                style.custom_text = f"{style.custom_text.rstrip()}\n\n{took.rules}"
+            else:
+                kept = (style.notes or "").rstrip()
+                style.notes = f"{kept}\n\n{took.rules}" if kept else took.rules
+        self.story.updated_at = utc_now_iso()
+        self.save()
+        return took
+
     def dismiss_suggestion(self, suggestion_id: str) -> None:
         suggestion = self._suggestion(suggestion_id)
         self.character_suggestions.remove(suggestion)
@@ -4162,6 +4218,93 @@ class StorySession(
                 f"The reply wasn't whole ({unfit}): fields it didn't reach are left as they are."
             )
         return fill
+
+    def find_lore_people(
+        self, entries: Sequence[LoreEntry], into: LorePeople, world: str = ""
+    ) -> Iterator[SessionNotice]:
+        """The people and the instructions among `entries` (engine/lore_people.py),
+        found by the authoring model into `into`, a batch of entries a call and
+        an entry about several people a call of its own; nothing changes here.
+        Yields a notice as each call goes. A batch that fails is said in
+        `into.warnings` and the rest go on; only a first failure with nothing
+        found raises (ProviderError or ValueError). Your characters' session
+        makes it for a kept lorebook, the story's for its lore."""
+        self._refuse_in_private("Finding the people in the lore")
+        shown = shown_entries(entries)
+        by_id = {item.entry_id: item for item in shown}
+        runs = batches(shown)
+        model = self.authoring_model
+        several: list[Shown] = []
+        for index, run in enumerate(runs, start=1):
+            yield SessionNotice(
+                f"Reading entries {run[0].number}–{run[-1].number} of {len(shown)} "
+                f"({index} of {len(runs)})…"
+            )
+            try:
+                text = self._lore_people_call(
+                    find_messages(run, world, texts=self.texts), FIND_MAX_TOKENS, model
+                )
+                findings = parse_find(text, run)
+            except (ProviderError, ValueError) as exc:
+                if index == 1 and len(runs) == 1:
+                    raise
+                into.warnings.append(
+                    f"entries {run[0].number}–{run[-1].number} couldn't be read ({exc})"
+                )
+                continue
+            numbered = {item.number: item for item in run}
+            for finding in findings:
+                item = numbered[finding.number]
+                if finding.kind == "person":
+                    into.people.append(single(item, finding))
+                elif finding.kind == "people":
+                    several.append(item)
+                else:
+                    into.instructions.append(
+                        FoundRules(
+                            entry_id=item.entry_id,
+                            title=item.title,
+                            words=len(item.content.split()),
+                            always_on=item.always_on,
+                        )
+                    )
+        for index, item in enumerate(several, start=1):
+            yield SessionNotice(f"Finding everyone in “{item.title}” ({index} of {len(several)})…")
+            try:
+                text = self._lore_people_call(
+                    split_messages(item, world, texts=self.texts), SPLIT_MAX_TOKENS, model
+                )
+                people, warnings = parse_split(text, by_id[item.entry_id])
+            except (ProviderError, ValueError) as exc:
+                into.warnings.append(f"the people in “{item.title}” couldn't be read ({exc})")
+                continue
+            into.people.extend(people)
+            into.warnings.extend(warnings)
+        # In the lorebook's own order, whatever order the calls came back in.
+        order = {item.entry_id: item.number for item in shown}
+        into.people.sort(key=lambda person: (order.get(person.entry_id, 0), person.start))
+
+    def _lore_people_call(self, messages: list, most: int, model: str) -> str:
+        request = ChatRequest(
+            model=model,
+            extra_body=self.route_for("authoring"),
+            messages=messages,
+            params=self.side_params(model, max_tokens=most),
+            purpose="lore_people_request",
+        )
+        payload = self.provider.build_payload(request)
+        log_ref = self._log("lore_people_request", {"payload": payload})
+        text, completed = self.provider.complete(request)
+        self._log(
+            "lore_people_response",
+            {"request_log_ref": log_ref, "text": text, "usage": completed.raw_usage},
+        )
+        self.unreported_usage.append(self.priced(completed.usage, model))
+        unfit = why_not_whole(completed)
+        if unfit:
+            # Half a list would read as "nobody else": said, and read no further.
+            raise ValueError(f"the reply wasn't whole: {unfit}")
+        return text
 
     # --- settings review ------------------------------------------------------
 

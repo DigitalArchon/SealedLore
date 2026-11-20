@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QEventLoop, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -19,7 +19,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMenu,
     QMessageBox,
-    QProgressDialog,
     QScrollArea,
     QToolButton,
     QVBoxLayout,
@@ -34,9 +33,8 @@ from sealedlore.engine.card_fill import (
     FillMode,
     proposed_changes,
 )
+from sealedlore.gui.modal_job import run_with_progress
 from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, may_discard, size_to_screen
-from sealedlore.gui.worker import GenerationWorker
-from sealedlore.gui.workers import WorkerThread
 from sealedlore.models.character import Character
 
 EXPAND_LABEL = "Expand character profile…"
@@ -288,25 +286,4 @@ def write_profile(
 
 def _run(parent: QWidget, session, words: str, job: Callable, result: dict) -> None:
     """The call on a worker thread, a progress dialog with Stop meanwhile."""
-    worker = GenerationWorker(job, provider=session.provider)
-    thread = WorkerThread(session=session)
-    worker.moveToThread(thread)
-    thread.started.connect(worker.run)
-    worker.failed.connect(lambda message: result.__setitem__("error", message))
-    worker.finished.connect(thread.quit)
-    loop = QEventLoop()
-    # Cleanup on the thread, never the worker's own finished (CONTRIBUTING.md).
-    thread.finished.connect(loop.quit)
-    progress = QProgressDialog(words, "Stop", 0, 0, parent)
-    progress.setWindowTitle("Writing a profile")
-    progress.setWindowModality(Qt.WindowModal)
-    progress.setMinimumDuration(0)
-    progress.canceled.connect(worker.stop)
-    progress.show()
-    thread.start()
-    loop.exec()
-    progress.close()
-    progress.deleteLater()
-    thread.wait()
-    worker.deleteLater()
-    thread.deleteLater()
+    run_with_progress(parent, session, words, job, result, title="Writing a profile")

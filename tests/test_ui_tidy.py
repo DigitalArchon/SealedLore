@@ -605,6 +605,7 @@ def test_the_file_menu_has_one_new_and_only_what_applies(app, tmp_path: Path, st
             "Import…",
             "Import from a link…",
             "Your characters…",
+            "Lorebooks…",
             "Plot file editor…",
             "Settings…",
             "Prompts (advanced)…",

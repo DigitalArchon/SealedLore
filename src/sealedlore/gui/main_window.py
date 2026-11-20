@@ -143,6 +143,7 @@ from sealedlore.gui.window_followup import FollowUpWindow
 from sealedlore.gui.window_images import ImagesWindow
 from sealedlore.gui.window_layout import LayoutWindow, StoriesDock
 from sealedlore.gui.window_looks import LooksWindow
+from sealedlore.gui.window_lorebooks import LorebooksWindow
 from sealedlore.gui.window_phone import PhoneWindow
 from sealedlore.gui.window_plot import PlotWindow
 from sealedlore.gui.window_private import PrivateWindow
@@ -368,6 +369,7 @@ class MainWindow(
     CastWindow,
     CastBoardWindow,
     CollectionWindow,
+    LorebooksWindow,
     CardLinkWindow,
     CardStartWindow,
     TavernWindow,
@@ -708,6 +710,7 @@ class MainWindow(
         self._init_images()
         self._init_board()
         self._init_collection()
+        self._init_lorebooks()
         self._init_card_link()
         self._init_phone()
         self._init_videos()
@@ -812,7 +815,7 @@ class MainWindow(
         _standard_keys(import_action, QKeySequence.Open)
         import_action.setStatusTip(
             "A new story from a scenario, a story backup or a plot file (.md); a SillyTavern "
-            "card into Your characters; a lorebook or a prompt set too"
+            "card into Your characters; a lorebook into Lorebooks or a new story; a prompt set"
         )
         import_action.triggered.connect(self.import_file)
         file_menu.addAction(import_action)
@@ -821,13 +824,15 @@ class MainWindow(
         link_action = QAction(LINK_IMPORT_LABEL, self)
         link_action.setStatusTip(
             "A SillyTavern card on Chub, RisuRealm or anywhere a card's file is linked, into "
-            "Your characters; a lorebook goes into the open story's lore"
+            "Your characters; a lorebook into Lorebooks, a new story or the open story"
         )
         link_action.triggered.connect(lambda _checked=False: self.import_from_link())
         file_menu.addAction(link_action)
         # The author's own characters, kept for any story or chat
         # (gui/window_collection.py).
         self._collection_menu_action(file_menu)
+        # Lorebooks kept for any story (gui/window_lorebooks.py).
+        self._lorebooks_menu_action(file_menu)
         # Leaving a story used to take opening another or making a new one.
         # Shown only while one is open (`_update_controls`).
         self.close_story_action = QAction("&Close story", self)
@@ -1366,6 +1371,15 @@ class MainWindow(
         elif editing is not None:
             # In a message's editor, Esc cancels the edit (asked if changed).
             editing.escape_edit()
+        elif self.lorebooks_shown():
+            # As Your characters: back, unless typing in one of its fields.
+            focus = self.focusWidget()
+            if isinstance(focus, QLineEdit | QPlainTextEdit) and self.lorebooks_page.isAncestorOf(
+                focus
+            ):
+                self.lorebooks_page.setFocus()
+            else:
+                self.show_lorebooks(False)
         elif self.collection_shown():
             # As the board: the page hides the story, so Esc there means "back";
             # but typing in one of its fields, Esc first leaves the field.
@@ -1436,13 +1450,17 @@ class MainWindow(
         # and pictures for the cards, before the opening is written.
         self._then_plot(wishes, self.start_story)
 
-    def _open_new_bundle(self, bundle: StoryBundle, *, review: bool = False) -> None:
+    def _open_new_bundle(
+        self, bundle: StoryBundle, *, review: bool = False, before_setup=None
+    ) -> None:
         """Save and open a story made from a file or a setup, and begin it.
 
         `review`: Setup first, and Start only once it is saved, as for a
         premise draft (an import may want changes, the style above all,
         before its opening is written). Restart skips it: it follows a Setup
         the author has just saved, or asks for the setup as it stands.
+        `before_setup`: what else is done to the story once it is open and
+        before Setup (a story from a lorebook: its people made characters).
         """
         save_story_bundle(bundle, root=self.root)
         self.stories.refresh(selected_id=bundle.story.id)
@@ -1458,6 +1476,10 @@ class MainWindow(
                 self.open_setup()
             self.statusBar().showMessage("The chat begins with your first message.", 8000)
             return
+        if before_setup is not None:
+            before_setup()
+            if self.session is None or self.session.story.id != bundle.story.id:
+                return
         if review and not self.open_setup():
             self.statusBar().showMessage(
                 "Not begun yet: Story → Start story… when it's ready", 8000
@@ -1511,6 +1533,8 @@ class MainWindow(
             self.import_from_link()
         elif kind == start_page.COLLECTION:
             self.show_collection(True)
+        elif kind == start_page.LOREBOOKS:
+            self.show_lorebooks(True)
         elif kind == start_page.SAMPLE:
             self.import_sample(Path(str(value)))
 
@@ -1602,15 +1626,13 @@ class MainWindow(
 
     def _import_lorebook_file(self, path: Path) -> None:
         """File → Import… of a lorebook (SillyTavern's, or one it converts):
-        lore for the open story; it makes no story of its own."""
-        if self.session is None or self.in_chat:
-            self._warn_plain(
-                "A lorebook is lore for a story",
-                f"{path.name} is a lorebook. Open the story it is for, then "
-                "import it again (or from the Lore page).",
-            )
-            return
-        self.import_lorebook(path)
+        kept in Lorebooks, a story started with it, or into the open story's
+        lore, as the author says (gui/window_lorebooks.py). It used to be lore
+        for the open story only, refused with none open (the author, Nov 20
+        2026: a lorebook on its own had no way in)."""
+        read = self._read_lorebook_file(path)
+        if read is not None:
+            self.lorebook_arrived(read, path.stem, path.name)
 
     def _import_scenario(self, path: Path) -> None:
         try:
@@ -1874,6 +1896,7 @@ class MainWindow(
     def _close_story(self) -> None:
         """Back to the no-story state the window starts in."""
         self.show_collection(False)
+        self.show_lorebooks(False)
         self.show_cast_board(False)
         self.show_map(False)
         self._forget_find()
@@ -2195,6 +2218,7 @@ class MainWindow(
             self._discard_edits(leaving=True)
             self._discard_memory_scene()
         self.show_collection(False)
+        self.show_lorebooks(False)
         self.show_cast_board(False)
         self.show_map(False)
         if self.session is not None:
@@ -2502,7 +2526,7 @@ class MainWindow(
         above the transcript are put away: greyed, they only looked usable.
         None: a story is open, and they are back."""
         open_story = start is None
-        if self.collection_shown():
+        if self.collection_shown() or self.lorebooks_shown():
             # Your characters fill the window: what goes back when they close
             # is decided then (`show_collection`).
             return
@@ -2665,7 +2689,7 @@ class MainWindow(
         """Your characters or the cast board has the whole window: the story's
         own bars and banners wait under it, worked out again from the story
         when it closes (window_collection.py, window_board.py)."""
-        return self.collection_shown() or self.board_shown()
+        return self.collection_shown() or self.lorebooks_shown() or self.board_shown()
 
     def refresh_branch_bar(self) -> None:
         if self.session is None:
@@ -2743,10 +2767,11 @@ class MainWindow(
     def show_map(self, on: bool) -> None:
         """Every branch on one diagram, in the transcript's place."""
         on = bool(on and self.session is not None and not self.session.in_private)
-        if not on and self.collection_shown():
+        if not on and (self.collection_shown() or self.lorebooks_shown()):
             return  # the page has the window; the map isn't there to leave
         if on:
             self.show_collection(False)
+            self.show_lorebooks(False)
         leaving = not on and self.map_shown()
         self.centre_stack.setCurrentWidget(self.story_map if on else self.transcript)
         self.composer.setVisible(not on)
@@ -3531,6 +3556,8 @@ class MainWindow(
             return
         if self.collection_shown():
             self.show_collection(False)
+        if self.lorebooks_shown():
+            self.show_lorebooks(False)
         if self.board_shown():
             self.show_cast_board(False)
         if self.map_shown():
@@ -6085,6 +6112,7 @@ class MainWindow(
         # Under a full page the composer and the docks are put away: their
         # sizes are remembered as the story has them.
         self.show_collection(False)
+        self.show_lorebooks(False)
         self.show_cast_board(False)
         if self.session is not None:
             self.session.close()

@@ -19,6 +19,7 @@ from sealedlore.models.config import Config
 from sealedlore.models.embedding import EmbeddingCacheEntry
 from sealedlore.models.image import GeneratedImage
 from sealedlore.models.lore import LoreEntry
+from sealedlore.models.lorebook import StoredLorebook
 from sealedlore.models.memory import Recollection
 from sealedlore.models.node import Node
 from sealedlore.models.story import Story
@@ -30,6 +31,7 @@ from sealedlore.storage.archive import ArchiveError, archive_data, read_archive
 from sealedlore.storage.formats import (
     CONFIG_FORMAT,
     FORMAT_KEY,
+    LOREBOOK_FORMAT,
     STORY_FORMAT,
     NewerStory,
     format_of,
@@ -83,12 +85,13 @@ def fingerprint(models: tuple[type[BaseModel], ...]) -> str:
 def test_a_change_to_what_is_saved_raises_its_format() -> None:
     """A field added, removed or changed in what a story folder or
     config.json holds is lost by any version that doesn't know it: raise
-    STORY_FORMAT or CONFIG_FORMAT (storage/formats.py), then write the
+    STORY_FORMAT, CONFIG_FORMAT or LOREBOOK_FORMAT (storage/formats.py), then write the
     format and fingerprint printed here into tests/data/file_formats.json."""
     recorded = json.loads(SHAPES.read_text(encoding="utf-8"))
     now = {
         "story": {"format": STORY_FORMAT, "shape": fingerprint(STORY_MODELS)},
         "config": {"format": CONFIG_FORMAT, "shape": fingerprint((Config,))},
+        "lorebook": {"format": LOREBOOK_FORMAT, "shape": fingerprint((StoredLorebook,))},
     }
     for kind, current in now.items():
         was = recorded[kind]

@@ -68,6 +68,7 @@ from sealedlore.storage.tavern_lore import (
     LOREBOOK_SUFFIXES,
     LorebookError,
     LoreImport,
+    ReadLorebook,
     lorebook_of,
     open_lorebook,
     write_lorebook,
@@ -76,7 +77,6 @@ from sealedlore.threads import BackgroundThread
 
 CARD_FILTER = "Character cards (*.png *.json *.charx);;All files (*)"
 LINK_FAILED = "Could not import from the link"
-NOT_FOR_A_CHAT = "A lorebook is lore for a story"
 
 
 class _LinkFetch(QObject):
@@ -137,6 +137,9 @@ class TavernWindow:
         self.lore_panel.lorebook_import_requested.connect(lambda: self.import_lorebook())
         self.lore_panel.lorebook_link_requested.connect(lambda: self.import_from_link("lore"))
         self.lore_panel.lorebook_export_requested.connect(self.export_lorebook)
+        self.lore_panel.from_lorebooks_requested.connect(self.lorebook_from_shelf)
+        self.lore_panel.to_lorebooks_requested.connect(self.story_lore_to_lorebooks)
+        self.lore_panel.people_requested.connect(lambda: self.find_people_in_story())
         self._link_fetch: _LinkFetch | None = None
         self._link_where = "story"
         # The link the last fetch was of: where a card read from it came from.
@@ -643,8 +646,14 @@ class TavernWindow:
         title, lead = {
             "story": (
                 "Import from a link",
-                "A SillyTavern character card is kept in Your characters; a lorebook goes "
-                "into the open story's lore. Paste the link to its page or its file:",
+                "A SillyTavern character card is kept in Your characters; a lorebook is kept "
+                "in Lorebooks, starts a story, or joins the open story's lore. Paste the link "
+                "to its page or its file:",
+            ),
+            "lorebooks": (
+                "Import a lorebook from a link",
+                "A lorebook, or a card's own, is kept in Lorebooks. Paste the link to its page "
+                "or its file:",
             ),
             "collection": (
                 "Import a card from a link",
@@ -764,6 +773,8 @@ class TavernWindow:
             return
         if isinstance(found, TavernCard):
             self._card_from_link(found, where)
+        elif where == "lorebooks":
+            self._lorebook_from_link(found, result.name, where=where)
         elif where == "collection":
             self._warn_plain(
                 "A lorebook, not a character",
@@ -771,9 +782,18 @@ class TavernWindow:
                 "from a file on their Lorebook tab; a story's, from its Lore page.",
             )
         else:
-            self._lorebook_from_link(found, result.name)
+            self._lorebook_from_link(found, result.name, where=where)
 
     def _card_from_link(self, card: TavernCard, where: str) -> None:
+        if where == "lorebooks":
+            if card.book is None:
+                self._warn_plain("Import a lorebook", f"{card.name}'s card has no lorebook in it.")
+                return
+            read = ReadLorebook(card.book)
+            kept = self.keep_lorebook(read, f"{card.name}'s lorebook", self._link_source)
+            if kept is not None:
+                self.show_lorebooks(True, kept.id)
+            return
         if where in ("story", "collection"):
             self._card_into_collection(card, self._link_source)
         elif self.session is None:
@@ -789,19 +809,26 @@ class TavernWindow:
             fill = macro_filler(card.name, held.name if held is not None else None)
             self._lore_into_story(lore_from_card(card, fill), f"{card.name}'s card")
 
-    def _lorebook_from_link(self, book: Mapping[str, Any], name: str) -> None:
-        if self.session is None or self.in_chat:
-            self._warn_plain(
-                NOT_FOR_A_CHAT,
-                "That link is a lorebook. Open the story it is for, then import "
-                "it again from File → Import from a link… or its Lore page.",
-            )
-            return
+    def _lorebook_from_link(self, book: Mapping[str, Any], name: str, *, where: str) -> None:
+        """A lorebook by link: kept in Lorebooks (its page's Import);
+        from the Lore page into the open story; from File, as the author says
+        (`lorebook_arrived`)."""
         try:
             # Another app's is converted as SillyTavern converts it.
             read = lorebook_of(book, name)
         except LorebookError as exc:
             self._warn_plain(LINK_FAILED, str(exc))
+            return
+        stem = Path(name).stem or name
+        if where == "lorebooks":
+            book_kept = self.keep_lorebook(read, stem, self._link_source)
+            if book_kept is not None:
+                self.show_lorebooks(True, book_kept.id)
+            return
+        if where != "lore":
+            self.lorebook_arrived(read, stem, self._link_source)
+            return
+        if self.session is None or self.in_chat:
             return
         held = self._held()
         # A lorebook of its own has no {{char}} to name: it stays.

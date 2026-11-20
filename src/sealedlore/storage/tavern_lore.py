@@ -21,6 +21,7 @@ import base64
 import itertools
 import json
 import re
+import unicodedata
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -226,6 +227,68 @@ def their_lorebook(name: str) -> str:
     return f"{name}'s lorebook"
 
 
+# A title's marks around its words: a bracket holding only symbols ("[👤]",
+# "[›] [°]", "【☰】"), and symbols and rules at either end ("═══[World]═══",
+# "⚠️⛔READ THIS⛔⚠️"). Lorebooks written for SillyTavern dress their memos so,
+# where a story matches a title against the prose (a place's picture, lore held
+# back until mentioned) and lists it on the Lore page.
+_BRACKETS = re.compile(r"[\[【(〔]([^\]】)〕]*)[\]】)〕]")
+
+
+def _has_words(text: str) -> bool:
+    """Words, not a marker: a letter or a digit, and more than one sign
+    unless it is plain ASCII ("[𖤓]" is a letter by Unicode's reckoning)."""
+    marks = [c for c in text if not c.isspace() and unicodedata.category(c)[0] not in "MC"]
+    if len(marks) <= 1 and not any(c.isascii() and c.isalnum() for c in marks):
+        return False
+    return any(unicodedata.category(c)[0] == "L" or c.isascii() and c.isdigit() for c in text)
+
+
+def _ends_stripped(text: str) -> str:
+    """`text` less what isn't a word at either end: symbols, rules, marks."""
+    kept = set("[]【】()〔〕\"'!?.…")
+
+    def word(c: str) -> bool:
+        return c in kept or unicodedata.category(c)[0] in "LN"
+
+    start, end = 0, len(text)
+    while start < end and not word(text[start]):
+        start += 1
+    while end > start and not word(text[end - 1]):
+        end -= 1
+    return text[start:end]
+
+
+def clean_title(title: str) -> str:
+    """An entry's title as words: brackets of nothing but symbols dropped,
+    the marks at either end taken off, and one bracket around the whole
+    unwrapped ("═══[World]═══" is "World"). A title with no words at all
+    ("1", "★") gives "" for the reader to name the entry otherwise; digits
+    alone are no title either."""
+    text = _BRACKETS.sub(lambda m: m.group(0) if _has_words(m.group(1)) else " ", title)
+    text = " ".join(_ends_stripped(text).split())
+    whole = _BRACKETS.fullmatch(text)
+    if whole:
+        text = " ".join(_ends_stripped(whole.group(1)).split())
+    if not any(unicodedata.category(c)[0] == "L" for c in text):
+        return ""
+    return text
+
+
+def heading_of(content: str) -> str:
+    """The heading an entry's text opens with, as its title, when its own is
+    no title ("3", a card's numbered memos): a short first line in brackets,
+    or a Markdown heading. "" when it opens with none."""
+    first = next((line.strip() for line in content.splitlines() if line.strip()), "")
+    if len(first) > 80:
+        return ""
+    if first.startswith("#"):
+        return clean_title(first.lstrip("#"))
+    if _BRACKETS.fullmatch(first) or (first.startswith("<") and first.endswith(">")):
+        return clean_title(first.strip("<>/"))
+    return ""
+
+
 def lore_from_book(
     book: Mapping[str, Any],
     fill: Callable[[str], str] = lambda text: text,
@@ -263,8 +326,8 @@ def lore_from_book(
             result.left_out["secondary"] += 1
         for kind in _features(raw, numbered):
             result.left_out[kind] += 1
-        title = entry_title(raw)
-        title = fill(title) if title else (keywords[0] if keywords else f"Entry {number}")
+        title = clean_title(fill(entry_title(raw)))
+        title = title or heading_of(content) or (keywords[0] if keywords else f"Entry {number}")
         always_on, enabled = bool(raw.get("constant")), entry_enabled(raw, numbered=numbered)
         if "@@activate" in decorators:
             always_on = True

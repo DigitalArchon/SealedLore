@@ -6,5 +6,9 @@
  "config": {
   "format": 1,
   "shape": "ed1c7f3d47e59974387ba37c3bfbc4789ae34aedbcda309dfd4a5c0747884422"
+ },
+ "lorebook": {
+  "format": 1,
+  "shape": "92ea06340c9739d82e6f3f89a346d15d3db8d247d5df57d8464a1fee03ed05d6"
  }
 }

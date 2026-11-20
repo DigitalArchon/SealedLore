@@ -34,6 +34,7 @@ from sealedlore.gui.card_fill import write_profile
 from sealedlore.gui.collection_page import (
     ADD_TO_STORY,
     BACKUP,
+    BOOK_TO_LOREBOOKS,
     CHAT,
     DELETE,
     DRAFT,
@@ -634,10 +635,16 @@ class CollectionWindow:
             GENERATE_PROFILE: lambda: self._write_kept_profile(card_id, GENERATE),
             BACKUP: lambda: self._backup_collection(),
             RESTORE: lambda: self.restore_collection(),
+            BOOK_TO_LOREBOOKS: lambda: self._kept_book_to_lorebooks(card_id),
         }
         action = actions.get(what)
         if action is not None:
             action()
+
+    def _kept_book_to_lorebooks(self, card_id: str) -> None:
+        card = self._kept_card(card_id)
+        if card is not None:
+            self.card_lorebook_to_lorebooks(card)
 
     def _write_kept_profile(self, card_id: str, mode: FillMode) -> None:
         """Write with AI → Expand / Generate character profile… (gui/card_fill.py):

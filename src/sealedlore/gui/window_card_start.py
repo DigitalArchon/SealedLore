@@ -89,6 +89,7 @@ class CardStartWindow:
         background = (greeting.background if greeting else None) or card_files.background_of(assets)
         self._card_background_for(background, story, files)
         self.show_collection(False)
+        self.show_lorebooks(False)
         if keep == "memory":
             self.open_memory_chat(bundle, files=files)
         else:

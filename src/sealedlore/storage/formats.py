@@ -32,6 +32,8 @@ FORMAT_KEY = "format_version"
 STORY_FORMAT = 1
 # The layout of config.json.
 CONFIG_FORMAT = 1
+# The layout of a lorebook kept in Lorebooks (storage/lorebooks.py).
+LOREBOOK_FORMAT = 1
 
 
 def format_of(data: Any) -> int:

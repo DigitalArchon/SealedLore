@@ -41,6 +41,9 @@ from sealedlore.gui.tavern_dialog import (
 )
 from sealedlore.models.lore import LoreEntry
 
+PEOPLE_LABEL = "Find the people…"
+FROM_LOREBOOKS_LABEL = "From Lorebooks…"
+TO_LOREBOOKS_LABEL = "Keep in Lorebooks…"
 # The pictures beside the titles in the list.
 LIST_ICON = 28
 # The most entries the list shows before it scrolls, and the report's list.
@@ -56,6 +59,11 @@ class LorePanel(QWidget):
     lorebook_import_requested = Signal()
     lorebook_link_requested = Signal()
     lorebook_export_requested = Signal()
+    # Lorebooks kept for any story (gui/window_lorebooks.py): one brought in,
+    # or the lore kept as one; and the people the lore describes found.
+    from_lorebooks_requested = Signal()
+    to_lorebooks_requested = Signal()
+    people_requested = Signal()
     # (entry id, picture id or "", what): a picture drawn for the entry:
     # "new", or "again" or "edit" of that picture (as on the Cast page).
     picture_requested = Signal(str, str, str)
@@ -99,14 +107,34 @@ class LorePanel(QWidget):
         tavern_menu.addAction(LOREBOOK_EXPORT_LABEL).triggered.connect(
             lambda _checked=False: self.lorebook_export_requested.emit()
         )
+        tavern_menu.addSeparator()
+        tavern_menu.addAction(FROM_LOREBOOKS_LABEL).triggered.connect(
+            lambda _checked=False: self.from_lorebooks_requested.emit()
+        )
+        tavern_menu.addAction(TO_LOREBOOKS_LABEL).triggered.connect(
+            lambda _checked=False: self.to_lorebooks_requested.emit()
+        )
         self.tavern_button.setMenu(tavern_menu)
+        self.people_button = QPushButton(PEOPLE_LABEL)
+        self.people_button.setToolTip(
+            "The authoring model reads the lore and finds the people it describes, for you to "
+            "make cast or supporting cards of; and points out instructions written for the "
+            "storyteller, to move into the style's notes"
+        )
+        self.people_button.clicked.connect(self.people_requested)
 
         buttons = QHBoxLayout()
         buttons.setContentsMargins(0, 0, 0, 0)
         buttons.addWidget(add_button)
         buttons.addWidget(self.remove_button)
         buttons.addWidget(self.tavern_button)
-        self._list_buttons = (add_button, self.remove_button, self.tavern_button)
+        buttons.addWidget(self.people_button)
+        self._list_buttons = (
+            add_button,
+            self.remove_button,
+            self.tavern_button,
+            self.people_button,
+        )
 
         top = QWidget()
         top_layout = QVBoxLayout(top)

@@ -147,22 +147,39 @@ def test_file_import_keeps_a_card_and_a_story_is_made_from_it_there(
     window.close()
 
 
-def test_a_lorebook_by_file_import_needs_a_story(app, tmp_path: Path, monkeypatch, story, cast):
+def test_a_lorebook_by_file_import_is_kept_or_joins_the_story(
+    app, tmp_path: Path, monkeypatch, story, cast
+):
+    """No story open, a lorebook is kept in Lorebooks (it used to be refused:
+    "Open the story it is for"); with one, it may join the story's lore."""
+    from sealedlore.gui import window_lorebooks
+    from sealedlore.storage.lorebooks import load_lorebooks
+
     path = tmp_path / "book.json"
     write_lorebook(path, [LoreEntry(title="The ridge", content="Cold.", keywords=["ridge"])])
     window = window_on(tmp_path)
     choose_file(monkeypatch, path)
-    warned: list[str] = []
-    monkeypatch.setattr(window, "_warn_plain", lambda title, text: warned.append(text))
+    offered: list[bool] = []
+
+    def ask(read, name, story_here):
+        offered.append(story_here)
+        return window_lorebooks.KEEP
+
+    monkeypatch.setattr(window, "_ask_lorebook_arrival", ask)
     window.import_file()
-    assert warned and "Open the story it is for" in warned[0]
+    assert offered == [False]
+    kept = load_lorebooks(tmp_path / "data").books
+    assert [book.name for book in kept] == ["book"]
+    assert window.lorebooks_shown()
     window.close()
 
     window = window_on(tmp_path / "two", story, cast)
     choose_file(monkeypatch, path)
     no_boxes(monkeypatch)
+    monkeypatch.setattr(window, "_ask_lorebook_arrival", lambda *_args: window_lorebooks.INTO)
     window.import_file()
     assert [entry.title for entry in window.session.bundle.lore] == ["The ridge"]
+    assert not load_lorebooks(tmp_path / "two" / "data").books
     window.close()
 
 
@@ -355,8 +372,12 @@ def test_file_import_takes_another_apps_lorebook_as_one(
     assert tavern_kind(agnai) == "card"
     novel = tmp_path / "dust.lorebook"
     novel.write_text(json.dumps(NOVEL_BOOK))
+    from sealedlore.gui import window_lorebooks
+    from sealedlore.storage.lorebooks import load_lorebooks
+
     window = window_on(tmp_path, story, cast)
     no_boxes(monkeypatch)
+    monkeypatch.setattr(window, "_ask_lorebook_arrival", lambda *_a: window_lorebooks.INTO)
     for path in (agnai, novel, novel_picture(tmp_path, NOVEL_BOOK)):
         choose_file(monkeypatch, path)
         window.import_file()
@@ -369,15 +390,15 @@ def test_file_import_takes_another_apps_lorebook_as_one(
     assert len(window.session.bundle.lore) == 9 and not window.collection_shown()
     window.close()
 
+    # With no story open it is kept in Lorebooks, converted as SillyTavern
+    # converts it, saying what converting it lost.
     window = window_on(tmp_path / "two")
     choose_file(monkeypatch, novel)
-    warned: list[str] = []
-    monkeypatch.setattr(window, "_warn_plain", lambda title, text: warned.append(text))
+    monkeypatch.setattr(window, "_ask_lorebook_arrival", lambda *_a: window_lorebooks.KEEP)
     window.import_file()
-    assert warned == [
-        "dust.lorebook is a lorebook. Open the story it is for, then import it again (or from "
-        "the Lore page)."
-    ]
+    (kept,) = load_lorebooks(tmp_path / "two" / "data").books
+    assert kept.name == "dust" and kept.came_from == "dust.lorebook"
+    assert any("Always On" in note for note in kept.converted)
     window.close()
 
 
@@ -519,16 +540,28 @@ def test_a_lorebook_by_link_goes_into_the_lore(app, tmp_path: Path, monkeypatch,
     window.close()
 
 
-def test_a_lorebook_by_link_with_no_story_says_where_it_goes(app, tmp_path: Path, monkeypatch):
+def test_a_lorebook_by_link_with_no_story_is_kept(app, tmp_path: Path, monkeypatch):
+    """It used to be refused ("Open the story it is for"): kept in Lorebooks
+    now, or a story started with it, as the author says."""
+    from sealedlore.gui import window_lorebooks
+    from sealedlore.storage.lorebooks import load_lorebooks
+
     window = window_on(tmp_path)
     book = book_from_lore([LoreEntry(title="The ridge", content="Cold.")])
     paste_link(monkeypatch, "https://chub.ai/lorebooks/someone/the-ridge")
     answered_with(monkeypatch, Fetched(io.BytesIO(json.dumps(book).encode()), "b.json", "Chub"))
-    warned: list[str] = []
-    monkeypatch.setattr(window, "_warn_plain", lambda title, text: warned.append(text))
+    asked: list[bool] = []
+
+    def ask(read, name, story_here):
+        asked.append(story_here)
+        return window_lorebooks.KEEP
+
+    monkeypatch.setattr(window, "_ask_lorebook_arrival", ask)
     window.import_from_link()
-    wait_for(app, lambda: warned)
-    assert "Open the story it is for" in warned[0] and window.session is None
+    wait_for(app, lambda: asked)
+    (kept,) = load_lorebooks(tmp_path / "data").books
+    assert asked == [False] and window.session is None
+    assert kept.came_from == "https://chub.ai/lorebooks/someone/the-ridge"
     window.close()
 
 

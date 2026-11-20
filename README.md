@@ -473,6 +473,11 @@ Have fun!
   (a new picture, a changed description) goes back to their card, becomes a
   new version of it, or stays in that story; start a simple chat with one, or
   have a story drafted around them from your premise.
+- **Lorebooks**: every lorebook you keep, outside any story, to change, export
+  and start stories in, with anyone from Your characters. The people a
+  lorebook describes become the story's cast or supporting characters (or are
+  kept in Your characters), cut from it word for word, and its instructions
+  for the storyteller are pointed out, to move into the style notes.
 - **SillyTavern cards and lorebooks**: import character cards into Your
   characters (a PNG, JSON or CHARX file, or just its link on Chub or
   RisuRealm) with every file they carry, bring a card into a story, and export
