@@ -5,6 +5,7 @@ story's lore."""
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 from sealedlore.models.lorebook import StoredLorebook
@@ -27,7 +28,8 @@ def test_a_kept_lorebook_is_its_own_file_and_reads_back_whole(tmp_path: Path):
     path = lorebooks.lorebook_path(stored.id, tmp_path)
     data = json.loads(path.read_text(encoding="utf-8"))
     assert data["format"] == "sealedlore-lorebook" and data[FORMAT_KEY] == LOREBOOK_FORMAT
-    assert path.stat().st_mode & 0o777 == 0o600
+    if sys.platform != "win32":  # mode bits; Windows: the folder's ACL (test_windows.py)
+        assert path.stat().st_mode & 0o777 == 0o600
     (again,) = lorebooks.load_lorebooks(tmp_path).books
     assert again == stored and again.book == book()
     assert again.name == "doomsville" and again.came_from == "doomsville.json"
