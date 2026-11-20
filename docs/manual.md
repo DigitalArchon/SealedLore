@@ -830,7 +830,7 @@ model, chosen when it was made; a TEE or encrypted chat's calls all go to it.
 | Video model ★ | Settings → Video | videos | starts as Seedance 2.5 |
 | Private model | Settings → Private | private scenes | — |
 | Model for looks | Settings → Private | choosing the pictures a private scene's characters are shown with | the scene's own model |
-| Embeddings model | Settings → Lore | lore vectors | `BAAI/bge-m3` |
+| Embeddings model | Settings → Lore | lore vectors | `BAAI/bge-m3` (or the built-in bge-m3 on this computer) |
 
 A model's reasoning is kept with its passage for you to read, and is never
 sent back: no later request, to any model, carries it.
@@ -2674,11 +2674,29 @@ has the lore model choose, plus whatever your own turn names; **Jev before
 each turn** asks NanoGPT's decision model just before the turn;
 **Similarity and keywords** uses embeddings and keywords alone.
 
-Embeddings are off by default. Turn them on under Settings → Lore; leave the
-base URL and key blank to reuse the chat endpoint's (the chat key is only
-reused for the chat endpoint's own host, never sent to a different server).
-The default model is `BAAI/bge-m3` (1024 dimensions, 8k context, no prefixes
-needed).
+Embeddings are off by default. Turn them on under Settings → Lore
+(**Retrieve lore semantically**) and choose what makes them with **Made by**:
+
+- **This computer (built in)**: bge-m3, the model lore and recall are tuned
+  on, run on your own computer. **Download…** fetches it once (586 MB, from
+  Hugging Face, checked against its known checksum before it is kept);
+  **Remove** takes it off again. Nothing you write is sent anywhere to embed
+  it. The first use loads it (about 0.6 GB of memory); a turn then takes a
+  few hundredths of a second, and a lorebook of 100 entries about 15 seconds
+  the first time (each entry is embedded once). In our tests it retrieved
+  lore as well as NanoGPT's bge-m3. Until it is downloaded, lore is matched
+  by keywords.
+- **An embeddings endpoint**: any OpenAI-compatible `/embeddings`. Leave the
+  base URL and key blank to reuse the chat endpoint's (the chat key is only
+  reused for the chat endpoint's own host, never sent to a different
+  server). The default model is `BAAI/bge-m3` (1024 dimensions, 8k context,
+  no prefixes needed). For a server on your own computer (Ollama, LM Studio,
+  llama.cpp, LocalAI, Text Embeddings Inference or vLLM), **Find a server on
+  this computer** asks each at its usual address for its models and fills in
+  the first that embeds (`ollama pull bge-m3` gets bge-m3 for Ollama).
+
+Vectors are kept per model, so changing what makes them embeds each entry
+again, once.
 
 Each turn, the entries are ranked by how well they match what you just
 wrote: how close each is in meaning (with embeddings on), and which of your
@@ -3841,7 +3859,8 @@ model and cost alone, like the rest.
   from the story; and a request for each one's model list when a price or
   the model picker needs one. Each call goes to the endpoint its model
   names, with that endpoint's key alone.
-- **The embeddings endpoint** (Settings → Lore, off by default) gets the lore
+- **The embeddings endpoint** (Settings → Lore, off by default; nothing at
+  all when Made by is this computer) gets the lore
   entries and a query built from the last few passages, and, for recall, the
   chapters merged into parts (and the archived passages, if recall is set to
   search them) and your Question or turn when recall searches for it. Its key is only

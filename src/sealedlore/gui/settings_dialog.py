@@ -50,6 +50,7 @@ from sealedlore.engine.reasoning import describe as describe_reasoning
 from sealedlore.engine.routing import describe, routable, route_body
 from sealedlore.engine.speed_test import Role, SpeedTarget, plan_targets
 from sealedlore.gui.attest_check import AttestationButton
+from sealedlore.gui.builtin_embeddings import BuiltinModelRow
 from sealedlore.gui.fields import FormScroll
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.image_picker import pick_image_model
@@ -93,6 +94,7 @@ from sealedlore.models.config import (
     chat_api,
     credentials,
     in_the_clear,
+    is_loopback_host,
     key_origin,
     key_problem,
     on_chutes,
@@ -124,6 +126,8 @@ from sealedlore.providers.context_probe import detect_context
 from sealedlore.providers.endpoints import EndpointsProvider, listing_key
 from sealedlore.providers.images import list_own_models, parse_image_models
 from sealedlore.providers.local_images import LocalSettings, where_drawn
+from sealedlore.providers.local_servers import find_local_servers
+from sealedlore.providers.local_servers import found_words as local_server_words
 from sealedlore.providers.privacy import (
     PRIVACY_LEVELS,
     SERVICE_NAMES,
@@ -1575,9 +1579,10 @@ class SettingsDialog(QDialog):
         """What leaves this computer unencrypted with every text model
         end-to-end encrypted, as the other pages stand."""
         still = []
-        if self.embeddings_enabled.isChecked():
+        if self.embeddings_enabled.isChecked() and not self._embedded_here():
             still.append(
-                "the lore sent for embeddings, while Lore → Retrieve lore semantically is on"
+                "the lore sent for embeddings, while Lore → Retrieve lore semantically is on "
+                "and Made by is an endpoint on another machine"
             )
         if self.lore_selector.currentData() == "jev":
             still.append("what Jev is shown to pick lore, while Lore → Large lorebooks uses it")
@@ -2758,6 +2763,23 @@ class SettingsDialog(QDialog):
         )
         form.addRow("Large lorebooks", self.lore_selector)
         form.addRow(self.embeddings_enabled)
+        # Where the vectors are made: on this computer by the built-in model,
+        # or by an endpoint (NanoGPT's bge-m3 by default, or a server of one's
+        # own: Find a server on this computer).
+        self.embed_where = QComboBox()
+        self.embed_where.addItem("This computer (built in)", "builtin")
+        self.embed_where.addItem("An embeddings endpoint", "endpoint")
+        self.embed_where.setCurrentIndex(
+            self.embed_where.findData("builtin" if existing and existing.builtin else "endpoint")
+        )
+        self.embed_where.setToolTip(
+            "This computer: the built-in bge-m3, downloaded once, and nothing you write is "
+            "sent anywhere to embed it. An endpoint: the address below (the chat "
+            "endpoint's by default), or a server of your own."
+        )
+        form.addRow("Made by", self.embed_where)
+        self.builtin_row = BuiltinModelRow(self._root)
+        form.addRow(self.builtin_row)
         hint = QLabel(
             "Keyword matching always runs, and is the whole story when this is off "
             "or the endpoint fails. A small lorebook is sent whole and needs neither."
@@ -2767,6 +2789,17 @@ class SettingsDialog(QDialog):
         form.addRow(hint)
         # The embeddings endpoint, opened when semantic retrieval is ticked.
         self.embeddings_fold = Fold(form, "Embeddings endpoint")
+        self.find_server_button = QPushButton("Find a server on this computer")
+        self.find_server_button.setToolTip(
+            "Asks Ollama, LM Studio, llama.cpp, LocalAI, Text Embeddings Inference and "
+            "vLLM at their usual ports for their models, and fills in the first that embeds."
+        )
+        self.find_server_button.clicked.connect(self._find_embeddings_server)
+        self.find_server_note = QLabel()
+        self.find_server_note.setObjectName("hintLabel")
+        self.find_server_note.setWordWrap(True)
+        self.embeddings_fold.add_row(self.find_server_button)
+        self.embeddings_fold.add_row(self.find_server_note)
         self.embeddings_fold.add_row("Base URL", self.embed_base_url)
         self.embeddings_fold.add_row("API key", self.embed_api_key)
         self.embeddings_fold.add_row(self._key_note())
@@ -2780,10 +2813,17 @@ class SettingsDialog(QDialog):
         prefixes.setObjectName("hintLabel")
         prefixes.setWordWrap(True)
         self.embeddings_fold.add_row(prefixes)
-        self.embeddings_fold.set_open(self.embeddings_enabled.isChecked())
-        self.embeddings_enabled.toggled.connect(
-            lambda on: on and self.embeddings_fold.set_open(True)
+        self.embeddings_fold.set_open(
+            self.embeddings_enabled.isChecked() and self.embed_where.currentData() == "endpoint"
         )
+        self.embeddings_enabled.toggled.connect(
+            lambda on: (
+                on
+                and self.embed_where.currentData() == "endpoint"
+                and self.embeddings_fold.set_open(True)
+            )
+        )
+        self.embed_where.currentIndexChanged.connect(self._sync_lore_fields)
         tuning = Fold(form, "Retrieval (advanced)")
         tuning.add_row("Entries per turn", self.retrieval_k)
         tuning.add_row("Similarity threshold", self.similarity)
@@ -2791,6 +2831,7 @@ class SettingsDialog(QDialog):
         tuning.add_row("Chosen lore may take", lore_room)
 
         self._lore_fields = [
+            self.find_server_button,
             self.embed_base_url,
             self.embed_api_key,
             self.embed_model,
@@ -2801,9 +2842,42 @@ class SettingsDialog(QDialog):
         self._sync_lore_fields()
         return widget
 
-    def _sync_lore_fields(self) -> None:
+    def _sync_lore_fields(self, *_args) -> None:
+        on = self.embeddings_enabled.isChecked()
+        builtin = self.embed_where.currentData() == "builtin"
         for field in self._lore_fields:
-            field.setEnabled(self.embeddings_enabled.isChecked())
+            field.setEnabled(on and not builtin)
+        self.embed_where.setEnabled(on)
+        self.builtin_row.setVisible(on and builtin)
+        if on and not builtin:
+            self.embeddings_fold.set_open(True)
+
+    def _embedded_here(self) -> bool:
+        """Lore embedded on this computer as the Lore page stands: the
+        built-in model, or a server at this computer's own address."""
+        if self.embed_where.currentData() == "builtin":
+            return True
+        url = self.embed_base_url.text().strip()
+        return bool(url) and is_loopback_host(urlparse(url).hostname or "")
+
+    def _find_embeddings_server(self) -> None:
+        """Find a server on this computer: the known ones asked for their
+        models (nothing else sent), the first that embeds filled in."""
+        self.find_server_button.setEnabled(False)
+        self.find_server_note.setText("Asking…")
+        QApplication.processEvents()
+        try:
+            servers = find_local_servers()
+        finally:
+            self.find_server_button.setEnabled(True)
+        words = local_server_words(servers)
+        chosen = next((s for s in servers if s.embedding_models), None)
+        if chosen is not None:
+            self.embed_base_url.setText(chosen.base_url)
+            self.embed_model.setText(chosen.embedding_models[0])
+            self.embed_api_key.clear()
+            words += f" Filled in: {chosen.embedding_models[0]} on {chosen.name}."
+        self.find_server_note.setText(words)
 
     def _double_field(self, value: float | None, *, maximum: float) -> QDoubleSpinBox:
         box = QDoubleSpinBox()
@@ -2877,6 +2951,7 @@ class SettingsDialog(QDialog):
         if not self.embeddings_enabled.isChecked():
             return None
         return EmbeddingProviderConfig(
+            builtin=self.embed_where.currentData() == "builtin",
             base_url=embed_url,
             api_key=self.embed_api_key.text(),
             model=self.embed_model.text().strip() or DEFAULT_EMBEDDING_MODEL,

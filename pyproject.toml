@@ -45,6 +45,12 @@ dependencies = [
     # API keys in the system keychain (storage/keychain.py): the Secret
     # Service on Linux, Credential Manager on Windows.
     "keyring>=25",
+    # Embeddings made on this computer (providers/local_embeddings.py): bge-m3
+    # run by ONNX Runtime, its text split by Hugging Face's tokenizer (read
+    # from the file downloaded with the model; its own downloader is never
+    # called). Imported on first use. At the AppImage lock's versions.
+    "onnxruntime==1.31.1",
+    "tokenizers==0.23.3",
     # Floors, as the AppImage's requirements.in sets them, for a source install
     # too: certifi without the eMudhra root (emSign ECC Root CA - G3, Oct 2026);
     # cryptography (the TEE checks use it), pyasn1 and dnspython past their

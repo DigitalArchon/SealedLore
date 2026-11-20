@@ -57,7 +57,8 @@ from sealedlore.models.node import (
 from sealedlore.models.story import Story
 from sealedlore.providers import make_session_provider
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError, TextDelta
-from sealedlore.providers.embeddings import OpenAICompatibleEmbeddings
+from sealedlore.providers.embeddings import EmbeddingBackend
+from sealedlore.providers.local_embeddings import make_embeddings
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.storage import folder_lock, keychain
 from sealedlore.storage.archive import ArchiveError, import_archive, write_archive
@@ -1060,9 +1061,9 @@ class Repl:
         print(f"    {summary.content.strip()}")
 
 
-def build_embeddings(config: Config) -> OpenAICompatibleEmbeddings | None:
+def build_embeddings(config: Config, root: Path | None = None) -> EmbeddingBackend | None:
     settings = config.embeddings()
-    return None if settings is None else OpenAICompatibleEmbeddings(settings)
+    return None if settings is None else make_embeddings(settings, root)
 
 
 def cmd_chat(args: argparse.Namespace) -> int:
@@ -1076,7 +1077,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
             provider,
             root=root,
             learn_corrections=not args.mock,
-            embeddings=build_embeddings(config),
+            embeddings=build_embeddings(config, root),
         )
     except (FileNotFoundError, ValueError) as exc:
         print(f"{args.story_id}: {exc}", file=sys.stderr)

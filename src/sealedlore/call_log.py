@@ -35,6 +35,7 @@ DECISION = "Decision"
 # How a call's content travelled.
 PLAIN_HTTPS = "HTTPS only: the provider can read it"
 PLAIN_LOCAL = "Unencrypted, on your own network"
+ON_THIS_COMPUTER = "Never left this computer"
 # What a speed test's or a host check's call is for (they keep no API log).
 SPEED_TEST = "speed_test"
 # A picture or video endpoint's service, by the protocol it speaks.

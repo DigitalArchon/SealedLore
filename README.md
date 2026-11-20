@@ -672,7 +672,8 @@ encrypts the whole way.
 - **The embeddings endpoint**, off by default, gets the lore entries, the
   chapters merged into parts (and the archived passages, if recall is set to
   search them), a query built from the last few passages, and your Question
-  or turn when recall searches for it.
+  or turn when recall searches for it. With the built-in model (Settings →
+  Lore, Made by this computer) nothing is sent at all.
 - **Pictures** go to the picture endpoint (Settings → Images; by default the
   chat endpoint): the prompt you approved and the reference pictures you
   chose. Drawn by a server of your own (ComfyUI or AUTOMATIC1111 / Forge),

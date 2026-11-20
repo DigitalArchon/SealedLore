@@ -1036,7 +1036,10 @@ class PrivateRuntime:
             models.add(self.role_model(role))
         if not all(m and self.privacy(m).sealed for m in models):
             return False
-        return self.embeddings is None and self.config.lore_selector != "jev"
+        # Lore embedded on this computer (the built-in model, a server here)
+        # goes nowhere.
+        embedded_here = self.embeddings is None or self.config.embeddings_stay_here()
+        return embedded_here and self.config.lore_selector != "jev"
 
     def _is_story_passage(self, node: Node) -> bool:
         """A passage of the story itself: no chat's, no private scene's."""

@@ -29,6 +29,12 @@ EXTRA_TEXTS = {
     "shiboken6": ["LGPL-3.0.txt", "GPL-3.0.txt"],
     # MIT; the licence is in its source repository (tinfoilsh/encrypted-http-body-protocol).
     "tinfoil-ehbp": ["tinfoil-ehbp.txt"],
+    # MIT; its wheel keeps the licence (and ThirdPartyNotices.txt, shipped with
+    # it) in the package folder, not its dist-info.
+    "onnxruntime": ["onnxruntime.txt"],
+    # Apache-2.0, as their metadata says; their wheels carry no text.
+    "tokenizers": ["Apache-2.0.txt"],
+    "flatbuffers": ["Apache-2.0.txt"],
 }
 LICENCE_FILE = re.compile(r"(^|/)(licen[cs]e|copying|notice|authors)[^/]*$", re.I)
 

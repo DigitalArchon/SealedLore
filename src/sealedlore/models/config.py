@@ -1035,6 +1035,9 @@ class ResolvedMedia(BaseModel):
 
 
 DEFAULT_EMBEDDING_MODEL = "BAAI/bge-m3"
+# The embeddings made on this computer (providers/local_embeddings.py): the
+# vector cache keeps them under this id, never mixed with an endpoint's.
+BUILTIN_EMBEDDING_MODEL = "local/bge-m3-int8"
 
 
 class EmbeddingProviderConfig(BaseModel):
@@ -1049,6 +1052,9 @@ class EmbeddingProviderConfig(BaseModel):
     base_url: str = ""
     api_key: str = ""
     model: str = DEFAULT_EMBEDDING_MODEL
+    # Made on this computer by the built-in bge-m3 (Settings → Lore): the
+    # address, key and model above are then not used, and nothing is sent.
+    builtin: bool = False
     dimensions: int = 0
     timeout_seconds: float = 60.0
     # Some models want the query and the document marked differently. bge-m3
@@ -1835,6 +1841,11 @@ class Config(BaseModel):
         signal to fall back to keyword matching (§7).
         """
         settings = self.embedding_provider
+        if settings is not None and settings.builtin:
+            # Nothing inherited: nothing is sent anywhere.
+            return EmbeddingProviderConfig(
+                builtin=True, model=BUILTIN_EMBEDDING_MODEL, batch_size=settings.batch_size
+            )
         if settings is None or not settings.model:
             return None
         chat = self._chat_to_inherit()
@@ -1864,6 +1875,17 @@ class Config(BaseModel):
             resolved.api_key, resolved.key_withheld = "", withheld
         resolved.sealed_api = self.sealed_api_at(resolved.base_url)
         return resolved
+
+    def embeddings_stay_here(self) -> bool:
+        """Lore embedded without leaving this computer: by the built-in model,
+        or by a server on this computer itself (not another machine of the
+        network: what goes there over plain http can be read on the way)."""
+        settings = self.embeddings()
+        if settings is None:
+            return False
+        if settings.builtin:
+            return True
+        return is_loopback_host(urlparse(settings.base_url).hostname or "")
 
     def sealed_api_at(self, url: str) -> str:
         """The end-to-end encrypted protocol (`SEALED_APIS`) a chat endpoint

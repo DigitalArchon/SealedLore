@@ -172,8 +172,9 @@ from sealedlore.models.story import Story
 from sealedlore.models.summary import Summary
 from sealedlore.providers import make_session_provider
 from sealedlore.providers.base import ChatProvider, ProviderError, UnconfiguredProvider
-from sealedlore.providers.embeddings import EmbeddingBackend, OpenAICompatibleEmbeddings
+from sealedlore.providers.embeddings import EmbeddingBackend
 from sealedlore.providers.endpoints import listing_key
+from sealedlore.providers.local_embeddings import make_embeddings
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.providers.model_hosts import Host
 from sealedlore.providers.privacy import PRIVACY_LEVELS, Privacy, level_line, privacy_of
@@ -3252,7 +3253,7 @@ class MainWindow(
         if self._embeddings is None:
             settings = self.config.embeddings()
             if settings is not None:
-                self._embeddings = OpenAICompatibleEmbeddings(settings)
+                self._embeddings = make_embeddings(settings, self.root)
         return self._embeddings
 
     def _discard_provider(self) -> None:
