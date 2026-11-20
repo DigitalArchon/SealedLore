@@ -178,7 +178,7 @@ def test_nothing_from_a_private_scene_reaches_another_model(tmp_path: Path, keep
     assert "agreed to meet at dawn" in json.dumps(main.payloads)
 
     on_disk = "".join(
-        path.read_text(errors="ignore")
+        path.read_text(errors="ignore", encoding="utf-8")
         for path in (tmp_path / "stories" / session.story.id).rglob("*")
         if path.is_file()
     )
@@ -752,7 +752,9 @@ def test_a_long_story_after_the_scene_never_brings_it_back(tmp_path: Path, keep:
         MARKER not in s.content and MARKER not in (s.ledger or "") for s in session.summaries
     )
     story_dir = tmp_path / "stories" / session.story.id
-    on_disk = "".join(p.read_text(errors="ignore") for p in story_dir.rglob("*") if p.is_file())
+    on_disk = "".join(
+        p.read_text(errors="ignore", encoding="utf-8") for p in story_dir.rglob("*") if p.is_file()
+    )
     assert (MARKER in on_disk) == (keep == "disk")
 
 

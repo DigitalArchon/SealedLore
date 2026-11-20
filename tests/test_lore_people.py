@@ -308,7 +308,7 @@ def test_the_session_finds_them_logs_the_calls_and_changes_nothing(
     assert [p.name for p in found.people] == ["John Hale", "Elena Ruiz", "Marcus Webb"]
     assert [r.title for r in found.instructions] == ["Tone"]
     assert len(session.unreported_usage) == 2 and len(session.bundle.lore) == 6
-    log = (tmp_path / "stories" / session.story.id / "api_log.jsonl").read_text()
+    log = (tmp_path / "stories" / session.story.id / "api_log.jsonl").read_text(encoding="utf-8")
     assert log.count('"lore_people_request"') == 2 and log.count('"lore_people_response"') == 2
 
 

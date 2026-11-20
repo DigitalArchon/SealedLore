@@ -333,7 +333,7 @@ def test_other_apps_lorebooks_go_into_the_lore_as_sillytavern_converts_them(
     files = []
     for name, book in books.items():
         files.append(tmp_path / name)
-        files[-1].write_text(json.dumps(book))
+        files[-1].write_text(json.dumps(book), encoding="utf-8")
     files.append(novel_picture(tmp_path, NOVEL_BOOK))
     said = no_boxes(monkeypatch)
     for path in files:
@@ -368,10 +368,10 @@ def test_file_import_takes_another_apps_lorebook_as_one(
     from tests.test_lorebook_formats import AGNAI_BOOK, NOVEL_BOOK, novel_picture
 
     agnai = tmp_path / "doomsville.json"
-    agnai.write_text(json.dumps(AGNAI_BOOK))
+    agnai.write_text(json.dumps(AGNAI_BOOK), encoding="utf-8")
     assert tavern_kind(agnai) == "card"
     novel = tmp_path / "dust.lorebook"
-    novel.write_text(json.dumps(NOVEL_BOOK))
+    novel.write_text(json.dumps(NOVEL_BOOK), encoding="utf-8")
     from sealedlore.gui import window_lorebooks
     from sealedlore.storage.lorebooks import load_lorebooks
 
@@ -415,7 +415,7 @@ def test_what_is_no_lorebook_keeps_its_words_and_a_broken_one_says_why(
         ("dust.lorebook", '{"title": "Doomsville"}'),
         ("broken.lorebook", '{"lorebookVersion": 5, "entries": [null]}'),
     ):
-        (tmp_path / name).write_text(text)
+        (tmp_path / name).write_text(text, encoding="utf-8")
         choose_file(monkeypatch, tmp_path / name)
         window.import_lorebook()
     assert warned == [

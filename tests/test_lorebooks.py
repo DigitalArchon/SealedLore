@@ -16,7 +16,7 @@ from tests.test_lore_people import book
 
 def kept(tmp_path: Path) -> StoredLorebook:
     path = tmp_path / "doomsville.json"
-    path.write_text(json.dumps(book()))
+    path.write_text(json.dumps(book()), encoding="utf-8")
     stored = lorebooks.kept_from(open_lorebook(path), "doomsville", path.name)
     lorebooks.save_lorebook(stored, tmp_path)
     return stored
@@ -25,7 +25,7 @@ def kept(tmp_path: Path) -> StoredLorebook:
 def test_a_kept_lorebook_is_its_own_file_and_reads_back_whole(tmp_path: Path):
     stored = kept(tmp_path)
     path = lorebooks.lorebook_path(stored.id, tmp_path)
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     assert data["format"] == "sealedlore-lorebook" and data[FORMAT_KEY] == LOREBOOK_FORMAT
     assert path.stat().st_mode & 0o777 == 0o600
     (again,) = lorebooks.load_lorebooks(tmp_path).books
@@ -49,23 +49,23 @@ def test_a_copy_kept_is_its_own(tmp_path: Path):
 def test_what_cant_be_read_is_listed_and_left(tmp_path: Path):
     stored = kept(tmp_path)
     folder = lorebooks.lorebooks_dir(tmp_path)
-    (folder / "broken.json").write_text("{not json")
-    (folder / "other.json").write_text(json.dumps({"entries": {}}))
-    newer = json.loads(lorebooks.lorebook_path(stored.id, tmp_path).read_text())
+    (folder / "broken.json").write_text("{not json", encoding="utf-8")
+    (folder / "other.json").write_text(json.dumps({"entries": {}}), encoding="utf-8")
+    newer = json.loads(lorebooks.lorebook_path(stored.id, tmp_path).read_text(encoding="utf-8"))
     newer[FORMAT_KEY] = LOREBOOK_FORMAT + 1
-    (folder / "newer.json").write_text(json.dumps(newer))
+    (folder / "newer.json").write_text(json.dumps(newer), encoding="utf-8")
     shelf = lorebooks.load_lorebooks(tmp_path)
     assert [b.id for b in shelf.books] == [stored.id]
     whys = {path.name: why for path, why in shelf.unreadable}
     assert set(whys) == {"broken.json", "other.json", "newer.json"}
     assert "newer SealedLore" in whys["newer.json"]
-    assert (folder / "broken.json").read_text() == "{not json"
+    assert (folder / "broken.json").read_text(encoding="utf-8") == "{not json"
 
 
 def test_a_file_copied_by_hand_is_known_by_its_name(tmp_path: Path):
     stored = kept(tmp_path)
     path = lorebooks.lorebook_path(stored.id, tmp_path)
-    (path.parent / "copied.json").write_text(path.read_text())
+    (path.parent / "copied.json").write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
     ids = sorted(b.id for b in lorebooks.load_lorebooks(tmp_path).books)
     assert ids == sorted([stored.id, "copied"])
 
@@ -90,14 +90,14 @@ def test_exported_as_sillytavern_reads_it_with_every_setting(tmp_path: Path):
     stored.book["entries"]["1"]["probability"] = 40
     out = tmp_path / "out.json"
     lorebooks.export(stored, out)
-    again = json.loads(out.read_text())
+    again = json.loads(out.read_text(encoding="utf-8"))
     assert again == stored.book
     # A card's book goes out in SillyTavern's own shape.
     from sealedlore.storage.tavern_lore import book_from_lore
 
     card_book = StoredLorebook(name="c", book=book_from_lore(lore_from_book(book()).entries))
     lorebooks.export(card_book, out)
-    written = json.loads(out.read_text())
+    written = json.loads(out.read_text(encoding="utf-8"))
     assert isinstance(written["entries"], dict)
     titles = [e.title for e in lore_from_book(written).entries]
     assert titles == [e.title for e in lore_from_book(book()).entries]

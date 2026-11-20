@@ -36,7 +36,7 @@ def window_on(tmp_path: Path, story=None, cast=()) -> MainWindow:
 
 def book_file(tmp_path: Path) -> Path:
     path = tmp_path / "doomsville.json"
-    path.write_text(json.dumps(book()))
+    path.write_text(json.dumps(book()), encoding="utf-8")
     return path
 
 
@@ -90,14 +90,16 @@ def test_exported_duplicated_and_deleted(app, tmp_path: Path, monkeypatch):
         "sealedlore.gui.file_dialogs.save_file_name", lambda *a, **k: (str(out), "")
     )
     window.lorebooks_page.action_requested.emit(lorebooks_page.EXPORT, stored.id)
-    assert json.loads(out.read_text()) == stored.book
+    assert json.loads(out.read_text(encoding="utf-8")) == stored.book
     window.lorebooks_page.action_requested.emit(lorebooks_page.DUPLICATE, stored.id)
     names = sorted(b.name for b in load_lorebooks(tmp_path / "data").books)
     assert names == ["doomsville", "doomsville (copy)"]
     trashed: list[str] = []
 
     def trash(path: Path) -> bool:
-        trashed.append(json.loads(Path(path).read_text())["entries"]["1"]["comment"])
+        trashed.append(
+            json.loads(Path(path).read_text(encoding="utf-8"))["entries"]["1"]["comment"]
+        )
         return True
 
     monkeypatch.setattr("sealedlore.gui.window_collection.move_to_trash", trash)

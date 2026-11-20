@@ -117,13 +117,13 @@ def test_the_picker_takes_the_turns_matches_after_its_picks():
 def test_five_go_by_default_and_an_old_settings_file_moves_from_three(tmp_path: Path):
     assert Config().lore_retrieval_k == 5
     path = tmp_path / "config.json"
-    path.write_text(json.dumps({"lore_retrieval_k": 3}))
+    path.write_text(json.dumps({"lore_retrieval_k": 3}), encoding="utf-8")
     assert load_config(tmp_path).lore_retrieval_k == 5
     assert load_config_or_recover(tmp_path)[0].lore_retrieval_k == 5
     # A number chosen is kept; so is 3 in a file of this format.
-    path.write_text(json.dumps({"lore_retrieval_k": 4}))
+    path.write_text(json.dumps({"lore_retrieval_k": 4}), encoding="utf-8")
     assert load_config(tmp_path).lore_retrieval_k == 4
-    path.write_text(json.dumps({"format_version": 2, "lore_retrieval_k": 3}))
+    path.write_text(json.dumps({"format_version": 2, "lore_retrieval_k": 3}), encoding="utf-8")
     assert load_config(tmp_path).lore_retrieval_k == 3
 
 
