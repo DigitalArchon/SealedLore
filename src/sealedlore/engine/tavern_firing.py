@@ -546,13 +546,14 @@ def fire(
             )
             if key is None:
                 continue
-            by = "the text of an entry that fired" if state == "recursion" else "key"
+            # In a later pass the key was found in what an earlier entry says.
+            where = ", in another entry's text" if state == "recursion" else ""
             if not (entry.selective and entry.secondary):
-                why[entry.id] = f"{by} “{key}”"
+                why[entry.id] = f"key “{key}”{where}"
                 now.append(entry)
                 continue
             if _secondary(entry, buffer, text):
-                why[entry.id] = f"{by} “{key}”, and its secondary keys"
+                why[entry.id] = f"key “{key}” and its secondary keys{where}"
                 now.append(entry)
             else:
                 not_fired[entry.id] = f"key “{key}”, but not its secondary keys"

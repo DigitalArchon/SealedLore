@@ -107,7 +107,7 @@ def test_a_turn_fires_its_lore_and_records_it(session: StorySession):
     # The wolves by their key, and the Hollow King by the wolves' own text
     # (recursion); the omen's 0% chance never comes up; the road isn't named.
     assert fired == ["Hollow King", "The Grey Wolves"]  # SillyTavern's order: lowest first
-    assert report.injected[0].describe().startswith("fired as SillyTavern would: the text of")
+    assert report.injected[0].describe().endswith("in another entry's text")
     not_fired = {entry.title: why for entry, why in report.not_fired}
     assert not_fired["Rare Omen"] == "its 0% chance didn't come up"
     # The constant stands with the world, cached; the rest go with the turn.

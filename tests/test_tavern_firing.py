@@ -135,7 +135,7 @@ def test_what_fired_is_read_again():
     king = entry("king", ["Hollow King"])
     result = run([wolf, king], ["John: A wolf."])
     assert sorted(result.ids) == ["king", "wolf"]
-    assert result.why["king"].startswith("the text of an entry that fired")
+    assert result.why["king"] == "key “Hollow King”, in another entry's text"
     assert run([wolf, king], ["John: A wolf."], settings=TavernSettings(recursive=False)).ids == [
         "wolf"
     ]
