@@ -401,7 +401,7 @@ class LorePanel(QWidget):
         for injection in report.injected:
             self.injected.addItem(f"{injection.entry.title} — {injection.describe()}")
         for injection in report.dropped:
-            self.injected.addItem(f"{injection.entry.title} — dropped, over the lore token cap")
+            self.injected.addItem(f"{injection.entry.title} — left out: no room left this turn")
         # Similarity scores cluster, so the threshold can only be tuned by
         # seeing what sat just under it.
         for entry, score in report.near_misses:

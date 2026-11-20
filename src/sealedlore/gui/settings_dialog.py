@@ -2015,6 +2015,11 @@ class SettingsDialog(QDialog):
         form.addRow(hint)
         return widget
 
+    def _show_lore_limit(self) -> None:
+        share = self.lore_limit.currentData() == "share"
+        self.lore_share.setVisible(share)
+        self.lore_cap.setVisible(not share)
+
     def _show_cast_limit(self) -> None:
         share = self.cast_limit.currentData() == "share"
         self.cast_share.setVisible(share)
@@ -2590,10 +2595,38 @@ class SettingsDialog(QDialog):
         self.query_turns = QSpinBox()
         self.query_turns.setRange(0, 20)
         self.query_turns.setValue(self.config.lore_query_turns)
+        # The room a turn has for its chosen lore: a share of the budget, or a
+        # fixed number of tokens, as the cast's (Context).
+        self.lore_limit = QComboBox()
+        self.lore_limit.addItem("A share of the budget", "share")
+        self.lore_limit.addItem("A fixed number of tokens", "tokens")
+        self.lore_limit.setCurrentIndex(self.lore_limit.findData(self.config.lore_limit))
+        self.lore_share = QSpinBox()
+        self.lore_share.setRange(1, 50)
+        self.lore_share.setSuffix("%")
+        self.lore_share.setValue(round(self.config.lore_share * 100))
         self.lore_cap = QSpinBox()
         self.lore_cap.setRange(100, 100_000)
         self.lore_cap.setSingleStep(250)
+        self.lore_cap.setGroupSeparatorShown(True)
+        self.lore_cap.setSuffix(" tokens")
         self.lore_cap.setValue(self.config.lore_token_cap)
+        for control in (self.lore_limit, self.lore_share, self.lore_cap):
+            control.setToolTip(
+                "The most the lore chosen for a turn may take. Entries go whole while they "
+                "fit; one too long for what is left goes in part, the parts the turn is "
+                "about, and the Lore page says so. A share grows and shrinks with each "
+                "story's budget."
+            )
+        lore_room = QWidget()
+        lore_row = QHBoxLayout(lore_room)
+        lore_row.setContentsMargins(0, 0, 0, 0)
+        lore_row.addWidget(self.lore_limit)
+        lore_row.addWidget(self.lore_share)
+        lore_row.addWidget(self.lore_cap)
+        lore_row.addStretch(1)
+        self.lore_limit.currentIndexChanged.connect(self._show_lore_limit)
+        self._show_lore_limit()
 
         self.lore_selector = QComboBox()
         for label, value in LORE_SELECTORS:
@@ -2644,7 +2677,7 @@ class SettingsDialog(QDialog):
         tuning.add_row("Entries per turn", self.retrieval_k)
         tuning.add_row("Similarity threshold", self.similarity)
         tuning.add_row("Turns in the query", self.query_turns)
-        tuning.add_row("Lore token cap", self.lore_cap)
+        tuning.add_row("Chosen lore may take", lore_room)
 
         self._lore_fields = [
             self.embed_base_url,
@@ -3245,6 +3278,8 @@ class SettingsDialog(QDialog):
         config.lore_query_turns = kept(
             self.query_turns, self.query_turns.value(), config.lore_query_turns
         )
+        config.lore_limit = self.lore_limit.currentData()
+        config.lore_share = kept(self.lore_share, self.lore_share.value() / 100, config.lore_share)
         config.lore_token_cap = kept(self.lore_cap, self.lore_cap.value(), config.lore_token_cap)
         self.config.lore_selector = self.lore_selector.currentData()
         self.config.lore_model = self._role_model(self.lore_model)

@@ -58,6 +58,9 @@ from sealedlore.storage.tavern_lore import (
 )
 
 SAVE_DELAY_MS = 400
+# Lore added with at least this many entries lacking a vector is embedded at
+# once (`embed_lore_now`).
+EMBED_NOW_LEAST = 20
 LOREBOOKS_TIP = "Lorebooks kept for any story: import, change, export, start stories from them"
 FILTER = "Lorebooks and character cards (*.json *.lorebook *.png *.charx);;All files (*)"
 FIND_TITLE = "Finding the people"
@@ -415,6 +418,7 @@ class LorebooksWindow:
                 self.add_from_collection(show=False)
             if chosen.find_people:
                 self.find_people_in_story(source=book.name)
+            self.embed_lore_now()
 
         if notes:
             self._say_left_out(
@@ -425,6 +429,43 @@ class LorebooksWindow:
             )
         self.show_lorebooks(False)
         self._open_new_bundle(bundle, review=True, before_setup=before_setup)
+
+    def embed_lore_now(self, *, least: int = EMBED_NOW_LEAST) -> None:
+        """The open story's lore embedded now, while a progress dialog says so,
+        when retrieval will want vectors and `least` entries or more have none:
+        a story's first turn otherwise waited for the whole lorebook, saying
+        nothing (most of a minute for 320 entries, Nov 20 2026). Stop leaves
+        the rest for the first turn, as before."""
+        session = self.session
+        if session is None or self.in_chat or self._busy or session.in_private:
+            return
+        if session.embeddings is None or session.lore_layout().mode != "select":
+            return
+        pending = session.lore_without_vectors()
+        if len(pending) < least:
+            return
+        result: dict[str, Any] = {}
+
+        def job():
+            session.ensure_lore_vectors()
+            session.save()
+            return
+            yield  # a generator, so GenerationWorker can run it
+
+        run_with_progress(
+            self._dialog_parent(),
+            session,
+            f"Embedding {len(pending)} lore entries, so each turn can find what it needs…",
+            job,
+            result,
+            title="Embedding the lore",
+        )
+        if result.get("error"):
+            self.statusBar().showMessage(
+                f"The lore couldn't be embedded now ({result['error']}): the first turn will "
+                "try again.",
+                10000,
+            )
 
     # --- the people a lorebook describes ---------------------------------------------------
 

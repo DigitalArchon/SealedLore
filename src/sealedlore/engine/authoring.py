@@ -123,6 +123,8 @@ APP_SETTINGS = (
     "lore_retrieval_k",
     "lore_query_turns",
     "lore_similarity_threshold",
+    "lore_limit",
+    "lore_share",
     "lore_token_cap",
     "lore_whole_share",
     "lore_selector",

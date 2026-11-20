@@ -1042,7 +1042,7 @@ class Repl:
         for injection in report.injected:
             print(f"    {injection.entry.title:<30} {injection.describe()}")
         for injection in report.dropped:
-            print(f"    {injection.entry.title:<30} dropped, over the lore token cap")
+            print(f"    {injection.entry.title:<30} left out: no room left this turn")
 
     def command_archive(self) -> None:
         session = self.session

@@ -30,6 +30,7 @@ from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.retrieval import (
     Injection,
     RetrievalReport,
+    fit_lore,
     keyword_matches,
     render_entry,
 )
@@ -149,10 +150,11 @@ def choose_picked(
     query: str = "",
     selector: str = "picker",
 ) -> RetrievalReport:
-    """The picks, then the entries the author's own turn names, within the cap.
+    """The picks, then the entries the author's own turn names, fitted to the
+    room (`fit_lore`).
 
-    Picks go first, in the model's order (or by probability, for Jev), so the
-    cap drops keyword hits before anything a model chose.
+    Picks go first, in the model's order (or by probability, for Jev), so
+    keyword hits are cut or left out before anything a model chose.
     """
     by_id = {entry.id: entry for entry in entries}
     ordered: list[tuple[LoreEntry, str]] = [(by_id[i], "picked") for i in picked if i in by_id]
@@ -161,21 +163,22 @@ def choose_picked(
         if entry.id not in seen and turn_text.strip() and keyword_matches(turn_text, entry):
             ordered.append((entry, "keyword"))
             seen.add(entry.id)
-    injected: list[Injection] = []
-    dropped: list[Injection] = []
-    used = 0
-    for entry, reason in ordered:
-        injection = Injection(
+    candidates = [
+        Injection(
             entry=entry,
             reason=reason,  # type: ignore[arg-type]
             tokens=count_tokens(render_entry(entry)),
             score=(scores or {}).get(entry.id) if reason == "picked" else None,
         )
-        if used + injection.tokens > token_cap:
-            dropped.append(injection)
-            continue
-        injected.append(injection)
-        used += injection.tokens
+        for entry, reason in ordered
+    ]
+    injected, dropped = fit_lore(
+        candidates,
+        token_cap,
+        query=" ".join(part for part in (turn_text, query) if part),
+        count_tokens=count_tokens,
+    )
+    used = sum(injection.tokens for injection in injected)
     return RetrievalReport(
         injected=tuple(injected),
         dropped=tuple(dropped),

@@ -2685,6 +2685,16 @@ tuning: the Lore tab shows the score on every hit and on the near-misses that
 fell just under it. With embeddings off or the endpoint failing, retrieval
 falls back to keyword matching and the status bar says so.
 
+The lore chosen for a turn has room for a tenth of the story's context budget
+(6,000 tokens of a 60,000 budget) by default; **Chosen lore may take**, under
+Retrieval (advanced) in Settings → Lore, sets another share, or a fixed number
+of tokens. The best-chosen entries go first, each whole while it fits and takes
+no more than half the room; an entry too long for what is left goes in part:
+its opening, and the parts of it that the turn and the story just before it
+are about, with "[…]" where the rest was left out. The Lore tab says which
+went in part, and how much of each. Only an entry with too little room left
+to say anything useful is left out, and it is listed there too.
+
 Keywords are matched against your own turn. When your turn names no entry,
 the last exchange (your previous turn and the passage that answered it) is
 searched too, then the last two, then the last three; the Lore tab says how

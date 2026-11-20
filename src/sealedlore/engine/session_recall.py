@@ -31,6 +31,9 @@ from sealedlore.providers.base import ProviderError
 RECALL_KIND = "recall"
 # What one embeddings request may hold, by estimate (see `embed_in_batches`).
 EMBED_BATCH_TOKENS = 5_000
+# Requests sent at once: well under NanoGPT's burst of about 25 calls, with
+# the reads after a passage beside them.
+EMBED_AT_ONCE = 4
 
 
 class RecallRuntime:
@@ -106,24 +109,33 @@ class RecallRuntime:
         return {item.id: score for item, score in zip(scored, similarities, strict=True)}, None
 
     def embed_in_batches(self, texts: Sequence[str]) -> list[tuple[float, ...]]:
-        """Embed `texts` in requests the endpoint will take. Raises ProviderError.
+        """Embed `texts` in requests the endpoint will take, up to
+        `EMBED_AT_ONCE` of them at a time, in order. Raises ProviderError.
 
         NanoGPT counts a whole request against bge-m3's 8k context: 32 archived
         exchanges in one were refused ("Input is too large", HTTP 400), 16 went
-        through. So a request holds at most `EMBED_BATCH_TOKENS` by estimate."""
-        vectors: list[tuple[float, ...]] = []
+        through. So a request holds at most `EMBED_BATCH_TOKENS` by estimate.
+        One at a time, a 320-entry lorebook was some twenty requests and most
+        of a minute before its story's first turn (Nov 20 2026)."""
+        batches: list[list[str]] = []
         batch: list[str] = []
         size = 0
         for text in texts:
             cost = self.estimator.estimate(text, None)
             if batch and size + cost > EMBED_BATCH_TOKENS:
-                vectors.extend(self.embeddings.embed(batch).vectors)
+                batches.append(batch)
                 batch, size = [], 0
             batch.append(text)
             size += cost
         if batch:
-            vectors.extend(self.embeddings.embed(batch).vectors)
-        return vectors
+            batches.append(batch)
+        if len(batches) <= 1:
+            return [v for chunk in batches for v in self.embeddings.embed(chunk).vectors]
+        from sealedlore.threads import thread_pool
+
+        with thread_pool(min(EMBED_AT_ONCE, len(batches))) as pool:
+            answers = list(pool.map(lambda chunk: self.embeddings.embed(chunk).vectors, batches))
+        return [vector for vectors in answers for vector in vectors]
 
     def _recall_vectors(self, items: Sequence[RecallItem]) -> dict[str, tuple[float, ...]]:
         """Embed what isn't cached yet; return item id -> vector."""

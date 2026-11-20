@@ -339,6 +339,7 @@ def recommended_models(base_url: str) -> dict[str, str]:
 
 CacheControlMode = Literal["auto", "on", "off"]
 CastLimit = Literal["share", "tokens"]
+LoreLimit = Literal["share", "tokens"]
 CacheTtl = Literal["5m", "1h"]
 SceneLedger = Literal["every_turn", "manual"]
 LoreSelector = Literal["picker", "jev", "similarity"]
@@ -1287,7 +1288,16 @@ class Config(BaseModel):
     # entries scored 0.48+; 0.45 keeps them while cutting the bottom half.
     # Retune per model — the Lore panel shows the scores to tune against.
     lore_similarity_threshold: float = 0.45
-    lore_token_cap: int = 2_000
+    # The room a turn has for the lore chosen for it (engine/retrieval.py
+    # `fit_lore`), as the cast's has (`cast_limit`): "share" is `lore_share`
+    # of the story's budget, so it grows and shrinks with it; "tokens" is
+    # `lore_token_cap` whatever the budget. A fixed 2,000 was the only limit
+    # until Nov 2026: on a 320-entry lorebook of long entries it left out the
+    # entries the turn was about with a fifth of a 60k budget used. An entry
+    # too long for what is left goes in part, the parts the turn is about.
+    lore_limit: LoreLimit = "share"
+    lore_share: float = Field(default=0.1, ge=0.01, le=0.5)
+    lore_token_cap: int = Field(default=2_000, ge=100)
     # Recall (engine/recall.py): the chapters a merged part stands for, or
     # those and the archived exchanges, brought back into the tail when a
     # Question (or, with recall_in "everywhere", a turn) is about them.
@@ -1695,6 +1705,13 @@ class Config(BaseModel):
         if self.cast_limit == "tokens":
             return self.cast_token_cap
         return round(budget * self.cast_share)
+
+    def lore_cap(self, budget: int) -> int:
+        """The most tokens a turn's chosen lore may take in a story with this
+        context budget."""
+        if self.lore_limit == "tokens":
+            return self.lore_token_cap
+        return max(100, round(budget * self.lore_share))
 
     def active_provider(self) -> ProviderConfig | None:
         """The default endpoint: where a bare model id is sent."""

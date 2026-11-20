@@ -1176,6 +1176,16 @@ class StorySession(
         report = self._select(layout.selectable, turn, history, query, allow_network=allow_network)
         return replace(report, standing=layout.standing)
 
+    def _lore_room(self) -> int:
+        """The room this turn has for its chosen lore (`Config.lore_cap`): a
+        share of the story's budget, or of a private scene's."""
+        budget = (
+            self.config.private_budget
+            if self.in_private
+            else self.story.defaults.context_token_budget
+        )
+        return self.config.lore_cap(budget)
+
     def lore_layout(self, budget: int | None = None) -> LoreLayout:
         """Whether the lorebook goes whole into the system block or is selected from.
         `budget`: another than the story's (a private scene's model has its own)."""
@@ -1205,7 +1215,7 @@ class StorySession(
                     entries,
                     last.meta.lore_picks,
                     turn_text=turn.user_text,
-                    token_cap=self.config.lore_token_cap,
+                    token_cap=self._lore_room(),
                     count_tokens=self._count_lore_tokens,
                     query=query,
                 )
@@ -1258,7 +1268,7 @@ class StorySession(
             entries,
             picked,
             turn_text=turn.user_text,
-            token_cap=self.config.lore_token_cap,
+            token_cap=self._lore_room(),
             count_tokens=self._count_lore_tokens,
             scores=probabilities,
             query=query,
@@ -1429,7 +1439,7 @@ class StorySession(
                 keyword_text=keyword_text,
                 k=self.config.lore_retrieval_k,
                 threshold=self.config.lore_similarity_threshold,
-                token_cap=self.config.lore_token_cap,
+                token_cap=self._lore_room(),
                 count_tokens=self._count_lore_tokens,
                 used_embeddings=False,
                 fallback_reason=reason,
@@ -1472,10 +1482,29 @@ class StorySession(
             scores=scores,
             k=self.config.lore_retrieval_k,
             threshold=self.config.lore_similarity_threshold,
-            token_cap=self.config.lore_token_cap,
+            token_cap=self._lore_room(),
             count_tokens=self._count_lore_tokens,
             used_embeddings=True,
         )
+
+    def lore_without_vectors(self) -> list[LoreEntry]:
+        """The entries `ensure_lore_vectors` would embed now."""
+        settings = self.config.embeddings()
+        model = settings.model if settings else ""
+        wanted = settings.dimensions if settings else 0
+        have = {
+            (row.content_hash, row.model)
+            for row in self.bundle.embeddings
+            if not wanted or row.dimensions == wanted
+        }
+        held = self.held_back_ids() | self.hidden_ids()
+        return [
+            entry
+            for entry in self.bundle.lore
+            if entry.enabled
+            and entry.id not in held
+            and (content_hash(embedding_text(entry)), model) not in have
+        ]
 
     def ensure_lore_vectors(self) -> dict[str, tuple[float, ...]]:
         """Embed any entry whose text or model has changed; return id → vector.

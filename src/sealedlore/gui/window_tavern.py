@@ -589,6 +589,7 @@ class TavernWindow:
             return
         session.add_lore(imported.entries)
         session.forget_review_undo()
+        self.embed_lore_now()
         self.refresh_panels()
         self._reassemble_inspector()
         self.right_tabs.setCurrentWidget(self.lore_panel)

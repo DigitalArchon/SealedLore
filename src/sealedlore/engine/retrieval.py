@@ -4,10 +4,12 @@ Pure functions over story state and pre-computed vectors — the embedding call
 itself belongs to `StorySession`, so this module stays testable without a
 network and the GUI can preview a selection on the main thread.
 
-Selection follows §7 exactly: top-k semantic hits above a threshold, then
-every `always_on` entry and every keyword match merged in, deduped, sorted by
-priority, and truncated to a token cap. Keyword matching is both a supplement
-and the whole story when embeddings are unconfigured or failing.
+Selection follows §7: top-k semantic hits above a threshold, then every
+`always_on` entry and every keyword match merged in, deduped, sorted by
+priority, and fitted to the room this turn has for lore (`fit_lore`): an
+entry too long for what is left goes in part, the parts the turn is about,
+rather than not at all. Keyword matching is both a supplement and the whole
+story when embeddings are unconfigured or failing.
 
 Selection is only for a lorebook too big to send whole (`lore_layout`).
 Measured on a long test story: at 8 entries every entry
@@ -20,7 +22,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
 from sealedlore.models.lore import LoreEntry
@@ -53,13 +55,24 @@ class Injection:
     reason: Reason
     tokens: int
     score: float | None = None
+    # Sent in part (`fit_lore`): `entry` holds the parts sent, and `whole`
+    # the tokens the entry has in all.
+    whole: int | None = None
+
+    @property
+    def fitted(self) -> bool:
+        return self.whole is not None
 
     def describe(self) -> str:
         if self.reason == "semantic" and self.score is not None:
-            return f"semantic match ({self.score:.2f})"
-        if self.reason == "picked" and self.score is not None:
-            return f"picked by Jev ({self.score:.2f})"
-        return REASON_LABELS[self.reason]
+            said = f"semantic match ({self.score:.2f})"
+        elif self.reason == "picked" and self.score is not None:
+            said = f"picked by Jev ({self.score:.2f})"
+        else:
+            said = REASON_LABELS[self.reason]
+        if self.whole is not None:
+            said += f", in part ({self.tokens} of its {self.whole} tokens)"
+        return said
 
 
 @dataclass(frozen=True)
@@ -144,18 +157,30 @@ def cosine_scores(query: Sequence[float], vectors: Sequence[Sequence[float]]) ->
     return [0.0 if norm == 0 else float(score) for score, norm in zip(scores, norms, strict=True)]
 
 
+# A word's plural or possessive ending, which a keyword still names.
+_ENDING = r"(?:['’]s|s['’]|es|s)?"
+
+
+def _names(lowered: str, word: str) -> bool:
+    return re.search(rf"(?<!\w){re.escape(word)}{_ENDING}(?!\w)", lowered) is not None
+
+
 def keyword_matches(text: str, entry: LoreEntry) -> bool:
-    """Whole-word, case-insensitive match on any of the entry's keywords.
+    """Whole-word, case-insensitive match on any of the entry's keywords, a
+    plural or possessive ending allowed ("the Adventurers' Guild" names the
+    keyword "Adventurer").
 
     Whole-word rather than substring: "accord" should not fire on "according",
-    and a lorebook full of false positives is worse than none at all.
+    and a lorebook full of false positives is worse than none at all. With
+    no ending allowed, lorebooks written for SillyTavern (which matches a
+    substring unless told otherwise) lost their entries to every plural: on
+    a 320-entry lorebook, "Adventurer" never matched the turn that asked
+    about the Adventurers' Guild (Nov 20 2026).
     """
     lowered = text.lower()
     for keyword in entry.keywords:
         cleaned = keyword.strip().lower()
-        if not cleaned:
-            continue
-        if re.search(rf"(?<!\w){re.escape(cleaned)}(?!\w)", lowered):
+        if cleaned and _names(lowered, cleaned):
             return True
     return False
 
@@ -165,7 +190,7 @@ def mentions_entry(text: str, entry: LoreEntry) -> bool:
     if keyword_matches(text, entry):
         return True
     title = entry.title.strip().lower()
-    return bool(title) and re.search(rf"(?<!\w){re.escape(title)}(?!\w)", text.lower()) is not None
+    return bool(title) and _names(text.lower(), title)
 
 
 def held_back(entries: Iterable[LoreEntry], nodes: Sequence[Node]) -> set[str]:
@@ -316,20 +341,13 @@ def select_lore(
         )
 
     ordered = sorted(chosen.values(), key=_sort_key)
-
-    injected: list[Injection] = []
-    dropped: list[Injection] = []
-    used = 0
-    for injection in ordered:
-        # Skip past an entry that doesn't fit rather than stopping: lore
-        # entries are independent, so one fat low-priority entry shouldn't
-        # shut out the smaller ones behind it. (History works the other way —
-        # a gap mid-scene reads worse than a shorter window.)
-        if used + injection.tokens > token_cap:
-            dropped.append(injection)
-            continue
-        injected.append(injection)
-        used += injection.tokens
+    injected, dropped = fit_lore(
+        ordered,
+        token_cap,
+        query=" ".join(part for part in (keyword_text, query) if part),
+        count_tokens=count_tokens,
+    )
+    used = sum(injection.tokens for injection in injected)
 
     missed = sorted(
         (
@@ -350,6 +368,152 @@ def select_lore(
         query_text=query,
         tokens=used,
     )
+
+
+# The least an entry is cut to: with less room left than this, it is left out
+# rather than sent as a line out of context.
+FIT_LEAST_TOKENS = 150
+# The most of the room any one entry takes, so one long profile never shuts
+# out everything after it: past it, the entry goes in part.
+ENTRY_MOST_SHARE = 0.5
+# Where an entry's text was cut (`fitted_entry`): a mark of the text's layout,
+# not an instruction.
+GAP = "[…]"
+
+
+def entry_parts(content: str) -> list[str]:
+    """An entry's text in its parts: paragraphs, and a heading line with what
+    follows it up to the next blank line or heading."""
+    parts: list[str] = []
+    current: list[str] = []
+    for line in content.strip().splitlines():
+        stripped = line.strip()
+        heading = (
+            bool(stripped)
+            and len(stripped) <= 80
+            and (
+                stripped.startswith(("#", "[", "<", "【"))
+                or (stripped.endswith(":") and len(stripped.split()) <= 6)
+            )
+        )
+        if not stripped or (heading and current):
+            if current:
+                parts.append("\n".join(current).strip())
+            current = [] if not stripped else [line]
+            continue
+        current.append(line)
+    if current:
+        parts.append("\n".join(current).strip())
+    return [part for part in parts if part]
+
+
+def _cut(text: str, budget: int, count_tokens: Callable[[str], int]) -> str:
+    """As much of `text` as `budget` tokens hold, ending at a sentence, else
+    at a word, its own line breaks kept; "" when not even a word fits."""
+    ends = [match.end() for match in re.finditer(r"[.!?](?=\s)|[.!?]$", text)]
+    for stops in (ends, [match.end() for match in re.finditer(r"\S+", text)]):
+        best = ""
+        for stop in stops:
+            piece = text[:stop].rstrip()
+            if count_tokens(piece) > budget:
+                break
+            best = piece
+        if best:
+            return best
+    return ""
+
+
+def fitted_entry(
+    entry: LoreEntry, room: int, query: str, count_tokens: Callable[[str], int]
+) -> LoreEntry | None:
+    """The entry cut to `room` tokens: its opening part always (what it is
+    about), then the parts the query's words reach most (BM25 over the
+    entry's own parts), in the entry's own order, with a gap mark where text
+    was left out. The best of them that doesn't fit whole goes cut, and so
+    does an opening longer than the room, at a sentence, or a word. None
+    when not even the title and a word fit."""
+    from sealedlore.engine.bm25 import bm25, words
+
+    parts = entry_parts(entry.content)
+    if not parts:
+        return None
+    head = count_tokens(f"## {entry.title}\n")
+    budget = room - head - count_tokens(GAP) * 2
+    sizes = [count_tokens(part) + 1 for part in parts]
+    if sizes[0] > budget:
+        opening = _cut(parts[0], budget, count_tokens)
+        if not opening:
+            return None
+        return entry.model_copy(update={"content": f"{opening} {GAP}"})
+    chosen: dict[int, str] = {0: parts[0]}
+    used = sizes[0]
+    scores = bm25(words(query), [words(part) for part in parts])
+    ranked = sorted(range(1, len(parts)), key=lambda i: (-scores[i], i))
+    cut_one = False
+    for index in ranked:
+        if used + sizes[index] <= budget:
+            chosen[index] = parts[index]
+            used += sizes[index]
+        elif scores[index] > 0 and not cut_one:
+            # The part the moment is most about, too long for what is left:
+            # its start, rather than nothing of it and a part about nothing.
+            cut_one = True
+            kept = _cut(parts[index], budget - used - count_tokens(GAP), count_tokens)
+            if kept:
+                chosen[index] = f"{kept} {GAP}"
+                used += count_tokens(chosen[index]) + 1
+    pieces: list[str] = []
+    previous = -1
+    for index in sorted(chosen):
+        if index != previous + 1:
+            pieces.append(GAP)
+        pieces.append(chosen[index])
+        previous = index
+    if previous != len(parts) - 1:
+        pieces.append(GAP)
+    return entry.model_copy(update={"content": "\n\n".join(pieces)})
+
+
+def fit_lore(
+    ordered: Sequence[Injection],
+    room: int,
+    *,
+    query: str,
+    count_tokens: Callable[[str], int],
+) -> tuple[list[Injection], list[Injection]]:
+    """`ordered` (best first) fitted to `room` tokens: (sent, left out).
+
+    Each goes whole while it fits what is left and takes no more than
+    `ENTRY_MOST_SHARE` of the room; else in part (`fitted_entry`), down to
+    `FIT_LEAST_TOKENS`; only below that is it left out. A fixed 2,000 tokens,
+    each entry whole or not at all, left out the entries a turn was about on
+    a lorebook of long entries (a character's profile is 1,400 tokens): on a
+    320-entry lorebook it dropped the Superd character when the author asked
+    about the Superd, with a fifth of the budget used (Nov 20 2026)."""
+    injected: list[Injection] = []
+    dropped: list[Injection] = []
+    used = 0
+    most = max(FIT_LEAST_TOKENS, int(room * ENTRY_MOST_SHARE))
+    for injection in ordered:
+        space = min(room - used, most)
+        if injection.tokens <= space:
+            injected.append(injection)
+            used += injection.tokens
+            continue
+        part = (
+            fitted_entry(injection.entry, space, query, count_tokens)
+            if (space >= FIT_LEAST_TOKENS)
+            else None
+        )
+        if part is None:
+            # Lore entries are independent: one too long for what is left
+            # doesn't shut out the smaller ones behind it.
+            dropped.append(injection)
+            continue
+        tokens = count_tokens(render_entry(part))
+        injected.append(replace(injection, entry=part, tokens=tokens, whole=injection.tokens))
+        used += tokens
+    return injected, dropped
 
 
 def render_entry(entry: LoreEntry) -> str:
