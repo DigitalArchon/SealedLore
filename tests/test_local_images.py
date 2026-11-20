@@ -263,7 +263,7 @@ def test_a_model_the_server_hasnt_got_is_said_before_anything_is_drawn(tmp_path:
     with pytest.raises(ProviderError) as caught:
         run_image_request(image, request("bytedance/seedream-v5.0-pro"), tmp_path)
     assert "has no model called 'bytedance/seedream-v5.0-pro'" in str(caught.value)
-    assert "Browse" in str(caught.value)
+    assert "Choose beside each model" in str(caught.value)
     assert not any(r.url.path.endswith("txt2img") for r in seen)
 
 

@@ -590,7 +590,7 @@ class LocalDrawing:
             listed = ", ".join(names[:6]) + ("…" if len(names) > 6 else "")
             raise ProviderError(
                 f"{self.service} has no model called {model!r}. Choose one of its own in "
-                f"Settings → Images (Browse… lists them){': ' + listed if listed else ''}."
+                f"Settings → Images (Choose beside each model lists them){': ' + listed if listed else ''}."
             )
 
     def draw(self, payload: dict[str, Any]) -> tuple[list[bytes], dict[str, Any]]:
