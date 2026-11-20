@@ -86,6 +86,41 @@ def draft_for(text: str) -> dict:
 
 def reply_for(body) -> str:
     text = text_of(body.get("messages", []))
+    if '{"entries": [' in text and '"kind": "person"' in text:
+        # Find the people (engine/lore_people.py): an entry whose title names
+        # a sheriff is a person's, the rest are left as lore.
+        found = re.search(r"^\[(\d+)\] [^\n]*Sheriff", text, re.M)
+        entries = []
+        if found:
+            entries.append(
+                {
+                    "n": int(found.group(1)),
+                    "kind": "person",
+                    "name": "Ada Hale",
+                    "aliases": ["the sheriff"],
+                    "summary": f"Hellsville's sheriff. ({TAG})",
+                }
+            )
+        return json.dumps({"entries": entries})
+    if '{"people": [' in text and '"starts"' in text:
+        return json.dumps({"people": []})
+    if '"lore_new": [{"title"' in text:
+        # Suggestions from the story (engine/story_suggestions.py): one new
+        # entry, nothing changed.
+        return json.dumps(
+            {
+                "lore_new": [
+                    {
+                        "title": "The dry water tower",
+                        "keywords": ["water tower"],
+                        "content": f"The town's water tower has stood dry since the second winter. ({TAG})",
+                        "why": "The story keeps coming back to it.",
+                    }
+                ],
+                "lore_change": [],
+                "card_change": [],
+            }
+        )
     if '"scene_closed"' in text:
         return json.dumps(
             {
@@ -188,6 +223,19 @@ class Handler(BaseHTTPRequestHandler):
                 200,
                 {"data": [model("fake/storyteller"), model("fake/private"), model("fake/small")]},
             )
+        if self.path.startswith("/sdapi/v1/sd-models"):
+            # AUTOMATIC1111 / Forge (providers/local_images.py): one checkpoint,
+            # titled with its hash as a hashed one is.
+            return self._json(
+                200,
+                [
+                    {
+                        "title": "lab-sd15.safetensors [0123456789]",
+                        "model_name": "lab-sd15",
+                        "filename": "/models/Stable-diffusion/lab-sd15.safetensors",
+                    }
+                ],
+            )
         if self.path.startswith("/v1/image-models"):
             return self._json(
                 200,
@@ -252,6 +300,14 @@ class Handler(BaseHTTPRequestHandler):
                 for i, t in enumerate(inputs)
             ]
             return self._json(200, {"data": rows, "usage": {"prompt_tokens": 10 * len(inputs)}})
+        if self.path.startswith(("/sdapi/v1/txt2img", "/sdapi/v1/img2img")):
+            count = int(body.get("batch_size") or 1)
+            log(f"  -> {count} picture(s) for {body.get('override_settings', {})}")
+            picture = base64.b64encode(png()).decode()
+            info = json.dumps({"all_seeds": list(range(1, count + 1))})
+            return self._json(200, {"images": [picture] * count, "info": info})
+        if self.path.startswith("/sdapi/v1/interrupt"):
+            return self._json(200, {})
         if self.path.startswith("/v1/images/generations"):
             picture = {"b64_json": base64.b64encode(png()).decode()}
             return self._json(200, {"data": [picture] * int(body.get("n") or 1), "cost": 0.03})
