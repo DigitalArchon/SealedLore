@@ -71,6 +71,7 @@ def test_each_suggestion_shows_what_it_rests_on_and_applies_as_edited(app):
     new, change, card = dialog.cards
     text = labels(dialog)
     assert "From the story: They crossed it." in text
+    assert "A new lore entry" in text and "<b>" not in text  # shown as text, bold by its font
     assert "keeps less than half of the entry's words" in labels(change)  # Burned. loses it all
     assert [c.apply_button.text() for c in dialog.cards] == [
         "Add to the lore",

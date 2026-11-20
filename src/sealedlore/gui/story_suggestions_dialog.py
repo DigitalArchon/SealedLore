@@ -64,7 +64,11 @@ class SuggestionCard(QFrame):
         heading = HEADINGS[suggestion.kind]
         if suggestion.kind != "lore_new":
             heading += f" {suggestion.title}"
-        title = QLabel(f"<b>{_escaped(heading)}</b>")
+        # Plain text, as every label is (gui/plain_text.py): bold by its font.
+        title = QLabel(heading)
+        font = title.font()
+        font.setBold(True)
+        title.setFont(font)
         column.addWidget(title)
         self.title_field: QLineEdit | None = None
         self.keywords_field: QLineEdit | None = None
@@ -123,10 +127,6 @@ class SuggestionCard(QFrame):
                 k.strip() for k in self.keywords_field.text().split(",") if k.strip()
             ]
         return values
-
-
-def _escaped(text: str) -> str:
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 class StorySuggestionsDialog(QDialog):
