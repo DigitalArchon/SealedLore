@@ -37,6 +37,20 @@ fun to play. This app will remain focused on text based roleplay.
 
 ### New in version 3
 
+- **Long lorebooks that still fit, and `{{user}}` and `{{char}}` kept**
+  (3.1.0b16). Always-on lorebook entries can have **condensed versions**,
+  written by the model beside the entry and never in its place, and sent
+  only when the always-on lore is more than the lore budget holds: the
+  fewest needed, least important first; Lorebooks can write them too, for
+  every story made from the lorebook. The Lore page says when always-on lore
+  is too much, and its **Always-on entries…** lets you make any of them
+  fire by keyword instead. Under SillyTavern's rules, always-on
+  entries no longer crowd every other entry out of its budget. Cards and
+  lorebooks keep `{{user}}` and `{{char}}` as written, and the names go in
+  whenever anything is sent: `{{user}}` is the story's player, even when you
+  switch characters, and `{{char}}` the character whose card or lorebook
+  the text came from (Story → Setup… → About). And a lorebook written by a
+  stranger can no longer hang or fail a turn.
 - **Lorebooks of their own, and lore that fits** (3.1.0b15). **Lorebooks**
   keeps SillyTavern lorebooks (and those it imports from NovelAI, Agnai and
   RisuAI) outside any story, exactly as they came, to change, export, or
