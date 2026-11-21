@@ -7,6 +7,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import QEventLoop, QObject, Qt, Slot
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QProgressDialog, QWidget
 
 from sealedlore.gui.worker import GenerationWorker
@@ -28,6 +29,23 @@ class _Label(QObject):
     @Slot(str)
     def say(self, text: str) -> None:
         self._progress.setLabelText(f"{self._words}\n{text}")
+
+
+class _Progress(QProgressDialog):
+    """A progress dialog that stays until its job has ended: once Stop was
+    pressed it has no button, and Esc or the window's close box hid it while
+    the job ran on (the state "Stopping…" was there to end)."""
+
+    stopping = False
+
+    def reject(self) -> None:
+        if not self.stopping:
+            super().reject()
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        if not self.stopping:
+            self.canceled.emit()  # as Stop: the job is told, and this stays
+        event.ignore()
 
 
 def run_with_progress(
@@ -65,7 +83,7 @@ def run_with_progress(
     loop = QEventLoop()
     # Cleanup on the thread, never the worker's own finished (CONTRIBUTING.md).
     thread.finished.connect(loop.quit)
-    progress = QProgressDialog(words, "Stop", 0, 0, parent)
+    progress = _Progress(words, "Stop", 0, 0, parent)
     progress.setWindowTitle(title)
     progress.setWindowModality(Qt.WindowModal)
     progress.setMinimumDuration(0)
@@ -77,6 +95,7 @@ def run_with_progress(
         if on_stop is not None:
             on_stop()
         if not ended:
+            progress.stopping = True
             progress.setLabelText(f"{words}\nStopping…")
             progress.setCancelButton(None)
             progress.show()
@@ -95,7 +114,7 @@ def run_with_progress(
     # that finished as stopped: Find the people then offered nothing and
     # Write with AI showed no changes (the lab walk, Nov 20 2026).
     progress.canceled.disconnect(stop)
-    progress.close()
+    progress.hide()  # not close(): closing is taken for Stop while it runs
     progress.deleteLater()
     thread.wait()
     worker.deleteLater()

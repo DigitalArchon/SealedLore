@@ -495,6 +495,10 @@ class CollectionWindow:
         if on:
             if not self.collection_shown():
                 self.close_find()
+                # Lorebooks first, as it leaves for this page: over it, what
+                # it had put away was taken for hidden by hand, and Back left
+                # the story with neither its composer nor its side panel.
+                self.show_lorebooks(False)
                 self.show_cast_board(False)
                 self.show_map(False)
                 # Hidden by hand or not: `isVisible` is False for all while the

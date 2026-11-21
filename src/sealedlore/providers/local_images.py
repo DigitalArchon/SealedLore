@@ -613,7 +613,9 @@ class LocalDrawing:
             if self.api == "a1111":
                 return self._a1111(payload, model, references)
             return self._comfy(payload, model, references)
-        except StreamCancelled:
+        except (StreamCancelled, MediaTimedOut):
+            # Given up on, by Stop or by the time allowed: the server is told,
+            # where a wait that ran out left the picture queued and drawn.
             self.stop()
             raise
 

@@ -29,6 +29,8 @@ class TavernFiringWindow:
             current = self.session.story.defaults.lore_firing if self.session else "sealedlore"
             self.lore_panel.set_firing(current)
             return
+        # An earlier review's Undo would put the rules back as they were.
+        self.session.forget_review_undo()
         self.session.story.defaults.lore_firing = mode
         self.session.save()
         self.statusBar().showMessage(SAID[mode], 8000)
@@ -40,6 +42,7 @@ class TavernFiringWindow:
         dialog = TavernSettingsDialog(self.session.story.defaults.tavern_world_info, self)
         try:
             if dialog.exec() == QDialog.Accepted:
+                self.session.forget_review_undo()
                 self.session.story.defaults.tavern_world_info = dialog.settings()
                 self.session.save()
                 self._reassemble_inspector()

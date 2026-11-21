@@ -15,6 +15,7 @@ from sealedlore.gui.workers import post, run_detached
 from sealedlore.providers.local_embeddings import (
     DOWNLOAD_BYTES,
     download,
+    downloading,
     installed,
     model_dir,
     remove,
@@ -74,7 +75,11 @@ class BuiltinModelRow(QWidget):
         size = size_words(DOWNLOAD_BYTES)
         self.state.setText(said or (HERE if here else NOT_YET).format(size=size))
         self.state.setToolTip(str(model_dir(self.root)))
-        self.download_button.setVisible(not here or self._running)
+        # A download begun before this dialog was opened goes on: no second.
+        elsewhere = not self._running and downloading(self.root)
+        if elsewhere and not said:
+            self.state.setText("Downloading (begun before Settings was opened)…")
+        self.download_button.setVisible((not here or self._running) and not elsewhere)
         self.download_button.setText("Stop" if self._running else "Download…")
         self.remove_button.setVisible(here and not self._running)
         self.bar.setVisible(self._running)
@@ -117,5 +122,13 @@ class BuiltinModelRow(QWidget):
             self.refresh(f"⚠ {error}")
 
     def _remove(self) -> None:
-        remove(self.root)
+        try:
+            remove(self.root)
+        except OSError as exc:
+            # Windows, the model still in use: said, where it was an error
+            # out of the button.
+            self.refresh(
+                f"⚠ Couldn't remove it ({exc.strerror or exc}): close the story and try again."
+            )
+            return
         self.refresh()

@@ -117,6 +117,29 @@ class SuggestionCard(QFrame):
         row.addWidget(self.apply_button)
         column.addLayout(row)
 
+    def typed(self) -> dict[str, str]:
+        """What the author changed in the fields, as typed: to put back when
+        the cards are made again."""
+        was = {
+            "content": self.suggestion.content,
+            "title": self.suggestion.title,
+            "keywords": ", ".join(self.suggestion.keywords),
+        }
+        now = {"content": self.content.toPlainText()}
+        if self.title_field is not None:
+            now["title"] = self.title_field.text()
+        if self.keywords_field is not None:
+            now["keywords"] = self.keywords_field.text()
+        return {name: text for name, text in now.items() if text != was[name]}
+
+    def put_back(self, typed: dict[str, str]) -> None:
+        if "content" in typed:
+            self.content.setPlainText(typed["content"])
+        if "title" in typed and self.title_field is not None:
+            self.title_field.setText(typed["title"])
+        if "keywords" in typed and self.keywords_field is not None:
+            self.keywords_field.setText(typed["keywords"])
+
     def values(self) -> dict:
         """The fields as the author left them."""
         values: dict = {"content": self.content.toPlainText()}
@@ -182,6 +205,10 @@ class StorySuggestionsDialog(QDialog):
         self.refresh()
 
     def refresh(self) -> None:
+        # What was typed in the other cards stays: every card is made again
+        # after one is applied or turned down, or a reading ends, and an edit
+        # waiting in another went back to the model's wording.
+        typed = {card.suggestion.id: card.typed() for card in getattr(self, "cards", [])}
         holder = QWidget()
         layout = QVBoxLayout(holder)
         waiting = self._suggestions()
@@ -197,6 +224,7 @@ class StorySuggestionsDialog(QDialog):
                 apply=self._on_apply,
                 decline=self._on_decline,
             )
+            card.put_back(typed.get(suggestion.id, {}))
             self.cards.append(card)
             layout.addWidget(card)
         layout.addStretch(1)

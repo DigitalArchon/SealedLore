@@ -128,6 +128,9 @@ class LorebooksWindow:
         self._lorebook_save.start()
 
     def _flush_lorebooks(self) -> None:
+        # A name still being typed (the page takes it a moment after the last
+        # key): quit within that moment, the old name stayed on disk.
+        self.lorebooks_page.take_name()
         self._lorebook_save.stop()
         dirty, self._lorebooks_dirty = self._lorebooks_dirty, set()
         for book_id in dirty:

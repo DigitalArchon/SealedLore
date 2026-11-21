@@ -1919,7 +1919,13 @@ class Config(BaseModel):
         if self.embedding_provider is not None:
             embeddings = self.embedding_provider
             yield "embeddings", embeddings, embeddings.base_url or inherited
-        yield "images", self.image_endpoint, self.image_endpoint.base_url or inherited
+        images = self.image_endpoint
+        # A server of the author's own left with no address is at its
+        # program's own (`_own_images`), never the chat endpoint's: taken for
+        # that, its key (AUTOMATIC1111's user:password) was recorded for the
+        # chat's host and then withheld from the server it was typed for.
+        own = LOCAL_IMAGE_ADDRESSES.get(images.api)
+        yield "images", images, images.base_url or (own if own is not None else inherited)
         yield "videos", self.video_endpoint, self.video_endpoint.base_url
         if self.private_provider is not None:
             yield "private", self.private_provider, self.private_provider.base_url

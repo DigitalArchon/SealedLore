@@ -126,6 +126,33 @@ def download(
     `progress(done, total)` in bytes; `stopped` is asked between pieces.
     Raises ProviderError (DownloadStopped when stopped)."""
     folder = model_dir(root)
+    with _LOAD_LOCK:
+        if str(folder) in _DOWNLOADING:
+            # One at a time: a second (Settings closed and opened again
+            # mid-download) emptied the part file the first was writing, and
+            # the first then kept a file of the right size, part of it zeros.
+            raise ProviderError(STILL_DOWNLOADING)
+        _DOWNLOADING.add(str(folder))
+    try:
+        return _download(folder, progress=progress, stopped=stopped, client=client)
+    finally:
+        with _LOAD_LOCK:
+            _DOWNLOADING.discard(str(folder))
+
+
+def downloading(root: Path | None = None) -> bool:
+    """A download of the model is under way in this process."""
+    with _LOAD_LOCK:
+        return str(model_dir(root)) in _DOWNLOADING
+
+
+def _download(
+    folder: Path,
+    *,
+    progress: Callable[[int, int], None] | None,
+    stopped: Callable[[], bool],
+    client: httpx.Client | None,
+) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
     wanted = [f for f in FILES if not _ready(folder / f.name, f)]
     total = sum(f.size for f in wanted)
@@ -182,8 +209,12 @@ def _ready(path: Path, item: ModelFile) -> bool:
 
 
 def remove(root: Path | None = None) -> None:
-    """Take the model off this computer (Settings → Lore)."""
+    """Take the model off this computer (Settings → Lore). Raises OSError
+    when a file can't go (Windows, while something still holds it open)."""
     folder = model_dir(root)
+    # Let go of the loaded model first: Windows removes no file in use.
+    with _LOAD_LOCK:
+        _LOADED.pop(str(folder), None)
     for item in FILES:
         (folder / item.name).unlink(missing_ok=True)
         (folder / f"{item.name}.part").unlink(missing_ok=True)
@@ -191,13 +222,14 @@ def remove(root: Path | None = None) -> None:
         folder.rmdir()
     except OSError:
         pass
-    with _LOAD_LOCK:
-        _LOADED.pop(str(folder), None)
 
 
 # The loaded model, by folder, shared by every session of the process.
 _LOADED: dict[str, tuple[Any, Any]] = {}
 _LOAD_LOCK = threading.Lock()
+# The folders a download is writing into.
+_DOWNLOADING: set[str] = set()
+STILL_DOWNLOADING = "the model is being downloaded already: it goes on until it is done"
 
 
 # onnxruntime's Windows wheels need Microsoft's C++ runtime (msvcp140.dll),

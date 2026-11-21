@@ -2454,8 +2454,12 @@ class SettingsDialog(QDialog):
         if problem := key_problem(key, "pictures"):
             self.own_server.show_check(f"⚠ {problem}")
             return
-        if key and not self._may_send([SentPlain("Images", "pictures", url, key)]):
-            self.own_server.show_check("Not asked: its key would have gone unencrypted.")
+        # Asked about only where the key, or a password written into the
+        # address, would cross the network in the clear: never for a server
+        # on this computer, and for a password as for a key.
+        sent = _plain([SentPlain("Images", "pictures", url, key)])
+        if (key or sent) and not self._may_send(sent):
+            self.own_server.show_check("Not asked: nothing was sent.")
             return
         self.own_server.check_button.setEnabled(False)
         self.own_server.show_check("Asking the server…")
@@ -3011,8 +3015,19 @@ class SettingsDialog(QDialog):
         Yes sends it there and a No sends it nowhere. False: No."""
         try:
             typed = self._as_typed(self._endpoints_as_typed(), self.embed_base_url.text().strip())
-        except ValueError:
-            return True  # an address that can't be used: nothing will be sent to it
+        except ValueError as exc:
+            # Something in Settings can't be read as it stands (an address, a
+            # workflow, Extra settings on any page), so nobody can say which
+            # saved key would go where: nothing is sent until it is put right.
+            # It used to send: with a slip in one field, a saved key went to
+            # an address edited in another with no question asked.
+            QMessageBox.warning(
+                self,
+                "Nothing was sent",
+                f"{exc}\n\nPut that right first: before a key is sent anywhere, every "
+                "address in Settings is checked against the place its key was saved for.",
+            )
+            return False
         moves = rebind_keys(self.config, typed, self._renamed())
         # Asked even about a place said No to at an earlier Save: this sends
         # the key now, and nothing else would say why nothing was sent.

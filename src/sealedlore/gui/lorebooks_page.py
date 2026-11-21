@@ -392,6 +392,11 @@ class LorebooksPage(QWidget):
             self._name_finished()
             self.action_requested.emit(what, self._current)
 
+    def take_name(self) -> None:
+        """The name as typed, now: before the page is left or the app quits."""
+        if self._name_timer.isActive():
+            self._name_finished()
+
     def _name_finished(self) -> None:
         self._name_timer.stop()
         book = self._loaded

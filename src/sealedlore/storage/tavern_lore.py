@@ -20,6 +20,7 @@ under either. Conversions are pure; only `open_lorebook` (and
 from __future__ import annotations
 
 import base64
+import copy
 import itertools
 import json
 import re
@@ -428,7 +429,10 @@ def _as_fired(raw: Mapping[str, Any], fill: Callable[[str], str], content: str) 
     them (engine/tavern_firing.py): as they came, with the names filled into
     its keys as SillyTavern fills them before matching, and its text as the
     story has it."""
-    kept = {key: value for key, value in raw.items() if key != "content"}
+    # A copy all the way down: its `extensions` shared with the lorebook it
+    # came from, a setting changed in Lorebooks changed the open story's entry
+    # too, against the page's own word that only later stories take it.
+    kept = copy.deepcopy({key: value for key, value in raw.items() if key != "content"})
     for name in ("key", "keys", "keysecondary", "secondary_keys"):
         value = kept.get(name)
         if isinstance(value, list):

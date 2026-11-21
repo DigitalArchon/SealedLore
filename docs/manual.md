@@ -2799,10 +2799,25 @@ for this story (scan depth, budget, recursion, minimum activations, case,
 whole words, group scoring, names): a lorebook doesn't carry them, so they
 start at SillyTavern's defaults. Set them as you have them in SillyTavern.
 
+A lorebook's patterns are someone else's, and a careless or hostile one can
+take minutes on the wrong text, so each is read before it is run. A pattern
+that repeats something which itself repeats or has alternatives (`/(\w+\s?)+/`,
+`/(dragon|wyrm)+/`), with more than three open-ended repeats, or written in
+JavaScript's own syntax that Python has no word for (`\p{L}`), is never run.
+One with an open-ended repeat that has something after it (`/dragon.*fire/`)
+reads only the newest part of what is scanned: 8,000 characters with one such
+repeat, 1,000 with two, 150 with three. A repeat that ends a pattern
+(`/drag\w*/`) reads everything. The Lore tab says so beside any entry this
+kept from firing.
+
 Where the entries go is SealedLore's, so caching keeps working: a constant
 entry nothing can stop (no chance, timing, group, trigger or filter) is sent
 with the world, cached; every other entry that fires goes with the turn, in
-SillyTavern's order. Positions, depths and outlets aren't used. The Lore tab
+SillyTavern's order. A constant entry still counts in the firing as it does
+in SillyTavern: what it says can fire other entries, it counts toward minimum
+activations, and it uses up the budget. In a private scene the budget is a
+share of the private model's context. Positions, depths and outlets aren't
+used. The Lore tab
 shows why each entry fired and why each other didn't ("on cooldown", "its
 40% chance didn't come up", "its group “x”: y won", "over the lore budget").
 Timed effects follow the story's branches: each of your turns keeps what

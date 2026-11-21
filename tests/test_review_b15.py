@@ -713,3 +713,111 @@ def test_a_title_of_brackets_is_cleaned_at_once():
     clean_title("[" * 20_000)
     assert time.perf_counter() - began < 0.5
     assert clean_title("═══[World]═══") == "World"
+
+
+# --- keys ---------------------------------------------------------------------------
+
+
+def test_a_server_of_ones_own_with_no_address_gets_its_key():
+    """AUTOMATIC1111 with the address left blank and user:password as the
+    key, as Settings advises: the key was recorded for the chat endpoint's
+    host and then withheld from the server ("saved for https://nano-gpt.com,
+    and its address is now http://127.0.0.1:7860")."""
+    from sealedlore.models.config import (
+        Config,
+        MediaEndpoint,
+        ProviderConfig,
+        bind_unbound_keys,
+        rebind_keys,
+    )
+
+    def made(api: str, address: str = "") -> Config:
+        return Config(
+            providers=[
+                ProviderConfig(
+                    name="NanoGPT",
+                    base_url="https://nano-gpt.com/api/v1",
+                    api_key="k" * 20,
+                    default_model="m",
+                )
+            ],
+            active_provider_name="NanoGPT",
+            image_endpoint=MediaEndpoint(api=api, base_url=address, api_key="user:password"),
+        )
+
+    config = made("a1111")
+    bind_unbound_keys(config)
+    assert config.image_endpoint.key_saved_for == "http://127.0.0.1:7860"
+    media = config.images()
+    assert media.base_url == "http://127.0.0.1:7860"
+    assert media.api_key == "user:password" and not media.key_withheld
+    # A key that was NanoGPT's doesn't follow the service to this computer
+    # unasked: the change is a move, for Settings to ask about.
+    before = made("nanogpt")
+    bind_unbound_keys(before)
+    after = before.model_copy(deep=True)
+    after.image_endpoint.api = "comfyui"
+    moves = rebind_keys(before, after, {})
+    assert [move.slot for move in moves] == ["images"]
+    assert after.images().key_withheld
+
+
+# --- servers and files of one's own ---------------------------------------------------
+
+
+def test_the_embeddings_model_is_downloaded_once_at_a_time(tmp_path: Path):
+    """Settings closed and opened again mid-download began a second onto the
+    same part file, which emptied what the first was writing."""
+    from sealedlore.providers import local_embeddings
+    from sealedlore.providers.base import ProviderError
+
+    folder = str(local_embeddings.model_dir(tmp_path))
+    local_embeddings._DOWNLOADING.add(folder)
+    try:
+        assert local_embeddings.downloading(tmp_path)
+        with pytest.raises(ProviderError, match="downloaded already"):
+            local_embeddings.download(tmp_path, client=object())
+    finally:
+        local_embeddings._DOWNLOADING.discard(folder)
+    assert not local_embeddings.downloading(tmp_path)
+
+
+def test_a_picture_given_up_on_for_time_is_stopped_on_the_server(monkeypatch):
+    """ComfyUI's wait ran out and the workflow stayed queued, to be drawn
+    for nobody: the server is told, as it is on Stop."""
+    from sealedlore.providers.local_images import LocalDrawing, LocalSettings
+    from sealedlore.providers.media_http import MediaHttp, MediaTimedOut
+
+    http = MediaHttp("http://127.0.0.1:8188", "", timeout_seconds=1)
+    drawing = LocalDrawing("comfyui", http, "http://127.0.0.1:8188", "", LocalSettings())
+    stopped: list[bool] = []
+    monkeypatch.setattr(drawing, "check_model", lambda model, with_picture: None)
+    monkeypatch.setattr(drawing, "stop", lambda: stopped.append(True))
+
+    def late(payload, model, references):
+        raise MediaTimedOut("ComfyUI: no picture after the time allowed")
+
+    monkeypatch.setattr(drawing, "_comfy", late)
+    with pytest.raises(MediaTimedOut):
+        drawing.draw({"model": "m", "prompt": "p"})
+    assert stopped == [True]
+
+
+def test_a_storys_copy_of_a_lorebooks_entry_shares_nothing_with_it():
+    """An entry's `extensions` was the same object in the kept lorebook and
+    in the story's entry: a setting changed in Lorebooks changed the open
+    story's too."""
+    book = {
+        "entries": {
+            "0": {
+                "uid": 0,
+                "key": ["wolf"],
+                "content": "They hunt in threes.",
+                "extensions": {"case_sensitive": False, "nested": {"a": [1]}},
+            }
+        }
+    }
+    (made,) = lore_from_book(book).entries
+    book["entries"]["0"]["extensions"]["case_sensitive"] = True
+    book["entries"]["0"]["extensions"]["nested"]["a"].append(2)
+    assert made.tavern.fields["extensions"] == {"case_sensitive": False, "nested": {"a": [1]}}

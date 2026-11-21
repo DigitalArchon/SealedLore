@@ -771,7 +771,12 @@ class TavernWindow:
             return
         finally:
             result.close()
-        if self._busy and where != "collection":
+        if self._busy and where not in ("collection", "lorebooks"):
+            return
+        if isinstance(found, TavernCard) and self._busy and where == "lorebooks":
+            # A card from Lorebooks' own Import is for the open story's side
+            # of the window: said, where it used to be dropped without a word.
+            self._say_wait("Importing a card")
             return
         if isinstance(found, TavernCard):
             self._card_from_link(found, where)
