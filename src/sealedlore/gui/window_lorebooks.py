@@ -31,6 +31,7 @@ from sealedlore.gui import file_dialogs
 from sealedlore.gui.lore_people_dialog import LorePeopleDialog
 from sealedlore.gui.lorebook_story import LorebookStoryDialog
 from sealedlore.gui.lorebooks_page import (
+    CONDENSE,
     DELETE,
     DUPLICATE,
     EXPORT,
@@ -45,6 +46,7 @@ from sealedlore.gui.lorebooks_page import (
 )
 from sealedlore.gui.modal_job import run_with_progress
 from sealedlore.models.character import Character
+from sealedlore.models.lore import lore_fingerprint
 from sealedlore.models.lorebook import StoredLorebook
 from sealedlore.providers.base import StreamCancelled
 from sealedlore.storage import collection, lorebooks
@@ -237,6 +239,8 @@ class LorebooksWindow:
             self._people_in_kept_lorebook(book)
         elif what == INTO_STORY:
             self._kept_lorebook_into_story(book)
+        elif what == CONDENSE:
+            self._condense_kept_lorebook(book)
 
     def _new_lorebook(self) -> None:
         books = self._lorebooks()
@@ -712,7 +716,16 @@ class LorebooksWindow:
             return
         name = lorebooks.unique_name(f"{session.story.title} lore", self._lorebooks())
         book = StoredLorebook(
-            name=name, came_from=f"the story {session.story.title}", book=book_from_lore(entries)
+            name=name,
+            came_from=f"the story {session.story.title}",
+            book=book_from_lore(entries),
+            # Its condensed versions along, under the key the book reads them by
+            # (an entry's text as a story reads it: `tavern_lore.condensed_key`).
+            condensed={
+                lore_fingerprint(entry.content): shorter
+                for entry in entries
+                if (shorter := entry.condensed_now())
+            },
         )
         if self._save_lorebook(book):
             self._lorebooks().append(book)

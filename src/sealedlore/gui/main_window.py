@@ -131,6 +131,7 @@ from sealedlore.gui.transcript import (
 )
 from sealedlore.gui.usage_dialog import UsageDialog
 from sealedlore.gui.welcome import setup_missing, welcome_html
+from sealedlore.gui.window_always_on import AlwaysOnWindow
 from sealedlore.gui.window_answers import AnswersWindow
 from sealedlore.gui.window_board import CastBoardWindow
 from sealedlore.gui.window_card_link import CardLinkWindow
@@ -395,6 +396,7 @@ class MainWindow(
     LayoutWindow,
     StorySuggestionsWindow,
     TavernFiringWindow,
+    AlwaysOnWindow,
     QMainWindow,
 ):
     generation_requested = Signal()
@@ -688,6 +690,8 @@ class MainWindow(
         self.lore_panel.picture_requested.connect(self._on_card_picture)
         self.lore_panel.firing_changed.connect(self._on_firing_changed)
         self.lore_panel.tavern_settings_requested.connect(self._open_tavern_settings)
+        self.lore_panel.always_on_requested.connect(self.open_always_on)
+        self.lore_panel.condense_requested.connect(self.condense_lore_entry)
         self.style_panel = StylePanel()
         self.style_panel.changed.connect(self._on_style_changed)
         self.summaries_panel = SummariesPanel()
@@ -2380,6 +2384,7 @@ class MainWindow(
         self._cast_changed_soon()
         self.lore_panel.set_entries(self.session.bundle.lore, hidden=hidden)
         self.lore_panel.set_firing(self.session.story.defaults.lore_firing)
+        self._sync_always_on()
         self.lore_panel.set_embeddings_available(self.session.embeddings is not None)
         self.style_panel.set_style(
             story.style, started=bool(self.session.nodes), texts=self.session.texts
@@ -5718,6 +5723,8 @@ class MainWindow(
             return
         self.session.last_prompt = None
         self.refresh_inspector()
+        # What changed may be the lore, its rules or the budget.
+        self._sync_always_on()
 
     def refresh_inspector(self) -> None:
         if self.session is None:

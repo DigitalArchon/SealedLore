@@ -52,7 +52,7 @@ NEW, IMPORT, LINK, EXPORT, DUPLICATE, DELETE = (
     "duplicate",
     "delete",
 )
-STORY, PEOPLE, INTO_STORY = "story", "people", "into_story"
+STORY, PEOPLE, INTO_STORY, CONDENSE = "story", "people", "into_story", "condense"
 SCOPE_WORDS = (
     "Lorebooks are kept for any story: a world's lore to start stories in, with anyone from "
     "Your characters. A story takes a copy of the entries, so what you change here reaches "
@@ -87,6 +87,11 @@ class _Shelved:
     @character_book.setter
     def character_book(self, book: dict[str, Any] | None) -> None:
         self.stored.book = book or {}
+
+    @property
+    def condensed(self) -> dict[str, str]:
+        """Its entries' condensed versions, beside the book (`StoredLorebook`)."""
+        return self.stored.condensed
 
 
 class LorebooksPage(QWidget):
@@ -188,6 +193,13 @@ class LorebooksPage(QWidget):
         self.more_button.setText("More")
         self.more_button.setPopupMode(QToolButton.InstantPopup)
         more = QMenu(self.more_button)
+        condense = more.addAction("Condense the always-on entries…")
+        condense.setToolTip(
+            "Shorter versions of the long always-on entries, kept beside them: a story made "
+            "from this lorebook sends them only when its always-on entries are too much"
+        )
+        condense.triggered.connect(lambda: self._act(CONDENSE))
+        more.setToolTipsVisible(True)
         more.addAction("Duplicate").triggered.connect(lambda: self._act(DUPLICATE))
         more.addAction("Delete…").triggered.connect(lambda: self._act(DELETE))
         self.more_button.setMenu(more)

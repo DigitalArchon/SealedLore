@@ -42,10 +42,11 @@ from sealedlore.gui.tavern_dialog import (
     LOREBOOK_LINK_LABEL,
 )
 from sealedlore.gui.wrap_row import WrapRow
-from sealedlore.models.lore import LoreEntry
+from sealedlore.models.lore import LoreEntry, lore_fingerprint
 from sealedlore.storage.tavern_lore import uses_tavern_settings
 
 PEOPLE_LABEL = "Find the people…"
+ALWAYS_ON_LABEL = "Always-on entries…"
 FROM_LOREBOOKS_LABEL = "From Lorebooks…"
 TO_LOREBOOKS_LABEL = "Keep in Lorebooks…"
 # The pictures beside the titles in the list.
@@ -94,6 +95,10 @@ class LorePanel(QWidget):
     # (engine/tavern_firing.py), and SillyTavern's settings asked for.
     firing_changed = Signal(str)
     tavern_settings_requested = Signal()
+    # The always-on entries looked over (gui/always_on_dialog.py), and one
+    # entry's condensed version written (engine/session_lore_condense.py).
+    always_on_requested = Signal()
+    condense_requested = Signal(str)
 
     def __init__(self, pictures: StoryPictures | None = None) -> None:
         super().__init__()
@@ -188,6 +193,20 @@ class LorePanel(QWidget):
         self.firing_about.setObjectName("hintLabel")
         self.firing_about.setWordWrap(True)
         self.firing_about.setTextFormat(Qt.PlainText)
+        # Always-on lore against the lore budget, said when it is over, with
+        # the way to choose which go optional or condensed.
+        self.always_on_note = QLabel()
+        self.always_on_note.setObjectName("warningLabel")
+        self.always_on_note.setWordWrap(True)
+        self.always_on_note.setTextFormat(Qt.PlainText)
+        self.always_on_note.hide()
+        self.always_on_button = QPushButton(ALWAYS_ON_LABEL)
+        self.always_on_button.setToolTip(
+            "Every always-on entry and how much it takes: make some optional (sent by their "
+            "keywords), or write shorter versions to send when they are too much"
+        )
+        self.always_on_button.clicked.connect(self.always_on_requested)
+        firing_row.add_group([self.always_on_button])
 
         top = QWidget()
         top_layout = QVBoxLayout(top)
@@ -195,6 +214,7 @@ class LorePanel(QWidget):
         top_layout.setSpacing(6)
         top_layout.addLayout(firing_row)
         top_layout.addWidget(self.firing_about)
+        top_layout.addWidget(self.always_on_note)
         top_layout.addWidget(self.list, 1)
         top_layout.addLayout(buttons)
         self._top_layout = top_layout
@@ -241,6 +261,24 @@ class LorePanel(QWidget):
             "turns or Directions names it (its title or a keyword) on the branch you're "
             "playing. The storyteller naming it doesn't count, nor does a private scene."
         )
+        # A shorter version beside the entry, never in its place: sent only
+        # when always-on lore is more than the lore budget holds.
+        self.condensed = GrowingText(lines=3)
+        self.condensed.setPlaceholderText(
+            "None yet. Sent in place of the whole only when the always-on entries are more "
+            "than the lore budget holds."
+        )
+        self.condensed_state = QLabel()
+        self.condensed_state.setObjectName("hintLabel")
+        self.condensed_state.setWordWrap(True)
+        self.condensed_state.setTextFormat(Qt.PlainText)
+        self.condense_button = QPushButton("Write a condensed version")
+        self.condense_button.setToolTip(
+            "The authoring model writes a shorter version of this entry, kept beside it"
+        )
+        self.condense_button.clicked.connect(
+            lambda: self._current is not None and self.condense_requested.emit(self._current.id)
+        )
         self.priority = QSpinBox()
         self.priority.setRange(-100, 100)
         self.priority.setToolTip("Higher priority survives the lore token cap first")
@@ -264,6 +302,7 @@ class LorePanel(QWidget):
         self.enabled.toggled.connect(self._apply_edits)
         self.until_mentioned.toggled.connect(self._apply_edits)
         self.priority.valueChanged.connect(self._apply_edits)
+        self.condensed.textChanged.connect(self._condensed_edited)
 
         form_host = QWidget()
         form = QFormLayout(form_host)
@@ -279,6 +318,16 @@ class LorePanel(QWidget):
         form.addRow(self.always_on)
         form.addRow(self.enabled)
         form.addRow(self.until_mentioned)
+        self._condensed_label = QLabel("Condensed")
+        form.addRow(self._condensed_label, self.condensed)
+        condensed_row = QHBoxLayout()
+        condensed_row.setContentsMargins(0, 0, 0, 0)
+        condensed_row.addWidget(self.condensed_state, 1)
+        condensed_row.addWidget(self.condense_button)
+        self._condensed_row = QWidget()
+        self._condensed_row.setLayout(condensed_row)
+        form.addRow(self._condensed_row)
+        self._form = form
         # Full width, under its label, as on the Cast page.
         form.addRow(QLabel("Other pictures"))
         form.addRow(self.pictures)
@@ -351,6 +400,8 @@ class LorePanel(QWidget):
         buttons = self._buttons_row.heightForWidth(width)
         firing = self._firing_row.heightForWidth(width)
         about = 0 if self.firing_about.isHidden() else self.firing_about.heightForWidth(width)
+        if not self.always_on_note.isHidden():
+            about += self._top_layout.spacing() + self.always_on_note.heightForWidth(width)
         spacing = self._top_layout.spacing()
         return (
             self._rows_tall(self.list, rows)
@@ -458,7 +509,8 @@ class LorePanel(QWidget):
             return
         if report.mode == "whole":
             for entry in report.standing:
-                self.injected.addItem(f"{entry.title} — sent every turn")
+                shorter = ", condensed" if entry.id in report.condensed else ""
+                self.injected.addItem(f"{entry.title} — sent every turn{shorter}")
             self.status.setText(
                 f"All {len(report.standing)} entries are sent every turn with the world, "
                 "cached. A lorebook this size costs less whole than selected from."
@@ -466,7 +518,8 @@ class LorePanel(QWidget):
             return
 
         for entry in report.standing:
-            self.injected.addItem(f"{entry.title} — always on, sent with the world")
+            shorter = ", condensed" if entry.id in report.condensed else ""
+            self.injected.addItem(f"{entry.title} — always on, sent with the world{shorter}")
         for injection in report.injected:
             self.injected.addItem(f"{injection.entry.title} — {injection.describe()}")
         for injection in report.dropped:
@@ -613,7 +666,55 @@ class LorePanel(QWidget):
         self.always_on.setChecked(entry.always_on)
         self.enabled.setChecked(entry.enabled)
         self.until_mentioned.setChecked(entry.until_mentioned)
+        self.condensed.setPlainText(entry.condensed or "")
         self._loading = False
+        self._show_condensed()
+
+    def _show_condensed(self) -> None:
+        """The condensed version's rows: for an always-on entry, or one that
+        has a condensed version; its state said under it."""
+        entry = self._current
+        shown = entry is not None and (entry.always_on or bool(entry.condensed))
+        self._form.setRowVisible(self.condensed, shown)
+        self._form.setRowVisible(self._condensed_row, shown)
+        if not shown:
+            return
+        if entry.condensed and not entry.condensed_now():
+            said = (
+                "Out of date: the entry changed since it was written. Never sent until "
+                "written again."
+            )
+        elif entry.condensed:
+            words = len(entry.condensed.split())
+            said = f"{words} words, of the entry's {len(entry.content.split())}."
+        else:
+            said = ""
+        self.condensed_state.setText(said)
+        self.condense_button.setText(
+            "Write it again" if entry.condensed else "Write a condensed version"
+        )
+
+    def _condensed_edited(self) -> None:
+        """The author's own words: current for the entry as it stands."""
+        if self._loading or self._current is None:
+            return
+        entry = self._current
+        text = self.condensed.toPlainText().strip()
+        entry.condensed = text or None
+        entry.condensed_from = lore_fingerprint(entry.content) if text else None
+        self._show_condensed()
+        self.changed.emit()
+
+    def set_busy_condensing(self, busy: bool) -> None:
+        self.condense_button.setEnabled(not busy)
+        self.always_on_button.setEnabled(not busy)
+
+    def set_always_on(self, note: str, any_on: bool) -> None:
+        """What always-on lore takes against the lore budget, when over."""
+        self.always_on_note.setText(note)
+        self.always_on_note.setVisible(bool(note))
+        self.always_on_button.setVisible(any_on)
+        self._fit_panes()
 
     def _apply_edits(self) -> None:
         if self._loading or self._current is None:
@@ -626,6 +727,7 @@ class LorePanel(QWidget):
         entry.always_on = self.always_on.isChecked()
         entry.enabled = self.enabled.isChecked()
         entry.until_mentioned = self.until_mentioned.isChecked()
+        self._show_condensed()
 
         item = self.list.currentItem()
         if item is not None:

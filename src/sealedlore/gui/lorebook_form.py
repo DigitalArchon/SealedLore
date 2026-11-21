@@ -231,6 +231,15 @@ class LorebookForm(QWidget):
         entry_form.addRow("Name", self.title)
         entry_form.addRow("Keywords", self.keys)
         entry_form.addRow("Text", self.content)
+        # A kept lorebook's shorter version of an entry, beside the book
+        # (`StoredLorebook.condensed`): a card's own lorebook has none.
+        self.condensed = GrowingText(lines=2)
+        self.condensed.setPlaceholderText(
+            "None for this text. Lorebooks → More → Condense the always-on entries… writes "
+            "them; a story sends one only when its always-on entries are too much."
+        )
+        self.condensed.textChanged.connect(self._condensed_edited)
+        entry_form.addRow("Condensed", self.condensed)
         entry_form.addRow("", switches)
         entry_form.addRow("Order", self.order)
         entry_form.addRow("Second keywords", self.secondary)
@@ -284,6 +293,7 @@ class LorebookForm(QWidget):
         form.addRow("Entries", entries)
         self._book_rows = (self.book_name, self.book_description, self.book_rest)
         self._form = form
+        self._entry_form = entry_form
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(FormScroll(content))
@@ -407,7 +417,37 @@ class LorebookForm(QWidget):
         self.selective.setChecked(lore.entry_selective(raw, numbered=numbered))
         self._show_logic(raw)
         self.entry_rest.set_value(lore.entry_rest(raw))
+        self._show_condensed(raw)
         self._loading = False
+
+    def refresh_entry(self) -> None:
+        """The entry shown, read again (its condensed version written meanwhile)."""
+        self._chosen(self.list.currentRow())
+
+    def _held_condensed(self) -> dict[str, str] | None:
+        return getattr(self._holder, "condensed", None)
+
+    def _show_condensed(self, raw: dict[str, Any]) -> None:
+        held = self._held_condensed()
+        text = held.get(lore.condensed_key(raw), "") if held is not None else ""
+        shown = held is not None and (bool(raw.get("constant")) or bool(text))
+        self._entry_form.setRowVisible(self.condensed, shown)
+        was = self._loading
+        self._loading = True
+        self.condensed.setPlainText(text)
+        self._loading = was
+
+    def _condensed_edited(self) -> None:
+        raw, held = self._current(), self._held_condensed()
+        if self._loading or raw is None or held is None:
+            return
+        key = lore.condensed_key(raw)
+        text = self.condensed.toPlainText().strip()
+        if text:
+            held[key] = text
+        else:
+            held.pop(key, None)
+        self.changed.emit()
 
     def _show_logic(self, raw: dict[str, Any]) -> None:
         logic = lore.entry_logic(raw, numbered=self._numbered)
@@ -425,10 +465,13 @@ class LorebookForm(QWidget):
             lore.entry_set(raw, "keys", lore.split_keys(self.keys.text()), numbered=numbered)
         elif what == "content":
             raw["content"] = self.content.toPlainText()
+            # A condensed version is of a text: this one's, if it has one.
+            self._show_condensed(raw)
         elif what is self.enabled:
             lore.set_entry_enabled(raw, self.enabled.isChecked(), numbered=numbered)
         elif what is self.constant:
             raw["constant"] = self.constant.isChecked()
+            self._show_condensed(raw)
         elif what is self.use_regex:
             raw["use_regex"] = self.use_regex.isChecked()
         elif what is self.case_sensitive:

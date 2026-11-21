@@ -78,6 +78,15 @@ def test_an_out_of_date_condensed_version_is_never_sent():
     assert fit.condensed == () and fit.over
 
 
+def test_a_lorebook_small_enough_to_go_whole_is_never_condensed(tmp_path, story, cast):
+    small = [condensed(entry(f"Entry{i}", 100, always_on=True), 10) for i in range(3)]
+    session = session_with(tmp_path, story, cast, small)
+    session.config.lore_limit = "tokens"
+    session.config.lore_token_cap = 100
+    assert session.lore_layout().mode == "whole" and session.lore_layout().condensed == ()
+    assert not session.standing_fit().over
+
+
 def test_switched_off_the_entries_go_whole_whatever_the_budget():
     a = condensed(entry("A", 300), 20)
     fit = fit_standing([a], room=10, count_tokens=WORDS, least_first=[a.id], use_condensed=False)
@@ -168,6 +177,8 @@ def sent(session: StorySession) -> str:
 def test_a_story_sends_the_fewest_condensed_and_keeps_the_rest_whole(tmp_path, story, cast):
     big = [condensed(entry(f"Entry{i}", 600, always_on=True, priority=i), 30) for i in range(4)]
     session = session_with(tmp_path, story, cast, big)
+    # Too big to go whole (a tenth of 20k), so chosen from, the four standing.
+    session.story.defaults.context_token_budget = 20_000
     session.config.lore_limit = "tokens"
     session.config.lore_token_cap = 3_500  # four of ~1,050 tokens: over by one
     fit = session.standing_fit()
@@ -185,6 +196,7 @@ def test_a_story_sends_the_fewest_condensed_and_keeps_the_rest_whole(tmp_path, s
 def test_which_go_condensed_is_the_same_every_turn(tmp_path, story, cast):
     big = [condensed(entry(f"Entry{i}", 600, always_on=True), 30) for i in range(4)]
     session = session_with(tmp_path, story, cast, big)
+    session.story.defaults.context_token_budget = 20_000
     session.config.lore_limit = "tokens"
     session.config.lore_token_cap = 2_000
     blocks = []

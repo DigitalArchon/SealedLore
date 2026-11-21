@@ -55,6 +55,9 @@ class LoreCondenseRuntime:
         return lambda entry: entry.priority
 
     def _fit_layout(self, layout: LoreLayout, budget: int | None = None) -> LoreLayout:
+        if layout.mode == "whole":
+            # A lorebook small enough to go whole is within its own limit.
+            return layout
         fit = self.standing_fit(layout.standing, budget)
         return replace(layout, standing=fit.entries, condensed=fit.condensed)
 
@@ -63,7 +66,15 @@ class LoreCondenseRuntime:
     ) -> StandingFit:
         """The always-on entries as sent, against the lore budget."""
         if standing is None:
-            standing = self._layout_as_written(budget).standing
+            layout = self._layout_as_written(budget)
+            if layout.mode == "whole":
+                # Sent whole as a small lorebook is: within its own limit.
+                whole = [e for e in layout.standing if e.always_on]
+                tokens = sum(
+                    self._count_lore_tokens(f"## {e.title}\n{e.content.strip()}") for e in whole
+                )
+                return StandingFit(tuple(whole), (), tokens, tokens, max(tokens, layout.limit))
+            standing = layout.standing
         order = [e for e in self.bundle.lore if any(e.id == s.id for s in standing)]
         return fit_standing(
             standing,

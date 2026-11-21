@@ -2829,6 +2829,49 @@ Changing the choice changes what is cached with the world, so the next turn
 writes the cache afresh. Entries brought in before this version keep only
 their keywords: bring the lorebook in again to fire it with all its settings.
 
+### Always-on entries and the lore budget
+
+Always-on entries are sent with every turn, cached with the world. A
+lorebook made for SillyTavern can carry a great many of them (a character
+card's can run to tens of thousands of tokens), and they then take a large
+part of every prompt before the story says a word. The lore budget they are
+held to is the story's own: SillyTavern's budget under SillyTavern's rules, the
+room for chosen lore (Settings → Lore) under SealedLore's, and in a private
+scene a share of the private model's context.
+
+When the always-on entries are more than that, the **Lore** page says so above
+the list, and the status bar says it once when the story opens.
+**Always-on entries…** beside the rules lists every always-on entry with its
+size, and what it would come to:
+
+- Untick an entry to make it optional: it is then sent when its keywords come
+  up, as any other entry is. One with no keywords would never be sent, and
+  the list says so.
+- **Write condensed versions…** has the authoring model write a shorter
+  version of each long always-on entry still ticked, one call an entry. A
+  condensed version is kept beside its entry and never changes it.
+- With **Use the condensed versions when the always-on entries are more than
+  the lore budget** ticked (the default), the condensed versions of as few
+  entries as are needed go in their entries' place, the least important
+  first: the lowest order under SillyTavern's rules, the lowest priority
+  under SealedLore's, and among equals the lowest in the list. The rest are
+  sent whole. Within the budget, every entry is sent whole.
+
+An entry's own page shows its condensed version under **Condensed**, to read
+or change in your own words, with **Write a condensed version** (or **Write
+it again**). Once the entry's text changes, its condensed version is out of
+date and never sent until it is written again. Nothing condensed is ever
+written for an entry no model may see: one the plot hides, or one held back
+until you mention it. A lorebook small enough to be sent whole is never
+condensed.
+
+A lorebook kept in Lorebooks can be condensed too: **More**, **Condense the
+always-on entries…**. Its condensed versions are kept beside the lorebook,
+never in it, so it is exported exactly as it came. A story made from it has
+both and starts with the whole texts, using the condensed versions only when
+its always-on entries are too much. A story's lore kept in Lorebooks takes
+its condensed versions along.
+
 ### Lore that hasn't happened yet
 
 The storyteller takes every entry it is sent as already true. An entry about
