@@ -1,6 +1,7 @@
 """What the review of 3.1.0b15 found (Nov 21 2026), one test a fault: each
-fails on da927af. The scripted mock provider and made-up lorebooks: no
-network."""
+fails on da927af, but the two that hold the new matching to what it was
+(plain keys as before, groups nested hundreds deep). The scripted mock
+provider and made-up lorebooks: no network."""
 
 from __future__ import annotations
 
@@ -313,14 +314,22 @@ def test_what_a_standing_entry_says_fires_the_others(tmp_path: Path, story, cast
 
 
 def test_standing_entries_use_up_sillytaverns_budget(tmp_path: Path, story, cast):
+    """Left out of the firing, a long always-on entry cost SillyTavern's
+    budget nothing: entries fired here that SillyTavern leaves out."""
     session = tavern_session(tmp_path, story, cast)
     valley = next(e for e in session.bundle.lore if e.title == "The Valley")
-    valley.content = "The Order of Ash rules. " + "snow " * 4000
+    assert "The Grey Wolves" in [
+        i.entry.title for i in session.retrieve(turn("A wolf watches."), []).injected
+    ]
+    valley.content = "The valley. " + "snow " * 4000
     valley.tavern.fields["content"] = valley.content
+    valley.tavern.fields["order"] = 200  # read first, as SillyTavern orders them
     session.story.defaults.context_token_budget = 8_000  # a quarter: 2,000
-    report = session.retrieve(turn("I look around."), [])
-    # Over the budget by itself, as in SillyTavern: nothing more is read.
+    report = session.retrieve(turn("A wolf watches."), [])
     assert not report.injected
+    assert dict((e.title, why) for e, why in report.not_fired)["The Grey Wolves"] == (
+        "over the lore budget"
+    )
 
 
 def test_a_firing_that_fails_never_costs_the_turn(tmp_path: Path, story, cast, monkeypatch):
