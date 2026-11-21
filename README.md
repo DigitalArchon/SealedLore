@@ -37,6 +37,26 @@ fun to play. This app will remain focused on text based roleplay.
 
 ### New in version 3
 
+- **Lorebooks of their own, and lore that fits** (3.1.0b15). **Lorebooks**
+  keeps SillyTavern lorebooks (and those it imports from NovelAI, Agnai and
+  RisuAI) outside any story, exactly as they came, to change, export, or
+  start any number of stories in, with whoever you like from Your
+  characters. **Find the people…** reads a lorebook for the people it
+  describes and makes them characters, cast or supporting, as you choose. A
+  story from a lorebook asks which rules its lore fires by: **SillyTavern's
+  rules** (the default: every entry's second keywords, chance, sticky,
+  cooldown, delay, groups and order work as they did there) or
+  **SealedLore's rules**, and you can switch on the Lore page. Under
+  SealedLore's rules lore has room for its share of the context, a long
+  entry is sent in part rather than dropped, and the entries are ranked on
+  your own turn, by meaning and by every word of an entry. Pictures can be
+  drawn for free on a server of your own (ComfyUI or AUTOMATIC1111 /
+  Forge), and lore embedded on this computer by a built-in model, with no
+  embeddings service at all. As chapters are archived the story suggests new
+  lore entries, changes to entries and additions to cards, for you to take
+  or turn down (Story → **Suggestions from the story…**). Review settings
+  and Change the story with the model now know all of this, and characters
+  played by their own model, and can propose changes to any of it.
 - **Model profiles, every call in view, and characters written with AI**
   (3.1.0b14). Settings → Models keeps whole sets of models, each job's model
   and its route, to put back with one choice: **Default** (what a new setup
