@@ -830,3 +830,38 @@ def test_a_storys_copy_of_a_lorebooks_entry_shares_nothing_with_it():
     book["entries"]["0"]["extensions"]["case_sensitive"] = True
     book["entries"]["0"]["extensions"]["nested"]["a"].append(2)
     assert made.tavern.fields["extensions"] == {"case_sensitive": False, "nested": {"a": [1]}}
+
+
+def test_a_keyword_is_looked_for_before_it_is_made_a_pattern():
+    """Every keyword of a lorebook was compiled to a pattern each time lore
+    was chosen (Python keeps the last 512): on the author's 320-entry
+    lorebook, half a second a time, the same answers now at once."""
+    import random as random_
+
+    from sealedlore.engine.retrieval import _ENDING, keyword_matches
+
+    def as_it_was(text: str, entry_: LoreEntry) -> bool:
+        lowered = text.lower()
+        return any(
+            re.search(rf"(?<!\w){re.escape(k.strip().lower())}{_ENDING}(?!\w)", lowered)
+            for k in entry_.keywords
+            if k.strip()
+        )
+
+    rng = random_.Random(3)
+    words = ["wolf", "Adventurer", "guild", "king's", "é", "old road", "x.y", "re", "s", "wolves"]
+    for _ in range(400):
+        text = " ".join(
+            rng.choice([*words, "the Adventurers' Guild", "wolves'", "kings", "roads", "according"])
+            for _ in range(rng.randint(0, 8))
+        )
+        entry_ = LoreEntry(title="t", content="c", keywords=rng.sample(words, rng.randint(1, 4)))
+        assert keyword_matches(text, entry_) == as_it_was(text, entry_), (text, entry_.keywords)
+    lore = [
+        LoreEntry(title=str(i), content="c", keywords=[f"keyword{i}a", f"keyword{i}b"])
+        for i in range(3000)
+    ]
+    text = "A long turn that names keyword77a and little else. " * 20
+    began = time.perf_counter()
+    named = [e.title for e in lore if keyword_matches(text, e)]
+    assert named == ["77"] and time.perf_counter() - began < 0.5

@@ -270,8 +270,18 @@ def turn_ranking(
 _ENDING = r"(?:['’]s|s['’]|es|s)?"
 
 
+@lru_cache(maxsize=8192)
+def _naming(word: str) -> re.Pattern[str]:
+    return re.compile(rf"(?<!\w){re.escape(word)}{_ENDING}(?!\w)")
+
+
 def _names(lowered: str, word: str) -> bool:
-    return re.search(rf"(?<!\w){re.escape(word)}{_ENDING}(?!\w)", lowered) is not None
+    # Looked for as it is first: a keyword that isn't in the text at all
+    # names nothing, and nearly none of a lorebook's are. Each used to be
+    # made a pattern every time it was asked about (Python keeps the last
+    # 512): on a 320-entry lorebook, half a second every time lore was
+    # chosen, the prompt's preview on the window's own thread included.
+    return word in lowered and _naming(word).search(lowered) is not None
 
 
 def keyword_matches(text: str, entry: LoreEntry) -> bool:
