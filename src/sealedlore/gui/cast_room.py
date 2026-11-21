@@ -114,6 +114,8 @@ def card_note(room: CastRoom | None, character: Character) -> str:
     cid = character.id
     form = room.fit.forms.get(cid)
     if character.keep_whole:
+        if character.condensed:
+            return "This card is always sent whole, so its condensed text isn't used."
         return "This card is always sent whole."
     if cid in room.fit.waiting:
         if cid in room.writing:
@@ -130,9 +132,14 @@ def card_note(room: CastRoom | None, character: Character) -> str:
         return "Sent in place of the description and voice while the cast is over its room."
     if form == "short":
         return "Even condensed, the cast doesn't fit its room: this card goes as its summary alone."
+    if room.fit.over:
+        return "Sent whole: condensing the other cards is enough to fit the cast in its room."
     if character.condensed:
         return "Not needed now: the cast's cards fit their room whole."
-    return ""
+    return (
+        "Not needed now: the cast's cards fit their room whole. When they don't, the "
+        "largest are condensed by themselves."
+    )
 
 
 def cast_room(session) -> CastRoom | None:  # noqa: ANN001 - a StorySession

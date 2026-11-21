@@ -430,6 +430,8 @@ class CastPanel(QWidget):
             lambda: self._current and self.own_prompt_requested.emit(self._current.id)
         )
         self.keep_whole.toggled.connect(self._apply_edits)
+        # The Condensed row follows the tick at once, not at the next refresh.
+        self.keep_whole.toggled.connect(lambda _on: self._show_condensed())
         self.condensed.textChanged.connect(self._condensed_edited)
 
         # The portrait at the left of the card, tall, with the other pictures
@@ -1027,8 +1029,18 @@ class CastPanel(QWidget):
             note = card_note(self._room, character)
         else:
             note = supporting_note(self._room, character)
-        # A chat's characters are never sent: no room, nothing condensed.
-        shown = character is not None and bool(note or character.condensed) and not self._chat
+        # A chat's characters are never sent: no room, nothing condensed. A
+        # main character's card can always be condensed, whether or not the
+        # cast fits, unless it is always sent whole: then only a text written
+        # before is shown. (It used to show only with a note to give, so the
+        # row appeared on ticking Always send the whole card, and nowhere else
+        # while the cast fit.) A supporting card's shows when it is used.
+        if character is None or self._chat:
+            shown = False
+        elif cast_card:
+            shown = not character.keep_whole or bool(character.condensed)
+        else:
+            shown = bool(note or character.condensed)
         self._form.setRowVisible(self.condensed_box, shown)
         self._form.setRowVisible(self.keep_whole, cast_card and not self._chat)
         if not shown:
@@ -1037,6 +1049,7 @@ class CastPanel(QWidget):
         self.condensed_note.setVisible(bool(note))
         room = self._room
         writing = room is not None and character.id in room.writing
+        self.condense_button.setVisible(not (cast_card and character.keep_whole))
         self.condense_button.setEnabled(not writing)
         self.condense_button.setText(
             CONDENSE_AGAIN_LABEL if character.condensed else CONDENSE_LABEL

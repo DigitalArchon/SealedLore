@@ -20,6 +20,7 @@ from sealedlore.engine.card_condense import fingerprint  # noqa: E402
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.models.character import Character  # noqa: E402
 from sealedlore.models.config import Config, ProviderConfig  # noqa: E402
+from sealedlore.models.supporting import SupportingCast  # noqa: E402
 from sealedlore.providers.mock import MockChatProvider  # noqa: E402
 from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa: E402
 
@@ -107,12 +108,70 @@ def test_the_author_edits_a_condensed_card_and_keeps_a_card_whole(app, window: M
     window._refresh_cast_room()
     assert window.session.cast_fit().forms["char-jane"] == "whole"
     assert "always sent whole" in panel.condensed_note.text()
-    # John's short card has nothing condensed and needs nothing.
+    assert "isn't used" in panel.condensed_note.text()
+    # Her text stays in view, but there is nothing to condense it for.
+    assert panel.condensed_box.isVisibleTo(window)
+    assert not panel.condense_button.isVisibleTo(window)
+    # John's short card is sent whole while Jane's is condensed, and can be
+    # condensed all the same.
     panel.select_character("char-john")
-    assert not panel.condensed_box.isVisibleTo(window)
+    assert panel.condensed_box.isVisibleTo(window)
+    assert panel.condense_button.isVisibleTo(window)
+    assert panel.condense_button.text() == "Condense this card"
+    assert "condensing the other cards" in panel.condensed_note.text()
 
 
 def test_a_cast_that_fits_says_nothing(app, window: MainWindow):
     window.config.cast_token_cap = 100_000
     window._refresh_cast_room()
     assert not window.cast_panel.room_banner.isVisibleTo(window)
+
+
+def test_a_card_can_be_condensed_while_the_cast_fits_unless_kept_whole(app, window: MainWindow):
+    """The Condensed row used to show only with a note to give: while the
+    cast fit, it appeared on a card only once Always send the whole card was
+    ticked, the one setting that makes condensing it pointless."""
+    window.config.cast_token_cap = 100_000
+    window._refresh_cast_room()
+    panel = window.cast_panel
+    panel.select_character("char-jane")
+    assert panel.condensed_box.isVisibleTo(window)
+    assert panel.condense_button.isVisibleTo(window)
+    assert "fit their room whole" in panel.condensed_note.text()
+
+    panel.keep_whole.setChecked(True)
+    # At once, before the room is worked out again.
+    assert not panel.condensed_box.isVisibleTo(window)
+    panel.keep_whole.setChecked(False)
+    assert panel.condense_button.isVisibleTo(window)
+
+    window._condense_soon.stop()
+    panel.condense_button.click()
+    window._poll_condensing()
+    jane = next(c for c in window.session.cast if c.id == "char-jane")
+    assert jane.condensed == "Jane: John's steady, practical wife."
+    assert panel.condense_button.text() == "Write it again"
+
+
+def test_a_supporting_cards_condense_button_condenses_it(app, tmp_path: Path, story):
+    """The window looked for the card in the main cast alone, so a
+    supporting card's Write it again did nothing."""
+    cast = [Character(id="char-john", name="John Jacobs", summary="A survivor.")]
+    supporting = [Character(id="char-ben", name="Ben", summary="A trader.", full_description=JANE)]
+    story.held_character_id = "char-john"
+    bundle = StoryBundle(story=story, cast=cast, supporting=SupportingCast(characters=supporting))
+    save_story_bundle(bundle, root=tmp_path)
+    window = MainWindow(root=tmp_path, use_mock=True)
+    window.config.suggest_characters = False
+    window.config.scene_reads = "manual"
+    window._provider = MockChatProvider(["Ben: trades in salvage."])
+    window.open_story(story.id)
+    window.show_cast_page()
+    window._condense_soon.stop()
+    panel = window.cast_panel
+    panel.select_character("char-ben")
+    assert panel.condensed_box.isVisibleTo(window)
+    panel.condense_button.click()
+    window._poll_condensing()
+    ben = next(c for c in window.session.supporting if c.id == "char-ben")
+    assert ben.condensed == "Ben: trades in salvage."

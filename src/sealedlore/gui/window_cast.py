@@ -115,7 +115,10 @@ class CastWindow:
             return
         wanted = None
         if character_id:
-            wanted = [c for c in session.cast if c.id == character_id]
+            # A supporting card's button too: looking in the cast alone, it
+            # did nothing.
+            everyone = [*session.cast, *session.supporting]
+            wanted = [c for c in everyone if c.id == character_id]
         else:
             waiting = set(session.cast_fit().waiting)
             private = session.private_cast_fit()

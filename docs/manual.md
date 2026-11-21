@@ -2258,10 +2258,13 @@ changed; until one is ready, its card is sent whole.
 The cast board says when the cast is over its room, and which cards are
 sent condensed. A character's card shows its **Condensed** text under its
 other fields: edit it, and your words are sent instead; **Write it again** has the
-model write it afresh from the card as it is now. Change a card, and its old
+model write it afresh from the card as it is now. **Condense this card** writes
+one for a card that has none, even while the cast fits, so you can read it or
+edit it before it is needed. Change a card, and its old
 condensed text is no longer sent until it is written again (or you edit it).
 Tick **Always send the whole card** for a main character the storyteller
-should always have in full: the others are condensed first. If even condensed
+should always have in full: the others are condensed first, and the card has
+no Condense button. If even condensed
 the cast doesn't fit, the last cards go as their name, summary and voice
 alone, and the board says so: give the cast more room, or move some of them to
 supporting characters, whose cards are sent only when the story names them.
