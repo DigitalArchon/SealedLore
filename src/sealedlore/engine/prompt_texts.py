@@ -2905,14 +2905,24 @@ Keep, as the entry states them:
 - every name, place, title and term the entry defines, spelt as it spells them;
 - the facts: who and what things are, how they stand with each other, numbers,
   dates, ranks, rules of the world, what is secret and from whom;
-- any instruction it gives the storyteller, each said briefly;
-- placeholders such as {{user}} and {{char}} exactly as written.
+- any instruction it gives the storyteller, each said briefly.
 
 Leave out repetition, decoration, examples that only restate a point, and
 lists of near-synonyms. Add nothing of your own. Write in the entry's own
 language, as plain prose or short labelled lines, in at most {words} words.
 Reply with the condensed entry only: no heading, no title line, no comment.""",
     (("words", "the most words the condensed entry may have"),),
+)
+
+# Only for an entry that has placeholders: named in every request, they had
+# GLM 5.3 write {{user}} 16 times into six condensed entries whose originals
+# had none (they said "the user"), and nothing fills a condensed version in.
+_text(
+    "lore.condense.placeholders",
+    LORE,
+    "A condensed always-on entry: its placeholders",
+    "Added to the condensing prompt only for an entry that has placeholders such as {{user}}.",
+    "Keep its placeholders, such as {{user}} and {{char}}, exactly as written, and add none.",
 )
 
 _text(

@@ -25,6 +25,7 @@ from sealedlore.engine.lore_condense import (
     fit_standing,
     least_important_first,
     parse_condensed_lore,
+    unasked_placeholders,
     worth_condensing,
 )
 from sealedlore.engine.retrieval import LoreLayout
@@ -117,9 +118,12 @@ class LoreCondenseRuntime:
             yield from self.condense_texts(items, written, failed)
         finally:
             by_id = {entry.id: entry for entry in wanted}
+            held = next((c for c in self.cast if c.id == self.story.held_character_id), None)
+            user = held.name if held is not None else "the user"
             for entry_id, text in written.items():
                 entry = by_id[entry_id]
-                entry.condensed = text
+                # A story's entries have their names written in already.
+                entry.condensed = unasked_placeholders(text, entry.content, user)
                 entry.condensed_from = lore_fingerprint(entry.content)
             if written:
                 self.forget_review_undo()

@@ -288,3 +288,30 @@ def test_the_authors_own_condensed_version_is_current_and_blank_takes_it_off(tmp
     assert long_one.condensed_now() == "My own."
     session.set_condensed_lore(long_one, "")
     assert long_one.condensed is None and long_one.condensed_from is None
+
+
+def test_placeholders_are_named_only_for_an_entry_that_has_them():
+    """Named in every request, they had GLM 5.3 write {{user}} 16 times into
+    six condensed entries whose originals had none."""
+    from sealedlore.engine.lore_condense import build_lore_condense_messages
+
+    plain = build_lore_condense_messages("Keep", "the user stands at the gate " * 30)[0].text
+    marked = build_lore_condense_messages("Keep", "{{user}} stands at the gate " * 30)[0].text
+    assert "{{user}}" not in plain and "{{user}}" in marked
+
+
+def test_a_placeholder_the_condenser_made_up_is_written_out(tmp_path, story, cast):
+    from sealedlore.engine.lore_condense import unasked_placeholders
+
+    assert unasked_placeholders("{{user}} and {{ char }} and {{user}}", "the user", "Serrik") == (
+        "Serrik and the character and Serrik"
+    )
+    assert (
+        unasked_placeholders("{{user}} waits", "{{user}} waits long", "Serrik") == "{{user}} waits"
+    )
+    keep = entry("The Keep", 400, always_on=True)
+    session = session_with(
+        tmp_path, story, cast, [keep], replies=["The keep, where {{user}} waits."]
+    )
+    list(session.condense_lore([keep]))
+    assert keep.condensed_now() == "The keep, where Serrik Vaun waits."

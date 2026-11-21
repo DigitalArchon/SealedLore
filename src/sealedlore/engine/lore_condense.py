@@ -22,6 +22,7 @@ Pure: the messages, the reply read, the fit. The session makes the calls
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
@@ -53,11 +54,32 @@ def build_lore_condense_messages(
     title: str, content: str, *, words: int | None = None, texts: PromptTexts = DEFAULT_TEXTS
 ) -> list[PromptMessage]:
     system = texts.fill("lore.condense", words=str(words or target_words(content)))
+    if _PLACEHOLDER.search(content):
+        system += "\n\n" + texts["lore.condense.placeholders"]
     entry = texts.fill("lore.condense.entry", title=title or "(untitled)", content=content.strip())
     return [
         PromptMessage(role="system", parts=(ContentPart(text=system),)),
         PromptMessage(role="user", parts=(ContentPart(text=entry),)),
     ]
+
+
+_PLACEHOLDER = re.compile(r"\{\{\s*(\w+)\s*\}\}")
+
+
+def unasked_placeholders(text: str, source: str, user: str) -> str:
+    """`text` with the {{user}} and {{char}} its `source` hasn't written out:
+    a condensed version is sent as it is, and a placeholder the condenser
+    made up would reach the storyteller as written. {{user}} becomes `user`
+    (the author's character, else "the user"), {{char}} "the character"."""
+    had = {name.lower() for name in _PLACEHOLDER.findall(source)}
+
+    def written(match: re.Match[str]) -> str:
+        name = match.group(1).lower()
+        if name in had or name not in ("user", "char"):
+            return match.group(0)
+        return user if name == "user" else "the character"
+
+    return _PLACEHOLDER.sub(written, text)
 
 
 def parse_condensed_lore(text: str, title: str) -> str:
