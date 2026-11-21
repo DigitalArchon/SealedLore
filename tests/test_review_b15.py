@@ -27,6 +27,7 @@ from sealedlore.engine.tavern_firing import (
     set_entry_setting,
 )
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
+from sealedlore.models.lore import LoreEntry
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.storage.repository import StoryBundle
 from sealedlore.storage.tavern_lore import lore_from_book
@@ -425,3 +426,93 @@ def test_a_models_reply_and_a_scenario_bring_no_half_characters(tmp_path: Path):
     log = tmp_path / "log.jsonl"
     append_jsonl(log, {"text": "cut \ud83d"})
     assert read_jsonl(log) == [{"text": "cut �"}]
+
+
+# --- the people in a lorebook -----------------------------------------------------
+
+
+def _profile(name: str, words: int) -> str:
+    return f"[{name.upper()}]\n" + " ".join(f"{name} fact{i}." for i in range(words // 2))
+
+
+def test_someone_left_in_the_lore_never_leaves_with_the_others():
+    """An entry was taken out whole when under forty words were left, though
+    those words were a person left in the lore: in no entry, and no card."""
+    from sealedlore.engine.lore_people import Shown, parse_split, take_apart
+
+    content = _profile("Alice", 400) + "\n\n" + _profile("Bob", 34)
+    entry_ = LoreEntry(title="The sisters", content=content)
+    shown = Shown(1, entry_.id, entry_.title, (), False, content)
+    reply = (
+        '{"people": [{"name": "Alice", "starts": "[ALICE]"}, {"name": "Bob", "starts": "[BOB]"}]}'
+    )
+    people, _warnings = parse_split(reply, shown)
+    assert [p.name for p in people] == ["Alice", "Bob"]
+    took = take_apart([entry_], [(people[0], "cast"), (people[1], "lore")])
+    assert [c.name for c in took.cast] == ["Alice"]
+    assert took.removed == 0 and took.shortened == 1
+    assert "Bob fact3." in took.lore[0].content and "Alice" not in took.lore[0].content
+
+
+def test_someone_with_only_a_line_stays_when_the_rest_are_taken():
+    from sealedlore.engine.lore_people import Shown, parse_split, take_apart
+
+    content = _profile("Atofe", 400) + "\n\n[BADIGADI]\nHer betrothed, a king."
+    entry_ = LoreEntry(title="Demon kings", content=content)
+    shown = Shown(1, entry_.id, entry_.title, (), False, content)
+    reply = (
+        '{"people": [{"name": "Atofe", "starts": "[ATOFE]"},'
+        ' {"name": "Badigadi", "starts": "[BADIGADI]"}]}'
+    )
+    people, warnings = parse_split(reply, shown)
+    assert [p.name for p in people] == ["Atofe"]
+    assert any("stay in the lore" in warning for warning in warnings)
+    assert not people[0].whole_entry  # the entry holds two people
+    took = take_apart([entry_], [(people[0], "supporting")])
+    assert took.removed == 0
+    assert "Her betrothed, a king." in took.lore[0].content
+
+
+def test_an_entry_longer_than_was_read_keeps_what_nobody_read(monkeypatch):
+    """The finder is shown an entry's first 12,000 words; the last person it
+    named was given everything after them, people it never saw included."""
+    from sealedlore.engine import lore_people
+    from sealedlore.engine.lore_people import Shown, parse_split, take_apart
+
+    monkeypatch.setattr(lore_people, "SPLIT_MOST_WORDS", 300)
+    content = "\n\n".join(_profile(name, 200) for name in ("One", "Two", "Three", "Four"))
+    entry_ = LoreEntry(title="The four", content=content)
+    shown = Shown(1, entry_.id, entry_.title, (), False, content)
+    assert lore_people.read_to(content, 300) is not None
+    assert lore_people.read_to("a few words", 300) is None
+    reply = '{"people": [{"name": "One", "starts": "[ONE]"}, {"name": "Two", "starts": "[TWO]"}]}'
+    people, warnings = parse_split(reply, shown)
+    assert [p.name for p in people] == ["One"]
+    assert any("longer than could be read" in warning for warning in warnings)
+    took = take_apart([entry_], [(people[0], "cast")])
+    left = took.lore[0].content
+    assert "[TWO]" in left and "[FOUR]" in left and "[ONE]" not in left
+
+
+def test_a_number_no_entry_has_is_not_a_crash():
+    """ "n": 1e999 is infinity, and int() of it an OverflowError that ended
+    the whole run, the batches already paid for with it."""
+    from sealedlore.engine.lore_people import Shown, parse_find
+
+    shown = [Shown(1, "id", "Elena", (), False, "Elena Ruiz is a doctor.")]
+    reply = (
+        '{"entries": [{"n": 1e999, "kind": "person", "name": "X"},'
+        ' {"n": true, "kind": "person", "name": "Y"},'
+        ' {"n": 1, "kind": "person", "name": "Elena Ruiz"}]}'
+    )
+    assert [f.name for f in parse_find(reply, shown)] == ["Elena Ruiz"]
+
+
+def test_the_engine_refuses_the_people_finder_in_a_chat(tmp_path: Path, story, cast):
+    from sealedlore.engine.lore_people import LorePeople
+
+    session = tavern_session(tmp_path, story, cast)
+    session.story.mode = "chat"
+    with pytest.raises(ValueError, match="simple chat"):
+        list(session.find_lore_people(session.bundle.lore, LorePeople()))
+    assert not session.provider.requests

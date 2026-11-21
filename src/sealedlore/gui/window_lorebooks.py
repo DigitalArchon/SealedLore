@@ -527,7 +527,10 @@ class LorebooksWindow:
                 self, "No endpoint set up", "Set up an endpoint and a model in Settings first."
             )
             return
-        hidden = session.hidden_ids()
+        # Never what the plot hides, nor lore held back until it is
+        # mentioned: no model has heard of either, and someone found in a
+        # held-back entry would be a card every model reads from then on.
+        hidden = session.hidden_ids() | session.held_back_ids()
         entries = [e for e in session.bundle.lore if e.enabled and e.id not in hidden]
         if not entries:
             self.statusBar().showMessage("The story has no lore to look in.", 6000)
@@ -538,7 +541,13 @@ class LorebooksWindow:
         self._story_spent(session)
         if found is None or self.session is not session:
             return
-        carded = [c.name for c in (*session.cast, *session.supporting)]
+        # Who has a card already, as the Cast board shows them: someone the
+        # plot still hides is named only with spoilers on.
+        if self.config.show_plot_spoilers:
+            cards = (*session.cast, *session.supporting)
+        else:
+            cards = (*session.visible_cast(), *session.visible_supporting())
+        carded = [c.name for c in cards]
         dialog = LorePeopleDialog(
             found, source=world, story=True, carded=carded, parent=self._dialog_parent()
         )

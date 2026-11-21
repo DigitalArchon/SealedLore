@@ -4118,6 +4118,9 @@ class StorySession(
             and current[person.entry_id].content[person.start : person.end].strip() == person.text
         ]
         took = take_apart(self.bundle.lore, people, [r for r in rules if r.entry_id in current])
+        # An earlier review's Undo would put the lore, the cast and the style
+        # back as they were before it, and take all of this with it.
+        self.forget_review_undo()
         self.bundle.lore = took.lore
         for card in took.cast:
             self.cast.append(card)
@@ -4336,6 +4339,7 @@ class StorySession(
         found raises (ProviderError or ValueError). Your characters' session
         makes it for a kept lorebook, the story's for its lore."""
         self._refuse_in_private("Finding the people in the lore")
+        self._refuse_in_chat("Finding the people in the lore")
         shown = shown_entries(entries)
         by_id = {item.entry_id: item for item in shown}
         runs = batches(shown)

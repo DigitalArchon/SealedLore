@@ -90,6 +90,10 @@ class FoundPerson:
     always_on: bool
     # Their part is the entry, all of it that matters (`REMAINDER_WORDS`).
     whole_entry: bool
+    # The entry holds someone else who stays in the lore whatever is chosen
+    # (only a line of their own, or a part that ran past what was read): it
+    # is never taken out whole, however little of it is left.
+    others_stay: bool = False
 
 
 @dataclass
@@ -257,9 +261,12 @@ def parse_find(text: str, batch: Sequence[Shown]) -> list[Finding]:
     for raw in listed if isinstance(listed, list) else []:
         if not isinstance(raw, dict):
             continue
+        number = raw.get("n")
+        if isinstance(number, bool):
+            continue  # true is not entry 1
         try:
-            number = int(raw.get("n"))
-        except (TypeError, ValueError):
+            number = int(number)
+        except (TypeError, ValueError, OverflowError):  # 1e999: infinity
             continue
         kind = _text(raw.get("kind")).lower()
         if number not in numbers or number in found or kind not in _KINDS:
@@ -288,6 +295,18 @@ def _remainder(content: str, parts: Sequence[tuple[int, int]]) -> str:
 
 def _whole(content: str, parts: Sequence[tuple[int, int]]) -> bool:
     return len(_remainder(content, parts).split()) < REMAINDER_WORDS
+
+
+def read_to(content: str, most: int | None = None) -> int | None:
+    """Where in an entry's text the finder stopped reading (`split_messages`
+    shows it SPLIT_MOST_WORDS words): None when it read all of it."""
+    most = SPLIT_MOST_WORDS if most is None else most
+    count = 0
+    for word in re.finditer(r"\S+", content):
+        count += 1
+        if count == most:
+            return word.end() if content[word.end() :].strip() else None
+    return None
 
 
 def single(shown: Shown, finding: Finding) -> FoundPerson:
@@ -355,7 +374,19 @@ def parse_split(text: str, shown: Shown) -> tuple[list[FoundPerson], list[str]]:
         )
         keep = [i for i, item in enumerate(unique) if item[1] not in short]
         unique, spans = [unique[i] for i in keep], [spans[i] for i in keep]
-    whole = _whole(shown.content, spans)
+    # An entry longer than was read: the last person found has everything
+    # after them, people the finder never saw among it (a 17,000-word entry
+    # of four gave the second a card of 10,000 words, the fourth's profile in
+    # it, and the entry left the lore). They stay where they are.
+    unread = read_to(shown.content) is not None and bool(unique)
+    if unread:
+        warnings.append(
+            f"“{shown.title}” is longer than could be read at once, so {unique[-1][1]} and "
+            "whoever comes after stay in the lore"
+        )
+        unique, spans = unique[:-1], spans[:-1]
+    stay = bool(short) or unread
+    whole = _whole(shown.content, spans) and not stay
     people = [
         FoundPerson(
             name=name,
@@ -368,6 +399,7 @@ def parse_split(text: str, shown: Shown) -> tuple[list[FoundPerson], list[str]]:
             end=end,
             always_on=shown.always_on,
             whole_entry=whole and len(unique) == 1,
+            others_stay=stay,
         )
         for (start, name, aliases, summary), (_s, end) in zip(unique, spans, strict=True)
     ]
@@ -427,12 +459,20 @@ def take_apart(
     dropped, who have a card already): an entry left with nobody's own words
     goes. The rules' entries go too, their text
     joined under their titles for the style's notes. People left in the lore
-    ("lore") change nothing. `lore` is not changed: a new list is made."""
+    ("lore") change nothing: an entry that still holds one of them, or
+    someone who stays whatever is chosen (`others_stay`), is cut down and
+    never taken out, however few words are left (under forty were taken for
+    nobody's, and a person left in the lore went with them into no entry and
+    no card). `lore` is not changed: a new list is made."""
     cast: list[Character] = []
     supporting: list[Character] = []
     cut: dict[str, list[tuple[int, int]]] = {}
+    stays: set[str] = set()
     for person, placement in people:
+        if person.others_stay:
+            stays.add(person.entry_id)
         if placement == "lore":
+            stays.add(person.entry_id)
             continue
         if placement != "drop":
             card = character_of(person, to_cast=placement == "cast")
@@ -452,7 +492,7 @@ def take_apart(
         if not spans:
             kept.append(entry)
             continue
-        if _whole(entry.content, spans):
+        if _whole(entry.content, spans) and entry.id not in stays:
             removed += 1
             continue
         left = re.sub(r"\n{3,}", "\n\n", _remainder(entry.content, spans)).strip()
