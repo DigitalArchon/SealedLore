@@ -447,6 +447,10 @@ class LorebooksWindow:
             return
         if session.embeddings is None or session.lore_layout().mode != "select":
             return
+        if session.fires_like_tavern:
+            # Fired by SillyTavern's rules, the lore is never ranked by its
+            # vectors: every entry was sent to be embedded, for nothing.
+            return
         pending = session.lore_without_vectors()
         if len(pending) < least:
             return

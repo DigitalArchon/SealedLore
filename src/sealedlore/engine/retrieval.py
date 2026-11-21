@@ -563,7 +563,16 @@ def _cut(text: str, budget: int, count_tokens: Callable[[str], int]) -> str:
             best = piece
         if best:
             return best
-    return ""
+    # No sentence or word fits: text with no spaces in it (Chinese, Japanese),
+    # cut at a character, where it used to be left out altogether.
+    low, high = 0, len(text) if budget > 0 else 0
+    while low < high:
+        middle = (low + high + 1) // 2
+        if count_tokens(text[:middle]) <= budget:
+            low = middle
+        else:
+            high = middle - 1
+    return text[:low].rstrip()
 
 
 def fitted_entry(
@@ -589,6 +598,7 @@ def fitted_entry(
             return None
         return entry.model_copy(update={"content": f"{opening} {GAP}"})
     chosen: dict[int, str] = {0: parts[0]}
+    added: list[int] = []
     used = sizes[0]
     scores = bm25(words(query), [words(part) for part in parts])
     ranked = sorted(range(1, len(parts)), key=lambda i: (-scores[i], i))
@@ -596,6 +606,7 @@ def fitted_entry(
     for index in ranked:
         if used + sizes[index] <= budget:
             chosen[index] = parts[index]
+            added.append(index)
             used += sizes[index]
         elif scores[index] > 0 and not cut_one:
             # The part the moment is most about, too long for what is left:
@@ -604,17 +615,29 @@ def fitted_entry(
             kept = _cut(parts[index], budget - used - count_tokens(GAP), count_tokens)
             if kept:
                 chosen[index] = f"{kept} {GAP}"
+                added.append(index)
                 used += count_tokens(chosen[index]) + 1
-    pieces: list[str] = []
-    previous = -1
-    for index in sorted(chosen):
-        if index != previous + 1:
+
+    def joined() -> str:
+        pieces: list[str] = []
+        previous = -1
+        for index in sorted(chosen):
+            if index != previous + 1:
+                pieces.append(GAP)
+            pieces.append(chosen[index])
+            previous = index
+        if previous != len(parts) - 1:
             pieces.append(GAP)
-        pieces.append(chosen[index])
-        previous = index
-    if previous != len(parts) - 1:
-        pieces.append(GAP)
-    return entry.model_copy(update={"content": "\n\n".join(pieces)})
+        return "\n\n".join(pieces)
+
+    # A gap mark stands wherever text was left out, and room was kept for two:
+    # parts chosen from all over a long entry (a glossary) came out a fifth
+    # over. The parts least about the turn go until it fits.
+    content = joined()
+    while added and head + count_tokens(content) > room:
+        del chosen[added.pop()]
+        content = joined()
+    return entry.model_copy(update={"content": content})
 
 
 def fit_lore(

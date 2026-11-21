@@ -459,7 +459,9 @@ class ArchivalRuntime:
             yield from self._adopt_scan(job.scan, scanned, turn=turn)
         elif job.scan is not None:
             self._log_dropped("characters", job.scan, reason)
-        if job.suggest is not None and adopted:
+        # Only for prose all adopted: a chapter dropped was edited or left
+        # behind since, and what was read of it is no longer the story's.
+        if job.suggest is not None and adopted and len(adopted) == len(job.chapters):
             yield from self._adopt_suggestions(job.suggest, scanned, turn=turn)
         elif job.suggest is not None:
             self._log_dropped("story_suggestions", job.suggest, reason)

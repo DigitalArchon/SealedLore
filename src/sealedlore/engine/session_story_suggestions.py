@@ -27,6 +27,16 @@ from sealedlore.providers.base import ChatRequest, ProviderError
 
 # Where a lore entry the story suggested came from, as the Lore page says.
 FROM_THE_STORY = "the story (a suggestion)"
+# With this many waiting, archived prose is no longer read for more: the
+# author hasn't looked, and each reading is a call (and its list of what
+# waits grew with every one, in story.json and in the next request).
+WAITING_MOST = 40
+# What was turned down is remembered so far back.
+DECLINED_MOST = 500
+WAITING = (
+    "suggestions are waiting already (Story → Suggestions from the story…): "
+    "apply them or turn them down first"
+)
 
 
 class StorySuggestionsRuntime:
@@ -35,8 +45,14 @@ class StorySuggestionsRuntime:
         return self.story.story_suggestions
 
     def suggests_changes(self) -> bool:
-        """Read archived prose for them: on, never in a chat or a private scene."""
-        return self.config.suggest_story_changes and not self.story.chat and not self.in_private
+        """Read archived prose for them: on, never in a chat or a private
+        scene, nor while as many wait as anyone would go through."""
+        return (
+            self.config.suggest_story_changes
+            and not self.story.chat
+            and not self.in_private
+            and len(self.story_suggestions) < WAITING_MOST
+        )
 
     def _suggestion_sources(self):  # noqa: ANN202 - (lore, cards, reserved names)
         """What the reader may see, and the names a new entry may not take."""
@@ -81,6 +97,8 @@ class StorySuggestionsRuntime:
             declined=self.story.suggestions_declined,
             reserved_names=reserved,
             node_ids=[node.id for node in nodes],
+            # As the request was made: a change only to what it showed.
+            prose=render_chunk(nodes, self.cast, texts=self.texts),
         )
         self.story.story_suggestions.extend(found)
         if found:
@@ -91,6 +109,9 @@ class StorySuggestionsRuntime:
         """Read `nodes` for what the lore and cards should take in. Raises
         ProviderError or ValueError; `suggest_after_archive` never does."""
         self._refuse_in_private("Suggesting changes to the lore and cards")
+        self._refuse_in_chat("Suggesting changes to the lore and cards")
+        if len(self.story_suggestions) >= WAITING_MOST:
+            raise ValueError(f"{len(self.story_suggestions)} {WAITING}")
         prose = render_chunk(nodes, self.cast, texts=self.texts)
         if not prose.strip():
             return []
@@ -131,6 +152,7 @@ class StorySuggestionsRuntime:
         """On demand (Story → Suggestions from the story…): the most recent
         prose still in the window."""
         self._refuse_in_private("Suggesting changes to the lore and cards")
+        self._refuse_in_chat("Suggesting changes to the lore and cards")
         recent = list(self.split().verbatim)[-nodes:]
         found = self.suggest_from(recent)
         if found:
@@ -174,6 +196,9 @@ class StorySuggestionsRuntime:
         text = (content if content is not None else suggestion.content).strip()
         if not text:
             raise ValueError("there is nothing to add")
+        # An earlier review's Undo would put the lore and the cards back as
+        # they were before it: this change gone, and the suggestion with it.
+        self.forget_review_undo()
         if suggestion.kind == "lore_new":
             name = (title if title is not None else suggestion.title).strip()
             if not name:
@@ -214,4 +239,5 @@ class StorySuggestionsRuntime:
         key = decline_key(suggestion)
         if key not in self.story.suggestions_declined:
             self.story.suggestions_declined.append(key)
+        del self.story.suggestions_declined[:-DECLINED_MOST]
         self.save()

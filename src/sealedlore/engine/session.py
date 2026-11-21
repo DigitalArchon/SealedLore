@@ -5170,6 +5170,10 @@ class StorySession(
                     self._log_dropped("ledger", chapter.ledger, reason)
             if job.scan is not None:
                 self._log_dropped("characters", job.scan, reason)
+            if job.suggest is not None:
+                # Paid for like the scan beside it: it was in neither the
+                # log nor the cost.
+                self._log_dropped("story_suggestions", job.suggest, reason)
         merge = self._merge_job
         if merge is not None:
             merge.done.wait(wait_seconds)

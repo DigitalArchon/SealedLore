@@ -17,6 +17,12 @@ see). The reply is held to that: a change to an entry or card not shown, a
 new entry under a title that exists or was turned down, an empty or unchanged
 text, are dropped.
 
+What is shown has a size (`shown_lore`, `shown_cards`): the entries and cards
+the prose names, whole, while they fit; one that doesn't fit isn't shown, and
+so can't be changed (shown in part, its new text would lose the rest). On a
+320-entry lorebook of long entries the request was many times the prose, on
+every archive run.
+
 Pure: the messages and the reply read. The session makes the call
 (engine/session_story_suggestions.py).
 """
@@ -36,6 +42,17 @@ from sealedlore.models.story_suggestion import StorySuggestion
 
 # At most this many of each kind from one reading.
 MOST_OF_EACH = 5
+# The most of the entries' text and of the cards' a reading is shown, in
+# characters (about 10,000 and 5,000 tokens): far more than a stretch of
+# story names in a story with a lorebook of ordinary size, where nothing is
+# left out.
+LORE_CHARS = 40_000
+CARDS_CHARS = 20_000
+# What a reply may hold: past these it isn't a title, a reason or an entry.
+TITLE_CHARS = 200
+WHY_CHARS = 600
+CONTENT_CHARS = 20_000
+KEYWORD_CHARS = 80
 # A card's addition past this is not a sentence or two.
 CARD_WORDS_MAX = 120
 KEYWORDS_MAX = 8
@@ -56,6 +73,29 @@ def _squeeze(text: str) -> str:
 
 # The setting shown, at most: enough for any setting the author wrote.
 SETTING_CHARS = 6000
+
+
+def _fitting(items: Sequence, text_of, most: int) -> list:  # noqa: ANN001
+    """`items` in their order, each whole while they fit `most` characters."""
+    kept, used = [], 0
+    for item in items:
+        size = len(text_of(item))
+        if used + size <= most:
+            kept.append(item)
+            used += size
+    return kept
+
+
+def shown_lore(prose: str, lore: Sequence[LoreEntry]) -> list[LoreEntry]:
+    """The entries whose text a reading of `prose` is shown: those it names,
+    whole, in the lorebook's order, while they fit."""
+    named = [e for e in lore if mentions_entry(prose, e)]
+    return _fitting(named, lambda e: e.content, LORE_CHARS)
+
+
+def shown_cards(prose: str, cards: Sequence[Character]) -> list[Character]:
+    """The cards a reading of `prose` is shown: of the characters it names."""
+    return _fitting([c for c in cards if mentions(prose, c)], _card_text, CARDS_CHARS)
 
 
 def build_suggestion_messages(
@@ -80,7 +120,7 @@ def build_suggestion_messages(
         body.append("THE STORY'S SETTING:\n" + shown)
     if lore:
         body.append("THE LOREBOOK'S ENTRIES (titles):\n" + "\n".join(f"- {e.title}" for e in lore))
-        named = [e for e in lore if mentions_entry(prose, e)]
+        named = shown_lore(prose, lore)
         if named:
             body.append(
                 "ENTRIES THE PROSE NAMES, AS THEY STAND:\n\n"
@@ -88,7 +128,7 @@ def build_suggestion_messages(
             )
     else:
         body.append("THE LOREBOOK'S ENTRIES: none yet.")
-    named_cards = [c for c in cards if mentions(prose, c)]
+    named_cards = shown_cards(prose, cards)
     if named_cards:
         body.append(
             "THE CARDS OF THE CHARACTERS THE PROSE NAMES:\n\n"
@@ -118,14 +158,26 @@ def parse_story_suggestions(
     declined: Sequence[str] = (),
     reserved_names: Sequence[str] = (),
     node_ids: Sequence[str] = (),
+    prose: str | None = None,
 ) -> list[StorySuggestion]:
     """The reply's suggestions that hold up. Raises ValueError when the
     reply holds no JSON object. `reserved_names`: titles and names a new
     entry may not take (a hidden card's or entry's: the reply never saw
-    them, but a new entry under one would stand beside it)."""
+    them, but a new entry under one would stand beside it). `prose`: what
+    was read, so a change is kept only to an entry or a card the reading was
+    shown (an entry's new text written without its old one would lose all
+    that was still true); None holds a change to any of `lore` and `cards`."""
     data = extract_json(text, dict, "object of suggestions")
-    by_title = {e.title.strip().casefold(): e for e in lore}
-    taken = set(by_title) | {name.strip().casefold() for name in reserved_names}
+    titles = [e.title.strip().casefold() for e in lore]
+    changeable = lore if prose is None else shown_lore(prose, lore)
+    # By its title, where one entry alone has it: never a guess between two.
+    by_title = {
+        e.title.strip().casefold(): e
+        for e in changeable
+        if titles.count(e.title.strip().casefold()) == 1
+    }
+    cards_shown = cards if prose is None else shown_cards(prose, cards)
+    taken = set(titles) | {name.strip().casefold() for name in reserved_names}
     # People are never lore entries: a new entry under a card's name is the
     # card's business (live, GLM 5.3 wrote one for a warlord).
     taken |= {form.casefold() for card in cards for form in name_forms(card)}
@@ -149,6 +201,8 @@ def parse_story_suggestions(
         title, content = _text(item.get("title")), _text(item.get("content"))
         if not title or not content or title.casefold() in taken:
             continue
+        if len(title) > TITLE_CHARS or len(content) > CONTENT_CHARS:
+            continue
         taken.add(title.casefold())
         keywords = item.get("keywords")
         keep(
@@ -158,10 +212,10 @@ def parse_story_suggestions(
                 keywords=[
                     k.strip()
                     for k in (keywords if isinstance(keywords, list) else [])
-                    if isinstance(k, str) and k.strip()
+                    if isinstance(k, str) and k.strip() and len(k.strip()) <= KEYWORD_CHARS
                 ][:KEYWORDS_MAX],
                 content=content,
-                why=_text(item.get("why")),
+                why=_why(item),
                 node_ids=list(node_ids),
             )
         )
@@ -170,18 +224,22 @@ def parse_story_suggestions(
         content = _text(item.get("content"))
         if entry is None or not content or _squeeze(content) == _squeeze(entry.content):
             continue
+        if len(content) > CONTENT_CHARS:
+            continue
         keep(
             StorySuggestion(
                 kind="lore_change",
                 target_id=entry.id,
                 title=entry.title,
                 content=content,
-                why=_text(item.get("why")),
+                why=_why(item),
                 node_ids=list(node_ids),
             )
         )
     for item in _items(data, "card_change"):
         card = _card_named(_text(item.get("name")), cards)
+        if card is not None and not any(card is shown for shown in cards_shown):
+            continue
         addition = _text(item.get("add"))
         if card is None or not addition or len(addition.split()) > CARD_WORDS_MAX:
             continue
@@ -193,7 +251,7 @@ def parse_story_suggestions(
                 target_id=card.id,
                 title=card.name,
                 content=addition,
-                why=_text(item.get("why")),
+                why=_why(item),
                 node_ids=list(node_ids),
             )
         )
@@ -209,6 +267,11 @@ def _items(data: dict, key: str) -> list[dict]:
 
 def _text(value: object) -> str:
     return value.strip() if isinstance(value, str) else ""
+
+
+def _why(item: dict) -> str:
+    said = _text(item.get("why"))
+    return said if len(said) <= WHY_CHARS else said[: WHY_CHARS - 1].rstrip() + "…"
 
 
 def _card_named(name: str, cards: Sequence[Character]) -> Character | None:

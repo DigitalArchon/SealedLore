@@ -297,6 +297,7 @@ def their_lorebook(name: str) -> str:
 # "⚠️⛔READ THIS⛔⚠️"). Lorebooks written for SillyTavern dress their memos so,
 # where a story matches a title against the prose (a place's picture, lore held
 # back until mentioned) and lists it on the Lore page.
+TITLE_MOST_CHARS = 400
 _BRACKETS = re.compile(r"[\[【(〔]([^\]】)〕]*)[\]】)〕]")
 
 
@@ -330,6 +331,9 @@ def clean_title(title: str) -> str:
     unwrapped ("═══[World]═══" is "World"). A title with no words at all
     ("1", "★") gives "" for the reader to name the entry otherwise; digits
     alone are no title either."""
+    # No title is longer: twenty thousand opening brackets took seconds an
+    # entry to look for their closing ones.
+    title = title[:TITLE_MOST_CHARS]
     text = _BRACKETS.sub(lambda m: m.group(0) if _has_words(m.group(1)) else " ", title)
     text = " ".join(_ends_stripped(text).split())
     whole = _BRACKETS.fullmatch(text)

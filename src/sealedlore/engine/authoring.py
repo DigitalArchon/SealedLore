@@ -14,6 +14,7 @@ from __future__ import annotations
 import copy
 import difflib
 import json
+import math
 import re
 from collections.abc import Collection, Iterator, Mapping, Sequence
 from typing import Any, get_args
@@ -1622,7 +1623,15 @@ def _number(value: object, what: str) -> float:
             value = float(str(value))
         except ValueError:
             raise ValueError(f"{what} must be a number") from None
-    return float(value)
+    try:
+        number = float(value)
+    except OverflowError:  # an integer of hundreds of digits
+        raise ValueError(f"{what} must be a number") from None
+    if not math.isfinite(number):
+        # "inf", 1e999: int() of it was an OverflowError past every caller's
+        # handling, and the whole review (or follow-up) was lost to one field.
+        raise ValueError(f"{what} must be a number")
+    return number
 
 
 def _check_generation(field: str | None, value: object, facts: ModelInfo | None) -> None:

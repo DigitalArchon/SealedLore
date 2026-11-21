@@ -287,3 +287,17 @@ def test_switched_off_the_archive_reads_no_suggestions(session: StorySession):
     job = session._archive_job
     assert job is not None and job.done.wait(5) and job.suggest is None
     assert "suggest" not in session.provider.background.calls
+
+
+def test_closing_with_a_job_out_logs_the_suggestions_call_too(session: StorySession):
+    """Paid for like the scan beside it, and in neither the log nor the cost
+    when the story was closed before a turn adopted the job (the review of
+    3.1.0b15)."""
+    list(session.send(turn()))
+    job = session._archive_job
+    assert job is not None and job.done.wait(5) and job.suggest is not None
+    session.close(wait_seconds=1)
+    log = read_api_log(session.story.id, root=session.root)
+    kinds = [entry["kind"] for entry in log]
+    assert "story_suggestions_request" in kinds and "story_suggestions_response" in kinds
+    assert "characters_response" in kinds
