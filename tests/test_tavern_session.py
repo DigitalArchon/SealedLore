@@ -105,11 +105,11 @@ def test_a_turn_fires_its_lore_and_records_it(session: StorySession):
     assert report.selector == "sillytavern"
     fired = [i.entry.title for i in report.injected]
     # The wolves by their key, and the Hollow King by the wolves' own text
-    # (recursion); the omen's 0% chance never comes up; the road isn't named.
+    # (recursion); the omen's 0% chance came in switched off; the road isn't named.
     assert fired == ["Hollow King", "The Grey Wolves"]  # SillyTavern's order: lowest first
     assert report.injected[0].describe().endswith("in another entry's text")
-    not_fired = {entry.title: why for entry, why in report.not_fired}
-    assert not_fired["Rare Omen"] == "its 0% chance didn't come up"
+    omen = next(e for e in session.bundle.lore if e.title == "Rare Omen")
+    assert not omen.enabled
     # The constant stands with the world, cached; the rest go with the turn.
     assert [e.title for e in report.standing] == ["The Valley"]
     text = sent_text(session)
@@ -174,8 +174,14 @@ def test_sealedlores_own_way_is_untouched(tmp_path: Path, story, cast):
 def test_the_import_says_what_is_kept_for_firing_as_sillytavern_does():
     from sealedlore.storage.tavern_lore import KEPT_NOTE
 
-    notes = lore_from_book(WORLD).notes()
-    assert any(note.startswith("sticky, cooldown and delay") for note in notes)
+    imported = lore_from_book(WORLD)
+    notes = imported.notes()
+    assert "SealedLore's own rules don't use sticky, cooldown and delay (1 entry)." in notes
     assert notes[-1] == KEPT_NOTE
+    # A 0% chance, never sent in SillyTavern, comes in switched off, said
+    # under either rules; nothing kept is said under SillyTavern's.
+    switched = next(note for note in notes if note.startswith("Switched off"))
+    assert imported.notes("sillytavern") == [switched]
+    assert imported.said("Lorebook", "sillytavern") == [f"Lorebook: s{switched[1:]}"]
     plain = {"entries": {"0": {"uid": 0, "key": ["x"], "content": "y"}}}
     assert KEPT_NOTE not in lore_from_book(plain).notes()

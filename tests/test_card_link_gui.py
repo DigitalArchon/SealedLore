@@ -679,7 +679,10 @@ def test_what_a_cards_lorebook_leaves_out_is_said_when_they_join(app, window, mo
     assert said and said[0][1] == (
         "Elena joined the cast, with 1 entry of their lorebook in the story's lore (the Lore page)."
     )
-    assert any("Elena's lorebook: left out second keywords" in note for note in said[0][2])
+    assert any(
+        "Elena's lorebook: SealedLore's own rules don't use second keywords" in note
+        for note in said[0][2]
+    )
 
 
 def test_saved_to_the_card_the_page_shows_it_and_typing_keeps_it(app, window, monkeypatch):

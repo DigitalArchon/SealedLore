@@ -704,7 +704,7 @@ def test_a_lorebook_becomes_lore_and_says_what_it_left_out():
         "sticky, cooldown and delay",
         "inclusion groups",
         "where in the prompt",
-        "no content",
+        "no text",
     ):
         assert said in notes
 

@@ -223,8 +223,8 @@ def test_a_novelai_lorebook_converts_as_sillytavern_converts_it():
     # What a story would have kept is said: its Always On.
     assert made.left_out == {"always_on": 1}
     assert made.notes() == [
-        "NovelAI's Always On, which SillyTavern's import drops too: the entry is sent only "
-        "when a keyword is mentioned (1 entry)"
+        "Left out NovelAI's Always On, which SillyTavern's import drops too: the entry is "
+        "sent only when a keyword is mentioned (1 entry)."
     ]
 
 
@@ -418,7 +418,7 @@ def test_the_rest_reads_a_converted_book_as_sillytaverns_own():
     ]
     assert novel.left_out == {"always_on": 1, "regex": 1, "empty": 1}
     notes = novel.notes()
-    assert notes[0].startswith("NovelAI's Always On") and "(1 entry)" in notes[0]
+    assert notes[0].startswith("Left out NovelAI's Always On") and "(1 entry)" in notes[0]
     agnai = lorebook_of(AGNAI_BOOK, "agnai.json").lore()
     assert [(e.title, e.enabled) for e in agnai.entries] == [
         ("The farmhouse", True),

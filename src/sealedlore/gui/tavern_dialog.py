@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.gui.lore_rules import LoreRulesChoice, settings_in_use
 from sealedlore.gui.ref_images import thumbnail_of
 from sealedlore.gui.sizing import GrowingText, size_to_screen
 from sealedlore.models.tavern import CardAsset
@@ -294,8 +295,10 @@ class CardImportDialog(QDialog):
         form.addRow("", self.preview_pictures)
         form.addRow("", self.instructions)
         form.addRow("", self.expressions)
-        made = lore_from_card(card, lambda text: text).entries if card.book else []
+        book = lore_from_card(card, lambda text: text) if card.book else None
+        made = book.entries if book is not None else []
         off = sum(not entry.enabled for entry in made)
+        self.lore_rules: LoreRulesChoice | None = None
         if made:
             # Said before it is made: the card's whole lorebook comes, as a
             # story from the card is set in the card's world (one joining a
@@ -304,6 +307,8 @@ class CardImportDialog(QDialog):
             lore.setWordWrap(True)
             lore.setTextFormat(Qt.PlainText)
             form.addRow("Lore", lore)
+            self.lore_rules = LoreRulesChoice(uses=settings_in_use(book))
+            form.addRow("Lore fires by", self.lore_rules)
 
         note = QLabel(
             "Setup opens next, to set the style (person, tense, length) before the story "
@@ -373,6 +378,7 @@ class CardImportDialog(QDialog):
             "world": self.as_world.isChecked(),
             "instructions": bool(self.card.instructions) and self.instructions.isChecked(),
             "expressions": bool(self.card.expressions) and self.expressions.isChecked(),
+            "lore_firing": self.lore_rules.value() if self.lore_rules else "sillytavern",
         }
 
 

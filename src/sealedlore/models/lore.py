@@ -25,7 +25,7 @@ class TavernEntry(BaseModel):
 
 class TavernWorldInfo(BaseModel):
     """SillyTavern's World Info settings, a story's own when its lore fires as
-    SillyTavern's does (Lore page, Entries fire). SillyTavern's defaults."""
+    SillyTavern's does (Lore page, Lore fires by). SillyTavern's defaults."""
 
     model_config = ConfigDict(validate_assignment=True)
 

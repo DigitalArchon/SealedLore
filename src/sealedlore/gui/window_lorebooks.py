@@ -411,7 +411,11 @@ class LorebooksWindow:
         if not accepted or not self._leave_for_new():
             return
         scenario, notes = lorebooks.scenario_from(
-            book, title=chosen.title, player=chosen.player, about_player=chosen.about_player
+            book,
+            title=chosen.title,
+            player=chosen.player,
+            about_player=chosen.about_player,
+            lore_firing=chosen.lore_firing,
         )
         bundle = bundle_from_scenario(scenario)
 

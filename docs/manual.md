@@ -1622,10 +1622,27 @@ made from it keep their own lore).
 the story's title, who you play (a name, and a line about them; blank, and you
 choose someone from the cast when it begins), whether to **Bring in
 characters from Your characters** next, and whether to **Find the people its
-lore describes, to make them characters** (below). The story takes a copy of
-every entry as its lore, always-sent ones still always sent, so what you
-change here afterwards reaches only stories made after; Setup opens next, then
-Start. A story already open can take a kept lorebook's entries too: **Add to
+lore describes, to make them characters** (below), and which rules its lore
+**fires by**: **SillyTavern's rules** (the default, since the lorebook was
+written for them: every entry's own second keywords, chance, timing, groups
+and order work as they did there) or **SealedLore's rules** (see "Lore fired
+exactly as SillyTavern fires it"); it says which of SillyTavern's settings
+the lorebook's entries use. The story takes a copy of every entry as its
+lore, always-sent ones still always sent, so what you change here afterwards
+reaches only stories made after; Setup opens next, then Start. A story made
+from a character card's own scenario asks the same when the card has a
+lorebook.
+
+What the import says it couldn't bring follows the rules chosen. Under either
+rules it says what is really lost: where in the prompt an entry went (at a
+depth in the chat or by the Author's Note: SealedLore places lore itself) and
+entries with no text. An entry with a 0% chance, which SillyTavern never
+sends, comes in switched off (tick Enabled on the Lore page to send it).
+Under SealedLore's rules it also names the settings those rules don't use,
+such as second keywords (the first keywords alone decide); each entry keeps
+them, so switching the story to SillyTavern's rules later puts them to work.
+An entry kept out of recursion needs no note: SealedLore's rules never fire
+an entry from another entry's text. A story already open can take a kept lorebook's entries too: **Add to
 the open story…** here, or **From Lorebooks…** in the Lore page's
 SillyTavern lorebook menu, lists them all to untick or change for that story
 alone. **Keep in Lorebooks…** in the same menu keeps the story's lore as a
@@ -2741,9 +2758,12 @@ brought in far more than the scene needed.
 
 A lorebook made for SillyTavern is tuned to SillyTavern's own rules: which
 entries fire on which messages, for how long, and how many at once. On the
-**Lore** page, **Entries** chooses how this story's entries are sent each
-turn: **chosen SealedLore's way** (the default; as Settings → Lore says) or
-**fired exactly as SillyTavern does**. Fired SillyTavern's way, each turn's
+**Lore** page, **Lore fires by** chooses how this story's entries are sent
+each turn: **SealedLore's rules** (the default for a story you write; as
+Settings → Lore says) or **SillyTavern's rules** (the default for a story
+made from a lorebook or a card with one). Under SealedLore's rules, a line
+under it says how many entries carry SillyTavern settings those rules leave
+unused; its tooltip says what the rules chosen do. Fired SillyTavern's way, each turn's
 entries come from SillyTavern 1.19's own rules and each entry's own settings,
 as the lorebook brought them:
 

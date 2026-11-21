@@ -7,11 +7,13 @@ shape, which SillyTavern imports as it is; a card's own in the second. The
 other apps' lorebooks SillyTavern imports (NovelAI's, Agnai's, RisuAI's) are
 converted into its own shape as it converts them, and read from there.
 
-SealedLore's lore is keywords, content, always-on and enabled. What a
+SealedLore's own lore is keywords, content, always-on and enabled. What a
 SillyTavern entry does beyond that (second keywords with their logic, a
-chance below 100%, timing, groups, where in the prompt it goes, regular
-expressions) has nothing to become, so it is left out and counted, and the
-import says what went. Conversions are pure; only `open_lorebook` (and
+chance below 100%, timing, groups, regular expressions) is kept with the
+entry (`LoreEntry.tavern`) for a story whose lore fires as SillyTavern's does
+(engine/tavern_firing.py), counted, and said on import in the words of the
+story's rules (`LoreImport.said`). Where in the prompt an entry went is lost
+under either. Conversions are pure; only `open_lorebook` (and
 `read_lorebook`), `is_converted_lorebook` and `write_lorebook` touch disk.
 """
 
@@ -61,47 +63,95 @@ class UnconvertibleLorebook(LorebookError):
 @dataclass
 class LoreImport:
     entries: list[LoreEntry] = field(default_factory=list)
-    # What SillyTavern did with them that SealedLore doesn't, counted by kind.
+    # What SillyTavern did with them that SealedLore's own rules don't, or
+    # that neither does, counted by kind.
     left_out: Counter[str] = field(default_factory=Counter)
 
-    def notes(self) -> list[str]:
-        """The left-out features in words, one line each; and, last, that
-        those SillyTavern's own rules use are kept with each entry
-        (`LoreEntry.tavern`) for a story whose lore fires as SillyTavern's
-        does (engine/tavern_firing.py)."""
-        said = [
-            f"{_LEFT_OUT[kind]} ({count} {'entry' if count == 1 else 'entries'})"
-            for kind, count in sorted(self.left_out.items(), key=lambda item: _ORDER[item[0]])
-        ]
-        if any(kind in KEPT_FOR_FIRING for kind in self.left_out):
+    def notes(self, firing: str = "sealedlore") -> list[str]:
+        """What a story firing its lore by `firing` ("sealedlore" or
+        "sillytavern", `StoryDefaults.lore_firing`) does without, or
+        differently, one sentence each; and, under SealedLore's own rules,
+        last, that each entry keeps those settings for SillyTavern's. Under
+        SillyTavern's rules nothing kept is said: it all works as it did
+        there. Sentences, not phrases: a caller prefixing "left out" once
+        made the last of them "left out Each entry keeps these settings"
+        (the author's screenshot, Nov 21 2026)."""
+
+        def counted(kind: str) -> str:
+            count = self.left_out[kind]
+            return f"{count} {'entry' if count == 1 else 'entries'}"
+
+        kinds = sorted(self.left_out, key=lambda kind: _ORDER.get(kind, len(_ORDER)))
+        said: list[str] = []
+        unused: list[str] = []
+        for kind in kinds:
+            if not self.left_out[kind]:
+                continue
+            if kind in KEPT_FOR_FIRING:
+                if firing != "sillytavern":
+                    unused.append(f"{_UNUSED[kind]} ({counted(kind)})")
+            else:
+                words = _LOST_TAVERN if firing == "sillytavern" else _LOST
+                said.append(f"{words[kind]} ({counted(kind)}).")
+        if unused:
+            said += [f"SealedLore's own rules don't use {phrase}." for phrase in unused]
             said.append(KEPT_NOTE)
         return said
 
+    def said(self, lead: str, firing: str = "sealedlore") -> list[str]:
+        """`notes`, each led by `lead` ("Lorebook", "Jane's lorebook") but
+        the last, which speaks of every entry."""
+        return [
+            note if note == KEPT_NOTE else f"{lead}: {_after_colon(note)}"
+            for note in self.notes(firing)
+        ]
 
-_LEFT_OUT = {
-    # Lost converting another app's lorebook, as SillyTavern's import loses it
-    # (`convertNovelLorebook` sets every entry's `constant` false).
-    "always_on": "NovelAI's Always On, which SillyTavern's import drops too: the entry is "
-    "sent only when a keyword is mentioned",
+
+def _after_colon(note: str) -> str:
+    """A sentence after a lead and a colon: "Left out…" as "left out…",
+    a name ("SealedLore's…") as written."""
+    if note.startswith(("Left out", "Switched off")):
+        return note[0].lower() + note[1:]
+    return note
+
+
+# Settings each entry keeps for SillyTavern's rules, which SealedLore's own
+# don't use: what happens instead under SealedLore's.
+_UNUSED = {
     "secondary": "second keywords and their logic: the first keywords alone decide",
-    "regex": "keywords written as regular expressions",
+    "regex": "keywords written as regular expressions: they never match",
     "probability": "a chance below 100%: the entry is sent whenever it applies",
     "timing": "sticky, cooldown and delay",
     "group": "inclusion groups",
-    "placement": "where in the prompt it went: SealedLore places lore itself",
-    "recursion": "recursion settings",
+    "recursion": "firing only from other entries' text: the story's own words fire it",
     "filter": "character filters",
-    "empty": "entries with no content, not imported",
 }
-_ORDER = {kind: index for index, kind in enumerate(_LEFT_OUT)}
-# What SealedLore's own way leaves out but each entry keeps, for a story that
-# fires its lore exactly as SillyTavern does (Lore page, Entries).
-KEPT_FOR_FIRING = frozenset(
-    {"secondary", "regex", "probability", "timing", "group", "recursion", "filter"}
-)
+KEPT_FOR_FIRING = frozenset(_UNUSED)
+# Lost under either rules: the story's own words, and SillyTavern's.
+_LOST = {
+    # Converting another app's lorebook, as SillyTavern's import loses it
+    # (`convertNovelLorebook` sets every entry's `constant` false).
+    "always_on": "Left out NovelAI's Always On, which SillyTavern's import drops too: the "
+    "entry is sent only when a keyword is mentioned",
+    # A 0% chance is never sent in SillyTavern; always on and enabled here,
+    # a note to readers of the book went with every turn (a signature,
+    # the author's 320-entry world file, Nov 21 2026).
+    "never": "Switched off entries with a 0% chance, which SillyTavern never sends: tick "
+    "Enabled on the Lore page to send one",
+    "placement": "Left out where in the prompt it went: SealedLore places lore itself, "
+    "always-on entries with the world",
+    "empty": "Left out entries with no text",
+}
+_LOST_TAVERN = {
+    **_LOST,
+    "placement": "Left out where in the prompt it went (at a depth in the chat, by the "
+    "Author's Note): SealedLore places lore itself, entries nothing can stop with the "
+    "world and the rest with the turn",
+}
+_ORDER = {kind: index for index, kind in enumerate((*_LOST, *_UNUSED))}
 KEPT_NOTE = (
-    "Each entry keeps these settings: fired exactly as SillyTavern does (the Lore page's "
-    "Entries), the story uses them"
+    "Each entry keeps these settings, and they work when the story's lore fires as "
+    "SillyTavern's does (Lore page → Lore fires by)."
 )
 
 
@@ -339,7 +389,8 @@ def lore_from_book(
         secondary = entry_keys(raw, "secondary_keys", numbered=numbered)
         if secondary and entry_selective(raw, numbered=numbered):
             result.left_out["secondary"] += 1
-        for kind in _features(raw, numbered):
+        features = set(_features(raw, numbered))
+        for kind in features:
             result.left_out[kind] += 1
         title = clean_title(fill(entry_title(raw)))
         title = title or heading_of(content) or (keywords[0] if keywords else f"Entry {number}")
@@ -347,6 +398,8 @@ def lore_from_book(
         if "@@activate" in decorators:
             always_on = True
         elif "@@dont_activate" in decorators:
+            enabled = False
+        if "never" in features:
             enabled = False
         result.entries.append(
             LoreEntry(
@@ -382,6 +435,21 @@ def _as_fired(raw: Mapping[str, Any], fill: Callable[[str], str], content: str) 
     return kept
 
 
+def uses_tavern_settings(entry: LoreEntry) -> bool:
+    """Whether a lore entry brought from a lorebook carries settings only
+    SillyTavern's rules read (`KEPT_FOR_FIRING`)."""
+    if entry.tavern is None:
+        return False
+    raw, numbered = entry.tavern.fields, entry.tavern.numbered
+    if entry_keys(raw, "secondary_keys", numbered=numbered) and entry_selective(
+        raw, numbered=numbered
+    ):
+        return True
+    if any(is_pattern(str(key)) for key in entry_keys(raw, numbered=numbered)):
+        return True
+    return any(kind in KEPT_FOR_FIRING for kind in _features(raw, numbered))
+
+
 def _features(raw: Mapping[str, Any], numbered: bool) -> Iterable[str]:
     """The kinds of what a SillyTavern entry does that SealedLore doesn't."""
     extensions = raw.get("extensions") if isinstance(raw.get("extensions"), Mapping) else {}
@@ -400,7 +468,7 @@ def _features(raw: Mapping[str, Any], numbered: bool) -> Iterable[str]:
         and probability not in (None, "")
         and (_int(probability, 100) < 100)
     ):
-        yield "probability"
+        yield "never" if _int(probability, 100) <= 0 else "probability"
     if any(_int(merged.get(name), 0) for name in ("sticky", "cooldown", "delay")):
         yield "timing"
     if str(merged.get("group") or "").strip():
@@ -410,17 +478,10 @@ def _features(raw: Mapping[str, Any], numbered: bool) -> Iterable[str]:
     # outlet is somewhere SealedLore has nothing like.
     if merged.get("position") not in (None, "", 0, 1, "before_char", "after_char"):
         yield "placement"
-    if any(
-        merged.get(name)
-        for name in (
-            "excludeRecursion",
-            "preventRecursion",
-            "delayUntilRecursion",
-            "exclude_recursion",
-            "prevent_recursion",
-            "delay_until_recursion",
-        )
-    ):
+    # Kept out of recursion, or keeping its own text out of it, is what
+    # SealedLore's rules do anyway (no entry fires from another's text):
+    # only one that waits for recursion fires differently there.
+    if any(merged.get(name) for name in ("delayUntilRecursion", "delay_until_recursion")):
         yield "recursion"
     character_filter = merged.get("characterFilter") or merged.get("character_filter")
     if isinstance(character_filter, Mapping) and (
@@ -990,7 +1051,7 @@ class ReadLorebook:
         return imported
 
     def notes(self) -> list[str]:
-        """What converting it lost, in words, one line each."""
+        """What converting it lost, in words, one sentence each."""
         return LoreImport(left_out=Counter(self.left_out)).notes()
 
 

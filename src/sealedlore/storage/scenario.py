@@ -79,6 +79,8 @@ def scenario_from_bundle(
         agency_mode=story.defaults.agency_mode,
         npc_scope=story.defaults.npc_scope,
         world_activity=story.defaults.world_activity,
+        lore_firing=story.defaults.lore_firing,
+        tavern_world_info=story.defaults.tavern_world_info.model_copy(),
         cast=cast,
         lore=lore,
         supporting=supporting,
@@ -172,6 +174,8 @@ def bundle_from_scenario(
     story.defaults.agency_mode = scenario.agency_mode
     story.defaults.npc_scope = scenario.npc_scope
     story.defaults.world_activity = scenario.world_activity
+    story.defaults.lore_firing = scenario.lore_firing
+    story.defaults.tavern_world_info = scenario.tavern_world_info.model_copy()
     story.defaults.main_model = main_model
     bundle = StoryBundle(
         story=story,

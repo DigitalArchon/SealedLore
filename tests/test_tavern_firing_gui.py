@@ -77,7 +77,7 @@ def test_the_window_keeps_the_choice_and_the_settings_with_the_story(app, window
     window.lore_panel.firing.setCurrentIndex(window.lore_panel.firing.findData("sillytavern"))
     story = window.session.story
     assert story.defaults.lore_firing == "sillytavern"
-    assert "fires as SillyTavern fires it" in window.statusBar().currentMessage()
+    assert "fires by SillyTavern's rules" in window.statusBar().currentMessage()
 
     def accept(dialog):
         dialog.scan_depth.setValue(6)

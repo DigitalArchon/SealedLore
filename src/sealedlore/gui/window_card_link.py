@@ -310,7 +310,7 @@ class CardLinkWindow:
         for (card, made), entries in zip(books, picked, strict=True):
             if entries:
                 lore_of[card.id] = entries
-                notes += [f"{card.name}'s lorebook: left out {note}." for note in made.notes()]
+                notes += made.said(f"{card.name}'s lorebook", self._lore_firing())
         return lore_of, total
 
     def _choose_their_lore(

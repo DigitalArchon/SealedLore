@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from sealedlore.models.character import Character
 from sealedlore.models.image import ImageRef
-from sealedlore.models.lore import LoreEntry
+from sealedlore.models.lore import LoreEntry, TavernWorldInfo
 from sealedlore.models.node import AgencyMode, NpcScope
 from sealedlore.models.plot import Plot
 from sealedlore.models.prompt_edit import PromptEdit
@@ -62,6 +62,10 @@ class Scenario(BaseModel):
     agency_mode: AgencyMode = "contested"
     npc_scope: NpcScope = "all"
     world_activity: WorldActivity = DEFAULT_WORLD_ACTIVITY
+    # How the lore fires: SealedLore's own rules, or exactly as SillyTavern's
+    # with each entry's own settings and these (engine/tavern_firing.py).
+    lore_firing: Literal["sealedlore", "sillytavern"] = "sealedlore"
+    tavern_world_info: TavernWorldInfo = Field(default_factory=TavernWorldInfo)
     cast: list[Character] = Field(default_factory=list)
     lore: list[LoreEntry] = Field(default_factory=list)
     # Cards the story built up for people it introduced. Suggestions and

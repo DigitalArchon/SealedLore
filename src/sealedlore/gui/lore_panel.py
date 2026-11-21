@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.retrieval import RetrievalReport
 from sealedlore.gui.fields import FormScroll, set_field_text
+from sealedlore.gui.lore_rules import ABOUT, NAMES
 from sealedlore.gui.plain_text import plain_tip
 from sealedlore.gui.portrait_view import PortraitView
 from sealedlore.gui.ref_images import CardIcons, RefImageStrip, StoryPictures
@@ -42,6 +43,7 @@ from sealedlore.gui.tavern_dialog import (
 )
 from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.models.lore import LoreEntry
+from sealedlore.storage.tavern_lore import uses_tavern_settings
 
 PEOPLE_LABEL = "Find the people…"
 FROM_LOREBOOKS_LABEL = "From Lorebooks…"
@@ -53,17 +55,23 @@ LIST_ROWS = 8
 REPORT_ROWS = 6
 
 
-FIRING_SEALEDLORE = "chosen SealedLore's way"
-FIRING_TAVERN = "fired exactly as SillyTavern does"
+FIRING_SEALEDLORE = NAMES["sealedlore"]
+FIRING_TAVERN = NAMES["sillytavern"]
 FIRING_TIP = (
-    "SealedLore's way: a small lorebook is sent whole, a large one chosen per turn as "
-    "Settings → Lore says.\n\nExactly as SillyTavern does: each turn's entries fire by "
+    "SealedLore's rules: a small lorebook is sent whole, a large one chosen per turn as "
+    "Settings → Lore says.\n\nSillyTavern's rules: each turn's entries fire exactly by "
     "SillyTavern's own rules and each entry's own settings from its lorebook (keys and "
     "secondary keys, order, recursion, sticky, cooldown, delay, inclusion groups, "
     "probability, its budget). A constant entry nothing can stop is sent with the world, "
     "cached; the rest go with the turn, in SillyTavern's order. Entries written here "
     "fire by their keywords."
 )
+
+
+def unused_here(entries: list[LoreEntry]) -> int:
+    """How many enabled entries carry SillyTavern settings SealedLore's own
+    rules don't use."""
+    return sum(entry.enabled and uses_tavern_settings(entry) for entry in entries)
 
 
 class LorePanel(QWidget):
@@ -171,15 +179,22 @@ class LorePanel(QWidget):
         self.tavern_settings_button.clicked.connect(self.tavern_settings_requested)
         # Wraps too: on one line it held the page ~90px wider than before.
         firing_row = WrapRow(spacing=6, group_spacing=6)
-        firing_row.add_group([QLabel("Entries"), self.firing])
+        firing_row.add_group([QLabel("Lore fires by"), self.firing])
         firing_row.add_group([self.tavern_settings_button])
         self._firing_row = firing_row
+        # What the rules chosen do, and what of the lore they leave unused:
+        # the choice made plain where it is made (the author, Nov 21 2026).
+        self.firing_about = QLabel()
+        self.firing_about.setObjectName("hintLabel")
+        self.firing_about.setWordWrap(True)
+        self.firing_about.setTextFormat(Qt.PlainText)
 
         top = QWidget()
         top_layout = QVBoxLayout(top)
         top_layout.setContentsMargins(0, 0, 0, 0)
         top_layout.setSpacing(6)
         top_layout.addLayout(firing_row)
+        top_layout.addWidget(self.firing_about)
         top_layout.addWidget(self.list, 1)
         top_layout.addLayout(buttons)
         self._top_layout = top_layout
@@ -330,12 +345,22 @@ class LorePanel(QWidget):
 
     def _list_height(self) -> int:
         """The list as tall as its entries, three to eight, its buttons, and
-        the Entries row above it."""
+        the rules row above it with what they do."""
         rows = min(max(self.list.count(), 3), LIST_ROWS)
-        buttons = self._buttons_row.heightForWidth(max(self.list.width(), 1))
-        firing = self._firing_row.heightForWidth(max(self.list.width(), 1))
+        width = max(self.list.width(), 1)
+        buttons = self._buttons_row.heightForWidth(width)
+        firing = self._firing_row.heightForWidth(width)
+        about = 0 if self.firing_about.isHidden() else self.firing_about.heightForWidth(width)
         spacing = self._top_layout.spacing()
-        return self._rows_tall(self.list, rows) + spacing + buttons + spacing + firing
+        return (
+            self._rows_tall(self.list, rows)
+            + spacing
+            + buttons
+            + spacing
+            + firing
+            + spacing
+            + max(about, 0)
+        )
 
     def _report_height(self) -> int:
         """The report as tall as what it says, its list six rows at most."""
@@ -370,6 +395,7 @@ class LorePanel(QWidget):
     def set_entries(self, entries: list[LoreEntry], *, hidden: set[str] | None = None) -> None:
         """`hidden`: ids the plot hasn't revealed, left off unless the author asked."""
         self._entries = entries
+        self._say_firing()
         if hidden is not None:
             self._hidden = hidden
         selected = self._current.id if self._current else None
@@ -648,8 +674,30 @@ class LorePanel(QWidget):
         self.firing.setCurrentIndex(max(0, self.firing.findData(mode)))
         self.firing.blockSignals(False)
         self.tavern_settings_button.setEnabled(mode == "sillytavern")
+        self._say_firing()
+
+    def _say_firing(self) -> None:
+        """One short line under the choice, the rules' whole account in its
+        tooltip: under SillyTavern's, that each entry's settings are used;
+        under SealedLore's, how many entries carry settings they leave
+        unused, or nothing. Longer, it took the list's room."""
+        mode = self.firing.currentData() or "sealedlore"
+        unused = unused_here(self._entries) if mode == "sealedlore" else 0
+        if mode == "sillytavern":
+            said = "Each entry fires by its own SillyTavern settings."
+        elif unused:
+            said = (
+                f"{unused} {'entry has' if unused == 1 else 'entries have'} SillyTavern "
+                "settings these rules don't use."
+            )
+        else:
+            said = ""
+        self.firing_about.setText(said)
+        self.firing_about.setToolTip(plain_tip(ABOUT[mode]))
+        self.firing_about.setHidden(not said)
 
     def _on_firing(self, _index: int) -> None:
         mode = self.firing.currentData()
         self.tavern_settings_button.setEnabled(mode == "sillytavern")
+        self._say_firing()
         self.firing_changed.emit(mode)

@@ -1176,13 +1176,16 @@ def scenario_from_card(
     world: bool = False,
     instructions: bool = False,
     expressions: bool = True,
+    lore_firing: str = "sillytavern",
 ) -> CardImport:
     """A new story from a card: `player` is the author's character (the
     card's `{{user}}`), `opening` which greeting opens it (None: the author
     writes the first turn), `world` that the card is a world or a narrator
     for several people rather than one character, `instructions` that the
     card's own system prompt goes into the style's notes, `expressions` that
-    its expression pictures come too (labelled, for its character's looks)."""
+    its expression pictures come too (labelled, for its character's looks),
+    `lore_firing` the rules its lorebook's entries fire by, if it has one
+    (SillyTavern's by default: the book was written for them)."""
     fill = macro_filler(card.name, player)
     notes: list[str] = []
     you = Character(name=player, summary=about_player.strip() or None)
@@ -1323,7 +1326,8 @@ def scenario_from_card(
     if card.book is not None:
         imported = lore_from_card(card, fill)
         scenario.lore = imported.entries
-        notes += [f"Lorebook: left out {note}." for note in imported.notes()]
+        scenario.lore_firing = "sealedlore" if lore_firing == "sealedlore" else "sillytavern"
+        notes += imported.said("Lorebook", scenario.lore_firing)
     tags = card.fields.get("tags")
     if isinstance(tags, list) and tags:
         notes.append("The card's tags were left out: SealedLore keeps none.")

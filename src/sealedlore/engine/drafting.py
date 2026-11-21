@@ -313,7 +313,7 @@ def _put_in_lore(
             off += 1
         scenario.lore.append(entry)
         added += 1
-    warnings += [f"{card.name}'s lorebook: left out {note}" for note in imported.notes()]
+    warnings += imported.said(f"{card.name}'s lorebook")
     return added, off
 
 

@@ -264,7 +264,7 @@ class TavernWindow:
             chosen_lore = picked[0]
         dropped = len(lore.entries) - len(chosen_lore) if not chat else 0
         if card.files:
-            lore_notes = [f"Lorebook: left out {note}." for note in lore.notes()]
+            lore_notes = lore.said("Lorebook", self._lore_firing())
             self._card_kept_into_story(
                 card, to_cast, chosen_lore, dropped, with_lore, lore_notes if chosen_lore else []
             )
@@ -312,7 +312,7 @@ class TavernWindow:
                 "File → Import… makes one from the card."
             )
         if chosen_lore:
-            notes += [f"Lorebook: left out {note}." for note in lore.notes()]
+            notes += lore.said("Lorebook", self._lore_firing())
         session.add_card(character, to_cast=to_cast, lore=chosen_lore)
         brought = lore_brought(len(chosen_lore), dropped=dropped)
         left_out = "" if chosen_lore else lore_left_out(dropped, chose=with_lore)
@@ -595,8 +595,9 @@ class TavernWindow:
         self.right_tabs.setCurrentWidget(self.lore_panel)
         count = len(imported.entries)
         lead = f"Added {count} lore {'entry' if count == 1 else 'entries'} from {source}."
-        if imported.notes():
-            self._say_left_out("Import a lorebook", lead, imported.notes())
+        notes = imported.said("Lorebook", self._lore_firing())
+        if notes:
+            self._say_left_out("Import a lorebook", lead, notes)
         else:
             self.statusBar().showMessage(lead, 8000)
 

@@ -189,23 +189,40 @@ def lore_of(book: StoredLorebook, fill: Callable[[str], str] = lambda text: text
     return lore_from_book(book.book, fill, f"the lorebook {book.name}")
 
 
+def converted_sentence(note: str) -> str:
+    """What converting a lorebook lost, as a sentence: kept as a phrase
+    ("NovelAI's Always On…") before Nov 21 2026, as a sentence ("Left out
+    NovelAI's…") since."""
+    if note.startswith("Left out "):
+        return f"l{note[1:]}"
+    return f"left out {note}."
+
+
 def scenario_from(
-    book: StoredLorebook, *, title: str, player: str = "", about_player: str = ""
+    book: StoredLorebook,
+    *,
+    title: str,
+    player: str = "",
+    about_player: str = "",
+    lore_firing: str = "sillytavern",
 ) -> tuple[Scenario, list[str]]:
     """A new story set in a kept lorebook's world: its entries the story's
     lore (`{{user}}` as `player`, when named; else written out at Start, as
     a card's are), its description the story's, and `player` the author's
     character, in the starting scene. What the lorebook had that a story has
-    no place for is said in the notes, as an import says it."""
+    no place for is said in the notes, as an import says it, in the words
+    of `lore_firing`, the rules its lore fires by: SillyTavern's by default,
+    the lorebook having been written for them (the author, Nov 21 2026)."""
     imported = lore_of(book, macro_filler("{{char}}", player or None))
-    notes = [f"Lorebook: left out {note}." for note in imported.notes()]
-    notes += [f"Converting it: left out {note}." for note in book.converted]
+    notes = imported.said("Lorebook", lore_firing)
+    notes += [f"Converting it: {converted_sentence(note)}" for note in book.converted]
     description = str(book.book.get("description") or "").strip()
     scenario = Scenario(
         title=title.strip() or book.name,
         description=description or None,
         lore=imported.entries,
         style=StyleDirectives(),
+        lore_firing="sillytavern" if lore_firing == "sillytavern" else "sealedlore",
     )
     if player.strip():
         you = Character(name=player.strip(), summary=about_player.strip() or None)

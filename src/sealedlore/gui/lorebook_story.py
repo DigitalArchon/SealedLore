@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.lore_people import batches, shown_entries
+from sealedlore.gui.lore_rules import LoreRulesChoice, settings_in_use
 from sealedlore.gui.sizing import enter_only_on_buttons, may_discard, size_to_screen, typed_texts
 from sealedlore.models.lorebook import StoredLorebook
 from sealedlore.storage import lorebooks
@@ -33,6 +34,7 @@ class LorebookStory:
     about_player: str
     from_collection: bool
     find_people: bool
+    lore_firing: str = "sillytavern"
 
 
 class LorebookStoryDialog(QDialog):
@@ -44,7 +46,7 @@ class LorebookStoryDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(f"A new story from {book.name}")
-        size_to_screen(self, 0.4, 0.45, at_least=QSize(620, 420))
+        size_to_screen(self, 0.4, 0.6, at_least=QSize(620, 560))
         found = lorebooks.stats(book.book)
         lead = QLabel(
             f"A story set in the world of {book.name}. Its {found.entries} entries "
@@ -76,6 +78,7 @@ class LorebookStoryDialog(QDialog):
         )
         people_note.setObjectName("hintLabel")
         people_note.setWordWrap(True)
+        self.lore_rules = LoreRulesChoice(uses=settings_in_use(lorebooks.lore_of(book)))
         form = QFormLayout()
         form.addRow("Title", self.title)
         form.addRow("You play", self.player)
@@ -83,6 +86,7 @@ class LorebookStoryDialog(QDialog):
         form.addRow("", self.collection)
         form.addRow("", self.people)
         form.addRow("", people_note)
+        form.addRow("Lore fires by", self.lore_rules)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Ok).setText("Make the story")
         buttons.accepted.connect(self._accept)
@@ -115,4 +119,5 @@ class LorebookStoryDialog(QDialog):
             about_player=self.about.text().strip(),
             from_collection=self.collection.isChecked() and self.collection.isEnabled(),
             find_people=self.people.isChecked() and self.people.isEnabled(),
+            lore_firing=self.lore_rules.value(),
         )

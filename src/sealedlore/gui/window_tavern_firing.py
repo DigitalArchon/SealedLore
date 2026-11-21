@@ -1,4 +1,4 @@
-"""The window's side of the Lore page's Entries choice and SillyTavern
+"""The window's side of the Lore page's Lore fires by choice and SillyTavern
 settings… (gui/lore_panel.py, engine/session_tavern.py): the story's own
 choice, saved; the prompt shown again, since what stands cached with the
 world changes with it."""
@@ -11,14 +11,18 @@ from sealedlore.gui.tavern_settings_dialog import TavernSettingsDialog
 
 SAID = {
     "sillytavern": (
-        "The lore now fires as SillyTavern fires it, with each entry's own settings. "
+        "The lore now fires by SillyTavern's rules, with each entry's own settings. "
         "The next turn writes the cache afresh."
     ),
-    "sealedlore": "The lore is chosen SealedLore's way again (Settings → Lore).",
+    "sealedlore": "The lore fires by SealedLore's rules again (Settings → Lore).",
 }
 
 
 class TavernFiringWindow:
+    def _lore_firing(self) -> str:
+        """How the open story's lore fires, for what an import says."""
+        return self.session.story.defaults.lore_firing if self.session else "sealedlore"
+
     def _on_firing_changed(self, mode: str) -> None:
         if self.session is None or self._busy or self.session.story.chat:
             # Locked while a job runs; a chat has no lore.
