@@ -213,7 +213,7 @@ from sealedlore.engine.session_private import PrivateRuntime, checked_where_mark
 from sealedlore.engine.session_reactions import ReactionRuntime
 from sealedlore.engine.session_reasoning import ReasoningRuntime
 from sealedlore.engine.session_rebuild import RebuildRuntime
-from sealedlore.engine.session_recall import RecallRuntime
+from sealedlore.engine.session_recall import EmbeddingStopped, RecallRuntime
 from sealedlore.engine.session_record import RecordRuntime
 from sealedlore.engine.session_story_suggestions import StorySuggestionsRuntime
 from sealedlore.engine.session_suggest import SuggestRuntime
@@ -1541,12 +1541,16 @@ class StorySession(
             and (content_hash(embedding_text(entry)), model) not in have
         ]
 
-    def ensure_lore_vectors(self) -> dict[str, tuple[float, ...]]:
+    def ensure_lore_vectors(
+        self, *, stopped: Callable[[], bool] | None = None
+    ) -> dict[str, tuple[float, ...]]:
         """Embed any entry whose text or model has changed; return id → vector.
 
         Vectors are cached by content hash *and* model, so editing one entry
         re-embeds one entry, and switching models re-embeds everything exactly
-        once (§7).
+        once (§7). `stopped` ends it between requests (`embed_in_batches`):
+        the entries done by then are kept and saved, and `EmbeddingStopped`
+        is raised.
         """
         settings = self.config.embeddings()
         model = settings.model if settings else ""
@@ -1573,8 +1577,15 @@ class StorySession(
                 pending.append(entry)
 
         if pending and self.embeddings is not None:
-            vectors_in = self.embed_in_batches([embedding_text(entry) for entry in pending])
-            for entry, vector in zip(pending, vectors_in, strict=True):
+            texts = [embedding_text(entry) for entry in pending]
+            try:
+                done = dict(enumerate(self.embed_in_batches(texts, stopped=stopped)))
+            except EmbeddingStopped as stop:
+                done, stopping = stop.vectors, stop
+            else:
+                stopping = None
+            for index, vector in sorted(done.items()):
+                entry = pending[index]
                 row = EmbeddingCacheEntry(
                     # Keyed by the model *we asked for*, not the name the
                     # endpoint echoes back: a proxy that renames the model
@@ -1587,6 +1598,9 @@ class StorySession(
                 self.bundle.embeddings.append(row)
                 cache[(row.content_hash, row.model)] = row
                 entry.embedding_hash = row.content_hash
+            if stopping is not None:
+                self.save()
+                raise stopping
             self._prune_embeddings(set(hashes.values()))
             self.save()
 

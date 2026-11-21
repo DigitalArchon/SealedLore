@@ -19,6 +19,7 @@ move into the style's notes).
 from __future__ import annotations
 
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +46,7 @@ from sealedlore.gui.lorebooks_page import (
 from sealedlore.gui.modal_job import run_with_progress
 from sealedlore.models.character import Character
 from sealedlore.models.lorebook import StoredLorebook
+from sealedlore.providers.base import StreamCancelled
 from sealedlore.storage import collection, lorebooks
 from sealedlore.storage.scenario import bundle_from_scenario
 from sealedlore.storage.tavern_cards import macro_filler
@@ -445,9 +447,13 @@ class LorebooksWindow:
         if len(pending) < least:
             return
         result: dict[str, Any] = {}
+        stopping = threading.Event()
 
         def job():
-            session.ensure_lore_vectors()
+            try:
+                session.ensure_lore_vectors(stopped=stopping.is_set)
+            except StreamCancelled:
+                return  # what was embedded is kept; the first turn does the rest
             session.save()
             return
             yield  # a generator, so GenerationWorker can run it
@@ -459,6 +465,7 @@ class LorebooksWindow:
             job,
             result,
             title="Embedding the lore",
+            on_stop=stopping.set,
         )
         if result.get("error"):
             self.statusBar().showMessage(

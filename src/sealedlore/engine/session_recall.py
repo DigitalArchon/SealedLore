@@ -12,7 +12,7 @@ the report, never a failed turn: the keywords rank alone.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 
 from sealedlore.engine.recall import (
@@ -26,7 +26,7 @@ from sealedlore.engine.recall import (
 from sealedlore.engine.retrieval import content_hash, cosine_scores
 from sealedlore.models.embedding import EmbeddingCacheEntry
 from sealedlore.models.node import Node
-from sealedlore.providers.base import ProviderError
+from sealedlore.providers.base import ProviderError, StreamCancelled
 
 RECALL_KIND = "recall"
 # What one embeddings request may hold, by estimate (see `embed_in_batches`).
@@ -34,6 +34,16 @@ EMBED_BATCH_TOKENS = 5_000
 # Requests sent at once: well under NanoGPT's burst of about 25 calls, with
 # the reads after a passage beside them.
 EMBED_AT_ONCE = 4
+
+
+class EmbeddingStopped(StreamCancelled):
+    """Stop came while texts were being embedded: `vectors` holds those
+    already done, by their place in the texts asked for, so what was paid
+    for is kept."""
+
+    def __init__(self, vectors: dict[int, tuple[float, ...]]) -> None:
+        super().__init__()
+        self.vectors = vectors
 
 
 class RecallRuntime:
@@ -108,7 +118,9 @@ class RecallRuntime:
             return {}, f"keywords only: {exc}"
         return {item.id: score for item, score in zip(scored, similarities, strict=True)}, None
 
-    def embed_in_batches(self, texts: Sequence[str]) -> list[tuple[float, ...]]:
+    def embed_in_batches(
+        self, texts: Sequence[str], *, stopped: Callable[[], bool] | None = None
+    ) -> list[tuple[float, ...]]:
         """Embed `texts` in requests the endpoint will take, up to
         `EMBED_AT_ONCE` of them at a time, in order. Raises ProviderError.
 
@@ -116,7 +128,13 @@ class RecallRuntime:
         exchanges in one were refused ("Input is too large", HTTP 400), 16 went
         through. So a request holds at most `EMBED_BATCH_TOKENS` by estimate.
         One at a time, a 320-entry lorebook was some twenty requests and most
-        of a minute before its story's first turn (Nov 20 2026)."""
+        of a minute before its story's first turn (Nov 20 2026).
+
+        `stopped` is asked before each request: once it says so, no more are
+        sent and `EmbeddingStopped` carries what was done. Stop never reached
+        the embeddings before, so a lorebook's embedding ran on to its end
+        after Stop, and quitting meanwhile waited for all of it (the author,
+        Nov 21 2026)."""
         batches: list[list[str]] = []
         batch: list[str] = []
         size = 0
@@ -129,13 +147,31 @@ class RecallRuntime:
             size += cost
         if batch:
             batches.append(batch)
-        if len(batches) <= 1:
-            return [v for chunk in batches for v in self.embeddings.embed(chunk).vectors]
-        from sealedlore.threads import thread_pool
+        done: dict[int, list[tuple[float, ...]]] = {}
 
-        with thread_pool(min(EMBED_AT_ONCE, len(batches))) as pool:
-            answers = list(pool.map(lambda chunk: self.embeddings.embed(chunk).vectors, batches))
-        return [vector for vectors in answers for vector in vectors]
+        def one(numbered: tuple[int, list[str]]) -> None:
+            number, chunk = numbered
+            if stopped is not None and stopped():
+                return
+            done[number] = list(self.embeddings.embed(chunk).vectors)
+
+        if len(batches) <= 1:
+            for numbered in enumerate(batches):
+                one(numbered)
+        else:
+            from sealedlore.threads import thread_pool
+
+            with thread_pool(min(EMBED_AT_ONCE, len(batches))) as pool:
+                list(pool.map(one, enumerate(batches)))
+        if len(done) < len(batches):
+            kept: dict[int, tuple[float, ...]] = {}
+            first = 0
+            for number, chunk in enumerate(batches):
+                for offset, vector in enumerate(done.get(number, ())):
+                    kept[first + offset] = vector
+                first += len(chunk)
+            raise EmbeddingStopped(kept)
+        return [vector for number in range(len(batches)) for vector in done[number]]
 
     def _recall_vectors(self, items: Sequence[RecallItem]) -> dict[str, tuple[float, ...]]:
         """Embed what isn't cached yet; return item id -> vector."""

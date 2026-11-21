@@ -39,17 +39,29 @@ def run_with_progress(
     *,
     title: str,
     follow_notices: bool = False,
+    on_stop: Callable[[], None] | None = None,
 ) -> None:
     """Run `job` (a generator, as GenerationWorker takes one) for `session`,
     lent to the thread for its while; a failure is `result["error"]`, a Stop
     `result["stopped"]`. `follow_notices`: each notice the job yields is the
-    progress dialog's label, under `words`."""
+    progress dialog's label, under `words`. `on_stop` tells a job that waits
+    on something other than the story model's stream (the embeddings) that
+    Stop was pressed.
+
+    After Stop the dialog stays, saying "Stopping…", until the job has
+    ended. Hidden at once (QProgressDialog hides itself on cancel), it left
+    the window free while the job ran on, and quitting then waited for the
+    whole of it behind a closed window (the author, Nov 21 2026)."""
     worker = GenerationWorker(job, provider=session.provider)
     thread = WorkerThread(session=session)
     worker.moveToThread(thread)
     thread.started.connect(worker.run)
     worker.failed.connect(lambda message: result.__setitem__("error", message))
     worker.finished.connect(thread.quit)
+    # Whether the job has ended, set on the worker's thread (a list, touched
+    # by nothing else there): the thread may still say it runs as it ends.
+    ended: list[bool] = []
+    worker.finished.connect(lambda: ended.append(True), Qt.DirectConnection)
     loop = QEventLoop()
     # Cleanup on the thread, never the worker's own finished (CONTRIBUTING.md).
     thread.finished.connect(loop.quit)
@@ -62,6 +74,12 @@ def run_with_progress(
     def stop() -> None:
         result["stopped"] = True
         worker.stop()
+        if on_stop is not None:
+            on_stop()
+        if not ended:
+            progress.setLabelText(f"{words}\nStopping…")
+            progress.setCancelButton(None)
+            progress.show()
 
     progress.canceled.connect(stop)
     if follow_notices:
@@ -69,6 +87,10 @@ def run_with_progress(
     progress.show()
     thread.start()
     loop.exec()
+    if not ended:
+        # The loop ended before the job did: the application is quitting.
+        # Stop it rather than wait out the whole of it.
+        stop()
     # Closing a QProgressDialog emits canceled, which would mark every job
     # that finished as stopped: Find the people then offered nothing and
     # Write with AI showed no changes (the lab walk, Nov 20 2026).
