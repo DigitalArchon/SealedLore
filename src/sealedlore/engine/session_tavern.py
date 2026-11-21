@@ -7,6 +7,14 @@ hidden, nor one held back until mentioned). A constant entry nothing can
 stop stands in the cached system block; the rest are fired each turn and
 sent with it, in SillyTavern's order, in place of SealedLore's own choice
 (the room `fit_lore` gives doesn't apply: SillyTavern's budget does).
+Those standing are fired with the rest, as SillyTavern fires them (the author,
+Nov 21 2026): what they say is read for the others' keys, they count toward
+min activations, and they use up the budget; they are sent once, where they
+stand. In a private scene the budget is a share of the private model's.
+
+No entry can cost a turn: one whose settings can't be read fires by its
+keywords as an entry written here does, and a firing that fails altogether
+sends the standing entries alone and says so (`retrieve`).
 
 Each author turn records what fired and the chat's length then
 (`NodeMeta.tavern_fired`, `tavern_length`), fired or not, and the timed
@@ -38,6 +46,11 @@ CONTINUE = ("continue",)
 
 
 class TavernRuntime:
+    # A retake's firing, recorded on its turn only once the take has text
+    # (`settle_tavern`): a take stopped or failed before any left the passage
+    # standing with a firing that wasn't its own.
+    _tavern_pending: tuple | None = None
+
     @property
     def fires_like_tavern(self) -> bool:
         """The story's lore fires as SillyTavern's does (never a chat's)."""
@@ -47,20 +60,30 @@ class TavernRuntime:
         return TavernSettings(**self.story.defaults.tavern_world_info.model_dump())
 
     def _fire_entries(self, entries: Sequence[LoreEntry]) -> list[FireEntry]:
-        return [
-            fire_entry(
-                id=entry.id,
-                title=entry.title,
-                content=entry.content,
-                keywords=entry.keywords,
-                always_on=entry.always_on,
-                enabled=entry.enabled,
-                raw=entry.tavern.fields if entry.tavern is not None else None,
-                numbered=entry.tavern.numbered if entry.tavern is not None else False,
-                decorators=entry.tavern.decorators if entry.tavern is not None else (),
+        return [self._fire_entry(entry) for entry in entries]
+
+    def _fire_entry(self, entry: LoreEntry) -> FireEntry:
+        own = {
+            "id": entry.id,
+            "title": entry.title,
+            "content": entry.content,
+            "keywords": entry.keywords,
+            "always_on": entry.always_on,
+            "enabled": entry.enabled,
+        }
+        if entry.tavern is None:
+            return fire_entry(**own, raw=None)
+        try:
+            return fire_entry(
+                **own,
+                raw=entry.tavern.fields,
+                numbered=entry.tavern.numbered,
+                decorators=entry.tavern.decorators,
             )
-            for entry in entries
-        ]
+        except Exception:  # noqa: BLE001 - a stranger's entry, in any shape
+            # Settings nothing here can read: the entry fires by its keywords,
+            # as one written in SealedLore does, and the story goes on.
+            return fire_entry(**own, raw=None)
 
     def tavern_layout(self) -> LoreLayout:
         """Standing: the constant entries nothing can stop, cached with the
@@ -105,9 +128,13 @@ class TavernRuntime:
         history: Sequence[Node],
         *,
         trigger: Sequence[str] = NEW_TURN,
+        standing: Sequence[LoreEntry] = (),
     ) -> RetrievalReport:
-        """This turn's lore, fired as SillyTavern fires it."""
-        fire_entries = self._fire_entries(entries)
+        """This turn's lore, fired as SillyTavern fires it. `standing`: the
+        entries in the cached block, fired with the rest and sent there."""
+        place = {entry.id: at for at, entry in enumerate(self.bundle.lore)}
+        together = sorted([*standing, *entries], key=lambda e: place.get(e.id, len(place)))
+        fire_entries = self._fire_entries(together)
         known = {f.id: f for f in fire_entries}
         records = [
             (node.meta.tavern_length, node.meta.tavern_fired or [])
@@ -121,7 +148,13 @@ class TavernRuntime:
             fire_entries,
             self._tavern_messages(turn, history),
             settings=self.tavern_settings(),
-            context=self.story.defaults.context_token_budget,
+            # A private scene's model has a budget of its own: by the story's,
+            # a quarter of 60k went into a 16k prompt.
+            context=(
+                self.config.private_budget
+                if self.in_private
+                else self.story.defaults.context_token_budget
+            ),
             count_tokens=self._count_lore_tokens,
             timed=replay(records, known),
             length=length,
@@ -137,6 +170,7 @@ class TavernRuntime:
                 why=result.why.get(fired.id, ""),
             )
             for fired in result.fired
+            if fired.id in by_id
         )
         not_fired = tuple((by_id[i], why) for i, why in result.not_fired.items() if i in by_id)
         return RetrievalReport(
@@ -146,9 +180,16 @@ class TavernRuntime:
             not_fired=not_fired,
             tavern_budget=result.budget,
             query_text=turn.user_text,
-            # What fired and the chat's length, for the turn's record.
-            tavern_record=(length, tuple(result.ids)),
+            # What fired and the chat's length, for the turn's record (not
+            # the standing entries: nothing of theirs is timed).
+            tavern_record=(length, tuple(i for i in result.ids if i in by_id)),
         )
+
+    def settle_tavern(self, came: bool) -> None:
+        """A retake's firing, once its take has text (`came`) or hasn't."""
+        pending, self._tavern_pending = self._tavern_pending, None
+        if pending is not None and came:
+            self.record_tavern(*pending)
 
     def record_tavern(self, turn, report: RetrievalReport) -> None:  # noqa: ANN001
         """What fired for a turn sent, on its author's node."""

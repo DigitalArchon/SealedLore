@@ -52,7 +52,6 @@ from sealedlore.engine.prompt import (
     assemble_prompt,
     story_rules_sections,
 )
-from sealedlore.engine.retrieval import lore_layout
 from sealedlore.engine.scene_state import log_on_path
 from sealedlore.ids import utc_now_iso
 from sealedlore.models.config import ProviderConfig, split_model
@@ -668,12 +667,11 @@ class PrivateRuntime:
         options = self.private_options()
         if self.story.chat:
             return self._private_assemble_chat(turn, history, span, options)
-        layout = lore_layout(
-            self.visible_lore(),
-            budget=options.token_budget,
-            share=self.config.lore_whole_share,
-            count_tokens=self._count_lore_tokens,
-        )
+        # The layout the scene's lore is chosen from (`retrieve`), and its
+        # Questions' and picture prompts': under SillyTavern's rules the
+        # story's own two lists, where SealedLore's were used here and an
+        # always-on entry with a chance went twice, or not at all.
+        layout = self.lore_layout(options.token_budget)
         lore = () if layout.mode == "whole" else self._keyword_lore(turn, history)
         verbatim, summaries = self._private_window(history, span)
         prompt = assemble_prompt(

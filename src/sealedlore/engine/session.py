@@ -1182,7 +1182,21 @@ class StorySession(
             return RetrievalReport(mode="whole", standing=layout.standing, query_text=query)
         if self.fires_like_tavern:
             # As SillyTavern fires a lorebook (engine/session_tavern.py).
-            report = self.tavern_select(layout.selectable, turn, history, trigger=trigger)
+            try:
+                report = self.tavern_select(
+                    layout.selectable, turn, history, trigger=trigger, standing=layout.standing
+                )
+            except Exception as exc:  # noqa: BLE001 - a stranger's lorebook
+                # Never the turn: the standing entries go, and the Lore page
+                # and the status bar say why nothing else did.
+                report = RetrievalReport(
+                    selector="sillytavern",
+                    query_text=turn.user_text,
+                    fallback_reason=(
+                        "the lore couldn't be fired as SillyTavern fires it "
+                        f"({type(exc).__name__}), so only the always-on entries went"
+                    ),
+                )
             return replace(report, standing=layout.standing)
         report = self._select(layout.selectable, turn, history, query, allow_network=allow_network)
         return replace(report, standing=layout.standing)
@@ -1203,6 +1217,11 @@ class StorySession(
         if self.fires_like_tavern:
             # SillyTavern fires a lorebook per turn, however small it is.
             return self.tavern_layout()
+        if budget is None and self.in_private:
+            # As the scene's own prompt lays it out (`private_assemble`): by
+            # the story's budget, a lorebook that went whole into the story's
+            # prompt but not the scene's was chosen from by nobody there.
+            budget = self.config.private_budget
         return lore_layout(
             self.visible_lore(),
             budget=budget or self.story.defaults.context_token_budget,
@@ -1639,7 +1658,12 @@ class StorySession(
             self.last_retrieval = None
             return ()
         report = self.retrieve(turn, history, trigger=trigger)
-        self.record_tavern(turn, report)
+        self._tavern_pending = None
+        if tuple(trigger) == NEW_TURN:
+            self.record_tavern(turn, report)
+        else:
+            # Another take, or more of one: recorded once it has text.
+            self._tavern_pending = (turn, report)
         self.last_retrieval = report
         return report.entries
 
@@ -2696,6 +2720,7 @@ class StorySession(
                     completed = event
                 yield event
         finally:
+            self.settle_tavern(bool("".join(text).strip()))
             self._finalize(
                 prompt=prompt,
                 turn=turn,

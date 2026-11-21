@@ -489,6 +489,9 @@ class LorePanel(QWidget):
             self.injected.addItem(item)
 
         count = f"{len(report.injected)} entries, ~{report.tokens:,} tokens"
+        if report.selector == "sillytavern" and report.fallback_reason:
+            self.status.setText(f"Not fired this turn: {report.fallback_reason}.")
+            return
         if report.selector == "sillytavern":
             self.status.setText(
                 f"{count} · fired as SillyTavern would, within its budget of "

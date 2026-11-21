@@ -426,6 +426,11 @@ class StatusStrip(QWidget):
             return
 
         count = len(report.injected)
+        if report.fallback_reason and report.selector == "sillytavern":
+            # A lorebook that couldn't be fired by SillyTavern's rules this turn.
+            self.lore_label.setText(f"Lore: {count} sent ⚠")
+            self.lore_label.setToolTip(f"Not fired this turn: {report.fallback_reason}")
+            return
         if report.fallback_reason:
             self.lore_label.setText(f"Lore: {count} sent ⚠")
             self.lore_label.setToolTip(

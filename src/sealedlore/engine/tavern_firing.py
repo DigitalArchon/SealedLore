@@ -65,9 +65,13 @@ from __future__ import annotations
 import math
 import random
 import re
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any
+
+from sealedlore.storage.tavern_lore import is_pattern
 
 # SillyTavern's own numbers.
 MAX_SCAN_DEPTH = 1000
@@ -82,6 +86,35 @@ AND_ANY, NOT_ALL, NOT_ANY, AND_ALL = 0, 1, 2, 3
 TRIGGERS = ("normal", "continue", "impersonate", "swipe", "regenerate", "quiet")
 
 _PATTERN = re.compile(r"^/([\s\S]+?)/([gimsuy]*)$")
+
+# A pattern is a stranger's: lorebooks, cards and scenario files come from
+# anyone, and Python's `re` has no time limit and holds the interpreter while
+# it matches (Nov 2026: /(\w+\s?)+$/ took 4.5 s on eight words and eight
+# times that for each word more, the window frozen, and again every time the
+# story was opened). So each pattern is read before it is run (`_screened`):
+# one that can take exponential time is never run, and one that can take
+# polynomial time reads only so much of what is scanned (the newest of it).
+# Measured on text made to be slow: one open-ended repeat with something
+# after it is quadratic (16,000 characters, up to 1 s), two cubic (1,000
+# characters, 0.6 s), three 3 s on 300. A screen, not a proof: the time all
+# of a turn's patterns take is measured too (PATTERN_SECONDS), and past it no
+# more are run that turn.
+PATTERN_MAX_CHARS = 1000
+# A repeat of more than this many times is open-ended.
+OPEN_REPEAT = 16
+# The most repeats of something that itself varies (a repeat inside, or
+# alternatives): more is exponential on the wrong text.
+VARIED_REPEAT = 4
+# The most characters a pattern reads, by its open-ended repeats that have
+# something after them (a repeat that ends the pattern never backtracks).
+SCAN_CAPS = {1: 8000, 2: 1000, 3: 150}
+# The most ways a pattern's optional parts and alternatives can be taken.
+WAYS_MOST = 4096
+# The ways past which a pattern with no open-ended repeat reads only so much.
+WAYS_FREE = 32
+WAYS_WORK = 20_000_000
+PATTERN_SECONDS = 2.0
+OUT_OF_TIME = "this turn's patterns had taken too long by then"
 
 
 @dataclass(frozen=True)
@@ -243,8 +276,11 @@ def set_entry_setting(raw: dict[str, Any], numbered: bool, name: str, value: Any
     if name == "secondary_logic":
         value = LOGIC_NAMES.index(value)
     if numbered or top:
-        if not numbered and world in raw and card not in raw:
-            field_name = world  # a card entry written with the world file's name
+        if not numbered and world in raw and card not in raw and name != "order":
+            # A card entry written with the world file's name. Not its order:
+            # a card's is read from `insertion_order` alone (as SillyTavern
+            # reads a card's book), so written to `order` it changed nothing.
+            field_name = world
         else:
             field_name = world if numbered else card
         raw[field_name] = value
@@ -269,7 +305,7 @@ def _int(value: Any, default: int = 0) -> int:
         return default
     try:
         number = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):  # an integer of 400 digits
         return default
     return int(number) if math.isfinite(number) else default
 
@@ -279,7 +315,7 @@ def _num(value: Any, default: float) -> float:
         return default
     try:
         number = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
     return number if math.isfinite(number) else default
 
@@ -327,9 +363,9 @@ def fire_entry(
     # The entry's keywords as SealedLore has them win over those it brought
     # (its patterns kept): edited on the Lore page or by a review, they had
     # changed nothing a story firing as SillyTavern does read.
-    plain = [key for key in keys if _PATTERN.match(key) is None]
+    plain = [key for key in keys if not is_pattern(key)]
     if list(dict.fromkeys(plain)) != list(keywords):
-        keys = (*keywords, *(key for key in keys if _PATTERN.match(key) is not None))
+        keys = (*keywords, *(key for key in keys if is_pattern(key)))
     secondary = _strings(
         raw.get("keysecondary")
         if numbered and "keysecondary" in raw
@@ -392,19 +428,168 @@ def fire_entry(
 # --- the scan ------------------------------------------------------------------
 
 
-def _pattern(key: str) -> re.Pattern[str] | None:
+@dataclass(frozen=True)
+class KeyPattern:
+    """A key written /like this/, as it is run: `compiled` None when it never
+    is (`refused` says why), `cap` the most characters it reads (None: all)."""
+
+    compiled: re.Pattern[str] | None = None
+    cap: int | None = None
+    refused: str = ""
+
+
+class _Refused(Exception):
+    """A pattern that could take too long on the wrong text."""
+
+
+_REPEATS = ("MAX_REPEAT", "MIN_REPEAT", "POSSESSIVE_REPEAT")
+_ASSERTS = ("ASSERT", "ASSERT_NOT")
+# JavaScript's named group, (?<name>…), is Python's (?P<name>…).
+_JS_NAMED_GROUP = re.compile(r"(?<!\\)\(\?<(?![=!])")
+
+
+def _varies(items: Any) -> bool:
+    """Whether what a repeat repeats can match more than one way: a repeat
+    inside it that isn't of a fixed count, alternatives, or a back-reference."""
+    for op, av in items:
+        name = op.name
+        if name in _REPEATS:
+            low, high, body = av
+            if low != high or _varies(body):
+                return True
+        elif name in ("BRANCH", "GROUPREF", "GROUPREF_EXISTS"):
+            return True
+        elif (name == "SUBPATTERN" and _varies(av[3])) or (name == "ATOMIC_GROUP" and _varies(av)):
+            return True
+    return False
+
+
+def _degree(items: Any, follow: bool) -> int:
+    """How many open-ended repeats a failed match can go back into: each
+    makes a search one power slower in the text's length. `follow`: something
+    comes after `items` that can still fail."""
+    total = 0
+    items = list(items)
+    for at, (op, av) in enumerate(items):
+        after = follow or at < len(items) - 1
+        name = op.name
+        if name in _REPEATS:
+            low, high, body = av
+            if _varies(body):
+                if high > VARIED_REPEAT:
+                    raise _Refused("it repeats something that itself repeats or has alternatives")
+                total += high * _degree(body, True)
+            else:
+                total += _degree(body, after or high > 1)
+                # One that must repeat many times can fail part-way through
+                # them, whatever comes after it.
+                if high > OPEN_REPEAT and (after or low > OPEN_REPEAT):
+                    total += 1
+        elif name == "BRANCH":
+            total += max((_degree(alt, after) for alt in av[1]), default=0)
+        elif name == "SUBPATTERN":
+            total += _degree(av[3], after)
+        elif name == "ATOMIC_GROUP":
+            total += _degree(av, after)
+        elif name in _ASSERTS:
+            total += _degree(av[1], False)
+        elif name == "GROUPREF_EXISTS":
+            total += max(_degree(alt, after) for alt in av[1:] if alt is not None)
+        elif name == "GROUPREF":
+            total += 1
+    return total
+
+
+def _ways(items: Any) -> int:
+    """How many ways a pattern's optional parts and alternatives can be
+    taken: forty optional letters are 2^40."""
+    total = 1
+    for op, av in items:
+        name = op.name
+        if name in _REPEATS:
+            low, high, body = av
+            inner = _ways(body)
+            if high <= OPEN_REPEAT:
+                total *= (high - low + 1) * inner ** max(1, high)
+            else:
+                total *= inner
+        elif name == "BRANCH":
+            total *= max(1, sum(_ways(alt) for alt in av[1]))
+        elif name == "SUBPATTERN":
+            total *= _ways(av[3])
+        elif name == "ATOMIC_GROUP":
+            total *= _ways(av)
+        elif name == "GROUPREF_EXISTS":
+            total *= max(1, sum(_ways(alt) for alt in av[1:] if alt is not None))
+        if total > WAYS_MOST:
+            raise _Refused("its optional parts and alternatives can be taken too many ways")
+    return total
+
+
+def _screened(source: str, flags: int) -> int | None:
+    """The most characters a pattern may read (None: all it is given), or
+    `_Refused` for one that is never run."""
+    try:
+        from re import _parser  # the parser `re.compile` itself uses
+    except ImportError:  # pragma: no cover - a Python without it
+        return SCAN_CAPS[2]
+    tree = _parser.parse(source, flags)
+    ways = _ways(tree)
+    degree = _degree(tree, False)
+    if degree == 0:
+        return None if ways <= WAYS_FREE else max(2000, WAYS_WORK // ways)
+    if degree not in SCAN_CAPS:
+        raise _Refused("it has too many open-ended repeats")
+    return max(100, int(SCAN_CAPS[degree] / ways ** (1 / (degree + 1))))
+
+
+@lru_cache(maxsize=4096)
+def _pattern(key: str) -> KeyPattern | None:
     """A key written /like this/flags, as SillyTavern's parseRegexFromString
-    takes one (JavaScript's flags, as near as Python's are)."""
+    takes one (JavaScript's flags, as near as Python's are; every slash
+    inside escaped, each flag once: `is_pattern`, as the importer reads it).
+    None for any other key, which is matched as written."""
+    if not is_pattern(key):
+        return None
     match = _PATTERN.match(key)
     if match is None:
         return None
     flags = 0
     for letter in match.group(2):
         flags |= {"i": re.IGNORECASE, "m": re.MULTILINE, "s": re.DOTALL}.get(letter, 0)
+    source = _JS_NAMED_GROUP.sub("(?P<", match.group(1))
+    if len(source) > PATTERN_MAX_CHARS:
+        return KeyPattern(refused="it is far longer than any key")
     try:
-        return re.compile(match.group(1), flags)
-    except re.error:
-        return None
+        cap = _screened(source, flags)
+        return KeyPattern(compiled=re.compile(source, flags), cap=cap)
+    except _Refused as exc:
+        return KeyPattern(refused=f"{exc}, which can take minutes on the wrong text")
+    except (re.error, OverflowError, RecursionError, ValueError):
+        # Not a pattern Python can run (JavaScript's \p{…}, a look-behind of
+        # no fixed width, a repeat count past any number, groups nested
+        # thousands deep): it matched nothing as plain text either.
+        return KeyPattern(refused="it isn't a pattern this program can run")
+
+
+def _is_word(char: str) -> bool:
+    """JavaScript's \\w: an ASCII letter, digit or underscore."""
+    return char.isascii() and (char.isalnum() or char == "_")
+
+
+def _whole_word(haystack: str, key: str) -> bool:
+    """`key` in `haystack` with no word character either side of it:
+    SillyTavern's /(?:^|\\W)(key)(?:$|\\W)/, found without a regular expression
+    (the scan reads every key against the same text, pass after pass)."""
+    at = haystack.find(key)
+    while at != -1:
+        end = at + len(key)
+        if (at == 0 or not _is_word(haystack[at - 1])) and (
+            end == len(haystack) or not _is_word(haystack[end])
+        ):
+            return True
+        at = haystack.find(key, at + 1)
+    return False
 
 
 class Buffer:
@@ -415,6 +600,21 @@ class Buffer:
         self.settings = settings
         self.recurse: list[str] = []
         self.skew = 0
+        # The joined text by how much of it is read, and each without case:
+        # every entry and key reads the same few, pass after pass.
+        self._texts: dict[tuple[int, int], str] = {}
+        self._lowered: dict[int, str] = {}
+        # Which of them a text is, by identity, and for each plain key how far
+        # it has been looked for and where it was first found: among the
+        # messages and among what fired. The scan reaches back a message a
+        # pass (min activations) and reads again what fired (recursion); read
+        # whole each time, 200 messages and 100 entries took 38 s.
+        self._parts: dict[int, tuple[int, int]] = {}
+        self._found: dict[tuple[str, bool, bool], list[int]] = {}
+        self._plain: dict[tuple[bool, bool, int], str] = {}
+        # Seconds this turn's patterns have taken, and what each couldn't read.
+        self.spent = 0.0
+        self.unread: dict[str, str] = {}
 
     def depth(self) -> int:
         return self.settings.scan_depth + self.skew
@@ -424,28 +624,96 @@ class Buffer:
         if depth <= 0:
             return ""
         depth = min(depth, MAX_SCAN_DEPTH)
-        result = MATCHER + JOINER.join(self.messages[:depth])
-        if self.recurse and state != "min_activations":
-            result += JOINER + JOINER.join(self.recurse)
-        return result
+        recursed = len(self.recurse) if state != "min_activations" else 0
+        found = self._texts.get((depth, recursed))
+        if found is None:
+            found = MATCHER + JOINER.join(self.messages[:depth])
+            if recursed:
+                found += JOINER + JOINER.join(self.recurse)
+            self._texts[(depth, recursed)] = found
+            self._parts[id(found)] = (depth, recursed)
+        return found
+
+    def _part(self, fired: bool, at: int, case: bool) -> str:
+        """One message, or one pass's fired text, as a plain key reads it."""
+        found = self._plain.get((fired, case, at))
+        if found is None:
+            found = self.recurse[at] if fired else self.messages[at]
+            found = found if case else found.lower()
+            self._plain[(fired, case, at)] = found
+        return found
+
+    def _plain_matches(self, part: tuple[int, int], key: str, case: bool, whole: bool) -> bool:
+        """A plain key against the text `part` names: found in one of its
+        messages or of what fired (no key matches across their separator)."""
+        depth, recursed = part
+        test = _whole_word if whole and len(key.split()) <= 1 else str.__contains__
+        seen = self._found.setdefault((key, case, whole), [0, -1, 0, -1])
+        for fired, most in ((False, min(depth, len(self.messages))), (True, recursed)):
+            done, first = (2, 3) if fired else (0, 1)
+            while seen[first] == -1 and seen[done] < most:
+                if test(self._part(fired, seen[done], case), key):
+                    seen[first] = seen[done]
+                seen[done] += 1
+            if seen[first] != -1 and seen[first] < most:
+                return True
+        return False
+
+    def _without_case(self, haystack: str) -> str:
+        # By identity: `text` hands out the same strings, kept in `_texts`.
+        found = self._lowered.get(id(haystack))
+        if found is None:
+            found = haystack.lower()
+            if any(haystack is kept for kept in self._texts.values()):
+                self._lowered[id(haystack)] = found
+        return found
+
+    def _pattern_matches(self, haystack: str, key: str, pattern: KeyPattern) -> bool:
+        if pattern.compiled is None:
+            self.unread.setdefault(key, f"its pattern {key} is never run: {pattern.refused}")
+            return False
+        if self.spent > PATTERN_SECONDS:
+            self.unread.setdefault(key, f"its pattern {key} wasn't run: {OUT_OF_TIME}")
+            return False
+        if pattern.cap is not None and len(haystack) > pattern.cap:
+            self.unread.setdefault(
+                key,
+                f"its pattern {key} read only the newest {pattern.cap:,} characters "
+                "(it could take too long on more)",
+            )
+            haystack = haystack[: pattern.cap]
+        began = time.perf_counter()
+        try:
+            return pattern.compiled.search(haystack) is not None
+        except RecursionError:
+            return False
+        finally:
+            self.spent += time.perf_counter() - began
 
     def matches(self, haystack: str, key: str, entry: FireEntry) -> bool:
         pattern = _pattern(key)
         if pattern is not None:
-            return pattern.search(haystack) is not None
+            return self._pattern_matches(haystack, key, pattern)
         case = entry.case_sensitive
         case = self.settings.case_sensitive if case is None else case
-        if not case:
-            haystack, key = haystack.lower(), key.lower()
         whole = entry.match_whole_words
         whole = self.settings.match_whole_words if whole is None else whole
+        part = self._parts.get(id(haystack))
+        if part is not None and key and haystack is self._texts.get(part):
+            return self._plain_matches(part, key if case else key.lower(), bool(case), bool(whole))
+        if not case:
+            haystack, key = self._without_case(haystack), key.lower()
         if not whole:
             return key in haystack
         if len(key.split()) > 1:
             return key in haystack
-        # JavaScript's \W: anything but an ASCII letter, digit or underscore.
-        found = re.search(rf"(?:^|\W)({re.escape(key)})(?:$|\W)", haystack, re.ASCII)
-        return found is not None
+        return _whole_word(haystack, key)
+
+    def said_unread(self, entry: FireEntry) -> str:
+        """Why a key of `entry` didn't read what it was given, if one didn't."""
+        return next(
+            (self.unread[key.strip()] for key in entry.keys if key.strip() in self.unread), ""
+        )
 
     def score(self, entry: FireEntry, state: str) -> int:
         text = self.text(entry, state)
@@ -551,7 +819,17 @@ def fire(
     not_fired: dict[str, str] = {}
     activated: dict[str, FireEntry] = {}
     failed_probability: set[str] = set()
-    activated_text = ""
+    # What fired before this pass and may be read again, in tokens. Each
+    # entry's are counted once: counted as SillyTavern does, the whole of what
+    # fired again for every entry, a book of long constants took seconds.
+    activated_tokens = 0
+    counted: dict[str, int] = {}
+
+    def tokens_of(entry: FireEntry) -> int:
+        if entry.id not in counted:
+            counted[entry.id] = count_tokens(f"{entry.content}\n")
+        return counted[entry.id]
+
     overflowed = False
     levels = sorted({e.delay_until_recursion for e in sorted_entries if e.delay_until_recursion})
     level = levels.pop(0) if levels else 0
@@ -624,6 +902,8 @@ def fire(
                 None,
             )
             if key is None:
+                if said := buffer.said_unread(entry):
+                    not_fired.setdefault(entry.id, said)
                 continue
             # In a later pass the key was found in what an earlier entry says.
             where = ", in another entry's text" if state == "recursion" else ""
@@ -641,7 +921,7 @@ def fire(
             now.sort(key=lambda e: (0 if e.id in sticky else 1, index[e.id]))
         _groups(now, activated, buffer, state, sticky, cooldown, delayed, settings, rng, not_fired)
 
-        new_text = ""
+        new_tokens = 0
         ignoring = sum(1 for e in now if e.ignore_budget)
         for entry in now:
             ignoring -= 1 if entry.ignore_budget else 0
@@ -662,10 +942,8 @@ def fire(
                 failed_probability.add(entry.id)
                 not_fired[entry.id] = f"its {entry.probability:g}% chance didn't come up"
                 continue
-            new_text += f"{entry.content}\n"
-            if not entry.ignore_budget and (
-                count_tokens(activated_text) + count_tokens(new_text) >= budget
-            ):
+            new_tokens += tokens_of(entry)
+            if not entry.ignore_budget and activated_tokens + new_tokens >= budget:
                 overflowed = True
                 not_fired[entry.id] = "over the lore budget"
                 continue
@@ -695,7 +973,7 @@ def fire(
             text = "\n".join(e.content for e in for_recursion)
             if text:
                 buffer.recurse.append(text)
-                activated_text = text + "\n" + activated_text
+                activated_tokens += sum(tokens_of(e) for e in for_recursion)
 
     for entry_id in activated:
         not_fired.pop(entry_id, None)

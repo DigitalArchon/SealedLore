@@ -1243,8 +1243,10 @@ def test_a_question_in_a_scene_begins_as_the_scene_s_turns_do(tmp_path: Path):
     private = enter(session)
     play(session, turn(held, "I whisper to her."))
     turn_system = private.requests[-1].messages[0].text
-    assert session.lore_layout().mode == "whole"
+    assert session.lore_layout(session.story.defaults.context_token_budget).mode == "whole"
     assert session.lore_layout(session.config.private_budget).mode != "whole"
+    # In the scene the layout is the scene's own, whoever asks.
+    assert session.lore_layout().mode != "whole"
     list(session.ask("Why did she look away?"))
     assert private.requests[-1].messages[0].text == turn_system
 
