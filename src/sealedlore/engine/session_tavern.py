@@ -8,9 +8,13 @@ stop stands in the cached system block; the rest are fired each turn and
 sent with it, in SillyTavern's order, in place of SealedLore's own choice
 (the room `fit_lore` gives doesn't apply: SillyTavern's budget does).
 Those standing are fired with the rest, as SillyTavern fires them (the author,
-Nov 21 2026): what they say is read for the others' keys, they count toward
-min activations, and they use up the budget; they are sent once, where they
-stand. In a private scene the budget is a share of the private model's.
+Nov 21 2026): what they say is read for the others' keys and they count
+toward min activations; they are sent once, where they stand. They stand
+outside SillyTavern's budget, the one way these rules differ from its own:
+SillyTavern leaves out a constant the budget can't hold, SealedLore sends it
+every turn, and counted, it took room it never used (a card's 19,000 tokens
+of constants left every keyed entry over a 15,000 budget, and recursion
+stopped). In a private scene the budget is a share of the private model's.
 
 No entry can cost a turn: one whose settings can't be read fires by its
 keywords as an entry written here does, and a firing that fails altogether
@@ -160,6 +164,8 @@ class TavernRuntime:
             length=length,
             trigger=tuple(trigger),
             present=[*present, *scene.present_others],
+            # Sent every turn, wherever the budget stands: outside it.
+            free={entry.id for entry in standing},
         )
         by_id = {entry.id: entry for entry in entries}
         injected = tuple(

@@ -66,7 +66,7 @@ import math
 import random
 import re
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any
@@ -797,14 +797,20 @@ def fire(
     trigger: str | Sequence[str] = "normal",
     present: Sequence[str] = (),
     rng: random.Random | None = None,
+    free: Collection[str] = (),
 ) -> Fired:
     """One turn's firing. `messages`: the chat newest first, as scanned;
     `context`: the context size the budget is a share of; `timed`: the state
     replayed along the path (`replay`), `length` the chat's length now;
     `present`: who is in the scene, for character filters; `trigger`: the
     kind of turn, or the kinds it counts as (SealedLore's Regenerate keeps the
-    old take, as a SillyTavern swipe does, and is a regenerate too)."""
+    old take, as a SillyTavern swipe does, and is a regenerate too). `free`:
+    entries outside the budget, neither refused by it nor counted against it
+    (those standing in the cached block: SealedLore sends them every turn
+    whatever the budget, so counted, they took room they never use and left
+    the keyed entries over it; the author's ruling, Nov 21 2026)."""
     rng = rng or random.Random()
+    free = set(free)
     triggers = {trigger} if isinstance(trigger, str) else set(trigger)
     trigger_name = trigger if isinstance(trigger, str) else next(iter(trigger), "normal")
     known = {entry.id: entry for entry in entries}
@@ -825,7 +831,12 @@ def fire(
     activated_tokens = 0
     counted: dict[str, int] = {}
 
+    def exempt(entry: FireEntry) -> bool:
+        return entry.ignore_budget or entry.id in free
+
     def tokens_of(entry: FireEntry) -> int:
+        if entry.id in free:
+            return 0
         if entry.id not in counted:
             counted[entry.id] = count_tokens(f"{entry.content}\n")
         return counted[entry.id]
@@ -922,15 +933,15 @@ def fire(
         _groups(now, activated, buffer, state, sticky, cooldown, delayed, settings, rng, not_fired)
 
         new_tokens = 0
-        ignoring = sum(1 for e in now if e.ignore_budget)
+        ignoring = sum(1 for e in now if exempt(e))
         for entry in now:
-            ignoring -= 1 if entry.ignore_budget else 0
-            if overflowed and not entry.ignore_budget:
+            ignoring -= 1 if exempt(entry) else 0
+            if overflowed and not exempt(entry):
                 not_fired[entry.id] = "over the lore budget"
                 if ignoring > 0:
                     continue
                 for rest in now[now.index(entry) + 1 :]:
-                    if not rest.ignore_budget:
+                    if not exempt(rest):
                         not_fired[rest.id] = "over the lore budget"
                 break
             if (
@@ -943,7 +954,7 @@ def fire(
                 not_fired[entry.id] = f"its {entry.probability:g}% chance didn't come up"
                 continue
             new_tokens += tokens_of(entry)
-            if not entry.ignore_budget and activated_tokens + new_tokens >= budget:
+            if not exempt(entry) and activated_tokens + new_tokens >= budget:
                 overflowed = True
                 not_fired[entry.id] = "over the lore budget"
                 continue

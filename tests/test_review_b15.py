@@ -313,23 +313,24 @@ def test_what_a_standing_entry_says_fires_the_others(tmp_path: Path, story, cast
     assert valley.id not in session.path()[-2].meta.tavern_fired
 
 
-def test_standing_entries_use_up_sillytaverns_budget(tmp_path: Path, story, cast):
-    """Left out of the firing, a long always-on entry cost SillyTavern's
-    budget nothing: entries fired here that SillyTavern leaves out."""
+def test_standing_entries_stand_outside_sillytaverns_budget(tmp_path: Path, story, cast):
+    """Sent every turn whatever the budget, they are neither refused by it
+    nor counted against it: counted, a card's long constants left every keyed
+    entry over it (the author's ruling, Nov 21 2026)."""
     session = tavern_session(tmp_path, story, cast)
     valley = next(e for e in session.bundle.lore if e.title == "The Valley")
-    assert "The Grey Wolves" in [
-        i.entry.title for i in session.retrieve(turn("A wolf watches."), []).injected
-    ]
     valley.content = "The valley. " + "snow " * 4000
     valley.tavern.fields["content"] = valley.content
     valley.tavern.fields["order"] = 200  # read first, as SillyTavern orders them
     session.story.defaults.context_token_budget = 8_000  # a quarter: 2,000
     report = session.retrieve(turn("A wolf watches."), [])
-    assert not report.injected
-    assert dict((e.title, why) for e, why in report.not_fired)["The Grey Wolves"] == (
-        "over the lore budget"
-    )
+    assert [e.title for e in report.standing] == ["The Valley"]
+    assert "The Grey Wolves" in [i.entry.title for i in report.injected]
+    # A keyed entry still meets the budget, as in SillyTavern.
+    wolves = next(e for e in session.bundle.lore if e.title == "The Grey Wolves")
+    wolves.content = wolves.tavern.fields["content"] = "wolf " * 3000
+    report = session.retrieve(turn("A wolf watches."), [])
+    assert "The Grey Wolves" not in [i.entry.title for i in report.injected]
 
 
 def test_a_firing_that_fails_never_costs_the_turn(tmp_path: Path, story, cast, monkeypatch):

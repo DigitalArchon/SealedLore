@@ -2814,9 +2814,11 @@ Where the entries go is SealedLore's, so caching keeps working: a constant
 entry nothing can stop (no chance, timing, group, trigger or filter) is sent
 with the world, cached; every other entry that fires goes with the turn, in
 SillyTavern's order. A constant entry still counts in the firing as it does
-in SillyTavern: what it says can fire other entries, it counts toward minimum
-activations, and it uses up the budget. In a private scene the budget is a
-share of the private model's context. Positions, depths and outlets aren't
+in SillyTavern: what it says can fire other entries, and it counts toward
+minimum activations. It stands outside the budget, the one way these rules
+differ from SillyTavern's own: SillyTavern leaves out a constant its budget
+can't hold, SealedLore sends every one, so the budget is for the entries that
+fire. In a private scene the budget is a share of the private model's context. Positions, depths and outlets aren't
 used. The Lore tab
 shows why each entry fired and why each other didn't ("on cooldown", "its
 40% chance didn't come up", "its group “x”: y won", "over the lore budget").
