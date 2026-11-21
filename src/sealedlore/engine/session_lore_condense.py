@@ -19,12 +19,12 @@ from dataclasses import replace
 
 from sealedlore.engine.archival import why_not_whole
 from sealedlore.engine.lore_condense import (
-    CONDENSE_MAX_TOKENS,
     StandingFit,
     build_lore_condense_messages,
     fit_standing,
     least_important_first,
     parse_condensed_lore,
+    reply_tokens,
     unasked_placeholders,
     worth_condensing,
 )
@@ -159,7 +159,7 @@ class LoreCondenseRuntime:
             model=model,
             extra_body=self.route_for("authoring"),
             messages=build_lore_condense_messages(title, content, texts=self.texts),
-            params=self.side_params(model, max_tokens=CONDENSE_MAX_TOKENS),
+            params=self.side_params(model, max_tokens=reply_tokens(content)),
             purpose="lore_condense_request",
         )
         log_ref = self._log(

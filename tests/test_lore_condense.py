@@ -100,8 +100,13 @@ def test_least_important_first_by_importance_then_lower_in_the_list():
 
 def test_the_lengths_and_the_reply():
     assert not worth_condensing("a few words") and worth_condensing("w " * 200)
-    assert target_words("w " * 3000) == 800 and target_words("w " * 300) == 100
+    # Half, with no cap (a third capped at 800 lost the longest entries'
+    # detail), and room in the reply for it.
+    assert target_words("w " * 3500) == 1750 and target_words("w " * 300) == 150
     assert target_words("w " * 90) == 60
+    from sealedlore.engine.lore_condense import CONDENSE_MAX_TOKENS, reply_tokens
+
+    assert reply_tokens("w " * 3500) > CONDENSE_MAX_TOKENS + 1750 * 1.4
     assert parse_condensed_lore("## The Keep\nAn empty fortress.", "The Keep") == (
         "An empty fortress."
     )

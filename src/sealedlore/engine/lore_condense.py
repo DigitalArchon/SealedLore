@@ -32,12 +32,18 @@ from sealedlore.models.lore import LoreEntry
 
 # An entry shorter than this saves too little to be worth a call.
 CONDENSE_FROM_WORDS = 150
-# A condensed version's length: a share of the entry, at least the least
-# (a short one loses its point), at most the most.
-CONDENSE_SHARE = 1 / 3
+# A condensed version's length: half the entry, never under the least (a
+# short one loses its point). Measured on the author's card (13 always-on
+# entries, 12,970 words; GLM 5.3 writing, an Opus judge against the
+# originals, Nov 21 2026): a third capped at 800 words kept about 75% of
+# what matters, 7 entries safe to send, 2 not (its two longest, cut to under
+# a third, lost a character sheet's voices and a scenario's detail, and a
+# rules entry was reworded into other rules); half with no cap kept about
+# 82%, 10 safe and none unsafe, every instruction kept.
+CONDENSE_SHARE = 1 / 2
 CONDENSE_LEAST_WORDS = 60
-CONDENSE_MOST_WORDS = 800
-# Room for a model that reasons first.
+# Room for a model that reasons first, and for what a long entry's half takes
+# (about 1.4 tokens a word): a reply cut short is never kept.
 CONDENSE_MAX_TOKENS = 4_000
 
 
@@ -46,8 +52,14 @@ def worth_condensing(content: str) -> bool:
 
 
 def target_words(content: str) -> int:
-    words = len(content.split())
-    return max(CONDENSE_LEAST_WORDS, min(CONDENSE_MOST_WORDS, round(words * CONDENSE_SHARE)))
+    return max(CONDENSE_LEAST_WORDS, round(len(content.split()) * CONDENSE_SHARE))
+
+
+def reply_tokens(content: str) -> int:
+    """The most a condensed version's reply may take: room to reason, and
+    the words asked for with some over (GLM 5.3 wrote up to twice the words
+    asked for at a third, Nov 21 2026)."""
+    return CONDENSE_MAX_TOKENS + round(target_words(content) * 2.8)
 
 
 def build_lore_condense_messages(
