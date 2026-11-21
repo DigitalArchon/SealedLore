@@ -28,11 +28,14 @@ from collections.abc import Collection, Sequence
 from dataclasses import dataclass, field
 
 from sealedlore.engine.authoring import (
+    CHARACTER_FIELDS,
     PICTURE_STYLES,
     _choices,
     _name_of,
     _slots,
     character_view,
+    lore_rules_view,
+    lore_view,
 )
 from sealedlore.engine.picture_styles import write_style
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
@@ -81,6 +84,7 @@ def setup_view(bundle: StoryBundle, hidden_ids: Collection[str] = frozenset()) -
         "storyteller_notes": (story.storyteller_notes or "").strip() or None,
         "world_activity": story.defaults.world_activity,
         "agency_mode": story.defaults.agency_mode,
+        **lore_rules_view(bundle),
         "picture_style": write_style(story.picture_style, story.image_style) or None,
         "style": style,
         "opening": {"text": setup.opening_text, "mode": setup.opening_mode},
@@ -95,14 +99,7 @@ def setup_view(bundle: StoryBundle, hidden_ids: Collection[str] = frozenset()) -
             character_view(c) for c in bundle.supporting.characters if c.id not in hidden_ids
         ],
         "lore": [
-            {
-                "title": entry.title,
-                "content": entry.content,
-                "keywords": entry.keywords,
-                "always_on": entry.always_on,
-                "enabled": entry.enabled,
-                "until_mentioned": entry.until_mentioned,
-            }
+            lore_view(entry, sillytavern=story.defaults.lore_firing == "sillytavern")
             for entry in bundle.lore
             if entry.id not in hidden_ids
         ],
@@ -119,10 +116,19 @@ def followup_system(texts: PromptTexts = DEFAULT_TEXTS) -> str:
         opening_modes=slots["opening_modes"],
         style_fields=slots["style_fields"],
         style_guide=slots["style_guide"],
-        character_fields=slots["character_fields"],
+        # Who plays a character is chosen on their card: a follow-up has no
+        # model list to check an id against.
+        character_fields=_choices(
+            [name for name in CHARACTER_FIELDS if name not in ("own_model", "own_notes")]
+        ),
         tiers=slots["tiers"],
         character_shape=slots["character_shape"],
         lore_fields=slots["lore_fields"],
+        lore_firings=slots["lore_firings"],
+        round_orders=slots["round_orders"],
+        sillytavern_fields=slots["sillytavern_fields"],
+        entry_settings=slots["entry_settings"],
+        secondary_logics=slots["secondary_logics"],
     )
 
 

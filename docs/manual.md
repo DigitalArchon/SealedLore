@@ -1907,7 +1907,18 @@ storyteller actually receives, all but the storyteller's notes: it is told
 only that there are some, and can't change them. On a character it can change anything their
 card holds: a SillyTavern card's personality too, and **Always send the whole
 card** when a condensed card has lost what the story needs of them (see
-[When the cast's cards don't fit](#when-the-casts-cards-dont-fit)). When the
+[When the cast's cards don't fit](#when-the-casts-cards-dont-fit)), and who
+plays them: a main character's own model, and what that model is told. It
+knows how the lore fires (SealedLore's rules or SillyTavern's), where each
+entry came from and its own SillyTavern settings (second keywords, chance,
+sticky, cooldown, delay, group, order), and may change any of them, the
+story's SillyTavern settings, when characters on their own model answer, and
+each job's own model for this story. It reads the public record those
+characters are told, what the scene card says is still open, and the
+suggestions the story has made that you haven't looked at, and names the
+Settings that would help when they are off (Keep the prose fresh, Let the
+storyteller make the next move when I wait). Asking for changes before the
+story begins can change the lore's rules and settings too. When the
 cause is the plot itself, it says so, and where it is changed: Story → Open in
 the plot editor…, or Story → Write a plot with the model…. You choose how many exchanges
 from the story it sees as examples, from none to all of them: each is your turn

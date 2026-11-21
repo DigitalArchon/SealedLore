@@ -44,22 +44,31 @@ from sealedlore.engine.prompt_texts import (
     TURN,
     PromptTexts,
 )
+from sealedlore.engine.public_record import record_at
+from sealedlore.engine.reactions import independent_cast
 from sealedlore.engine.response_style import label_for
 from sealedlore.engine.rules import narration_reminder, render_history_node
 from sealedlore.engine.scene_state import move_into_cast, move_out_of_cast, rename_in_scene
 from sealedlore.engine.story_plot import plot_uses, take_out_character
+from sealedlore.engine.tavern_firing import (
+    ENTRY_SETTINGS,
+    LOGIC_NAMES,
+    entry_settings,
+    set_entry_setting,
+)
 from sealedlore.engine.validators import mentions
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.authoring import AppFinding, SettingsChange, SettingsReview
 from sealedlore.models.character import Character, Competence, CompetenceTier
 from sealedlore.models.config import Config
 from sealedlore.models.generation import REASONING_LEVELS, GenerationParams
-from sealedlore.models.lore import LoreEntry
+from sealedlore.models.lore import LoreEntry, TavernEntry, TavernWorldInfo
 from sealedlore.models.node import AgencyMode, Node, NpcScope, ResponseStyle
 from sealedlore.models.scenario import Scenario
 from sealedlore.models.scene import OffstageCharacter, SceneState
 from sealedlore.models.story import (
     DEFAULT_WORLD_ACTIVITY,
+    STORY_MODEL_FIELDS,
     NarrativePerson,
     NarrativeTense,
     OpeningMode,
@@ -142,6 +151,16 @@ APP_SETTINGS = (
     "cast_limit",
     "cast_share",
     "cast_token_cap",
+    # Since Nov 2026: what the storyteller is reminded of, whether it moves
+    # the story on an idle turn, the record kept for characters on their own
+    # model, recall of merged chapters, and the looks picked after a passage.
+    "prose_reminders",
+    "storyteller_moves",
+    "public_record",
+    "record_model",
+    "recall",
+    "recall_in",
+    "look_picks",
 )
 
 
@@ -182,10 +201,26 @@ CHARACTER_FIELDS = (
     "playable",
     "author_only",
     "keep_whole",
+    "own_model",
+    "own_notes",
 )
 # An alias longer than this is a note about someone, not a name for them.
 ALIAS_MOST_WORDS = 5
-LORE_FIELDS = ("title", "content", "keywords", "always_on", "enabled", "until_mentioned")
+LORE_FIELDS = (
+    "title",
+    "content",
+    "keywords",
+    "always_on",
+    "enabled",
+    "until_mentioned",
+    "sillytavern",
+)
+# How a story's lore fires (`StoryDefaults.lore_firing`), when characters on
+# their own model answer (`round_order`), SillyTavern's World Info settings
+# a story keeps (`tavern_world_info`), and an entry's own (`ENTRY_SETTINGS`).
+LORE_FIRINGS = ("sealedlore", "sillytavern")
+ROUND_ORDERS = ("together", "after")
+SILLYTAVERN_FIELDS = tuple(TavernWorldInfo.model_fields)
 # A starting scene's fields, for a follow-up (engine/followup.py).
 SCENE_FIELDS = ("location", "time_of_day", "situation", "present")
 # What a review may propose, and what a follow-up on a story not yet begun
@@ -251,7 +286,9 @@ GENERATION_FIELDS = (*GENERATION_RANGES, "max_tokens", "reasoning")
 MIN_MAX_TOKENS = 256
 MAX_MAX_TOKENS = 200_000
 MIN_CONTEXT_BUDGET = 4_000
-MODEL_FIELDS = ("main_model", "summarization_model")
+# Every job's own model for this story (`STORY_MODEL_FIELDS`): blank follows
+# Settings → Models, but the storyteller's.
+MODEL_FIELDS = tuple(STORY_MODEL_FIELDS.values())
 
 
 def _slots(texts: PromptTexts) -> dict[str, str]:
@@ -268,6 +305,12 @@ def _slots(texts: PromptTexts) -> dict[str, str]:
         "lore_fields": LORE_FIELDS,
         "generation_fields": GENERATION_FIELDS,
         "reasoning_efforts": REASONING_EFFORTS,
+        "lore_firings": LORE_FIRINGS,
+        "round_orders": ROUND_ORDERS,
+        "sillytavern_fields": SILLYTAVERN_FIELDS,
+        "entry_settings": tuple(ENTRY_SETTINGS),
+        "secondary_logics": LOGIC_NAMES,
+        "model_fields": MODEL_FIELDS,
     }
     slots = {name: _choices(values) for name, values in lists.items()}
     slots["character_shape"] = texts["authoring.character_shape"]
@@ -735,6 +778,57 @@ def character_view(character: Character) -> dict[str, Any]:
     if character.keep_whole:
         # "Always send the whole card" (engine/cast_fit.py), likewise.
         view["keep_whole"] = True
+    if (character.own_model or "").strip():
+        # Played by a model of their own (engine/reactions.py), likewise.
+        view["own_model"] = character.own_model
+        if (character.own_notes or "").strip():
+            view["own_notes"] = character.own_notes
+    return view
+
+
+def lore_view(entry: LoreEntry, *, sillytavern: bool) -> dict[str, Any]:
+    """One lore entry as a review or a follow-up sees it. Where it came from,
+    and its own SillyTavern settings that differ from SillyTavern's defaults,
+    only where there are any, so no other story's review changes. Under
+    SealedLore's rules too, said to be unused: shown them only under
+    SillyTavern's, GLM 5.3 took a lorebook's second keywords for lost and
+    rewrote the entry's keywords instead (live, Nov 21 2026)."""
+    view: dict[str, Any] = {
+        "title": entry.title,
+        "content": entry.content,
+        "keywords": entry.keywords,
+        "always_on": entry.always_on,
+        "enabled": entry.enabled,
+        "until_mentioned": entry.until_mentioned,
+    }
+    if entry.came_from:
+        view["came_from"] = entry.came_from
+    if entry.tavern is not None:
+        settings = entry_settings(entry.tavern.fields, entry.tavern.numbered)
+        own = {
+            name: value
+            for name, value in settings.items()
+            if value != ENTRY_SETTINGS[name][3]
+            # The logic says nothing without second keywords, all with them.
+            or (name == "secondary_logic" and settings["secondary_keywords"])
+        }
+        if not settings["secondary_keywords"]:
+            own.pop("secondary_logic", None)
+        if own:
+            view["sillytavern" if sillytavern else "sillytavern_unused"] = own
+    return view
+
+
+def lore_rules_view(bundle: StoryBundle) -> dict[str, Any]:
+    """How the story's lore fires, and its characters on their own model
+    answer, for a review and a follow-up: the rules always, SillyTavern's
+    settings under them, the answers' order only where someone answers."""
+    defaults = bundle.story.defaults
+    view: dict[str, Any] = {"lore_firing": defaults.lore_firing}
+    if defaults.lore_firing == "sillytavern":
+        view["sillytavern_settings"] = defaults.tavern_world_info.model_dump()
+    if independent_cast(bundle.cast):
+        view["round_order"] = defaults.round_order
     return view
 
 
@@ -853,13 +947,48 @@ def playthrough_view(
             "privacy": scene.privacy,
             "kept_by": "the story's own scene reads" if scene.source == "story" else "the author",
             "everyone_tracked": scene.tracked,
+            **({"still_open": list(scene.still_open)} if scene.still_open else {}),
         },
+        **_record_view(bundle, path),
+        **_suggestions_view(bundle),
+    }
+
+
+def _record_view(bundle: StoryBundle, path: Sequence[Node]) -> dict[str, Any]:
+    """What everyone where the story is set knows by now
+    (engine/public_record.py), told to the characters on their own model:
+    only for a story that has some."""
+    if not independent_cast(bundle.cast):
+        return {}
+    return {"public_record": list(record_at(path).facts)}
+
+
+def _suggestions_view(bundle: StoryBundle) -> dict[str, Any]:
+    """Suggestions from the story still waiting for the author (Story →
+    Suggestions from the story…): lore and cards the story has outgrown."""
+    waiting = bundle.story.story_suggestions
+    if not waiting:
+        return {}
+    return {
+        "suggestions_waiting": [
+            f"{suggestion.kind.replace('_', ' ')}: {suggestion.title}" for suggestion in waiting
+        ]
     }
 
 
 def app_settings_view(config: Config) -> dict[str, Any]:
-    """SealedLore's own settings that shape a story, read-only for the reviewer."""
-    return {name: getattr(config, name) for name in APP_SETTINGS}
+    """SealedLore's own settings that shape a story, read-only for the
+    reviewer; and where lore's embeddings are made, which decides whether
+    lore is chosen by meaning at all."""
+    view: dict[str, Any] = {name: getattr(config, name) for name in APP_SETTINGS}
+    embeddings = config.embeddings()
+    if embeddings is None:
+        view["lore_embeddings"] = None
+    elif embeddings.builtin:
+        view["lore_embeddings"] = "built in, on this computer"
+    else:
+        view["lore_embeddings"] = embeddings.model
+    return view
 
 
 def settings_view(
@@ -897,14 +1026,16 @@ def settings_view(
         "agency_mode": story.defaults.agency_mode,
         "npc_scope": story.defaults.npc_scope,
         "world_activity": story.defaults.world_activity,
+        **lore_rules_view(bundle),
         "opening": {"text": story.setup.opening_text, "mode": story.setup.opening_mode},
         "model": {
             "main_model": story.defaults.main_model or model,
             "summarization_model": story.defaults.summarization_model,
             **{
                 f"{name}_for_this_story": getattr(story.defaults, name)
-                for name in ("authoring_model", "scene_model", "plot_model", "lore_model")
-                if getattr(story.defaults, name)
+                for name in MODEL_FIELDS
+                if name not in ("main_model", "summarization_model")
+                and getattr(story.defaults, name)
             },
             "context_token_budget": story.defaults.context_token_budget,
             # The author's, for every story: suggested, never applied.
@@ -924,14 +1055,7 @@ def settings_view(
             character_view(c) for c in bundle.supporting.characters if c.id not in hidden_ids
         ],
         "lore": [
-            {
-                "title": entry.title,
-                "content": entry.content,
-                "keywords": entry.keywords,
-                "always_on": entry.always_on,
-                "enabled": entry.enabled,
-                "until_mentioned": entry.until_mentioned,
-            }
+            lore_view(entry, sillytavern=story.defaults.lore_firing == "sillytavern")
             for entry in bundle.lore
             if entry.id not in hidden_ids
         ],
@@ -1304,7 +1428,11 @@ SUPPORTING_ONLY_FIELDS = (
 )
 
 
-def _apply_character(bundle: StoryBundle, change: SettingsChange) -> None:
+def _apply_character(
+    bundle: StoryBundle,
+    change: SettingsChange,
+    models: Mapping[str, ModelInfo] | None = None,
+) -> None:
     character = _find_character(bundle, change.target)
     field, value = change.field, change.value
     supporting = any(card is character for card in bundle.supporting.characters)
@@ -1375,11 +1503,93 @@ def _apply_character(bundle: StoryBundle, change: SettingsChange) -> None:
         if not isinstance(value, bool):
             raise ValueError("keep_whole must be true or false")
         character.keep_whole = value
+    elif field == "own_model":
+        model_id = _text(value)
+        if model_id is not None and models is not None and model_id not in models:
+            raise ValueError(f"your endpoint doesn't offer a model called “{model_id}”")
+        if model_id != character.own_model:
+            # A route chosen for another model is that model's.
+            character.own_route = None
+        character.own_model = model_id
+    elif field == "own_notes":
+        if not (character.own_model or "").strip():
+            raise ValueError(f"{character.name} isn't played by a model of their own")
+        character.own_notes = _text(value)
     else:
         raise ValueError(f"“{field}” isn't a character setting")
 
 
-def _apply_lore_edit(entry: LoreEntry, field: str | None, value: object) -> None:
+def _sillytavern_settings(settings: TavernWorldInfo, value: object) -> TavernWorldInfo:
+    """SillyTavern's World Info settings with those `value` names changed,
+    checked as the settings dialog checks them."""
+    if not isinstance(value, dict) or not value:
+        raise ValueError("SillyTavern's settings come as an object of the ones to change")
+    unknown = [name for name in value if name not in SILLYTAVERN_FIELDS]
+    if unknown:
+        raise ValueError(f"“{unknown[0]}” isn't one of SillyTavern's settings")
+    try:
+        return TavernWorldInfo.model_validate({**settings.model_dump(), **value})
+    except ValidationError as exc:
+        problem = exc.errors()[0]
+        name = ".".join(str(part) for part in problem.get("loc", ())) or "a setting"
+        raise ValueError(f"SillyTavern's {name}: {problem.get('msg', 'not allowed')}") from None
+
+
+def _entry_setting(name: str, value: object) -> object:
+    """One of an entry's SillyTavern settings, checked as SillyTavern has it."""
+    if name == "secondary_keywords":
+        return _strings(value, commas=True)
+    if name == "secondary_logic":
+        text = (_text(value) or "").lower()
+        if text not in LOGIC_NAMES:
+            raise ValueError(f"the second keywords' logic is one of {', '.join(LOGIC_NAMES)}")
+        return text
+    if name == "group":
+        return _text(value) or ""
+    number = _number(value, name.replace("_", " "))
+    if number != int(number):
+        raise ValueError(f"{name.replace('_', ' ')} must be a whole number")
+    if name == "probability" and not 0 <= number <= 100:
+        raise ValueError("a chance is from 0 to 100")
+    if name in ("sticky", "cooldown", "delay") and number < 0:
+        raise ValueError(f"{name} can't be below 0")
+    return int(number)
+
+
+def _apply_entry_settings(entry: LoreEntry, value: object, firing: str) -> None:
+    if firing != "sillytavern":
+        raise ValueError(
+            "the story's lore fires by SealedLore's rules, which don't read SillyTavern's "
+            "settings: change the story's lore_firing first"
+        )
+    if not isinstance(value, dict) or not value:
+        raise ValueError("SillyTavern's settings come as an object of the ones to change")
+    checked = {}
+    for name, setting in value.items():
+        if name not in ENTRY_SETTINGS:
+            raise ValueError(f"“{name}” isn't one of an entry's SillyTavern settings")
+        checked[name] = _entry_setting(name, setting)
+    if entry.tavern is None:
+        # Written in SealedLore: given SillyTavern's own entry around it.
+        entry.tavern = TavernEntry(
+            numbered=True,
+            fields={
+                "key": list(entry.keywords),
+                "content": entry.content,
+                "constant": entry.always_on,
+                "selective": True,
+            },
+        )
+    for name, setting in checked.items():
+        set_entry_setting(entry.tavern.fields, entry.tavern.numbered, name, setting)
+
+
+def _apply_lore_edit(
+    entry: LoreEntry, field: str | None, value: object, firing: str = "sealedlore"
+) -> None:
+    if field == "sillytavern":
+        _apply_entry_settings(entry, value, firing)
+        return
     if field == "title":
         entry.title = _required_text(value, "a title")
     elif field == "content":
@@ -1457,7 +1667,8 @@ def _apply_model(
     if model_id is None:
         if field == "main_model":
             raise ValueError("the storyteller needs a model")
-        bundle.story.defaults.summarization_model = None
+        # Back to following Settings → Models.
+        setattr(bundle.story.defaults, field, None)
         return
     if models is not None and model_id not in models:
         raise ValueError(f"your endpoint doesn't offer a model called “{model_id}”")
@@ -1511,11 +1722,17 @@ def apply_change(
         if ceiling and number > ceiling:
             raise ValueError(f"the model reads at most {ceiling:,} tokens")
         story.defaults.context_token_budget = number
+    elif kind == "story" and field == "sillytavern_settings":
+        story.defaults.tavern_world_info = _sillytavern_settings(
+            story.defaults.tavern_world_info, value
+        )
     elif kind == "story":
         allowed = {
             "agency_mode": AGENCY_MODES,
             "npc_scope": NPC_SCOPES,
             "world_activity": WORLD_ACTIVITIES,
+            "lore_firing": LORE_FIRINGS,
+            "round_order": ROUND_ORDERS,
         }.get(field or "")
         text = (_text(value) or "").lower()
         if allowed is None:
@@ -1545,7 +1762,7 @@ def apply_change(
         else:
             raise ValueError(f"“{field}” isn't an opening setting")
     elif kind == "character":
-        _apply_character(bundle, change)
+        _apply_character(bundle, change, models)
     elif kind == "character_add":
         if change.target not in ("cast", "supporting"):
             raise ValueError("a new character goes in the cast or supporting")
@@ -1616,7 +1833,7 @@ def apply_change(
             wanted = (_text(value) or "").lower()
             if any(e is not entry and e.title.strip().lower() == wanted for e in bundle.lore):
                 raise ValueError(f"there is already a lore entry titled “{_text(value)}”")
-        _apply_lore_edit(entry, field, value)
+        _apply_lore_edit(entry, field, value, bundle.story.defaults.lore_firing)
     elif kind == "lore_disable":
         _find_lore(bundle, change.target).enabled = False
     elif kind == "scene":
@@ -1731,6 +1948,18 @@ _FIELD_LABELS = {
     "context_token_budget": "context budget",
     "main_model": "storyteller",
     "summarization_model": "summariser",
+    "authoring_model": "authoring",
+    "scene_model": "scene read",
+    "plot_model": "plot",
+    "lore_model": "lore picker",
+    "image_prompt_model": "picture prompts",
+    "record_model": "public record",
+    "lore_firing": "lore fires by",
+    "round_order": "when characters on their own model answer",
+    "sillytavern_settings": "SillyTavern settings",
+    "sillytavern": "SillyTavern settings",
+    "own_model": "played by their own model",
+    "own_notes": "notes for their own model",
     "max_tokens": "max tokens",
     "top_p": "top p",
     "reasoning_effort": "reasoning effort",
@@ -1809,6 +2038,8 @@ def current_value(
             names = [_name_of(bundle, i) for i in scene.present_character_ids]
             return [name for name in names if name] + list(scene.present_others)
         return getattr(scene, change.field or "", None)
+    if change.kind == "story" and change.field == "sillytavern_settings":
+        return story.defaults.tavern_world_info.model_dump()
     if change.kind in ("story", "model"):
         return getattr(story.defaults, change.field or "", None)
     if change.kind == "generation":
@@ -1828,6 +2059,8 @@ def current_value(
             return None
         if change.field == "keep_whole":
             return character.keep_whole
+        if change.field in ("own_model", "own_notes"):
+            return getattr(character, change.field)
         return character_view(character).get(change.field or "")
     if change.kind == "character_move":
         try:
@@ -1840,9 +2073,13 @@ def current_value(
             entry = _find_lore(bundle, change.target)
         except ValueError:
             return None
-        return (
-            entry.enabled if change.kind == "lore_disable" else getattr(entry, change.field or "")
-        )
+        if change.kind == "lore_disable":
+            return entry.enabled
+        if change.field == "sillytavern":
+            if entry.tavern is None:
+                return None
+            return entry_settings(entry.tavern.fields, entry.tavern.numbered)
+        return getattr(entry, change.field or "", None)
     return None
 
 
@@ -2074,6 +2311,14 @@ def parse_review(
                 + (f" ({change.reason})" if change.reason else "")
                 + ", but your endpoint's model list couldn't be checked, so it isn't offered "
                 "as a change. Pick it in Settings if it's right."
+            )
+            continue
+        if change.kind == "character" and change.field == "own_model" and models is None:
+            review.cannot_fix.append(
+                f"Suggested {describe(change)} “{change.value}”"
+                + (f" ({change.reason})" if change.reason else "")
+                + ", but no model list could be checked, so it isn't offered as a change. "
+                "Choose it under Played by on their card if it's right."
             )
             continue
         if change.kind == "prompt":

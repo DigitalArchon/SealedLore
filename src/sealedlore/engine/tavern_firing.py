@@ -193,6 +193,77 @@ def _get(raw: Mapping[str, Any], numbered: bool, world: str, card: str, default:
     return default
 
 
+# An entry's own SillyTavern settings a review reads and may change
+# (engine/authoring.py), by SealedLore's names: its name in a world file, in a
+# card's book, whether a card keeps it at the entry's top level (else in its
+# extensions, where SillyTavern reads a card's), and its default.
+ENTRY_SETTINGS: dict[str, tuple[str, str, bool, Any]] = {
+    "secondary_keywords": ("keysecondary", "secondary_keys", True, []),
+    "secondary_logic": ("selectiveLogic", "selectiveLogic", False, "and any"),
+    "order": ("order", "insertion_order", True, DEFAULT_ORDER),
+    "probability": ("probability", "probability", False, 100),
+    "sticky": ("sticky", "sticky", False, 0),
+    "cooldown": ("cooldown", "cooldown", False, 0),
+    "delay": ("delay", "delay", False, 0),
+    "group": ("group", "group", False, ""),
+}
+# `selectiveLogic` by number, as SillyTavern stores it.
+LOGIC_NAMES = ("and any", "not all", "not any", "and all")
+
+
+def entry_settings(raw: Mapping[str, Any], numbered: bool) -> dict[str, Any]:
+    """An entry's `ENTRY_SETTINGS` as `fire_entry` reads them."""
+    read = fire_entry(
+        id="",
+        title="",
+        content="",
+        keywords=(),
+        always_on=False,
+        enabled=True,
+        raw={**raw, "key": [], "keys": []},
+        numbered=numbered,
+    )
+    logic = read.logic if 0 <= read.logic < len(LOGIC_NAMES) else AND_ANY
+    return {
+        "secondary_keywords": list(read.secondary),
+        "secondary_logic": LOGIC_NAMES[logic],
+        "order": read.order,
+        "probability": read.probability if read.use_probability else 100,
+        "sticky": read.sticky,
+        "cooldown": read.cooldown,
+        "delay": read.delay,
+        "group": read.group_text,
+    }
+
+
+def set_entry_setting(raw: dict[str, Any], numbered: bool, name: str, value: Any) -> None:
+    """One of `ENTRY_SETTINGS`, already checked, written where SillyTavern
+    (and `fire_entry`) reads it."""
+    world, card, top, _default = ENTRY_SETTINGS[name]
+    if name == "secondary_logic":
+        value = LOGIC_NAMES.index(value)
+    if numbered or top:
+        if not numbered and world in raw and card not in raw:
+            field_name = world  # a card entry written with the world file's name
+        else:
+            field_name = world if numbered else card
+        raw[field_name] = value
+    else:
+        extensions = raw.get("extensions")
+        if not isinstance(extensions, dict):
+            extensions = raw["extensions"] = {}
+        extensions[card] = value
+        if world in raw and world != card:
+            raw[world] = value
+    if name == "secondary_keywords" and value:
+        raw["selective"] = True
+    if name == "probability":
+        if numbered:
+            raw["useProbability"] = True
+        else:
+            raw.setdefault("extensions", {})["useProbability"] = True
+
+
 def _int(value: Any, default: int = 0) -> int:
     if isinstance(value, bool) or value is None:
         return default
@@ -253,6 +324,12 @@ def fire_entry(
     keys = _strings(
         raw.get("key") if numbered and "key" in raw else raw.get("keys", raw.get("key"))
     )
+    # The entry's keywords as SealedLore has them win over those it brought
+    # (its patterns kept): edited on the Lore page or by a review, they had
+    # changed nothing a story firing as SillyTavern does read.
+    plain = [key for key in keys if _PATTERN.match(key) is None]
+    if list(dict.fromkeys(plain)) != list(keywords):
+        keys = (*keywords, *(key for key in keys if _PATTERN.match(key) is not None))
     secondary = _strings(
         raw.get("keysecondary")
         if numbered and "keysecondary" in raw
@@ -271,7 +348,9 @@ def fire_entry(
         secondary=secondary,
         selective=bool(raw.get("selective", True)) if numbered else bool(raw.get("selective")),
         logic=_int(_get(raw, numbered, "selectiveLogic", "selectiveLogic", AND_ANY), AND_ANY),
-        constant=bool(raw.get("constant")) or always_on,
+        # Always on as SealedLore has it: unticked, a constant entry stops
+        # being one. One made always on by @@activate alone isn't constant.
+        constant=always_on and (bool(raw.get("constant")) or "@@activate" not in decorators),
         disabled=not enabled,
         order=_int(order, DEFAULT_ORDER),
         probability=_num(_get(raw, numbered, "probability", "probability", 100), 100),

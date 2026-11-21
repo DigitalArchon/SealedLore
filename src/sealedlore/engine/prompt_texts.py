@@ -5042,7 +5042,10 @@ the story turns on, every one sent on every turn; "supporting", everyone else
 with a card; "opening", the notes the first passage is written from, and
 "starting_scene"; "style", how the prose reads; "agency_mode";
 "world_activity", how much happens that the author didn't start;
-"picture_style", how its pictures look; and "storyteller_notes", what only
+"lore_firing", the rules its lore is sent by (with "sillytavern_settings"
+under SillyTavern's), and "round_order" when some characters are played by
+a model of their own; "picture_style", how its pictures look; and
+"storyteller_notes", what only
 the storyteller is told: the truth behind what the setup leaves open, and
 what its central people want and hide (null when it has none). Then what the
 author asked before, if anything, and what they ask now.
@@ -5075,9 +5078,16 @@ How to answer:
 
 What you can change. Each change is one setting:
 - kind "story": field "title", "description", "agency_mode" ({agency_modes}),
-  "world_activity" ({world_activities}), or "picture_style" (one of
+  "world_activity" ({world_activities}), "picture_style" (one of
   {picture_styles}, a few words of your own for another look, or null for
-  the default, realistic).
+  the default, realistic), "lore_firing" ({lore_firings}: "sealedlore" sends
+  a small lorebook whole and chooses from a large one each turn; "sillytavern"
+  fires each entry exactly by SillyTavern's rules and its own settings, as a
+  lorebook made for SillyTavern expects), "sillytavern_settings" (under
+  SillyTavern's rules, an object of the settings to change, any of
+  {sillytavern_fields}), or "round_order" ({round_orders}: whether the
+  characters played by their own model answer at the same time as the author
+  or after seeing the author's turn).
 - kind "world": the value is the complete new world text.
 - kind "opening": field "text" (the notes the first passage is written from)
   or "mode" ({opening_modes}).
@@ -5099,6 +5109,9 @@ What you can change. Each change is one setting:
 - kind "lore_add": the value is {"title": ..., "content": ..., "keywords":
   [...], "until_mentioned": false}.
 - kind "lore_edit": "target" is the entry's title; field one of {lore_fields}.
+  "sillytavern", under SillyTavern's rules only, is an object of the entry's
+  own settings to change, any of {entry_settings} ("secondary_logic" one of
+  {secondary_logics}).
 - kind "lore_remove": "target" is the entry's title: out of the story.
 - kind "storyteller_notes": the value is the complete new text of the
   storyteller's notes, or null for a story left with no secrets.
@@ -5125,6 +5138,11 @@ Reply with one JSON object and nothing else:
         ("tiers", "the competence tiers"),
         ("character_shape", "A character, as JSON"),
         ("lore_fields", "the lore fields"),
+        ("lore_firings", "the allowed values, quoted and comma-separated"),
+        ("round_orders", "the allowed values, quoted and comma-separated"),
+        ("sillytavern_fields", "SillyTavern's World Info settings, quoted"),
+        ("entry_settings", "an entry's own SillyTavern settings, quoted"),
+        ("secondary_logics", "the allowed values, quoted and comma-separated"),
     ),
 )
 
@@ -5849,6 +5867,13 @@ else. Keep everything that had no problem as it was.""",
     (("problems", "what is wrong, a line each, as the importer says it"),),
 )
 
+# Brought up to date again (the author, Nov 21 2026: "aware of and can
+# recommend changes to all of these new things"): the lore's rules and
+# SillyTavern's settings, an entry's own, own-model characters and their
+# order, every job's model, the record, open threads, waiting suggestions and
+# the newer app settings. Live, four complaints each answered by one of them,
+# GLM 5.3 and Sonnet 4.6 once each: 8 of 8 proposed it (SealedLoreDocs
+# design/authoring.md, "The review knows what came after it").
 # Brought up to date (the author, Nov 6 2026: "make sure it is also up to date
 # with all the latest changes"): a card's personality and "keep_whole" are the
 # review's to change, and a plot is changed in the plot editor or written
@@ -5872,9 +5897,26 @@ You are given:
   story, not a setting: who the author is playing, where the scene stands and
   who is in it, how far along the story is. Read it — a character the author
   says is silent may be listed as elsewhere, or marked as the author's own.
+  In it, "scene"."still_open" is what the scene card says is still waiting
+  on an answer; "public_record", in a story with characters played by a
+  model of their own, is what everyone where the story is set knows by now,
+  as those characters are told it; "suggestions_waiting" lists changes to
+  the lore and the cards the story itself has suggested and the author hasn't
+  looked at yet (Story → Suggestions from the story…): when one of them is
+  what the complaint needs, say so in "cannot_fix" rather than writing it
+  again as a change.
   "app_settings" are SealedLore's own settings, which shape what the
   storyteller remembers and who it recalls; you can't change them, but if one
-  explains the complaint, name it in "cannot_fix" so the author can.
+  explains the complaint, name it in "cannot_fix" so the author can. Among
+  them: "prose_reminders" (the final reminder names the habits the recent
+  passages share, against repetitive prose), "storyteller_moves" (a turn
+  that leaves the storyteller nothing to answer lets it move the story on),
+  "public_record" and "record_model" (the record above), and
+  "lore_embeddings" (where the lore's meaning is read; null means lore is
+  chosen by its keywords alone). In Settings they are Generation → "Keep
+  the prose fresh" and "Let the storyteller make the next move when I
+  wait", Models → "Keep a public record for characters on their own
+  models", and Lore.
 - The system prompt the storyteller model actually receives, built from those
   settings and SealedLore's own texts, and after it the per-turn
   instructions it receives at the end of every turn: recent scenes, the story
@@ -5925,12 +5967,34 @@ What you can change. Each change is one setting:
   setting), "world_activity" ({world_activities} — how much
   happens that the author did not start: people acting on their own aims,
   someone arriving, an earlier choice catching up. Propose it when the
-  complaint is that the story feels passive, or that too much interrupts)
-  or "context_token_budget" (how many tokens of story the storyteller
+  complaint is that the story feels passive, or that too much interrupts),
+  "context_token_budget" (how many tokens of story the storyteller
   is sent each turn; more keeps more verbatim history at a higher cost per
   turn, and it can't exceed the model's context length. The author found
   Claude Sonnet's storytelling degrades quickly past about 60,000 tokens:
-  never propose more than that for a Sonnet model).
+  never propose more than that for a Sonnet model), "lore_firing"
+  ({lore_firings}), "sillytavern_settings" or "round_order" ({round_orders}).
+  "lore_firing" is the rules the lore's entries are sent by (the Lore page's
+  "Lore fires by"): "sealedlore" sends a small lorebook whole and chooses
+  from a large one each turn by the turn's words and their meaning;
+  "sillytavern" fires each entry exactly as SillyTavern does, by its own
+  settings (shown under "sillytavern" on an entry: second keywords, chance,
+  sticky, cooldown, delay, groups, order). Under SealedLore's rules an entry
+  brought from a SillyTavern lorebook keeps them, shown as
+  "sillytavern_unused": they work the moment the story fires by SillyTavern's
+  rules.
+  A lorebook made for SillyTavern is tuned to its rules: when its entries come
+  at the wrong times or too often under SealedLore's, propose "sillytavern";
+  when the entries a turn needs aren't sent under SillyTavern's, propose
+  "sealedlore", or change the entries' settings. "sillytavern_settings",
+  under SillyTavern's rules only, is an object of the World Info settings to
+  change, any of {sillytavern_fields}: how many recent messages are scanned,
+  the lore's share of the context and its cap, recursion and its steps, and
+  matching. "round_order", in a story with characters played by a model of
+  their own, is when they answer: "together", at the same time as the
+  author, without seeing the author's turn; "after", once the author has
+  sent, having seen it. Propose "after" when their answers ignore or cut
+  across what the author's character just did.
 - kind "world": the value is the complete new world text. Keep what isn't part
   of the problem word for word; add or reword only what is. A replacement that
   drops text is shown to the author as a loss, so never shorten silently.
@@ -5965,7 +6029,14 @@ What you can change. Each change is one setting:
   description, and changed as the description is. "keep_whole" true always
   sends a cast member's card whole: the answer when a condensed card
   ("playthrough"."cast_cards") lost what the story needs of them, at the cost
-  of other cards' room.
+  of other cards' room. "own_model", on a cast member, is a model id (as in
+  "model") that plays them as another player would: after each passage it
+  answers in their name, and the storyteller writes what they do from that;
+  null hands them back to the storyteller. Never the character the author
+  plays. Propose one only when the complaint is that a main character has no
+  mind of their own, and say that it costs a call each passage. "own_notes"
+  is what their model alone is told about playing them: change it when
+  their answers go wrong.
 - kind "character_add": "target" is "cast" or "supporting", and the value is a
   character object:
 {character_shape}
@@ -5992,7 +6063,15 @@ What you can change. Each change is one setting:
   storyteller takes every entry it is sent as already true, so when a passage
   brings in early something an entry describes as still to come (an arrival,
   a revelation, an event), propose setting it on that entry rather than a
-  note.
+  note. "sillytavern", only while the story's lore fires by SillyTavern's
+  rules, is an object of the entry's own SillyTavern settings to change, any
+  of {entry_settings}: "secondary_keywords" (a list) with "secondary_logic"
+  ({secondary_logics}) make the entry fire only when those also match as the
+  logic says, the answer to an entry that fires on a common word; "probability"
+  (0 to 100) its chance each time it applies; "sticky", "cooldown" and
+  "delay" how many messages it stays, rests, or waits before it may fire;
+  "group" a name it shares with entries of which only one fires at a time;
+  "order" which goes first, highest first.
 - kind "lore_disable": "target" is the entry's title.
 - kind "generation": field one of {generation_fields}. These are the author's
   settings for every story, so they are shown as suggestions for the author to
@@ -6008,8 +6087,11 @@ What you can change. Each change is one setting:
   lowering it. Reasoning makes replies slower and dearer; suggest more than
   "least" only when the complaint is about the storyteller losing track of
   complex situations.
-- kind "model": field "main_model" (the storyteller) or "summarization_model"
-  (writes chapter summaries; null means the storyteller's model). The value is
+- kind "model": field one of {model_fields}: this story's own model for the
+  storyteller ("main_model"), chapter summaries, drafting and reviews
+  ("authoring_model"), the scene read after each passage, the plot, choosing
+  lore, picture prompts, or the public record. Null makes one follow the
+  author's Settings again (never the storyteller's). The value is
   an exact model id as the endpoint lists it, like the current one in
   "model". Suggest a different model only when the complaint is really about
   what the current one can do — holding a complex cast, following its
@@ -6110,6 +6192,12 @@ Reply with one JSON object and nothing else:
         ("lore_fields", "the lore fields"),
         ("generation_fields", "the generation fields"),
         ("reasoning_efforts", "the allowed values, quoted and comma-separated"),
+        ("lore_firings", "the allowed values, quoted and comma-separated"),
+        ("round_orders", "the allowed values, quoted and comma-separated"),
+        ("sillytavern_fields", "SillyTavern's World Info settings, quoted"),
+        ("entry_settings", "an entry's own SillyTavern settings, quoted"),
+        ("secondary_logics", "the allowed values, quoted and comma-separated"),
+        ("model_fields", "this story's own model fields, quoted"),
     ),
 )
 
