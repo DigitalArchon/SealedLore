@@ -16,6 +16,7 @@ from sealedlore.models.character import Character
 from sealedlore.models.image import ImageRef
 from sealedlore.models.lore import TavernWorldInfo
 from sealedlore.models.node import AgencyMode, NpcScope, ResponseStyle
+from sealedlore.models.placeholders import StoryPlaceholders
 from sealedlore.models.plot import Plot
 from sealedlore.models.private import Attestation, PrivacyRecord, PrivatePrompt, PrivateSpan
 from sealedlore.models.prompt_edit import PromptEdit
@@ -194,6 +195,9 @@ class StorySetup(BaseModel):
     # ("Doomsville"): pictures the author kept for it are offered when a
     # story starts from it again (storage/template_pictures.py).
     template: str = ""
+    # Whom {{user}} and {{char}} name in its cards and lore, filled as each
+    # request goes out (engine/placeholders.py).
+    placeholders: StoryPlaceholders = Field(default_factory=StoryPlaceholders)
 
 
 class Story(BaseModel):

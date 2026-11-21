@@ -275,7 +275,11 @@ class PlotRuntime:
 
         Read from `path()`, so a mention inside a private scene reveals
         nothing, there or after: that it was named would be scene text."""
-        return held_back(self.bundle.lore, self.path() if path is None else path)
+        # Named by a title or keyword as it reads with the names in
+        # ("{{user}}'s farm" is named by "Rowan's farm").
+        names = self.placeholder_names()
+        lore = [names.entry(e) if e.until_mentioned else e for e in self.bundle.lore]
+        return held_back(lore, self.path() if path is None else path)
 
     @property
     def plot_model(self) -> str:

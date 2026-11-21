@@ -31,6 +31,7 @@ from sealedlore.engine.characters import render_supporting_block
 from sealedlore.engine.habits import feedback as habits_feedback
 from sealedlore.engine.initiative import Move, move_left
 from sealedlore.engine.model_tuning import left_out
+from sealedlore.engine.placeholders import Names
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.recall import RecallItem, render_recall_block
 from sealedlore.engine.response_style import LengthInstruction, for_turn
@@ -199,6 +200,10 @@ class AssemblyOptions:
     # writers). Nothing in the notes should be seen in a picture, and the
     # prompt they write is shown to the author.
     without_notes: bool = False
+    # Whom {{user}} and {{char}} name (engine/placeholders.py): the cards',
+    # the lore's and the world's filled in before anything is rendered.
+    # None: sent as written (a test, a call outside a story).
+    names: Names | None = None
     # Whether a turn that waits, says next to nothing or lets time pass hands
     # the next move to the storyteller (`Config.storyteller_moves`,
     # engine/initiative.py).
@@ -379,6 +384,15 @@ def assemble_prompt(
     `history_nodes` is the active path *excluding* the turn being composed —
     that text arrives in `turn` and is rendered into the volatile tail.
     """
+    names = (options or AssemblyOptions()).names
+    if names is not None:
+        story, cast, supporting, on_file = (
+            names.story(story),
+            names.characters(cast),
+            names.characters(supporting),
+            names.characters(on_file),
+        )
+        lore, standing_lore = names.entries(lore), names.entries(standing_lore)
     cast_by_id = {character.id: character for character in cast}
     texts = (options or AssemblyOptions()).texts
 
@@ -578,6 +592,15 @@ def assemble_question(
     active path, since nothing is being composed; `earlier` is the question
     and answer pairs already asked at this point, so a follow-up has context.
     """
+    names = (options or AssemblyOptions()).names
+    if names is not None:
+        story, cast, supporting, on_file = (
+            names.story(story),
+            names.characters(cast),
+            names.characters(supporting),
+            names.characters(on_file),
+        )
+        lore, standing_lore = names.entries(lore), names.entries(standing_lore)
     cast_by_id = {character.id: character for character in cast}
     texts = (options or AssemblyOptions()).texts
     tail_specs = [

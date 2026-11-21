@@ -107,12 +107,14 @@ def set_fields(character: Character, values: Mapping[str, Any]) -> None:
             setattr(character, key, value or None)
 
 
-def given(card: Character, user: str | None) -> dict[str, Any]:
-    """What a story is given of a kept card: `{{char}}` and `{{user}}`
-    written out (`user`: whom the card's `{{user}}` becomes), a blank
-    summary the description's first sentence and a blank voice the card's
-    example messages, as a card read into a story always had them."""
-    fill = macro_filler(card.name, user or None)
+def given(card: Character, user: str | None, kept: bool = False) -> dict[str, Any]:
+    """What a story is given of a kept card: `{{char}}` and `{{user}}` as
+    written when `kept` (`CardLink.placeholders_kept`: the story fills them
+    as it sends), else written out (`user`: whom the card's `{{user}}`
+    becomes); a blank summary the description's first sentence and a blank
+    voice the card's example messages, as a card read into a story always
+    had them."""
+    fill = (lambda text: text) if kept else macro_filler(card.name, user or None)
     tavern = card.tavern or TavernFields()
     values = fields_of(card)
     description = fill(values["full_description"]).strip()
@@ -151,17 +153,21 @@ def filled_tavern(tavern: TavernFields | None, fill: Callable[[str], str]) -> Ta
     return copy
 
 
-def story_copy(card: Character, characters: Sequence[Character], user: str | None) -> Character:
+def story_copy(
+    card: Character, characters: Sequence[Character], user: str | None, *, kept: bool = True
+) -> Character:
     """A kept card as a story's character: its fields as `given`, a fresh
-    id, linked to the card. Its pictures are the window's to copy in
-    (`picture_mark` each, into `linked.pictures`)."""
+    id, linked to the card. Its {{char}} and {{user}} stay as written
+    (`kept`): the story fills them as it sends. Its pictures are the window's
+    to copy in (`picture_mark` each, into `linked.pictures`)."""
     from sealedlore.storage import collection
 
-    values = given(card, user)
+    values = given(card, user, kept)
     copy = card.model_copy(deep=True)
     copy.id = new_id()
     set_fields(copy, values)
-    copy.tavern = filled_tavern(card.tavern, macro_filler(card.name, user or None))
+    fill = (lambda text: text) if kept else macro_filler(card.name, user or None)
+    copy.tavern = filled_tavern(card.tavern, fill)
     # The card's other files stay in Your characters (they go out with the
     # card there); the story has its pictures, copied in by the window.
     copy.tavern.assets = []
@@ -175,6 +181,7 @@ def story_copy(card: Character, characters: Sequence[Character], user: str | Non
         family=main.id,
         version="" if main is card else collection.info(card).version,
         user=user or "",
+        placeholders_kept=kept,
         fields=values,
     )
     return copy
@@ -274,7 +281,7 @@ def changes(
     if link is None:
         return []
     base = link.fields
-    theirs = given(card, link.user)
+    theirs = given(card, link.user, link.placeholders_kept)
     mine = _mine(character, card, theirs)
     found: list[Change] = []
     for key in LINKED_FIELDS:
@@ -365,7 +372,7 @@ def in_step(
     link = character.linked
     if link is None:
         return
-    theirs = given(card, link.user)
+    theirs = given(card, link.user, link.placeholders_kept)
     mine = _mine(character, card, theirs)
     for key in LINKED_FIELDS:
         if mine[key] == theirs[key]:
@@ -453,6 +460,8 @@ def name_the_user(character: Character, user: str) -> bool:
     link = character.linked
     if link is None or link.user or not user or user == character.name:
         return False
+    if link.placeholders_kept:
+        return False  # {{user}} stays as written: filled as it is sent
     set_fields(character, _with_user(fields_of(character), user))
     link.fields = _with_user(link.fields, user)
     if character.tavern is not None:
@@ -526,7 +535,7 @@ def save_to_card(
     if link is None:
         return
     story_order = list(story_refs)
-    before = given(card, link.user)
+    before = given(card, link.user, link.placeholders_kept)
     names = _names(character, link)
     for change in chosen:
         if change.field:
@@ -561,7 +570,7 @@ def _follow_derived(character: Character, card: Character, before: Mapping[str, 
     and the story never changed, follows in the story too: else the save
     itself read as a change on the card."""
     link = character.linked
-    after = given(card, link.user)
+    after = given(card, link.user, link.placeholders_kept)
     mine = fields_of(character)
     raw = fields_of(card)
     for key in DERIVED:
@@ -625,13 +634,14 @@ def version_from_story(
 
     link = character.linked
     user = link.user if link is not None else ""
+    kept = link.placeholders_kept if link is not None else False
     version = card.model_copy(deep=True)
     version.id = new_id()
     version.forget_own_model()
     # The card's own text wherever the story has what the card gives it
     # (a blank voice stays blank, its examples its own); the story's,
     # names back as macros, where it changed.
-    theirs = given(card, user)
+    theirs = given(card, user, kept)
     for key, value in _mine(character, card, theirs).items():
         if value != theirs[key]:
             _back(version, key, value, user, _names(character, link))
@@ -672,6 +682,7 @@ def relink(
         family=main_id,
         version=card.collection.version if card.collection else "",
         user=old.user if old is not None else "",
+        placeholders_kept=old.placeholders_kept if old is not None else False,
         fields=fields_of(character),
         pictures=list(marks),
     )

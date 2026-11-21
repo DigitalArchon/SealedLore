@@ -29,6 +29,7 @@ from sealedlore.engine.draft_detail import STANDARD_DETAIL, DraftDetail, render_
 from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.picture_styles import STYLES as PICTURE_STYLES
 from sealedlore.engine.picture_styles import read_style, write_style
+from sealedlore.engine.placeholders import has_placeholders, names_for
 from sealedlore.engine.prompt_edits import missing_slots, set_text, texts_in_force
 from sealedlore.engine.prompt_texts import (
     CHAPTERS,
@@ -833,6 +834,22 @@ def lore_rules_view(bundle: StoryBundle) -> dict[str, Any]:
     return view
 
 
+def placeholders_view(bundle: StoryBundle) -> dict[str, Any]:
+    """Whom {{user}} and {{char}} name, for a review and a follow-up, only
+    when the story's texts write them (engine/placeholders.py): every other
+    request is as it was."""
+    story = bundle.story
+    people = [*bundle.cast, *bundle.supporting.characters]
+    texts = [story.world_bible, story.storyteller_notes, story.setup.opening_text]
+    texts += [e.content for e in bundle.lore] + [e.condensed or "" for e in bundle.lore]
+    for c in people:
+        texts += [c.summary, c.full_description, c.personality, c.voice_notes, c.condensed]
+    if not any(has_placeholders(text) for text in texts):
+        return {}
+    names = names_for(story, people)
+    return {"placeholders": {"{{user}}": names.user, "{{char}}": names.char}}
+
+
 def _name_of(bundle: StoryBundle, character_id: str | None) -> str | None:
     for character in (*bundle.cast, *bundle.supporting.characters):
         if character.id == character_id:
@@ -1028,6 +1045,7 @@ def settings_view(
         "npc_scope": story.defaults.npc_scope,
         "world_activity": story.defaults.world_activity,
         **lore_rules_view(bundle),
+        **placeholders_view(bundle),
         "opening": {"text": story.setup.opening_text, "mode": story.setup.opening_mode},
         "model": {
             "main_model": story.defaults.main_model or model,

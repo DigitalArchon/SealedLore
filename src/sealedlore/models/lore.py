@@ -71,6 +71,9 @@ class LoreEntry(BaseModel):
     # Ruiz's lorebook", "the lorebook Hellsville.json"), for the Lore page to
     # say. Never sent to a model; blank for an entry written here.
     came_from: str = ""
+    # The character whose card's lorebook it came with: whom {{char}} names in
+    # it (engine/placeholders.py). None: the story's {{char}}.
+    of_character: str | None = None
     # The entry as SillyTavern had it, when it came from a lorebook: what a
     # story firing its lore as SillyTavern does reads (`TavernEntry`).
     tavern: TavernEntry | None = None

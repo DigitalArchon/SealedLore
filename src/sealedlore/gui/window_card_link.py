@@ -40,7 +40,6 @@ from sealedlore.storage.image_meta import picture_kind
 from sealedlore.storage.images import REFS_DIR
 from sealedlore.storage.paths import COLLECTION_ID
 from sealedlore.storage.picture_store import PictureStore
-from sealedlore.storage.tavern_cards import macro_filler
 from sealedlore.storage.tavern_lore import LoreImport, lore_from_book, their_lorebook
 
 # A character's own line, for one only in the story: saved at once. The
@@ -277,6 +276,9 @@ class CardLinkWindow:
                 data = session.pictures.read(new.file) or b""
                 marks.append(picture_mark(ref, data))
         copy.linked.pictures = marks
+        for entry in lore:
+            # Their lorebook's {{char}} is them (engine/placeholders.py).
+            entry.of_character = copy.id
         session.add_card(copy, to_cast=to_cast, lore=list(lore))
         return copy
 
@@ -287,8 +289,8 @@ class CardLinkWindow:
         book = card.tavern.character_book if card.tavern else None
         if not book:
             return None
-        fill = macro_filler(card.name, self._story_user())
-        return lore_from_book(book, fill, their_lorebook(card.name))
+        # {{char}} and {{user}} as written: filled as each request goes out.
+        return lore_from_book(book, lambda text: text, their_lorebook(card.name))
 
     def _lore_to_bring(
         self, cards: Sequence[Character], with_lore: bool, notes: list[str]
@@ -390,21 +392,15 @@ class CardLinkWindow:
         session, held = self.session, self._held()
         if session is None or held is None:
             return
+        # Copies made before placeholders were kept had the names written in;
+        # theirs is written out now as it always was. Lore keeps {{user}} as
+        # written: it is filled as each request goes out, and keywords are
+        # matched with the names in (engine/placeholders.py).
         named = [
             character
             for character in (*session.cast, *session.supporting)
             if card_link.name_the_user(character, held.name)
         ]
-        # Their lore too, and any lore a lorebook brought in before anyone was
-        # played: left as {{user}}, it read so to the storyteller, and a
-        # keyword written so could never match.
-        fill = macro_filler("{{char}}", held.name)
-        for entry in session.bundle.lore:
-            title, content = fill(entry.title), fill(entry.content)
-            keywords = [fill(keyword) for keyword in entry.keywords]
-            if (title, content, keywords) != (entry.title, entry.content, entry.keywords):
-                entry.title, entry.content, entry.keywords = title, content, keywords
-                named.append(entry)
         if named:
             session.save()
 

@@ -49,6 +49,11 @@ class CardLink(BaseModel):
     version: str = ""
     # Who `{{user}}` became in the story ("": left as written).
     user: str = ""
+    # The story's copy keeps the card's {{char}} and {{user}} as written,
+    # filled as each request goes out (engine/placeholders.py): what a story
+    # is given of the card is then the card's text itself. Copies made before
+    # (False) had the names written in.
+    placeholders_kept: bool = False
     fields: dict[str, Any] = Field(default_factory=dict)
     pictures: list[PictureMark] = Field(default_factory=list)
     # The story's own changes the author chose to keep in it, by their

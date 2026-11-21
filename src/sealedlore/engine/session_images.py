@@ -99,7 +99,9 @@ class ImageRuntime:
         may see; None in a chat, with no location, or when none matches."""
         if self.story.chat:
             return None
-        return place_for(self.story.scene.location, self.visible_lore())
+        return place_for(
+            self.story.scene.location, self.placeholder_names().entries(self.visible_lore())
+        )
 
     def place_picture(self) -> tuple[LoreEntry, ImageRef] | None:
         """The current place and the picture that stands for it now, when it

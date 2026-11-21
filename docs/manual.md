@@ -1365,8 +1365,9 @@ to or taken off:
 - **Card**: the character as a story has them: name, aliases, summary,
   description, personality, voice, competence and skills, with their portrait
   and other pictures. Write `{{char}}` for their name and `{{user}}` for
-  whoever they talk to, as SillyTavern cards do: the names go in when they
-  join a story.
+  whoever they talk to, as SillyTavern cards do: a story keeps them as
+  written and puts the names in whenever it sends anything (see
+  "`{{user}}` and `{{char}}`").
 - **Pictures**: their pictures as the cast board's sheet of looks and
   expressions, with the gaps ready to draw, pictures from your computer
   dropped on a place, and Restyle.
@@ -1556,9 +1557,9 @@ its lorebook as it is, and what came in can still be changed on the Lore
 page. The message afterwards says how many entries came and how many you
 left out. Their lorebook stays on their card either way. Only a
 story made from their card (its own scenario, or a draft built around them)
-takes the lorebook without asking. `{{char}}` and `{{user}}` become their name and the name of the
-character you are playing (before anyone is played, the one the story
-suggests you play, else whoever you choose when it begins).
+takes the lorebook without asking. Their card's `{{char}}` and `{{user}}`,
+and their lorebook's, stay as written in the story and mean them and the
+story's player (see "`{{user}}` and `{{char}}`").
 
 A character from Your characters says so on their Card tab on the cast
 board, with what has changed since they joined: in this story (a new
@@ -1566,8 +1567,8 @@ picture, a changed description), on their card, or both. **Changes…** shows ea
 side, ticked, and offers:
 
 - **Save the ticked to the card**: their card takes them, `{{char}}` and
-  `{{user}}` put back where the card writes them, so every story they join
-  from now on has them;
+  `{{user}}` where the card writes them, so every story they join from now
+  on has them;
 - **Save as a new version…**: the character as this story has them becomes a
   new version of their card, kept beside it, and this story's character is
   that version from now on;
@@ -1705,8 +1706,8 @@ story from it, and asks:
   story's world, with no card of its own; **Fill with lore characters…** on
   the cast board can write cards for the people in it);
 - **who you play**: SealedLore needs a character for you where SillyTavern
-  has your persona. Every `{{user}}` on the card becomes their name, and
-  every `{{char}}` the card's;
+  has your persona. Every `{{user}}` on the card means them, and every
+  `{{char}}` the card's character (see "`{{user}}` and `{{char}}`");
 - which **greeting** opens the story, or none, and you write the first turn.
 
 The card's description and personality become the character's card, its
@@ -1730,8 +1731,8 @@ it to Style → Other notes), its tags, macros other than `{{char}}` and
 character card…** adds the card's character to the open story, on the cast
 or as a supporting character. As with From Your characters…, its lorebook
 stays out unless you tick **Bring their lorebook too**, and the question
-says why; ticked, you choose its entries for this story first, the same way. Its `{{user}}`
-becomes the name of the character you are playing. A card with files of its
+says why; ticked, you choose its entries for this story first, the same way. Its `{{char}}`
+means them and its `{{user}}` the story's player. A card with files of its
 own (a background, pictures its greetings show) is also kept whole in Your
 characters, and the story's character linked to it, as From Your
 characters… would; during a private scene that waits until the scene ends.
@@ -1821,6 +1822,32 @@ cards on RisuRealm can't be downloaded, at their creator's choice).
 through a copy on JannyAI, which turns programs away), and a site that answers
 with a bot check is the same: download the card in a browser and import the
 file.
+
+### `{{user}}` and `{{char}}`
+
+Cards and lorebooks write `{{user}}` for the person their character talks to,
+and `{{char}}` for their character (and the older `<USER>` and `<BOT>`).
+SealedLore keeps them as written, wherever they are (a card, a lorebook, the
+world, the opening, the storyteller's notes), and puts the names in whenever
+anything is sent to a model: a passage, a Question, the reads after it, the
+pictures' prompts. Keywords are matched with the names in too, so a keyword
+`{{user}}'s debt` finds a turn about Rowan's debt. A simple chat is sent as
+written.
+
+- **`{{user}}`** is the story's player, set on **Story → Setup… → About →
+  {{user}} is**: the character you play in a story made from a card or a
+  lorebook, else whoever you play when the story begins. It stays them when
+  you switch to play someone else: a card's "`{{char}}` owes `{{user}}`" goes
+  on meaning the one they owe, not whoever you are playing now.
+- **`{{char}}`** is the text's own character. A character's own card means
+  them, and so does a lorebook entry that came with their card, whatever
+  story they are in, beside whoever else. Anything else (the world, a
+  lorebook file, the opening) means the story's own character, set on
+  **Story → Setup… → About → {{char}} is**: the card a story was made from,
+  or, for a world or narrator card, its name.
+
+Saving a character back to their card keeps the placeholders where the card
+had them.
 
 ## Drafting a story, and reviewing its settings
 

@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from sealedlore.engine.placeholders import Names
 from sealedlore.engine.rules import render_cast_sheet
 from sealedlore.models.character import Character, Competence
 from sealedlore.models.lore import LoreEntry
@@ -526,14 +527,26 @@ def test_a_new_story_from_a_card(tmp_path: Path):
     assert (elena.name, john.name, john.summary) == ("Elena", "John", "A drifter.")
     assert scenario.suggested_character_id == john.id
     assert scenario.starting_scene.present_character_ids == [elena.id, john.id]
+    # The card's {{user}} and {{char}} stay as written, whom they name kept
+    # beside them (engine/placeholders.py): John is {{user}}, Elena {{char}},
+    # her lorebook's {{char}} hers.
+    assert scenario.placeholders.user_id == john.id
+    assert scenario.placeholders.char_id == elena.id
     assert scenario.world_bible == (
+        "Four winters after the end of the world, {{user}} reaches the farmhouse."
+    )
+    names = Names(user="John", char="Elena")
+    assert names.fill(scenario.world_bible) == (
         "Four winters after the end of the world, John reaches the farmhouse."
     )
     assert scenario.opening_mode == "as_written"
-    assert scenario.opening_text == "The door is barred. Elena speaks through it."
+    assert names.fill(scenario.opening_text) == "The door is barred. Elena speaks through it."
     assert scenario.description == "A slow-burn survival story."
     assert [entry.title for entry in scenario.lore] == ["Hellsville"]
-    assert scenario.lore[0].content == "Hellsville is walled; John is not welcome there."
+    assert scenario.lore[0].of_character == elena.id
+    assert names.fill(scenario.lore[0].content) == (
+        "Hellsville is walled; John is not welcome there."
+    )
     assert elena.reference_images and elena.reference_images[0].file in scenario.reference_files
     notes = " ".join(imported.notes)
     assert "1 other greeting on the card was not used" in notes
@@ -546,7 +559,10 @@ def test_a_new_story_from_a_card(tmp_path: Path):
 def test_the_cards_instructions_can_go_into_the_styles_notes(tmp_path: Path):
     card = read_card(png_card(tmp_path, {"chara": v2()}))
     imported = scenario_from_card(card, player="John", instructions=True)
-    assert imported.scenario.style.notes == "You are Elena. Never break character."
+    assert imported.scenario.style.notes == "You are {{char}}. Never break character."
+    assert Names(char="Elena").fill(imported.scenario.style.notes) == (
+        "You are Elena. Never break character."
+    )
 
 
 def test_a_world_card_makes_the_world_and_its_picture_the_background(tmp_path: Path):

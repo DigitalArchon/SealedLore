@@ -57,6 +57,7 @@ from sealedlore.storage.tavern_cards import (
     character_from_card,
     expression_refs,
     expressions_from_zip,
+    keep_placeholders,
     lore_from_card,
     macro_filler,
     read_card,
@@ -240,11 +241,20 @@ class TavernWindow:
                 "Your characters now.",
             )
             return
+        chat = session.story.chat
         held = self._held()
-        fill = macro_filler(card.name, held.name if held is not None else None)
+        if chat:
+            # A chat's people are for their pictures: its text as before.
+            fill = macro_filler(card.name, held.name if held is not None else None)
+        else:
+            # {{user}} and {{char}} as written: the story fills them as each
+            # request goes out, {{char}} as this character in their own text
+            # and in their lorebook (engine/placeholders.py).
+            fill = keep_placeholders
         character = character_from_card(card, fill)
         lore = lore_from_card(card, fill)
-        chat = session.story.chat
+        for entry in lore.entries:
+            entry.of_character = character.id
         if chat:
             # A chat's characters are for their pictures: no cast or
             # supporting characters, and no lore to give them.
@@ -558,24 +568,22 @@ class TavernWindow:
             if not chosen:
                 return
             path = Path(chosen)
-        held = self._held()
-        user = held.name if held is not None else None
         imported: LoreImport | None = None
         problem = f"{path.name} has no lorebook in it."
         if path.suffix.lower() in LOREBOOK_SUFFIXES:
             try:
                 # A lorebook of its own has no {{char}} to name: it stays. What
                 # converting another app's lost is said with the rest.
-                imported = open_lorebook(path).lore(
-                    macro_filler("{{char}}", user), f"the lorebook {path.name}"
-                )
+                imported = open_lorebook(path).lore(keep_placeholders, f"the lorebook {path.name}")
             except LorebookError as exc:
                 problem = str(exc)
         if imported is None:
             # A card's own lorebook will do as well.
             card = self._read_card(path, quietly=True)
             if card is not None and card.book is not None:
-                imported = lore_from_card(card, macro_filler(card.name, user))
+                # Its {{char}} is the card's character, who isn't in the
+                # story: their name; {{user}} stays, filled as it is sent.
+                imported = lore_from_card(card, macro_filler(card.name, None))
         if imported is None:
             self._warn_plain("Could not read the lorebook", problem)
             return
@@ -812,8 +820,9 @@ class TavernWindow:
         elif card.book is None:
             self._warn_plain("Import a lorebook", f"{card.name}'s card has no lorebook in it.")
         else:
-            held = self._held()
-            fill = macro_filler(card.name, held.name if held is not None else None)
+            # Its {{char}} is the card's character, not in the story: their
+            # name; {{user}} stays, filled as it is sent.
+            fill = macro_filler(card.name, None)
             self._lore_into_story(lore_from_card(card, fill), f"{card.name}'s card")
 
     def _lorebook_from_link(self, book: Mapping[str, Any], name: str, *, where: str) -> None:
@@ -837,9 +846,8 @@ class TavernWindow:
             return
         if self.session is None or self.in_chat:
             return
-        held = self._held()
-        # A lorebook of its own has no {{char}} to name: it stays.
-        imported = read.lore(macro_filler("{{char}}", held.name if held else None))
+        # {{user}} and {{char}} as written: filled as each request goes out.
+        imported = read.lore(keep_placeholders)
         title = book.get("name")
         self._lore_into_story(imported, title if isinstance(title, str) and title else name)
 

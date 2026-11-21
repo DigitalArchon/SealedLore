@@ -17,6 +17,7 @@ from sealedlore.models.character import Character
 from sealedlore.models.image import ImageRef
 from sealedlore.models.lore import LoreEntry, TavernWorldInfo
 from sealedlore.models.node import AgencyMode, NpcScope
+from sealedlore.models.placeholders import StoryPlaceholders
 from sealedlore.models.plot import Plot
 from sealedlore.models.prompt_edit import PromptEdit
 from sealedlore.models.scene import SceneState
@@ -58,6 +59,8 @@ class Scenario(BaseModel):
     absent_at_start: list[str] = Field(default_factory=list)
     suggested_character_id: str | None = None
     choose_one_of: list[str] = Field(default_factory=list)
+    # Whom {{user}} and {{char}} name (`StorySetup.placeholders`).
+    placeholders: StoryPlaceholders = Field(default_factory=StoryPlaceholders)
     style: StyleDirectives = Field(default_factory=StyleDirectives)
     agency_mode: AgencyMode = "contested"
     npc_scope: NpcScope = "all"

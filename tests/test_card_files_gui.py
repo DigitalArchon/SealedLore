@@ -140,7 +140,10 @@ def test_a_story_from_the_cards_scenario_looks_at_its_greeting_as_the_story_open
     dialog = CardImportDialog(card)
     dialog.player.setText("John")
     made = scenario_from_card(card, **dialog.options()).scenario
-    assert dialog.preview.toPlainText() == made.opening_text
+    # The preview with the names in, as the story's first message has them.
+    from sealedlore.engine.placeholders import Names
+
+    assert dialog.preview.toPlainText() == Names(user="John", char="Elena").fill(made.opening_text)
     assert "{{" not in dialog.preview.toPlainText() and "<img" not in dialog.preview.toPlainText()
     assert not dialog.preview_pictures.isHidden()
     assert dialog.preview_pictures.text() == (

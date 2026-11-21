@@ -67,7 +67,7 @@ class LoreCondenseRuntime:
     ) -> StandingFit:
         """The always-on entries as sent, against the lore budget."""
         if standing is None:
-            layout = self._layout_as_written(budget)
+            layout = self._layout_named(budget)
             if layout.mode == "whole":
                 # Sent whole as a small lorebook is: within its own limit.
                 whole = [e for e in layout.standing if e.always_on]

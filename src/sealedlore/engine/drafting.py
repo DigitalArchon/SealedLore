@@ -19,7 +19,7 @@ from sealedlore.engine.authoring import (
     build_generation_messages,
     parse_generated,
 )
-from sealedlore.engine.card_link import fields_of, picture_mark, story_copy
+from sealedlore.engine.card_link import picture_mark, story_copy
 from sealedlore.engine.draft_detail import STANDARD_DETAIL, DraftDetail
 from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
@@ -39,7 +39,6 @@ from sealedlore.storage.image_meta import picture_kind
 from sealedlore.storage.images import REFS_DIR
 from sealedlore.storage.repository import StoryBundle, append_api_log, save_story_bundle
 from sealedlore.storage.scenario import bundle_from_scenario
-from sealedlore.storage.tavern_cards import macro_filler
 from sealedlore.storage.tavern_lore import lore_from_book, their_lorebook
 
 
@@ -201,6 +200,9 @@ def put_in_characters(
                     title.strip().casefold() for title in titles if isinstance(title, str)
                 }
     played = next((c for c in scenario.cast if c.id == scenario.suggested_character_id), None)
+    if played is not None and scenario.placeholders.user_id is None:
+        # Their cards' {{user}}: whom the author plays here.
+        scenario.placeholders.user_id = played.id
     taken: set[str] = set()
     # Lore titles a card's lorebook brought, beside the draft's own.
     # Each title a chosen character's lorebook brought, and whose it was.
@@ -234,11 +236,6 @@ def put_in_characters(
             copy.full_description = "\n\n".join(
                 part for part in (copy.full_description or "", f"In this story: {note}") if part
             )
-        if user is None and "{{user}}" in str(fields_of(copy)):
-            warnings.append(
-                f"{card.name}'s card names {{{{user}}}}, the one they talk to: write that "
-                "person's name in on the cast board"
-            )
         marks = []
         for ref in card.reference_images:
             data_bytes = read(ref.file)
@@ -253,7 +250,12 @@ def put_in_characters(
             marks.append(picture_mark(ref, data_bytes))
         copy.linked.pictures = marks
         lore, off = _put_in_lore(
-            scenario, card, user, warnings, from_cards, aside.get(card.name.casefold(), set())
+            scenario,
+            card,
+            copy.id,
+            warnings,
+            from_cards,
+            aside.get(card.name.casefold(), set()),
         )
         if brought is not None:
             brought.append(_brought(card.name, in_cast, len(marks), lore, off))
@@ -262,7 +264,7 @@ def put_in_characters(
 def _put_in_lore(
     scenario: Scenario,
     card: Character,
-    user: str | None,
+    owner: str,
     warnings: list[str],
     from_cards: dict[str, str],
     set_aside: set[str],
@@ -285,9 +287,12 @@ def _put_in_lore(
     book = card.tavern.character_book if card.tavern else None
     if not book:
         return 0, 0
-    imported = lore_from_book(book, macro_filler(card.name, user), their_lorebook(card.name))
+    # {{char}} and {{user}} as written: their {{char}} is the character
+    # (`of_character`), filled as each request goes out.
+    imported = lore_from_book(book, lambda text: text, their_lorebook(card.name))
     added = off = 0
     for entry in imported.entries:
+        entry.of_character = owner
         title = entry.title.casefold()
         if from_cards.get(title, card.id) != card.id:
             warnings.append(

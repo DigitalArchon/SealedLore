@@ -54,6 +54,16 @@ def app() -> QApplication:
     return QApplication.instance() or QApplication([])
 
 
+def sent(session, character) -> str:
+    """A character's description as the storyteller is sent it: the story's
+    names in its {{user}} and {{char}} (engine/placeholders.py)."""
+    return session.placeholder_names().character(character).full_description or ""
+
+
+def cast_ids(bundle) -> dict[str, str]:
+    return {c.name: c.id for c in (*bundle.cast, *bundle.supporting.characters)}
+
+
 def keep_elena(root: Path, tmp_path: Path) -> Character:
     """Elena kept in Your characters, from the test card, before any window."""
     bundle = collection.load_collection(root)
@@ -120,8 +130,9 @@ def test_a_kept_character_joins_the_story_with_the_names_in(app, window, monkeyp
     elena = added_elena(window, monkeypatch)
     session = window.session
     assert elena.linked is not None and elena.linked.user == "John"
-    assert "She trusts John slowly." in elena.full_description
-    assert elena.voice_notes.startswith("John: Hello?")
+    assert elena.linked.placeholders_kept and "{{user}}" in elena.full_description
+    assert "She trusts John slowly." in sent(session, elena)
+    assert session.placeholder_names().character(elena).voice_notes.startswith("John: Hello?")
     # Her picture is the story's own file now.
     portrait = elena.reference_images[0]
     assert session.pictures.read(portrait.file) is not None
@@ -202,7 +213,10 @@ def test_the_cards_changes_since_come_into_the_story(app, window, monkeypatch):
     assert "Changed on the card since: personality." in window.cast_panel.link_words.text()
     answer_changes(monkeypatch, TAKE)
     window.cast_panel.link_button.click()
-    assert elena.personality == "wary, and fond of John"
+    assert elena.personality == "wary, and fond of {{user}}"  # the card's, as written
+    assert window.session.placeholder_names().character(elena).personality == (
+        "wary, and fond of John"
+    )
     saved = load_story_bundle("story-1", root=window.root)
     assert next(c for c in saved.cast if c.name == "Elena").personality == elena.personality
 
@@ -412,7 +426,9 @@ def test_a_draft_names_their_cards_and_keeps_them_as_they_are(app, window, tmp_p
     linked = cast["Elena"]
     assert linked.linked.card_id == elena.id and linked.linked.user == "Mara"
     assert not linked.is_player_available
-    assert "She trusts Mara slowly." in linked.full_description
+    assert linked.linked.placeholders_kept and "{{user}}" in linked.full_description
+    # Mara is the draft's player: its {{user}}.
+    assert bundle.story.setup.placeholders.user_id == cast["Mara"].id
     assert linked.full_description.endswith(
         "In this story: She runs smuggled engines through the harbour."
     )
@@ -448,7 +464,8 @@ def test_a_draft_brings_their_own_lorebook_as_add_to_the_story_does(app, window,
     assert "is walled; the author's character is not welcome there." in request
     assert request.endswith(DEFAULT_TEXTS["authoring.draft.characters.lore"])
     by_title = {entry.title: entry for entry in bundle.lore}
-    assert by_title["Hellsville"].content == "Hellsville is walled; Mara is not welcome there."
+    assert by_title["Hellsville"].content == "Hellsville is walled; {{user}} is not welcome there."
+    assert by_title["Hellsville"].of_character == cast_ids(bundle)["Elena"]
     assert by_title["Hellsville"].came_from == "Elena's lorebook"
     assert by_title["The Harbour"].came_from == "" and warnings == []
     assert draft.brought == [
@@ -457,7 +474,7 @@ def test_a_draft_brings_their_own_lorebook_as_add_to_the_story_does(app, window,
     ]
     bundle, warnings, _draft = drafted([{"title": "Hellsville", "content": "The draft's own."}])
     assert [e.content for e in bundle.lore if e.title == "Hellsville"] == [
-        "Hellsville is walled; Mara is not welcome there."
+        "Hellsville is walled; {{user}} is not welcome there."
     ]
     assert warnings == [
         "the draft's own lore entry “Hellsville” was left out: Elena's lorebook has one by "
@@ -627,13 +644,15 @@ def test_their_card_from_setup_doesnt_open_the_page_behind_it(app, window, monke
 
 
 def test_a_card_added_before_anyone_is_played_names_them_at_the_start(app, window, monkeypatch):
+    """Her {{user}} stays as written, and names whom the author plays once
+    they play someone (engine/placeholders.py): nothing to write out."""
     window.session.story.held_character_id = None
     elena = added_elena(window, monkeypatch)
     assert "{{user}}" in elena.full_description and elena.linked.user == ""
     window.session.story.held_character_id = "john"
     window.name_kept_users()
-    assert "She trusts John slowly." in elena.full_description
-    assert elena.linked.user == "John"
+    assert "{{user}}" in elena.full_description
+    assert "She trusts John slowly." in sent(window.session, elena)
     window._sync_card_link()
     assert "In step with their card" in window.cast_panel.link_words.text()
 
@@ -647,8 +666,11 @@ def test_a_cards_lore_added_before_anyone_is_played_is_named_at_the_start(app, w
     assert "{{user}}" in entry.content
     window.session.story.held_character_id = "john"
     window.name_kept_users()
-    assert entry.content == "Hellsville is walled; John is not welcome there."
-    assert "John is not welcome" in load_story_bundle("story-1", window.root).lore[0].content
+    # Kept as written, sent and matched with the names in.
+    assert "{{user}}" in entry.content
+    layout = window.session.lore_layout()
+    (sent_entry,) = [*layout.standing, *layout.selectable]
+    assert sent_entry.content == "Hellsville is walled; John is not welcome there."
 
 
 def test_the_same_card_twice_is_asked_about_and_no_is_the_default(app, window, monkeypatch):
@@ -705,7 +727,7 @@ def test_the_story_suggests_whom_a_card_talks_to_before_anyone_plays(app, window
     window.session.story.held_character_id = None
     window.session.story.setup.suggested_character_id = "john"
     elena = added_elena(window, monkeypatch)
-    assert "She trusts John slowly." in elena.full_description
+    assert "She trusts John slowly." in sent(window.session, elena)
 
 
 def test_a_name_taken_from_the_card_keeps_their_place_on_the_rosters(app, window, monkeypatch):
@@ -778,7 +800,7 @@ def test_a_story_from_their_cards_scenario_has_them_linked_to_their_card(
     session = window.session
     linked = next(c for c in session.cast if c.name == "Elena")
     assert linked.linked is not None and linked.linked.card_id == elena.id
-    assert linked.linked.user == "John" and "She trusts John slowly." in linked.full_description
+    assert linked.linked.user == "John" and "She trusts John slowly." in sent(session, linked)
     assert len(linked.reference_images) == (3 if expressions else 1)
     assert session.story.setup.starting_scene.present_character_ids.count(linked.id) == 1
     window._sync_card_link()

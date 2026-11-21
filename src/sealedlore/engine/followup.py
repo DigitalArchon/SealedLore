@@ -36,6 +36,7 @@ from sealedlore.engine.authoring import (
     character_view,
     lore_rules_view,
     lore_view,
+    placeholders_view,
 )
 from sealedlore.engine.picture_styles import write_style
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
@@ -85,6 +86,7 @@ def setup_view(bundle: StoryBundle, hidden_ids: Collection[str] = frozenset()) -
         "world_activity": story.defaults.world_activity,
         "agency_mode": story.defaults.agency_mode,
         **lore_rules_view(bundle),
+        **placeholders_view(bundle),
         "picture_style": write_style(story.picture_style, story.image_style) or None,
         "style": style,
         "opening": {"text": setup.opening_text, "mode": setup.opening_mode},

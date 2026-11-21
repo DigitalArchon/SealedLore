@@ -75,6 +75,7 @@ def scenario_from_bundle(
         absent_at_start=list(setup.absent_at_start),
         suggested_character_id=setup.suggested_character_id,
         choose_one_of=list(setup.choose_one_of),
+        placeholders=setup.placeholders.model_copy(),
         style=story.style.model_copy(deep=True),
         agency_mode=story.defaults.agency_mode,
         npc_scope=story.defaults.npc_scope,
@@ -132,6 +133,8 @@ def bundle_from_scenario(
     suggested = scenario.suggested_character_id
     if suggested not in cast_ids:
         suggested = None
+    # Whom {{user}} and {{char}} name: a card or a supporting card of its own.
+    known_ids = cast_ids | {character.id for character in scenario.supporting}
 
     story = Story(
         title=title or scenario.title,
@@ -158,6 +161,16 @@ def bundle_from_scenario(
                 character_id for character_id in scenario.choose_one_of if character_id in cast_ids
             ],
             template=scenario.template or scenario.title,
+            placeholders=scenario.placeholders.model_copy(
+                update={
+                    "user_id": scenario.placeholders.user_id
+                    if scenario.placeholders.user_id in known_ids
+                    else None,
+                    "char_id": scenario.placeholders.char_id
+                    if scenario.placeholders.char_id in known_ids
+                    else None,
+                }
+            ),
         ),
         style=scenario.style.model_copy(deep=True),
         scene=starting.model_copy(deep=True),

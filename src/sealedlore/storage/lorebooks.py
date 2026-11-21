@@ -30,7 +30,6 @@ from sealedlore.models.story import StyleDirectives
 from sealedlore.storage.atomic import atomic_write_json, read_json
 from sealedlore.storage.formats import FORMAT_KEY, LOREBOOK_FORMAT, format_of, with_format
 from sealedlore.storage.paths import data_home, ensure_data_home, is_plain_id
-from sealedlore.storage.tavern_cards import macro_filler
 from sealedlore.storage.tavern_lore import (
     LoreImport,
     ReadLorebook,
@@ -207,13 +206,14 @@ def scenario_from(
     lore_firing: str = "sillytavern",
 ) -> tuple[Scenario, list[str]]:
     """A new story set in a kept lorebook's world: its entries the story's
-    lore (`{{user}}` as `player`, when named; else written out at Start, as
-    a card's are), its description the story's, and `player` the author's
+    lore ({{user}} and {{char}} as written, filled as each request goes out,
+    {{user}} as `player`), its description the story's, and `player` the author's
     character, in the starting scene. What the lorebook had that a story has
     no place for is said in the notes, as an import says it, in the words
     of `lore_firing`, the rules its lore fires by: SillyTavern's by default,
     the lorebook having been written for them (the author, Nov 21 2026)."""
-    imported = lore_of(book, macro_filler("{{char}}", player or None))
+    # {{user}} and {{char}} stay as written: filled as each request goes out.
+    imported = lore_of(book)
     notes = imported.said("Lorebook", lore_firing)
     notes += [f"Converting it: {converted_sentence(note)}" for note in book.converted]
     description = str(book.book.get("description") or "").strip()
@@ -227,6 +227,7 @@ def scenario_from(
     if player.strip():
         you = Character(name=player.strip(), summary=about_player.strip() or None)
         scenario.cast = [you]
+        scenario.placeholders.user_id = you.id
         scenario.starting_scene = SceneState(present_character_ids=[you.id])
         scenario.suggested_character_id = you.id
     return scenario, notes

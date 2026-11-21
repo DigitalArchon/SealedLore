@@ -126,8 +126,10 @@ class PortraitRuntime:
         allowed_people, allowed_lore = self.picture_cards()
         people_ids = {c.id for c in allowed_people}
         lore_ids = {e.id for e in allowed_lore}
-        characters = [c for c in characters if c.id in people_ids]
-        lore = [e for e in lore if e.id in lore_ids]
+        # The names in, as every model reads them.
+        names = self.placeholder_names()
+        characters = names.characters(c for c in characters if c.id in people_ids)
+        lore = names.entries([e for e in lore if e.id in lore_ids])
         prompts: dict[str, str] = {}
         problems: list[str] = []
         if characters or lore:
@@ -148,7 +150,7 @@ class PortraitRuntime:
                     extra_body=self.route_for("image_prompt", model),
                     messages=build_portrait_messages(
                         people,
-                        world_bible=story.world_bible or "",
+                        world_bible=names.fill(story.world_bible) or "",
                         title=story.title,
                         image_style=style,
                         begins=where_it_begins(story),

@@ -770,6 +770,12 @@ def is_card_file(path: Path) -> bool:
 # --- into SealedLore ---------------------------------------------------------------
 
 
+def keep_placeholders(text: str) -> str:
+    """Text as a story keeps it: {{char}} and {{user}} as written, filled as
+    each request goes out (engine/placeholders.py)."""
+    return text
+
+
 def macro_filler(char: str, user: str | None) -> Callable[[str], str]:
     """`{{char}}` (and the old `<BOT>`) as `char`, `{{user}}` (`<USER>`) as
     `user`; with no `user`, `{{user}}` stays as written."""
@@ -783,9 +789,17 @@ def macro_filler(char: str, user: str | None) -> Callable[[str], str]:
     return fill
 
 
+# The placeholders a story reads (engine/placeholders.py), which aren't
+# "unread" for being kept as written.
+_NAMES = re.compile(r"^\{\{\s*(?:user|char)\s*\}\}$", re.IGNORECASE)
+
+
 def unread_macros(texts: Sequence[str]) -> int:
-    """Macros still in `texts` after the names went in: SealedLore reads none."""
-    return sum(len(_MACRO.findall(text)) for text in texts)
+    """Macros in `texts` SealedLore doesn't read: any but {{user}} and
+    {{char}}, which a story fills as it sends."""
+    return sum(
+        1 for text in texts for match in _MACRO.finditer(text) if not _NAMES.match(match.group(0))
+    )
 
 
 def first_sentence(text: str, limit: int = 240) -> str:
@@ -1185,15 +1199,22 @@ def scenario_from_card(
     card's own system prompt goes into the style's notes, `expressions` that
     its expression pictures come too (labelled, for its character's looks),
     `lore_firing` the rules its lorebook's entries fire by, if it has one
-    (SillyTavern's by default: the book was written for them)."""
-    fill = macro_filler(card.name, player)
+    (SillyTavern's by default: the book was written for them).
+
+    The card's {{user}} and {{char}} stay as written, in its fields, its
+    lorebook and its greetings: the story fills them as each request goes out
+    (engine/placeholders.py), {{user}} as `player` and {{char}} as the card's
+    character (a world card: its name)."""
+    fill = keep_placeholders
     notes: list[str] = []
     you = Character(name=player, summary=about_player.strip() or None)
     scenario = Scenario(
         title=card.name,
-        description=fill(card.text("creator_notes")).strip() or None,
+        # The Stories list's line, for the author's eyes: the names in.
+        description=macro_filler(card.name, player)(card.text("creator_notes")).strip() or None,
         style=StyleDirectives(),
     )
+    scenario.placeholders.user_id = you.id
     setting = fill(card.text("scenario")).strip()
     if world:
         about = "\n\n".join(
@@ -1207,6 +1228,7 @@ def scenario_from_card(
         )
         scenario.world_bible = about or None
         scenario.cast = [you]
+        scenario.placeholders.char_name = card.name
         background = _picture_ref(card, scenario, "")
         if background is not None:
             # A world's picture is its cover: behind the story, not a face.
@@ -1248,6 +1270,7 @@ def scenario_from_card(
         notes += card.expression_notes
         scenario.world_bible = setting or None
         scenario.cast = [character, you]
+        scenario.placeholders.char_id = character.id
     if (
         card.picture is not None
         and not any(
@@ -1325,6 +1348,10 @@ def scenario_from_card(
             )
     if card.book is not None:
         imported = lore_from_card(card, fill)
+        if not world:
+            # Its {{char}} is the card's character, whoever else joins later.
+            for entry in imported.entries:
+                entry.of_character = scenario.cast[0].id
         scenario.lore = imported.entries
         scenario.lore_firing = "sealedlore" if lore_firing == "sealedlore" else "sillytavern"
         notes += imported.said("Lorebook", scenario.lore_firing)

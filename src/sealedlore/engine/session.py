@@ -207,6 +207,7 @@ from sealedlore.engine.session_images import ImageRuntime
 from sealedlore.engine.session_looks import LooksRuntime
 from sealedlore.engine.session_lore_condense import LoreCondenseRuntime
 from sealedlore.engine.session_merge import MergeRuntime, _close
+from sealedlore.engine.session_placeholders import PlaceholdersRuntime
 from sealedlore.engine.session_plot import NoticeSeverity, PlotRuntime, SessionNotice
 from sealedlore.engine.session_plot_draft import PlotDraftRuntime
 from sealedlore.engine.session_portraits import PortraitRuntime
@@ -619,6 +620,7 @@ class StorySession(
     StorySuggestionsRuntime,
     TavernRuntime,
     LoreCondenseRuntime,
+    PlaceholdersRuntime,
 ):
     def __init__(
         self,
@@ -994,6 +996,8 @@ class StorySession(
             model=self.model,
             prose_reminders=self.config.prose_reminders,
             storyteller_moves=self.config.storyteller_moves,
+            # A chat's prompt is made from its card when the chat is made.
+            names=None if self.story.chat else self.placeholder_names(),
         )
 
     def chapter_days(self) -> tuple[tuple[str, tuple[int, int]], ...]:
@@ -1223,9 +1227,20 @@ class StorySession(
         `budget`: another than the story's (a private scene's model has its own).
         The standing entries as sent: condensed where always-on lore is more
         than the lore budget holds (engine/session_lore_condense.py)."""
-        return self._fit_layout(self._layout_as_written(budget), budget)
+        return self._fit_layout(self._layout_named(budget), budget)
 
-    def _layout_as_written(self, budget: int | None = None) -> LoreLayout:
+    def _layout_named(self, budget: int | None = None) -> LoreLayout:
+        layout = self._layout_raw(budget)
+        # The names in before anything reads them: a keyword "{{user}}'s farm"
+        # matches the turn that names the farm, and what is sent reads so.
+        names = self.placeholder_names()
+        return replace(
+            layout,
+            standing=tuple(names.entries(layout.standing)),
+            selectable=tuple(names.entries(layout.selectable)),
+        )
+
+    def _layout_raw(self, budget: int | None = None) -> LoreLayout:
         if self.fires_like_tavern:
             # SillyTavern fires a lorebook per turn, however small it is.
             return self.tavern_layout()
@@ -1564,12 +1579,13 @@ class StorySession(
             if not wanted or row.dimensions == wanted
         }
         held = self.held_back_ids() | self.hidden_ids()
+        names = self.placeholder_names()
         return [
             entry
             for entry in self.bundle.lore
             if entry.enabled
             and entry.id not in held
-            and (content_hash(embedding_text(entry)), model) not in have
+            and (content_hash(embedding_text(names.entry(entry))), model) not in have
         ]
 
     def ensure_lore_vectors(
@@ -1599,16 +1615,21 @@ class StorySession(
         # included; it is embedded on the first turn after it is named. Nor
         # does lore the plot hasn't revealed yet (`visible_lore`).
         held = self.held_back_ids() | self.hidden_ids()
+        # Embedded as it is matched and sent: with {{user}} and {{char}}
+        # written out (engine/placeholders.py).
+        names = self.placeholder_names()
+        texts_of: dict[str, str] = {}
         for entry in self.bundle.lore:
             if not entry.enabled or entry.id in held:
                 continue
-            digest = content_hash(embedding_text(entry))
+            texts_of[entry.id] = embedding_text(names.entry(entry))
+            digest = content_hash(texts_of[entry.id])
             hashes[entry.id] = digest
             if (digest, model) not in cache:
                 pending.append(entry)
 
         if pending and self.embeddings is not None:
-            texts = [embedding_text(entry) for entry in pending]
+            texts = [texts_of[entry.id] for entry in pending]
             try:
                 done = dict(enumerate(self.embed_in_batches(texts, stopped=stopped)))
             except EmbeddingStopped as stop:
@@ -1846,8 +1867,13 @@ class StorySession(
             # Holding someone the roster puts elsewhere tells the model the
             # author's own character can't see the scene.
             story.scene.present_character_ids.append(held_character_id)
+        # {{user}} from now on, if the story named nobody: whom they play now.
+        self.settle_placeholder_user()
 
-        opening = story.setup.opening_text.strip()
+        # The opening becomes the story's first message, which is the story's
+        # own record: its names are written in (a card's greeting reads
+        # "{{user}} walks in").
+        opening = (self.placeholder_names().fill(story.setup.opening_text) or "").strip()
         if not opening:
             self.save()
             return
@@ -4129,7 +4155,35 @@ class StorySession(
             if person.entry_id in current
             and current[person.entry_id].content[person.start : person.end].strip() == person.text
         ]
-        took = take_apart(self.bundle.lore, people, [r for r in rules if r.entry_id in current])
+        # An entry's {{char}} is its card's, or the story's; in the card made
+        # from it, or the style's notes, it would be someone else
+        # (engine/placeholders.py), so it is written out. {{user}} stays.
+        names = self.placeholder_names()
+
+        def theirs(entry_id: str, text: str) -> str:
+            return names.char_only(text, names.owner_of(current[entry_id])) or text
+
+        people = [
+            (
+                replace(
+                    person,
+                    name=theirs(person.entry_id, person.name),
+                    aliases=[theirs(person.entry_id, a) for a in person.aliases],
+                    summary=theirs(person.entry_id, person.summary),
+                    text=theirs(person.entry_id, person.text),
+                ),
+                placement,
+            )
+            for person, placement in people
+        ]
+        rule_ids = {rule.entry_id for rule in rules}
+        lore = [
+            entry.model_copy(update={"content": theirs(entry.id, entry.content)})
+            if entry.id in rule_ids
+            else entry
+            for entry in self.bundle.lore
+        ]
+        took = take_apart(lore, people, [r for r in rules if r.entry_id in current])
         # An earlier review's Undo would put the lore, the cast and the style
         # back as they were before it, and take all of this with it.
         self.forget_review_undo()
@@ -4230,7 +4284,10 @@ class StorySession(
         request = ChatRequest(
             model=self.summarization_model,
             extra_body=self.route_for("summarisation"),
-            messages=build_inference_messages(character, self.story.world_bible),
+            messages=build_inference_messages(
+                self.placeholder_names().character(character),
+                self.placeholder_names().fill(self.story.world_bible) or "",
+            ),
             params=self.side_params(self.summarization_model),
         )
         log_ref = self._log(

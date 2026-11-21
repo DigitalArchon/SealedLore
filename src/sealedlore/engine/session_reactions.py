@@ -152,13 +152,15 @@ class ReactionRuntime:
         job, and with the round after the author's turn no passage could be
         written until the card was changed."""
         model = (character.own_model or "").strip()  # "Endpoint::model", kept whole
+        names = self.placeholder_names()
         try:
             request = ChatRequest(
                 model=model,
                 messages=reaction_messages(
-                    story=self.story,
-                    cast=cast,
-                    character=character,
+                    # The names in, as the storyteller reads them.
+                    story=names.story(self.story),
+                    cast=names.characters(cast),
+                    character=names.character(character),
                     history=history,
                     # Their model's own wording, where SealedLore adjusts for it.
                     texts=tuned_texts(self.texts, model, "character"),
@@ -274,7 +276,9 @@ class ReactionRuntime:
             ChatRequest(
                 model=model,
                 extra_body=self.route_for("summarisation"),
-                messages=recollect_messages(character, chunk, texts=self.texts),
+                messages=recollect_messages(
+                    self.placeholder_names().character(character), chunk, texts=self.texts
+                ),
                 params=self.side_params(model),
             )
             for character, chunk in jobs
@@ -396,10 +400,11 @@ class ReactionRuntime:
         if self.story.defaults.round_order == "after":
             held = self._character(self.story.held_character_id)
             after = held.name if held is not None else "The author"
+        names = self.placeholder_names()
         return reaction_messages(
-            story=self.story,
-            cast=cast,
-            character=character,
+            story=names.story(self.story),
+            cast=names.characters(cast),
+            character=names.character(character),
             history=history,
             texts=tuned_texts(self.texts, character.own_model, "character"),
             count=self.estimator.estimate,

@@ -115,16 +115,19 @@ def test_a_story_from_it_takes_a_copy_of_its_lore_and_whom_the_author_plays(tmp_
     )
     assert scenario.title == "doomsville" and scenario.description == "After the dead rose."
     assert [e.title for e in scenario.lore][:2] == ["Doomsville", "John Hale"]
-    assert scenario.lore[3].content == "Jane Hale rides into Hellsville."
+    # {{user}} as written, Jane its name (filled as each request goes out).
+    assert scenario.lore[3].content == "{{user}} rides into Hellsville."
     assert all(e.came_from == "the lorebook doomsville" for e in scenario.lore)
     (you,) = scenario.cast
     assert you.name == "Jane Hale" and you.summary == "John's sister."
     assert scenario.starting_scene.present_character_ids == [you.id]
     assert scenario.suggested_character_id == you.id
+    assert scenario.placeholders.user_id == you.id
     assert "Converting it: left out NovelAI's Always On (1 entry)." in notes
-    # Nobody named: {{user}} stays to be written out at Start.
+    # Nobody named: {{user}} is whom the author plays when the story begins.
     scenario, _notes = lorebooks.scenario_from(stored, title="Dust")
     assert not scenario.cast and "{{user}}" in scenario.lore[3].content
+    assert scenario.placeholders.user_id is None
 
 
 def test_searched_by_its_name_and_its_entries_titles(tmp_path: Path):

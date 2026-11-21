@@ -139,8 +139,16 @@ def test_a_kept_lorebooks_condensed_versions_come_into_its_stories_beside_the_wh
     assert valley.content == "The valley of Rowan is cut off by snow all winter."  # the whole
     assert valley.condensed_now() == "Rowan's valley: snowbound."
     assert wolves.condensed is None
+    # A story keeps the placeholders, in the condensed version too, and fills
+    # both as it sends (engine/placeholders.py).
     scenario, _notes = scenario_from(book, title="T", player="Rowan")
-    assert scenario.lore[0].condensed_now() == "Rowan's valley: snowbound."
+    kept = scenario.lore[0]
+    assert kept.condensed_now() == "{{user}}'s valley: snowbound."
+    from sealedlore.engine.placeholders import Names
+
+    sent = Names(user="Rowan").entry(kept)
+    assert sent.content == "The valley of Rowan is cut off by snow all winter."
+    assert sent.condensed_now() == "Rowan's valley: snowbound."
     # A key is the entry's text as a story reads it: @@activate off, names not filled.
     assert condensed_key(raw) == lore_fingerprint(
         "The valley of {{user}} is cut off by snow all winter."

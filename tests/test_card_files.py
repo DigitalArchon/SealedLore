@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 from sealedlore.engine import card_link
+from sealedlore.engine.placeholders import Names
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
 from sealedlore.models.image import ImageRef
@@ -355,7 +356,8 @@ def test_a_story_from_the_card_has_its_background_and_its_greetings_pictures(tmp
     made = scenario_from_card(card, player="John")
     scenario = made.scenario
     assert "{{img::" not in scenario.opening_text and "<img" not in scenario.opening_text
-    assert scenario.opening_text.startswith("Elena lowers the rifle an inch.")
+    # Its names as written, filled when the story begins (the session's `begin`).
+    assert scenario.opening_text.startswith("{{char}} lowers the rifle an inch.")
     names = [p.card_file for p in scenario.opening_pictures]
     assert names == ["Farmhouse", "snow"]
     assert all(p.from_card == "Elena" for p in scenario.opening_pictures)
@@ -386,7 +388,9 @@ def test_a_greeting_looked_at_first_is_the_opening_the_story_from_the_card_has(t
     ]:
         made = scenario_from_card(card, player="John", world=world, expressions=expressions)
         shown = greeting_shown(card, 0, player="John", world=world, expressions=expressions)
-        assert shown.text == made.scenario.opening_text and "{{" not in shown.text
+        # The preview with the names in, as the story's first message has them.
+        filled = Names(user="John", char="Elena").fill(made.scenario.opening_text)
+        assert shown.text == filled and "{{" not in shown.text
         assert [p.card_file for p in made.scenario.opening_pictures] == names
         told = [p.name if isinstance(p, CardAsset) else p.expression for p in shown.pictures]
         assert told == names

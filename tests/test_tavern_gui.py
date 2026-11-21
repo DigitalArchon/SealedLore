@@ -41,6 +41,12 @@ def app() -> QApplication:
     return QApplication.instance() or QApplication([])
 
 
+def sent(session, character) -> str:
+    """A character's description as the storyteller is sent it: the story's
+    names in its {{user}} and {{char}} (engine/placeholders.py)."""
+    return session.placeholder_names().character(character).full_description or ""
+
+
 def window_on(tmp_path: Path, story=None, cast=()) -> MainWindow:
     window = MainWindow(root=tmp_path / "data", use_mock=True)
     if story is not None:
@@ -138,8 +144,9 @@ def test_file_import_keeps_a_card_and_a_story_is_made_from_it_there(
     assert session is not None and session.story.title == "Elena"
     assert not window.collection_shown()
     assert [c.name for c in session.cast] == ["Elena", "John"]
-    assert "She trusts John slowly." in session.cast[0].full_description
-    assert session.story.setup.opening_text.startswith("Elena lowers the rifle")
+    assert "She trusts John slowly." in sent(session, session.cast[0])
+    assert "{{user}}" in session.cast[0].full_description  # kept as the card writes it
+    assert session.story.setup.opening_text.startswith("{{char}} lowers the rifle")
     assert [entry.title for entry in session.bundle.lore] == ["Hellsville"]
     portrait = session.cast[0].reference_images[0]
     assert text_chunks(session.pictures.read(portrait.file)) == {}
@@ -199,7 +206,10 @@ def test_a_card_joins_the_open_story(app, tmp_path: Path, monkeypatch, story, ca
     session = window.session
     elena = session.supporting[-1]
     assert elena.name == "Elena" and elena not in session.cast
-    assert "She trusts Serrik Vaun slowly." in elena.full_description
+    # Her {{user}} kept as written, sent as whom the author plays; her
+    # lorebook's {{char}} hers.
+    assert "She trusts Serrik Vaun slowly." in sent(session, elena)
+    assert session.bundle.lore[0].of_character == elena.id
     assert elena.reference_images and session.pictures.read(elena.reference_images[0].file)
     assert [entry.title for entry in session.bundle.lore] == ["Hellsville"]
     assert said and "greetings belong to a story of their own" in said[0]

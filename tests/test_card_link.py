@@ -25,15 +25,42 @@ MARK_P = PictureMark(sha256="p", look="coat")
 
 
 def linked(card):
-    copy = story_copy(card, [card], "John")
+    # A copy made before placeholders were kept: the names written in. A
+    # story's copy keeps them now (`test_a_storys_copy_keeps_the_cards_names_as_written`).
+    copy = story_copy(card, [card], "John", kept=False)
     copy.linked.pictures = [MARK_P]
     copy.reference_images = [ImageRef(id="sp", file="images/refs/sp.png", look="coat")]
     return copy
 
 
-def test_a_story_is_given_the_card_with_the_names_in():
+def test_a_storys_copy_keeps_the_cards_names_as_written():
+    """{{char}} and {{user}} as the card writes them, filled as each request
+    goes out (engine/placeholders.py): what the story is given is the card's
+    own text, so nothing reads as a change, and a change goes back as it is."""
+    from sealedlore.engine.placeholders import Names
+
     card = elena()
     copy = story_copy(card, [card], "John")
+    assert copy.linked.placeholders_kept and copy.linked.user == "John"
+    assert copy.full_description == card.full_description
+    assert "{{user}}" in copy.full_description
+    assert copy.linked.fields == given(card, "John", kept=True)
+    assert Names(user="John", char="Elena").character(copy).full_description == (
+        "Elena keeps the farmhouse. She trusts John slowly."
+    )
+    assert changes(copy, card, [], []) == []
+    assert not card_link.name_the_user(copy, "John")  # nothing to write out at Start
+    copy.full_description = "{{char}} keeps the farmhouse. She trusts {{user}} now."
+    found = changes(copy, card, [], [])
+    card_link.save_to_card(copy, card, found, story_refs={}, card_refs={}, copy=lambda r: None)
+    assert card.full_description == "{{char}} keeps the farmhouse. She trusts {{user}} now."
+    assert changes(copy, card, [], []) == []
+
+
+def test_a_story_is_given_the_card_with_the_names_in():
+    """A copy made before placeholders were kept: the names written in."""
+    card = elena()
+    copy = story_copy(card, [card], "John", kept=False)
     assert copy.id != card.id and copy.collection is None
     assert copy.full_description == "Elena keeps the farmhouse. She trusts John slowly."
     assert copy.summary == "Elena keeps the farmhouse."

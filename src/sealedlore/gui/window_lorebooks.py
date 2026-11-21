@@ -51,7 +51,7 @@ from sealedlore.models.lorebook import StoredLorebook
 from sealedlore.providers.base import StreamCancelled
 from sealedlore.storage import collection, lorebooks
 from sealedlore.storage.scenario import bundle_from_scenario
-from sealedlore.storage.tavern_cards import macro_filler
+from sealedlore.storage.tavern_cards import keep_placeholders
 from sealedlore.storage.tavern_lore import (
     LOREBOOK_SUFFIXES,
     LorebookError,
@@ -353,10 +353,8 @@ class LorebooksWindow:
         story_here = self.session is not None and not self.in_chat and not self.in_private
         answer = self._ask_lorebook_arrival(read, name, story_here)
         if answer == INTO and story_here:
-            held = self._held()
-            imported = read.lore(
-                macro_filler("{{char}}", held.name if held else None), f"the lorebook {name}"
-            )
+            # {{user}} and {{char}} as written: filled as each request goes out.
+            imported = read.lore(keep_placeholders, f"the lorebook {name}")
             self._lore_into_story(imported, name)
             return
         if answer not in (KEEP, START):
@@ -694,8 +692,7 @@ class LorebooksWindow:
         session = self.session
         if session is None or self.in_chat or self._busy or session.in_private:
             return
-        held = self._held()
-        imported = lorebooks.lore_of(book, macro_filler("{{char}}", held.name if held else None))
+        imported = lorebooks.lore_of(book)
         picked = self._choose_their_lore([(book.name, imported.entries)])
         if picked is None:
             return

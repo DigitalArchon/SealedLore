@@ -115,6 +115,16 @@ WRITTEN = {
     "chat_prompt",
     "chat_tail",
 }
+# Setup → About's {{user}} and {{char}} (engine/placeholders.py).
+PLACEHOLDER_FIRST_PLAYED = "Whoever you play when it begins"
+PLACEHOLDER_NOBODY = "Nobody (“the character”)"
+PLACEHOLDER_HINT = (
+    "Character cards and lorebooks write {{user}} for the person their character talks to, "
+    "and {{char}} for their character. They stay as written, and the names here go in "
+    "whenever anything is sent: {{user}} stays whoever it names here even when you switch "
+    "characters. A character's own card, and a lorebook that came with one, always mean that "
+    "character by {{char}}."
+)
 ALL_IN_SETTINGS = "Every model here goes with Settings → Models, and follows it when it changes."
 SOME_OF_ITS_OWN = "The filled-in ones are this story's alone; the rest go with Settings → Models."
 
@@ -594,6 +604,7 @@ class SetupDialog(QDialog):
                 "someone arriving, an earlier choice catching up."
             )
         )
+        self._placeholder_rows(form)
         self.round_order = round_order_combo(self.story.defaults.round_order)
         form.addRow(ROUND_ORDER_LABEL, self.round_order)
         form.addRow(
@@ -618,6 +629,24 @@ class SetupDialog(QDialog):
             )
         )
         return widget
+
+    def _placeholder_rows(self, form: QFormLayout) -> None:
+        """Whom a card's or a lorebook's {{user}} and {{char}} name: kept as
+        written, filled as each request goes out (engine/placeholders.py)."""
+        chosen = self.story.setup.placeholders
+        self.user_is = QComboBox()
+        self.user_is.addItem(PLACEHOLDER_FIRST_PLAYED, None)
+        for character in self.cast:
+            self.user_is.addItem(character.name, character.id)
+        self.user_is.setCurrentIndex(max(self.user_is.findData(chosen.user_id), 0))
+        self.char_is = QComboBox()
+        self.char_is.addItem(chosen.char_name.strip() or PLACEHOLDER_NOBODY, None)
+        for character in self.cast:
+            self.char_is.addItem(character.name, character.id)
+        self.char_is.setCurrentIndex(max(self.char_is.findData(chosen.char_id), 0))
+        form.addRow("{{user}} is", self.user_is)
+        form.addRow("{{char}} is", self.char_is)
+        form.addRow(_hint(PLACEHOLDER_HINT))
 
     def _world_tab(self) -> QWidget:
         widget = QWidget()
@@ -999,4 +1028,8 @@ class SetupDialog(QDialog):
         if self.suggested is not None:
             suggested = self.suggested.currentData()
             setup.suggested_character_id = suggested if suggested in self._live_ids() else None
+        live = self._live_ids()
+        user, char = self.user_is.currentData(), self.char_is.currentData()
+        setup.placeholders.user_id = user if user in live else None
+        setup.placeholders.char_id = char if char in live else None
         self._save_models(story)
