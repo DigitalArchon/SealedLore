@@ -68,9 +68,13 @@ class ReactionRuntime:
     def react_after_turn(self) -> Iterator[SessionNotice]:
         """The round after a passage: each character played by a model of
         their own answers it, blind to the others and to the author's turn.
-        Not when the story has them answer after the author's turn instead
-        (`react_to_turn`)."""
-        if self.story.chat or self.in_private or self.story.defaults.round_order == "after":
+
+        When the story has them answer after the author's turn instead
+        (`react_to_turn`), only the record and the passage views run here,
+        while the author writes: run before the answers, they were part of
+        the wait before the storyteller began (Nov 22 2026, round_order kit:
+        the first word 9.8-14.6s after sending, the answer alone 4-8s)."""
+        if self.story.chat or self.in_private:
             return
         result = self.last_result
         if result is None or result.unread or result.node is None:
@@ -81,6 +85,8 @@ class ReactionRuntime:
         history = self.path()
         yield from self.keep_public_record(history)
         yield from self.mark_views(history)
+        if self.story.defaults.round_order == "after":
+            return
         yield from self._round(history, passage)
 
     def react_to_turn(self, turn_node, history) -> Iterator[SessionNotice]:

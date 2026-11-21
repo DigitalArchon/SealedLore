@@ -48,7 +48,7 @@ class StartPlayers(QWidget):
         cast: Sequence[Character],
         browse: Callable[..., str | None] | None = None,
         routes: tuple[Callable, Callable, Callable] | None = None,
-        round_order: str = "together",
+        round_order: str = "after",
         qualify: Callable[[str], str] | None = None,
     ) -> None:
         """`routes`: the window's Choose with a route, the endpoint a model

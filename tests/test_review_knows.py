@@ -112,7 +112,7 @@ def test_the_review_sees_who_plays_themselves_and_the_record(bundle: StoryBundle
     view = settings_view(bundle, config=Config())
     assert view["cast"][0]["own_model"] == "kimi-k3"
     assert view["cast"][0]["own_notes"] == "Short answers."
-    assert view["round_order"] == "together"
+    assert view["round_order"] == "after"  # the default since Nov 22 2026
     playthrough = view["playthrough"]
     assert playthrough["public_record"] == ["The bridge fell."]
     assert playthrough["scene"]["still_open"] == ["Who cut the rope?"]

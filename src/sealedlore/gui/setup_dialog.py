@@ -610,7 +610,9 @@ class SetupDialog(QDialog):
         form.addRow(
             _hint(
                 "For characters played by their own model (a trial; Played by on their "
-                "card): when they answer."
+                "card): when they answer. After your turn plays better, since they answer "
+                "what you did; at the same time as you is faster, but their answers run a "
+                "step behind your turn."
             )
         )
         self.picture_style = PictureStyleField(

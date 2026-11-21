@@ -94,8 +94,9 @@ OWN_CHOICE = (
     OWN,
     "Their own model (a trial)",
     "A model of their own plays them, as another player: it says what they mean to do, and "
-    "the storyteller works that in with your turn. Whether they answer at the same time as "
-    "you or after your turn is the story's choice (Story → Setup… → About). You can't play "
+    "the storyteller works that in with your turn. Whether they answer after your turn (it "
+    "plays better) or at the same time as you (faster) is the story's choice (Story → "
+    "Setup… → About). You can't play "
     "them while it does. A local or fine-tuned model works, named as Endpoint::model. This "
     "is a trial: how well it plays isn't known yet.",
 )
@@ -103,19 +104,24 @@ OWN_MODEL_HINT = "The model that plays them, e.g. Local::maela-lora"
 OWN_PROMPT_LABEL = "What their model is sent…"
 # When they answer (`StoryDefaults.round_order`), in Setup → About and Start.
 ROUND_ORDER_LABEL = "They answer"
+# "after" first: the default, and the better of the two (Nov 22 2026, the
+# round_order kit in SealedLoreDocs design/own-models.md).
 ROUND_ORDER_LABELS = {
+    "after": "After your turn (plays better)",
     "together": "At the same time as you (faster)",
-    "after": "After your turn, having seen it",
 }
 ROUND_ORDER_TIPS = {
-    "together": (
-        "Each answers the storyteller's passage while you write your turn, without seeing "
-        "it; the storyteller writes everything together when you send. Nobody waits."
-    ),
     "after": (
         "You send first; each then answers having seen your turn (not each other's), as "
-        "another player at the table would, and the storyteller writes. Each turn waits for "
-        "their answers before the storyteller starts."
+        "another player at the table would, and the storyteller writes. It plays better: "
+        "they answer what you actually did. Each turn waits a few seconds for their answers "
+        "before the storyteller starts."
+    ),
+    "together": (
+        "Each answers the storyteller's passage while you write your turn, without seeing "
+        "it; the storyteller writes everything together when you send. It is faster, since "
+        "nobody waits, but their answers are a step behind your turn, and the storyteller "
+        "sometimes works in something your turn has already answered or moved past."
     ),
 }
 OWN_MODEL_MISSING = (

@@ -2143,21 +2143,23 @@ keep it.
 
 #### Characters played by their own model (a trial)
 
-This is an experiment, and how well it plays isn't known yet. After each
-passage, every character in the scene who is played by their own model
-answers it at once, in their own words: what they say, and what they mean to
-do next. None of them sees the others' answers or your next turn. You answer
-the passage too, with your turn as usual. The storyteller then gets your turn
-and every character's answer, and writes what happens when all of it meets:
-an answer is what that character means to do, not something that has
-happened, so the storyteller decides how it turns out.
+This is an experiment, and how well it plays isn't known yet. You send your
+turn as usual. Then every character in the scene who is played by their own
+model answers it, in their own words: what they say, and what they mean to do
+next. Each has seen your turn, though not the others' answers, as another
+player at the table would. The storyteller then gets your turn and every
+character's answer, and writes what happens when all of it meets: an answer is
+what that character means to do, not something that has happened, so the
+storyteller decides how it turns out.
 
-That is the default, and the quicker one: nobody waits for anyone. A story can
-have them answer after your turn instead, with **They answer** under Story →
-Setup… → About (the Start dialog offers it too). You send first; each of them
-then answers having seen your turn, though still not each other's, as another
-player at the table would; then the storyteller writes. Each turn then waits
-for their answers before the storyteller starts.
+That is the default, and it plays better, but each turn waits a few seconds
+for their answers before the storyteller starts. A story can have them answer
+at the same time as you instead, with **They answer** under Story → Setup… →
+About (the Start dialog offers it too). Each of them then answers the passage
+while you write your turn, without seeing it, so nobody waits; but their
+answers run a step behind your turn, and the storyteller sometimes works in
+one your turn has already answered or moved past (a question you just
+answered, say).
 
 **Which model plays them.** Choose beside their model under Played by lists
 the models measured best at it. Claude Opus 5.5 plays a character best, and is
@@ -2222,18 +2224,20 @@ storyteller never sees them) and **What they remember**, each memory note
 yours to change. The rest is changed where it lives: their card on the Card
 tab, the wording under File → Prompts (advanced)…, the story by editing it.
 
-The answers to the latest passage are hidden under it until you send your
-turn, so you answer it as they did. **Show** beside that line, or **View →
-Show the characters' answers**, shows them anyway. On the People page their
-card is marked MAIN · OWN MODEL. Once you've sent, they show under their passage, each with
+Their answers show under your turn, each with **Edit**: edit one and the
+passage after it is written again from your version, as a new take, with the
+one there now kept (‹ ›). On the People page their card is marked MAIN · OWN
+MODEL. Their calls show under *Own-model characters* (and their memories under
+*Own-model characters' memories*) in Story → Usage and cost…, and Stop skips
+them.
+
+When they answer at the same time as you, the answers to the latest passage
+are hidden under it until you send your turn, so you answer it as they did.
+**Show** beside that line, or **View → Show the characters' answers**, shows
+them anyway. Once you've sent, they show under their passage, each with
 **Edit**. Edit an answer to the latest passage and the storyteller gets your
-version with your next turn. Edit an older one and the passage that followed
-it is written again from your version, as a new take, with the one there now
-kept (‹ ›). Their calls show under *Own-model characters* (and their memories
-under *Own-model characters' memories*) in Story → Usage and cost…, and Stop
-skips them. Answered after your turn, they show under your turn, never
-hidden, with the same **Edit**: the passage after it is written again from
-your version.
+version with your next turn; edit an older one and the passage that followed
+it is written again from your version.
 
 ### When the cast's cards don't fit
 

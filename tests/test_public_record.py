@@ -182,6 +182,29 @@ def test_passages_it_missed_are_read_one_at_a_time(tmp_path: Path) -> None:
     assert session.path()[-1].meta.public_record == ["A door gave.", "A door opened."]
 
 
+def test_after_the_turn_the_record_is_kept_while_the_author_writes(tmp_path: Path) -> None:
+    """Answering after the author's turn, the keeper reads a passage as soon as it
+    lands, as it does when they answer at the same time. It used to run once the
+    author had sent, before their answers, and the storyteller's first word waited
+    for it (Nov 22 2026: 9.8-14.6s after sending, the answers alone 4-8s)."""
+    # Maela answers the author's turn, the passage is written, then the keeper.
+    session = make_session(
+        tmp_path,
+        ["I hold the lamp.", "The door gives.", '{"facts": ["A door gave."]}'],
+        record=True,
+    )
+    session.story.defaults.round_order = "after"
+    play(session, turn())
+    turn_node, passage = session.path()[-2:]
+    assert passage.content == "The door gives."
+    assert len(record_calls(session)) == 1
+    assert passage.meta.public_record is not None
+    assert passage.meta.public_record == ["A door gave."]
+    # They answered the turn, and the passage is answered by the next turn.
+    assert [r.text for r in turn_node.meta.reactions] == ["I hold the lamp."]
+    assert not passage.meta.reactions and len(character_calls(session)) == 1
+
+
 def test_after_the_turn_the_record_is_kept_before_they_answer(tmp_path: Path) -> None:
     from sealedlore.models.story import Story  # noqa: F401 - the story's order below
 

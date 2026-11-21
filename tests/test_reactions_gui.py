@@ -34,6 +34,10 @@ def app() -> QApplication:
 def own_window(tmp_path: Path, story, cast, responses: list[str]):
     cast[1].own_model = MODEL  # Maela, in the scene
     cast[1].is_player_available = False
+    # The open round, hidden until the author sends: answering at the same time
+    # (no longer the default; a test of "after" sets it before calling this).
+    if "round_order" not in story.defaults.model_fields_set:
+        story.defaults.round_order = "together"
     window = _window(tmp_path, story, cast, responses)
     # The public record's own call is tested in tests/test_public_record.py.
     window.config.public_record = False
@@ -398,23 +402,28 @@ def test_setup_and_start_choose_when_they_answer(
     from sealedlore.gui import main_window as window_module
     from sealedlore.gui.setup_dialog import SetupDialog
 
+    # After the author's turn is the default, first in the list, and says it
+    # plays better; at the same time says it is faster (Nov 22 2026).
     dialog = SetupDialog(story, cast)
-    assert dialog.round_order.currentData() == "together"
-    dialog.round_order.setCurrentIndex(dialog.round_order.findData("after"))
+    assert dialog.round_order.currentData() == "after"
+    assert dialog.round_order.itemData(0) == "after"
+    assert "plays better" in dialog.round_order.itemText(0)
+    assert "faster" in dialog.round_order.itemText(1)
+    dialog.round_order.setCurrentIndex(dialog.round_order.findData("together"))
     dialog._save()
-    assert story.defaults.round_order == "after"
+    assert story.defaults.round_order == "together"
     dialog.deleteLater()
 
-    story.defaults.round_order = "together"
+    story.defaults.round_order = "after"
     window = _start_window(tmp_path, story, cast)
 
     def run(start) -> int:
-        start.players.round_order.setCurrentIndex(start.players.round_order.findData("after"))
+        start.players.round_order.setCurrentIndex(start.players.round_order.findData("together"))
         return QDialog.Accepted
 
     monkeypatch.setattr(window_module.StartDialog, "exec", run)
     window.start_story()
-    assert window.session.story.defaults.round_order == "after"
+    assert window.session.story.defaults.round_order == "together"
     window.close()
 
 

@@ -88,12 +88,16 @@ class StoryDefaults(BaseModel):
     npc_scope: NpcScope = "all"
     world_activity: WorldActivity = DEFAULT_WORLD_ACTIVITY
     # When characters played by their own model answer (the trial,
-    # engine/reactions.py): "together", each passage, at the same time as the
-    # author and blind to their turn (the author's first ruling, and faster:
-    # nobody waits); "after", once the author has sent, having seen their
-    # turn, before the storyteller writes (the author, Nov 18 2026: as
-    # another human player would).
-    round_order: Literal["together", "after"] = "together"
+    # engine/reactions.py): "after", once the author has sent, having seen
+    # their turn, before the storyteller writes (the author, Nov 18 2026: as
+    # another human player would); "together", each passage, at the same
+    # time as the author and blind to their turn (faster: nobody waits).
+    # "after" is the default since Nov 22 2026 (the author, after the
+    # round_order kit: blind answers run a beat behind the author's turn and
+    # the storyteller works them in anyway; answered after it, the fewest
+    # errors on both judges). story.json stores the field, so a story saved
+    # since it came keeps its "together"; only older ones take the default.
+    round_order: Literal["together", "after"] = "after"
     # How the lore's entries are chosen each turn: SealedLore's own ways
     # (Settings → Lore), or exactly as SillyTavern fires a lorebook's, with
     # its own settings (engine/tavern_firing.py; the Lore page).

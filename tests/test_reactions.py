@@ -62,6 +62,9 @@ def a_story() -> Story:
     )
     story.defaults.main_model = "story-model"
     story.held_character_id = "char-serrik"
+    # Most tests here are of the round after a passage ("together", the first
+    # default); the round after the author's turn has its own below (`_after`).
+    story.defaults.round_order = "together"
     return story
 
 
