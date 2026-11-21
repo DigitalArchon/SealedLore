@@ -31,3 +31,9 @@ class StoredLorebook(BaseModel):
     # say again when a story is made from it.
     converted: list[str] = Field(default_factory=list)
     book: dict[str, Any] = Field(default_factory=dict)
+    # Shorter versions of its entries, beside them, never in the book (which
+    # goes out again as it came): by the fingerprint of the text each was
+    # written from (`models.lore.lore_fingerprint` of an entry's text, its
+    # @@activate and the like taken off). A story made from the book takes
+    # them along, and starts with the whole texts.
+    condensed: dict[str, str] = Field(default_factory=dict)

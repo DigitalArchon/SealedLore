@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from sealedlore.models.lore import LoreEntry, TavernEntry
+from sealedlore.models.lore import LoreEntry, TavernEntry, lore_fingerprint
 from sealedlore.storage.atomic import NestedTooDeep, atomic_write_json, outside_json
 from sealedlore.storage.image_meta import PNG_SIGNATURE
 from sealedlore.storage.png_text import PngTextError, text_chunks
@@ -359,10 +359,18 @@ def heading_of(content: str) -> str:
     return ""
 
 
+def condensed_key(raw: Mapping[str, Any]) -> str:
+    """What a kept lorebook keeps an entry's condensed version under
+    (`StoredLorebook.condensed`): its text's fingerprint, as a story reads
+    the text (its @@activate and the like taken off), names not filled in."""
+    return lore_fingerprint(_decorators(str(raw.get("content") or ""))[1])
+
+
 def lore_from_book(
     book: Mapping[str, Any],
     fill: Callable[[str], str] = lambda text: text,
     came_from: str = "",
+    condensed: Mapping[str, str] | None = None,
 ) -> LoreImport:
     """A lorebook's entries as lore. `fill` puts names in for {{char}} and
     {{user}} (storage/tavern_cards.py `macro_filler`). Each field is read
@@ -370,7 +378,9 @@ def lore_from_book(
     switches SillyTavern reads at the head of an entry's text are read as
     there and taken off it: @@activate sends the entry whatever is said,
     @@dont_activate never (and @@activate wins, being looked at first).
-    `came_from` says where on each entry (`LoreEntry.came_from`)."""
+    `came_from` says where on each entry (`LoreEntry.came_from`);
+    `condensed`, a kept lorebook's condensed versions (`condensed_key`),
+    each put beside its entry, its names filled in as the entry's are."""
     result = LoreImport()
     numbered = is_numbered(book)
     for number, raw in enumerate(entries_of(book), start=1):
@@ -406,8 +416,12 @@ def lore_from_book(
             enabled = False
         if "never" in features:
             enabled = False
+        shorter = (condensed or {}).get(lore_fingerprint(text))
+        shorter = fill(shorter).strip() if shorter else ""
         result.entries.append(
             LoreEntry(
+                condensed=shorter or None,
+                condensed_from=lore_fingerprint(content) if shorter else None,
                 title=title,
                 content=content,
                 keywords=list(dict.fromkeys(keywords)),

@@ -785,6 +785,14 @@ def _active(timed: Timed, length: int, entries: Mapping[str, FireEntry]) -> tupl
 # --- firing --------------------------------------------------------------------
 
 
+def budget_of(settings: TavernSettings, context: int) -> int:
+    """SillyTavern's lore budget: its share of the context, at most its cap."""
+    budget = round(settings.budget_percent * context / 100) or 1
+    if settings.budget_cap > 0 and budget > settings.budget_cap:
+        budget = settings.budget_cap
+    return budget
+
+
 def fire(
     entries: Sequence[FireEntry],
     messages: Sequence[str],
@@ -818,9 +826,7 @@ def fire(
     index = {entry.id: i for i, entry in enumerate(sorted_entries)}
     sticky, cooldown, delayed = _active(timed, length, known)
     buffer = Buffer(messages, settings)
-    budget = round(settings.budget_percent * context / 100) or 1
-    if settings.budget_cap > 0 and budget > settings.budget_cap:
-        budget = settings.budget_cap
+    budget = budget_of(settings, context)
     why: dict[str, str] = {}
     not_fired: dict[str, str] = {}
     activated: dict[str, FireEntry] = {}

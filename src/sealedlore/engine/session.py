@@ -205,6 +205,7 @@ from sealedlore.engine.session_cast import CastRuntime
 from sealedlore.engine.session_followup import FollowUpRuntime, FollowUpUndo
 from sealedlore.engine.session_images import ImageRuntime
 from sealedlore.engine.session_looks import LooksRuntime
+from sealedlore.engine.session_lore_condense import LoreCondenseRuntime
 from sealedlore.engine.session_merge import MergeRuntime, _close
 from sealedlore.engine.session_plot import NoticeSeverity, PlotRuntime, SessionNotice
 from sealedlore.engine.session_plot_draft import PlotDraftRuntime
@@ -617,6 +618,7 @@ class StorySession(
     ViewsRuntime,
     StorySuggestionsRuntime,
     TavernRuntime,
+    LoreCondenseRuntime,
 ):
     def __init__(
         self,
@@ -1179,7 +1181,12 @@ class StorySession(
         query = query_text(turn.user_text, history, turns=self.config.lore_query_turns)
         if layout.mode == "whole":
             # Nothing to choose: every entry is standing in the system block.
-            return RetrievalReport(mode="whole", standing=layout.standing, query_text=query)
+            return RetrievalReport(
+                mode="whole",
+                standing=layout.standing,
+                condensed=layout.condensed,
+                query_text=query,
+            )
         if self.fires_like_tavern:
             # As SillyTavern fires a lorebook (engine/session_tavern.py).
             try:
@@ -1197,9 +1204,9 @@ class StorySession(
                         f"({type(exc).__name__}), so only the always-on entries went"
                     ),
                 )
-            return replace(report, standing=layout.standing)
+            return replace(report, standing=layout.standing, condensed=layout.condensed)
         report = self._select(layout.selectable, turn, history, query, allow_network=allow_network)
-        return replace(report, standing=layout.standing)
+        return replace(report, standing=layout.standing, condensed=layout.condensed)
 
     def _lore_room(self) -> int:
         """The room this turn has for its chosen lore (`Config.lore_cap`): a
@@ -1213,7 +1220,12 @@ class StorySession(
 
     def lore_layout(self, budget: int | None = None) -> LoreLayout:
         """Whether the lorebook goes whole into the system block or is selected from.
-        `budget`: another than the story's (a private scene's model has its own)."""
+        `budget`: another than the story's (a private scene's model has its own).
+        The standing entries as sent: condensed where always-on lore is more
+        than the lore budget holds (engine/session_lore_condense.py)."""
+        return self._fit_layout(self._layout_as_written(budget), budget)
+
+    def _layout_as_written(self, budget: int | None = None) -> LoreLayout:
         if self.fires_like_tavern:
             # SillyTavern fires a lorebook per turn, however small it is.
             return self.tavern_layout()

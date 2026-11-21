@@ -134,6 +134,8 @@ class RetrievalReport:
     # why, and the budget its rules gave the turn.
     not_fired: tuple[tuple[LoreEntry, str], ...] = ()
     tavern_budget: int = 0
+    # The standing entries sent condensed, by id (`LoreLayout.condensed`).
+    condensed: tuple[str, ...] = ()
     # (the chat's length in messages, what fired): what the author's node keeps.
     tavern_record: tuple[int, tuple[str, ...]] | None = None
 
@@ -362,6 +364,9 @@ class LoreLayout:
     # The whole lorebook's size, and the most the system block may give it.
     tokens: int
     limit: int
+    # The standing entries sent as their condensed versions, by id
+    # (engine/lore_condense.py): always-on lore past the lore budget.
+    condensed: tuple[str, ...] = ()
 
 
 def lore_layout(

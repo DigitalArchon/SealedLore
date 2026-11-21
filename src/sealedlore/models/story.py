@@ -98,6 +98,10 @@ class StoryDefaults(BaseModel):
     # its own settings (engine/tavern_firing.py; the Lore page).
     lore_firing: Literal["sealedlore", "sillytavern"] = "sealedlore"
     tavern_world_info: TavernWorldInfo = Field(default_factory=TavernWorldInfo)
+    # Always-on entries more than the lore budget holds: sent condensed where
+    # they have a condensed version, the fewest needed, least important
+    # first (engine/lore_condense.py). Off, they are always sent whole.
+    condense_lore: bool = True
     # The author's testing (Sept 2026): Sonnet 4.5/4.6 storytelling degrades
     # quickly past ~60k tokens of context, so 60k is the ceiling as well as
     # the default. Existing stories keep what they were saved with.

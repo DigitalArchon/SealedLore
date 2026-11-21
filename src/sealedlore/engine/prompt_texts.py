@@ -2883,6 +2883,47 @@ _text(
 # --- Lore ----------------------------------------------------------------
 
 
+# Always-on entries more than the lore budget holds are sent condensed, the
+# fewest needed (engine/lore_condense.py). Written on the author's word, from
+# the Lore page or Lorebooks; the whole entry is always kept beside it. Not
+# measured: what a condensed always-on entry keeps against the whole.
+_text(
+    "lore.condense",
+    LORE,
+    "A condensed always-on entry",
+    "The system prompt that writes a shorter version of an always-on lore entry, kept beside "
+    "the entry and sent in its place only when the always-on entries are more than the lore "
+    "budget holds.",
+    """\
+You condense one entry of a lorebook for a storyteller model. The entry is sent
+with every turn of a collaborative story, and the story's always-on lore has
+grown too long, so the storyteller may read what you write in its place. It
+must still be able to rely on it as it relied on the whole.
+
+Keep, as the entry states them:
+
+- every name, place, title and term the entry defines, spelt as it spells them;
+- the facts: who and what things are, how they stand with each other, numbers,
+  dates, ranks, rules of the world, what is secret and from whom;
+- any instruction it gives the storyteller, each said briefly;
+- placeholders such as {{user}} and {{char}} exactly as written.
+
+Leave out repetition, decoration, examples that only restate a point, and
+lists of near-synonyms. Add nothing of your own. Write in the entry's own
+language, as plain prose or short labelled lines, in at most {words} words.
+Reply with the condensed entry only: no heading, no title line, no comment.""",
+    (("words", "the most words the condensed entry may have"),),
+)
+
+_text(
+    "lore.condense.entry",
+    LORE,
+    "A condensed always-on entry: the entry",
+    "The condensing request: the entry as it stands.",
+    "The entry “{title}”:\n\n{content}",
+    (("title", "the entry's title"), ("content", "the entry's whole text")),
+)
+
 _text(
     "lore.picker",
     LORE,

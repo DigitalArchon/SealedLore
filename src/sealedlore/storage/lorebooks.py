@@ -186,7 +186,7 @@ def unique_name(name: str, books: list[StoredLorebook]) -> str:
 
 def lore_of(book: StoredLorebook, fill: Callable[[str], str] = lambda text: text) -> LoreImport:
     """The book's entries as a story's lore, each saying it came from here."""
-    return lore_from_book(book.book, fill, f"the lorebook {book.name}")
+    return lore_from_book(book.book, fill, f"the lorebook {book.name}", book.condensed)
 
 
 def converted_sentence(note: str) -> str:

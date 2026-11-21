@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from sealedlore.ids import new_id
 from sealedlore.models.image import ImageRef
+
+
+def lore_fingerprint(text: str) -> str:
+    """Of the text a condensed version is written from: a change to it makes
+    the condensed version out of date (`LoreEntry.condensed_now`)."""
+    return hashlib.sha256(text.strip().encode("utf-8")).hexdigest()
 
 
 class TavernEntry(BaseModel):
@@ -67,3 +74,16 @@ class LoreEntry(BaseModel):
     # The entry as SillyTavern had it, when it came from a lorebook: what a
     # story firing its lore as SillyTavern does reads (`TavernEntry`).
     tavern: TavernEntry | None = None
+    # A shorter version of the entry, written by the authoring model (or by
+    # the author) beside it, never in its place: sent instead of the whole
+    # when always-on lore is more than the lore budget holds, and the story
+    # says to (engine/lore_condense.py). `condensed_from` is the fingerprint
+    # of the text it was written from: an edited entry's old one is never sent.
+    condensed: str | None = None
+    condensed_from: str | None = None
+
+    def condensed_now(self) -> str | None:
+        """The condensed version, while it is of the entry as it stands."""
+        if self.condensed and self.condensed_from == lore_fingerprint(self.content):
+            return self.condensed
+        return None

@@ -1,14 +1,14 @@
 {
  "story": {
-  "format": 2,
-  "shape": "31884281f2dbed60e634599a600de5ea51248592192530a391d9beb12338c768"
+  "format": 3,
+  "shape": "4a6f8af76fd2b1a72e7b87d8a9f2b20827b25c5c4f52c8940374c2c3b1998d35"
  },
  "config": {
   "format": 2,
   "shape": "d3d97a13c8e26b0775be346ec2a2614803d828d4fc9e792ba0da99d4ff6aa99b"
  },
  "lorebook": {
-  "format": 1,
-  "shape": "92ea06340c9739d82e6f3f89a346d15d3db8d247d5df57d8464a1fee03ed05d6"
+  "format": 2,
+  "shape": "11c84e4106c93e7b67f42eaf14bdd69aa0564159a1d1eed653de78627c74a4b7"
  }
 }
