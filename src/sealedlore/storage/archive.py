@@ -35,7 +35,7 @@ from sealedlore.models.story import Story
 from sealedlore.models.summary import Summary
 from sealedlore.models.supporting import SupportingCast
 from sealedlore.models.video import GeneratedVideo
-from sealedlore.storage.atomic import atomic_write_json, nests_deeper
+from sealedlore.storage.atomic import atomic_write_json, nests_deeper, whole_characters
 from sealedlore.storage.formats import STORY_FORMAT
 from sealedlore.storage.image_meta import stripped_or_same
 from sealedlore.storage.images import IMAGES_FILE, RECORD_FILES, VIDEOS_FILE, is_story_file
@@ -167,7 +167,7 @@ def _items(data: dict[str, Any], section: str, name: str) -> list[Any]:
 def read_archive(path: Path) -> tuple[StoryBundle, list[dict[str, Any]]]:
     name = Path(path).name
     try:
-        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        data = whole_characters(json.loads(Path(path).read_text(encoding="utf-8")))
     except OSError as exc:
         raise ArchiveError(f"Couldn't read {path}: {exc.strerror or exc}") from exc
     except json.JSONDecodeError as exc:

@@ -27,7 +27,6 @@ from sealedlore.engine.tavern_firing import (
     set_entry_setting,
 )
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
-from sealedlore.models.lore import LoreEntry
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.storage.repository import StoryBundle
 from sealedlore.storage.tavern_lore import lore_from_book
@@ -380,3 +379,49 @@ def test_a_take_that_never_came_leaves_the_turns_record(tmp_path: Path, story, c
     # A take that does come records as before.
     list(session.regenerate())
     assert session.path()[-2].meta.tavern_fired == first
+
+
+# --- half a character from outside ------------------------------------------------
+
+
+def test_a_lorebook_with_half_an_emoji_leaves_the_story_saveable(tmp_path: Path, story, cast):
+    """ "\\ud83d" in a lorebook (a string cut mid-emoji by the program that
+    wrote it) is read by Python's json and can't be written as UTF-8: added
+    to a story, every later save raised and no turn played after was kept."""
+    from sealedlore.storage.atomic import atomic_write_json, outside_json, read_json
+
+    book = outside_json(
+        '{"entries": {"0": {"uid": 0, "key": ["wolf\\ud83d"], "comment": "Wolves",'
+        ' "content": "They hunt in threes \\ud83d", "half\\udc00": 1}}}'
+    )
+    session = tavern_session(tmp_path, story, cast, world=book)
+    list(session.send(turn("A wolf.")))
+    session.save()
+    entry_ = session.bundle.lore[0]
+    assert entry_.content == "They hunt in threes �"
+    assert entry_.keywords == ["wolf�"]
+    # A whole emoji written as a pair of escapes is a whole emoji still.
+    assert outside_json('"\\ud83d\\ude00 and \\u00e9"') == "\U0001f600 and é"
+    # And whatever reaches a save some other way is saved, never an error.
+    path = tmp_path / "odd.json"
+    atomic_write_json(path, {"text": "cut \ud83d here"})
+    assert read_json(path) == {"text": "cut � here"}
+
+
+def test_a_models_reply_and_a_scenario_bring_no_half_characters(tmp_path: Path):
+    from sealedlore.engine.jsonreply import extract_json
+    from sealedlore.models.scenario import Scenario
+    from sealedlore.storage.atomic import append_jsonl, read_jsonl
+    from sealedlore.storage.scenario import read_scenario, write_scenario
+
+    assert extract_json('{"summary": "cut \\ud83d"}', dict, "a reply") == {"summary": "cut �"}
+    path = tmp_path / "s.sealedlore-scenario.json"
+    write_scenario(path, Scenario(title="T", world_bible="The valley."))
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("The valley.", "The valley \\ud83d."),
+        encoding="utf-8",
+    )
+    assert read_scenario(path).world_bible == "The valley �."
+    log = tmp_path / "log.jsonl"
+    append_jsonl(log, {"text": "cut \ud83d"})
+    assert read_jsonl(log) == [{"text": "cut �"}]

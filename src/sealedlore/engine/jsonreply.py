@@ -26,7 +26,7 @@ import json
 import re
 from typing import Any
 
-from sealedlore.storage.atomic import MAX_NESTING, outside_json
+from sealedlore.storage.atomic import MAX_NESTING, outside_json, whole_characters
 
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
 _CLOSER = {"{": "}", "[": "]"}
@@ -207,7 +207,8 @@ def _last_whole(text: str, opener: str, kind: type) -> Any:
         if isinstance(value, kind):
             found = value
         position = text.find(opener, stop)
-    return found
+    # A model's "\ud83d" is a lone surrogate, which nothing can save.
+    return whole_characters(found)
 
 
 def _escape_inner_quotes(text: str) -> str:

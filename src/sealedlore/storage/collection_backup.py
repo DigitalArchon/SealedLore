@@ -34,7 +34,7 @@ from pydantic import ValidationError
 from sealedlore.ids import utc_now_iso
 from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage
-from sealedlore.storage.atomic import nests_deeper
+from sealedlore.storage.atomic import nests_deeper, whole_characters
 from sealedlore.storage.collection import files_of
 from sealedlore.storage.formats import STORY_FORMAT
 from sealedlore.storage.image_meta import (
@@ -325,7 +325,9 @@ def _json(archive: zipfile.ZipFile, member: str, default: Any) -> Any:
     if info.file_size > MAX_MEMBER_BYTES:
         raise BackupError(f"its {member} is far larger than any backup's.")
     try:
-        data = json.loads(read_member(archive, info, MAX_MEMBER_BYTES).decode("utf-8"))
+        data = whole_characters(
+            json.loads(read_member(archive, info, MAX_MEMBER_BYTES).decode("utf-8"))
+        )
     except RecursionError as exc:
         # Python 3.11's json gives up at about 1,000 levels, where 3.12 reads
         # them: either way it is the nesting, and says so. First: it is a

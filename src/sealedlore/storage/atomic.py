@@ -41,6 +41,62 @@ _LOCK = threading.Lock()
 MAX_NESTING = 200
 
 
+# Half of a pair of UTF-16 surrogates on its own: JSON may write one ("\ud83d",
+# what a JavaScript program leaves when it cuts a string in the middle of an
+# emoji) and Python's json reads it, but nothing can write it as UTF-8. A
+# lorebook holding one, added to a story, left the story unsaveable: every
+# save raised, with no word, and no turn played after reached the disk (Nov
+# 2026). It is read as U+FFFD, as any decoder reads a broken character.
+_LONE_SURROGATE = re.compile("[\ud800-\udfff]")
+
+
+def _whole(text: str) -> str:
+    return _LONE_SURROGATE.sub("\ufffd", text) if _LONE_SURROGATE.search(text) else text
+
+
+def whole_characters(value: Any) -> Any:
+    """`value` (as json.loads made it) with every lone surrogate in its
+    strings and keys replaced by U+FFFD: changed in place, and returned.
+    Walked, never recursed into."""
+    if isinstance(value, str):
+        return _whole(value)
+    stack: list[Any] = [value]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, dict):
+            for key in [k for k in item if isinstance(k, str) and _LONE_SURROGATE.search(k)]:
+                item[_whole(key)] = item.pop(key)
+            pairs: Any = list(item.items())
+        elif isinstance(item, list):
+            pairs = list(enumerate(item))
+        else:
+            continue
+        for key, child in pairs:
+            if isinstance(child, str):
+                if _LONE_SURROGATE.search(child):
+                    item[key] = _whole(child)
+            elif isinstance(child, dict | list):
+                stack.append(child)
+    return value
+
+
+def utf8(text: str) -> bytes:
+    """`text` as UTF-8, a lone surrogate (which has no UTF-8) as U+FFFD:
+    what is saved is never an error for one character that isn't one."""
+    try:
+        return text.encode("utf-8")
+    except UnicodeEncodeError:
+        return _LONE_SURROGATE.sub("\ufffd", text).encode("utf-8")
+
+
+def _may_hold_surrogates(data: str | bytes | bytearray) -> bool:
+    """Whether JSON text could give a lone surrogate: by an escape, or as it
+    stands (json reads bytes with surrogates passed through)."""
+    if isinstance(data, str):
+        return "\\u" in data or _LONE_SURROGATE.search(data) is not None
+    return b"\\u" in data or b"\xed" in data or b"\x00" in data[:4]
+
+
 def nests_deeper(data: Any, limit: int = MAX_NESTING) -> bool:
     """Whether `data` (as json.loads made it) nests past `limit` levels.
     Walked, never recursed into."""
@@ -76,15 +132,16 @@ def outside_json(data: str | bytes | bytearray, limit: int = MAX_NESTING) -> Any
     reads on), it is `NestedTooDeep`: what was read could otherwise be
     walked, copied or saved into a RecursionError later, far from here, and
     crash whatever thread met it. Bytes are read as json.loads reads them
-    (UTF-8, -16 or -32 by their first bytes). (The DA apps' standard: depth
-    at most 200, never a crash.)"""
+    (UTF-8, -16 or -32 by their first bytes). A lone surrogate comes back as
+    U+FFFD (`whole_characters`). (The DA apps' standard: depth at most 200,
+    never a crash.)"""
     try:
         value = json.loads(data)
     except RecursionError:
         raise NestedTooDeep(limit) from None
     if nests_deeper(value, limit):
         raise NestedTooDeep(limit)
-    return value
+    return whole_characters(value) if _may_hold_surrogates(data) else value
 
 
 def read_json(path: Path, default: Any = None) -> Any:
@@ -143,7 +200,7 @@ def atomic_write_json(
     key, is written 0600); otherwise the process's umask decides.
     """
     text = json.dumps(data, indent=2, ensure_ascii=False)
-    _write_atomic(path, text.encode("utf-8"), keep_backup=keep_backup, mode=mode)
+    _write_atomic(path, utf8(text), keep_backup=keep_backup, mode=mode)
 
 
 def atomic_write_bytes(path: Path, data: bytes) -> None:
@@ -354,7 +411,7 @@ def append_jsonl(path: Path, record: Any) -> None:
     """One record on a line of its own. A file whose last line a crash cut
     short (no newline after it) gets one first: written straight on, the
     record would join that half line and be lost with it to every reader."""
-    line = (json.dumps(record, ensure_ascii=False) + "\n").encode("utf-8")
+    line = utf8(json.dumps(record, ensure_ascii=False) + "\n")
     with _LOCK:
         path.parent.mkdir(parents=True, exist_ok=True)
         fd = open_private(path, os.O_RDWR | os.O_APPEND)
