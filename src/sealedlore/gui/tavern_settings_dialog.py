@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.gui.fields import set_spin_value
 from sealedlore.models.lore import TavernWorldInfo
 
 INTRO = (
@@ -88,7 +89,7 @@ class TavernSettingsDialog(QDialog):
     def _number(value: int, low: int, high: int, *, suffix: str = "", none: str = "") -> QSpinBox:
         box = QSpinBox()
         box.setRange(low, high)
-        box.setValue(value)
+        set_spin_value(box, value)
         if suffix:
             box.setSuffix(suffix)
         if none:
@@ -96,12 +97,12 @@ class TavernSettingsDialog(QDialog):
         return box
 
     def _load(self, settings: TavernWorldInfo) -> None:
-        self.scan_depth.setValue(settings.scan_depth)
-        self.budget_percent.setValue(settings.budget_percent)
-        self.budget_cap.setValue(settings.budget_cap)
-        self.min_activations.setValue(settings.min_activations)
-        self.min_depth_max.setValue(settings.min_activations_depth_max)
-        self.max_recursion_steps.setValue(settings.max_recursion_steps)
+        set_spin_value(self.scan_depth, settings.scan_depth)
+        set_spin_value(self.budget_percent, settings.budget_percent)
+        set_spin_value(self.budget_cap, settings.budget_cap)
+        set_spin_value(self.min_activations, settings.min_activations)
+        set_spin_value(self.min_depth_max, settings.min_activations_depth_max)
+        set_spin_value(self.max_recursion_steps, settings.max_recursion_steps)
         self.recursive.setChecked(settings.recursive)
         self.case_sensitive.setChecked(settings.case_sensitive)
         self.whole_words.setChecked(settings.match_whole_words)

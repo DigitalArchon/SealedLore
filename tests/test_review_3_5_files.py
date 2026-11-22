@@ -17,9 +17,14 @@ from pathlib import Path
 import pytest
 
 from sealedlore.engine import plot_md
+from sealedlore.engine.chronicle import schedule
 from sealedlore.engine.plot_md import parse_plot_markdown, read_clause
+from sealedlore.engine.usage import usage_report
 from sealedlore.models.character import Character
+from sealedlore.models.config import Config
 from sealedlore.models.image import ImageRef
+from sealedlore.models.plot import EventDef, Plot
+from sealedlore.models.story import BUDGET_MOST, StoryDefaults
 from sealedlore.models.tavern import CardAsset, TavernFields
 from sealedlore.storage import collection, collection_backup
 from sealedlore.storage.collection_backup import BackupError, open_backup, restore
@@ -296,3 +301,32 @@ def test_a_full_disk_while_restoring_is_said_and_nothing_of_the_backup_is_kept(t
         if p.is_file()
     }
     assert kept == {"images/refs/p1.png"}, "hers is still here, and nothing of the backup's"
+
+
+# --- F3: numbers a backup's reader takes, and what reads them after -----------------
+
+
+def test_a_log_with_numbers_nothing_can_add_is_still_counted():
+    entries = [
+        {"id": "r1", "kind": "response", "usage": {"prompt_tokens": 100, "cost": 0.25}},
+        {"id": "r2", "kind": "response", "usage": {"prompt_tokens": float("nan")}},
+        {"id": "r3", "kind": "response", "usage": {"prompt_tokens": float("inf")}},
+        {"id": "r4", "kind": "aside", "usage": {"prompt_tokens": 5, "cost": 10**400}},
+        {"id": "r5", "kind": "aside", "usage": {"prompt_tokens": 5, "cost": float("nan")}},
+        {"id": "r6", "kind": "aside", "usage": {"cost": float("inf"), "cost_estimated": True}},
+        {"id": "r7", "kind": "response", "usage": {"prompt_tokens": 7, "cost": 0.5}},
+    ]
+    total = usage_report(entries).total
+    assert total.calls == 7 and total.cost == 0.75 and total.prompt_tokens >= 107
+    assert total.unpriced >= 3, "said as unpriced, never as free"
+
+
+def test_a_storys_budget_and_an_events_window_are_read_as_they_can_be_used():
+    defaults = StoryDefaults.model_validate({"context_token_budget": 10**400})
+    assert defaults.context_token_budget == BUDGET_MOST
+    Config().cast_cap(defaults.context_token_budget)  # a share of it: no overflow
+    assert StoryDefaults(context_token_budget=900).context_token_budget == 900
+    event = EventDef.model_validate({"id": "e", "title": "E", "kind": "timed", "window": [30, 10]})
+    assert event.window == (10, 30)
+    days = schedule(Plot(events=[event]), {}, random.Random(1))
+    assert 10 <= days["e"] <= 30

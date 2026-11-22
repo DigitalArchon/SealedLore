@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QProxyStyle,
     QScrollArea,
+    QSpinBox,
     QStackedWidget,
     QWidget,
 )
@@ -40,6 +41,15 @@ def set_field_text(field: QLineEdit | QComboBox, text: str) -> None:
         edit = field
     if edit is not None:
         edit.setCursorPosition(0)
+
+
+def set_spin_value(box: QSpinBox, value: int) -> None:
+    """Set a spin box to a number read from a file, held to the box's own
+    range first. Qt holds a value to the range itself, but only one that
+    fits its 32 bits: past that `setValue` raises in the slot that called it
+    (a lore entry's priority of 10**18 left its form half-loaded, and
+    locked)."""
+    box.setValue(max(box.minimum(), min(box.maximum(), value)))
 
 
 def line_edit(text: str = "") -> QLineEdit:

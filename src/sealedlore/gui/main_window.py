@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import html
 import sys
+import traceback
 from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -2344,37 +2345,70 @@ class MainWindow(
         self.composer.clear_cast()
         self._keep_draft()
         self.status_strip.reset_session_cost()
-        self._refresh_story_cost()
         self._counted_summaries.clear()
         self._staleness_dismissed = False
-        self._resume_private()
-        # Pictures drawn for its cards, or to be its background, while another
-        # story was open; a card's pictures its as-written opening shows.
-        self.session.show_opening_pictures()
-        self.session.take_card_pictures()
+        session = self.session
+
+        def check_model() -> None:
+            self._tee_state = ""
+            self._attest_chat()
+
+        # Each part by itself: a story's files may hold what one of them
+        # can't show (a backup is anyone's, and its reader can't foresee
+        # every number), and the first to raise used to leave everything
+        # after it undone: the story open, and not a message of it shown.
+        # In this order: each line's reason is beside what it runs.
+        parts: tuple[tuple[str, Callable[[], object]], ...] = (
+            ("what the story has cost", self._refresh_story_cost),
+            ("its private scene", self._resume_private),
+            # Pictures drawn for its cards, or to be its background, while
+            # another story was open; a card's pictures its as-written
+            # opening shows.
+            ("its opening's pictures", session.show_opening_pictures),
+            ("the pictures drawn for its cards", session.take_card_pictures),
+            ("its new background", self._take_background),
+            ("its pages", self.refresh_panels),
+            # Before the first page: a story opened from a chat found People
+            # still hidden, and the pages refuse a hidden one (it opened on
+            # Story so far).
+            ("its pages", self._sync_chat_ui),
+            ("what you had typed", lambda: self._restore_draft(session.story.id)),
+            ("its pages", self._show_first_page),
+            ("the Media page", self.refresh_images),
+            ("its videos", self._resume_videos),
+            ("its background", self._apply_background),
+            ("its messages", self.reload_transcript),
+            ("Story so far", self.refresh_summaries),
+            ("the Lore page's report", self.refresh_retrieval),
+            ("the Prompt page", self.refresh_inspector),
+            ("the check of its model", check_model),
+            ("its controls", self._update_controls),
+            ("the Stories list", self._sync_stories_list),
+        )
+        failed: list[str] = []
+        for what, show in parts:
+            if self.session is not session:
+                return  # closed, or another opened, by what a part asked
+            try:
+                show()
+            except Exception as exc:  # noqa: BLE001 - said below; the other parts are still shown
+                traceback.print_exc()
+                failed.append(f"{what} ({type(exc).__name__}: {str(exc)[:160]})")
+        # Cards over the cast's room are condensed while the author reads.
+        self._condense_soon.start()
+        if failed:
+            self._warn_plain(
+                "Part of this story couldn't be shown",
+                f"Something in “{session.story.title}” isn't as SealedLore writes it, and "
+                f"this couldn't be shown: {'; '.join(dict.fromkeys(failed))}. The rest of "
+                "the story is shown as it is.",
+            )
+
+    def _take_background(self) -> None:
         try:
             self.session.take_background_pictures()
         except (OSError, ValueError) as exc:
             self.statusBar().showMessage(f"Couldn't use the new background: {exc}", 12000)
-        self.refresh_panels()
-        # Cards over the cast's room are condensed while the author reads.
-        self._condense_soon.start()
-        # Before the first page: a story opened from a chat found People still
-        # hidden, and the pages refuse a hidden one (it opened on Story so far).
-        self._sync_chat_ui()
-        self._restore_draft(self.session.story.id)
-        self._show_first_page()
-        self.refresh_images()
-        self._resume_videos()
-        self._apply_background()
-        self.reload_transcript()
-        self.refresh_summaries()
-        self.refresh_retrieval()
-        self.refresh_inspector()
-        self._tee_state = ""
-        self._attest_chat()
-        self._update_controls()
-        self._sync_stories_list()
 
     def _refresh_cast_list(self) -> set[str]:
         """The cast board's list of the story's characters as it stands (one

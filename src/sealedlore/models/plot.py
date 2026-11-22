@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 EventKind = Literal["timed", "optional"]
 # "quiet": wait for a lull (the author's turns shortening, the character
@@ -120,6 +120,14 @@ class EventDef(BaseModel):
     brings: list[str] = Field(default_factory=list)
     reveals: list[str] = Field(default_factory=list)
     place: str | None = None
+
+    @field_validator("window")
+    @classmethod
+    def _first_day_first(cls, value: tuple[int, int] | None) -> tuple[int, int] | None:
+        """A window read from a file with its days the wrong way round
+        (`[30, 10]`, which the importer never writes) is the same days in
+        order: no day could be drawn from it, and the story opened blank."""
+        return value if value is None else (min(value), max(value))
 
     @property
     def guaranteed(self) -> bool:

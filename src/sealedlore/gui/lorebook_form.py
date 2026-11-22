@@ -35,7 +35,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from sealedlore.gui.fields import FormScroll, set_field_text
+from sealedlore.gui.fields import FormScroll, set_field_text, set_spin_value
 from sealedlore.gui.json_field import JsonField
 from sealedlore.gui.sizing import GrowingText
 from sealedlore.models.character import Character
@@ -411,7 +411,9 @@ class LorebookForm(QWidget):
         self.constant.setChecked(bool(raw.get("constant")))
         self.use_regex.setChecked(bool(raw.get("use_regex")))
         self.case_sensitive.setChecked(lore.entry_case_sensitive(raw, numbered=numbered))
-        self.order.setValue(_order_of(lore.entry_get(raw, "insertion_order", numbered=numbered)))
+        set_spin_value(
+            self.order, _order_of(lore.entry_get(raw, "insertion_order", numbered=numbered))
+        )
         secondary = lore.entry_keys(raw, "secondary_keys", numbered=numbered)
         set_field_text(self.secondary, _keys_text(secondary))
         self.selective.setChecked(lore.entry_selective(raw, numbered=numbered))

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from sealedlore.ids import new_id, utc_now_iso
 from sealedlore.models.character import Character
@@ -23,6 +23,11 @@ from sealedlore.models.prompt_edit import PromptEdit
 from sealedlore.models.route import ModelRoute
 from sealedlore.models.scene import SceneLogEntry, SceneState
 from sealedlore.models.story_suggestion import StorySuggestion
+
+# The most a story's context budget is read as: fifty times any model's
+# window. A backup may say anything, and a budget of four hundred digits can't
+# be multiplied by a share (the cast's room, lore's): the story opened blank.
+BUDGET_MOST = 100_000_000
 
 NarrativePerson = Literal["first", "second", "third"]
 NarrativeTense = Literal["past", "present"]
@@ -111,6 +116,15 @@ class StoryDefaults(BaseModel):
     # quickly past ~60k tokens of context, so 60k is the ceiling as well as
     # the default. Existing stories keep what they were saved with.
     context_token_budget: int = 60_000
+
+    # Held in a validator, not the field's own bounds: those are part of the
+    # saved file's shape (tests/test_file_formats.py), and a file an older
+    # version wrote must still load.
+    @field_validator("context_token_budget")
+    @classmethod
+    def _budget_within_reason(cls, value: int) -> int:
+        return min(value, BUDGET_MOST)
+
     # This story's own models, chosen in Story → Setup → Models (the author,
     # Oct 31 2026). Blank goes with Settings → Models, and follows it there.
     # A chat always has its own `main_model`: moved by nothing but its owner.

@@ -13,12 +13,14 @@ $0.00 — so a total can say "about" or "at least" honestly.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
 from sealedlore.engine.pricing import estimate_cost
 from sealedlore.models.config import ModelPrice, split_model
+from sealedlore.models.node import Usage
 from sealedlore.providers.base import parse_usage
 
 # Response entry kinds, and what each call was for.
@@ -102,27 +104,25 @@ class UsageLine:
         *,
         cache_ttl: str = "5m",
     ) -> None:
-        usage = parse_usage(raw)
+        try:
+            usage = parse_usage(raw)
+            cost, how = _cost_of(raw, usage, model, price, cache_ttl)
+            if not math.isfinite(cost):
+                raise ValueError("a cost that is no number")
+        except (ArithmeticError, ValueError):
+            # A log is a file like any other, and one from someone's backup
+            # may hold a number nothing can add (NaN, an infinity, a whole
+            # number of four hundred digits): the call is counted, with no
+            # tokens and no price. Raised here, the story opened blank.
+            usage, cost, how = Usage(), 0.0, "unpriced"
         self.calls += 1
         self.prompt_tokens += usage.prompt_tokens
         self.completion_tokens += usage.completion_tokens
         self.cache_read_tokens += usage.cache_read_tokens
         self.cache_creation_tokens += usage.cache_creation_tokens
-        if raw.get("cost_estimated") and isinstance(raw.get("cost"), (int, float)):
-            self.cost += float(raw["cost"])
-            self.estimated += 1
-        elif isinstance(raw.get("cost"), (int, float)) or isinstance(
-            raw.get("total_cost"), (int, float)
-        ):
-            self.cost += usage.cost
-        elif price is not None and model:
-            # The same lifetime the session prices with: an hour's cache
-            # write costs about twice a five-minute one on nano-gpt, and the
-            # two totals used to drift apart on every unpriced Claude turn.
-            self.cost += estimate_cost(usage, price, model, cache_ttl=cache_ttl)
-            self.estimated += 1
-        else:
-            self.unpriced += 1
+        self.cost += cost
+        self.estimated += how == "estimated"
+        self.unpriced += how == "unpriced"
 
     @property
     def cache_hit_rate(self) -> float | None:
@@ -130,6 +130,23 @@ class UsageLine:
         if not self.prompt_tokens:
             return None
         return self.cache_read_tokens / self.prompt_tokens
+
+
+def _cost_of(
+    raw: dict[str, Any], usage: Usage, model: str | None, price: ModelPrice | None, cache_ttl: str
+) -> tuple[float, str]:
+    """What one call cost, and how that is known: "reported", "estimated"
+    (from listed prices, here or when it was logged) or "unpriced"."""
+    if raw.get("cost_estimated") and isinstance(raw.get("cost"), (int, float)):
+        return float(raw["cost"]), "estimated"
+    if isinstance(raw.get("cost"), (int, float)) or isinstance(raw.get("total_cost"), (int, float)):
+        return usage.cost, "reported"
+    if price is not None and model:
+        # The same lifetime the session prices with: an hour's cache
+        # write costs about twice a five-minute one on nano-gpt, and the
+        # two totals used to drift apart on every unpriced Claude turn.
+        return estimate_cost(usage, price, model, cache_ttl=cache_ttl), "estimated"
+    return 0.0, "unpriced"
 
 
 @dataclass

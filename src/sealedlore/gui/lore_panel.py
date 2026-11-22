@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.retrieval import RetrievalReport
-from sealedlore.gui.fields import FormScroll, set_field_text
+from sealedlore.gui.fields import FormScroll, set_field_text, set_spin_value
 from sealedlore.gui.lore_rules import ABOUT, NAMES
 from sealedlore.gui.plain_text import plain_tip
 from sealedlore.gui.portrait_view import PortraitView
@@ -664,7 +664,7 @@ class LorePanel(QWidget):
         set_field_text(self.title, entry.title)
         self.content.setPlainText(entry.content)
         set_field_text(self.keywords, ", ".join(entry.keywords))
-        self.priority.setValue(entry.priority)
+        set_spin_value(self.priority, entry.priority)
         self.always_on.setChecked(entry.always_on)
         self.enabled.setChecked(entry.enabled)
         self.until_mentioned.setChecked(entry.until_mentioned)

@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.chronicle import clock_minutes, day_of, describe_changes, format_clock
+from sealedlore.gui.fields import set_spin_value
 from sealedlore.gui.sizing import adjustable_columns
 from sealedlore.models.plot import MINUTES_PER_DAY, Chronicle, EventDef, EventStatus, Plot
 
@@ -52,7 +53,7 @@ class ClockDialog(QDialog):
         self.setWindowTitle("Set the story's clock")
         self.day = QSpinBox()
         self.day.setRange(1, 100_000)
-        self.day.setValue(day_of(minutes))
+        set_spin_value(self.day, day_of(minutes))
         within = minutes % MINUTES_PER_DAY
         self.time = QTimeEdit(QTime(within // 60, within % 60))
         self.time.setDisplayFormat("HH:mm")

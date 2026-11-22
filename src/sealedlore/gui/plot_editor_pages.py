@@ -43,7 +43,7 @@ from sealedlore.gui.composer import (
     WORLD_ACTIVITY_LABELS,
     WORLD_ACTIVITY_TIPS,
 )
-from sealedlore.gui.fields import set_field_text
+from sealedlore.gui.fields import set_field_text, set_spin_value
 from sealedlore.gui.picture_style import PictureStyleField
 from sealedlore.gui.plot_pictures import (
     Folder,
@@ -389,7 +389,7 @@ class PlotPage(Page):
 
     def _fill(self) -> None:
         document: PlotDocument = self.item
-        self.start_day.setValue(document.start_day)
+        set_spin_value(self.start_day, document.start_day)
         time = QTime.fromString(document.start_time, "HH:mm")
         self.start_time.setTime(time if time.isValid() else QTime(0, 0))
 
@@ -1191,8 +1191,8 @@ class WayPage(Page):
             self.timeline.setChecked(event.timeline)
             self.days_only.setChecked(event.when is not None)
             first, last = event.when or (1, 1)
-            self.first_day.setValue(first)
-            self.last_day.setValue(last)
+            set_spin_value(self.first_day, first)
+            set_spin_value(self.last_day, last)
             self.pacing.setCurrentIndex(max(self.pacing.findData(event.pacing), 0))
             self.lead_in.setChecked(event.lead_in)
             self.must_happen.setCurrentIndex(max(self.must_happen.findData(event.must_happen), 0))
