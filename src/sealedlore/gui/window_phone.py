@@ -999,7 +999,11 @@ class _Backend:
     def continue_passage(self, retake: Retake) -> None:
         self.window._phone_refusal()
         entry = next((e for e in self.service.entries if e["id"] == retake.node_id), None)
-        if entry is None or not entry["can_continue"]:
+        # And asked of the story as it is now: the window carries on whatever
+        # is latest, which a view behind the story doesn't name.
+        path = self.window.session.full_path()
+        latest = bool(path) and path[-1].id == retake.node_id
+        if entry is None or not entry["can_continue"] or not latest:
             raise Refused(409, "Only the latest passage can be continued.")
         self.window.continue_passage(self._shape(retake))
         self._started()

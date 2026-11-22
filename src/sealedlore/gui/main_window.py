@@ -2519,9 +2519,13 @@ class MainWindow(
         """A rebuild nobody asked for (a job ending, a rebuild landing, a
         picture arriving): it waits while a message's editor is open, since
         the rebuild destroys every widget and the editor with it, mid-sentence
-        (the review, Oct 20 2026). It runs when the editor closes."""
+        (the review, Oct 20 2026). It runs when the editor closes. The
+        phones' view doesn't wait with it: it is built from the story, not
+        from these widgets, and left for the editor to close it showed the
+        story as it was for as long as an editor stood open."""
         if self.transcript.editing():
             self._reload_deferred = True
+            self._phone_settled()
             return
         self.reload_transcript()
 
