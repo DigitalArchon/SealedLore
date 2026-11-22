@@ -100,6 +100,7 @@ from sealedlore.providers.base import (
     checked_key,
     parse_usage,
     relay_said,
+    stated_count,
 )
 from sealedlore.providers.chutes_catalog import MODELS_URL
 from sealedlore.providers.chutes_e2ee import (
@@ -1159,10 +1160,10 @@ def _reasoning_tokens(usage: dict[str, Any]) -> int:
     """The reply's reported reasoning tokens, where the model server put them
     (vLLM's beside the counts, live; OpenAI's in completion_tokens_details)."""
     details = usage.get("completion_tokens_details")
-    count = details.get("reasoning_tokens") if isinstance(details, dict) else None
-    if not isinstance(count, int):
-        count = usage.get("reasoning_tokens")
-    return count if isinstance(count, int) and not isinstance(count, bool) else 0
+    count = stated_count(details.get("reasoning_tokens")) if isinstance(details, dict) else None
+    if count is None:
+        count = stated_count(usage.get("reasoning_tokens"))
+    return count or 0
 
 
 def chutes_context(model: str) -> Any:

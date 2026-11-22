@@ -20,7 +20,6 @@ cancel, retries, siblings) is `providers/streaming.py`.
 
 from __future__ import annotations
 
-import json
 from collections.abc import Iterator, Sequence
 from typing import Any
 
@@ -46,6 +45,7 @@ from sealedlore.providers.base import (
     checked_key,
     parse_usage,
     relay_said,
+    stated_count,
 )
 from sealedlore.providers.http import reply_json
 from sealedlore.providers.privacy import plain_refusal, privacy_for
@@ -182,8 +182,7 @@ def app_usage(raw: dict[str, Any]) -> dict[str, Any]:
     """
 
     def count(key: str) -> int:
-        value = raw.get(key)
-        return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0
+        return stated_count(raw.get(key)) or 0
 
     return {
         **raw,
@@ -298,7 +297,9 @@ class AnthropicProvider(StreamingHttpProvider):
                     continue
                 try:
                     event = outside_json(data)
-                except (json.JSONDecodeError, RecursionError) as exc:
+                except (ValueError, RecursionError) as exc:
+                    # Any JSON nothing can read, a whole number of thousands
+                    # of digits among it (a ValueError of json's own).
                     raise ProviderError(f"malformed stream event: {data[:200]!r}") from exc
                 if not isinstance(event, dict):
                     raise ProviderError(f"malformed stream event: {data[:200]!r}")

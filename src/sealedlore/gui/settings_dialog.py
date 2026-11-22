@@ -121,7 +121,7 @@ from sealedlore.models.route import ModelRoute
 from sealedlore.models.story import Story
 from sealedlore.phone.torrc import find_tor
 from sealedlore.providers import make_chat_provider
-from sealedlore.providers.base import ChatProvider, ProviderError
+from sealedlore.providers.base import ChatProvider, ProviderError, stated_count
 from sealedlore.providers.chutes_provider import chutes_context
 from sealedlore.providers.context_probe import detect_context
 from sealedlore.providers.endpoints import EndpointsProvider, listing_key
@@ -2341,22 +2341,30 @@ class SettingsDialog(QDialog):
         self.detect_note.setText("Asking the server…")
         QApplication.processEvents()
         service = self._private_service()
-        if service == "tinfoil":
-            found = tinfoil_context(url, model)
-        elif service == "chutes":
-            found = chutes_context(model)
-        else:
-            found = detect_context(url, key, model, api=self._private_api())
-        self.detect_button.setEnabled(True)
-        if found is None:
+        try:
+            if service == "tinfoil":
+                found = tinfoil_context(url, model)
+            elif service == "chutes":
+                found = chutes_context(model)
+            else:
+                found = detect_context(url, key, model, api=self._private_api())
+            # A size is a whole number above zero, whoever stated it.
+            tokens = stated_count(getattr(found, "tokens", None))
+        except Exception:
+            # Nothing a server answers may leave the button off for good, or
+            # the note saying "Asking…": it didn't say, in any way we can use.
+            found, tokens = None, None
+        finally:
+            self.detect_button.setEnabled(True)
+        if found is None or not tokens:
             self.detect_note.setText(
                 "The server didn't say. Set the budget by hand, a little under the model's context."
             )
             return
         # Leave room for the reply and a margin for counting differences.
-        budget = max(2_000, int(found.tokens * 0.8) - 1_000)
+        budget = max(2_000, int(tokens * 0.8) - 1_000)
         self.private_budget.setValue(min(budget, self.private_budget.maximum()))
-        note = f"{found.tokens:,} tokens ({found.source}); budget set to {budget:,}."
+        note = f"{tokens:,} tokens ({found.source}); budget set to {budget:,}."
         if not found.loaded:
             note += " That's the most it can take: check what it's loaded with."
         self.detect_note.setText(note)

@@ -323,13 +323,43 @@ def side_by_side(provider: ChatProvider, count: int) -> list[ChatProvider]:
     return lines
 
 
+# More tokens than any one call counts, and more dollars than any one costs:
+# a number past either is an endpoint's mistake, and is no more taken than
+# one below zero.
+TOKENS_MOST = 1_000_000_000
+COST_MOST = 1_000_000.0
+
+
+def stated_count(value: Any) -> int | None:
+    """A count of tokens as an endpoint stated it, or None when what it
+    stated is no count: not a number (JSON's true is one to Python), NaN, an
+    infinity, below zero or past `TOKENS_MOST`. JSON lets an endpoint write
+    1e999 and NaN, and `int()` of either raised after a whole passage had
+    come. The comparison is false for NaN and never overflows."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(value) if 0 <= value <= TOKENS_MOST else None
+
+
+def stated_cost(value: Any) -> float | None:
+    """A charge in dollars as an endpoint stated it, or None when what it
+    stated is no charge (as `stated_count`, to `COST_MOST`): the call is then
+    priced from the listing or shown unpriced, never as NaN, a credit or
+    `True` dollars."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value) if 0 <= value <= COST_MOST else None
+
+
 def parse_usage(raw: dict[str, Any] | None) -> Usage:
     """Read usage out of whatever shape the endpoint reports it in.
 
     OpenAI-compatible proxies disagree about cache accounting: Anthropic's own
     field names appear through some, OpenAI's `prompt_tokens_details` through
     others, and cost is an OpenRouter extension. Boundary parsing, so be
-    permissive here rather than everywhere downstream.
+    permissive here rather than everywhere downstream, and total: a value
+    that is no count or no charge (`stated_count`, `stated_cost`) is as if
+    the endpoint hadn't stated it.
     """
     if not raw or not isinstance(raw, dict):
         return Usage()
@@ -341,9 +371,9 @@ def parse_usage(raw: dict[str, Any] | None) -> Usage:
     def first_int(*keys: str, source: dict[str, Any] | None = None) -> int:
         container = source if source is not None else raw
         for key in keys:
-            value = container.get(key)
-            if isinstance(value, (int, float)):
-                return int(value)
+            count = stated_count(container.get(key))
+            if count is not None:
+                return count
         return 0
 
     # OpenRouter names a cache write `prompt_tokens_details.cache_write_tokens`
@@ -357,20 +387,17 @@ def parse_usage(raw: dict[str, Any] | None) -> Usage:
         "cached_tokens", "cache_read_tokens", source=details
     )
 
-    cost = raw.get("cost")
-    if not isinstance(cost, (int, float)):
-        cost = raw.get("total_cost")
-    reported = isinstance(cost, (int, float))
-    if not reported:
-        cost = 0.0
+    cost = stated_cost(raw.get("cost"))
+    if cost is None:
+        cost = stated_cost(raw.get("total_cost"))
 
     return Usage(
         prompt_tokens=first_int("prompt_tokens", "input_tokens"),
         completion_tokens=first_int("completion_tokens", "output_tokens"),
         cache_creation_tokens=cache_creation,
         cache_read_tokens=cache_read,
-        cost=float(cost),
-        cost_reported=reported,
+        cost=cost or 0.0,
+        cost_reported=cost is not None,
     )
 
 

@@ -41,6 +41,7 @@ from sealedlore.providers.base import (
     StreamCompleted,
     TextDelta,
     error_detail,
+    stated_count,
 )
 
 # Short, so it costs next to nothing, and long enough to time: a rate taken
@@ -234,10 +235,10 @@ def provider_for(settings: ProviderConfig) -> ChatProvider:
 def _reasoning_tokens(completed: StreamCompleted) -> int | None:
     raw = completed.raw_usage or {}
     details = raw.get("completion_tokens_details")
-    thinking = (details or {}).get("reasoning_tokens") if isinstance(details, dict) else None
-    if not isinstance(thinking, (int, float)):
-        thinking = raw.get("reasoning_tokens")
-    return int(thinking) if isinstance(thinking, (int, float)) else None
+    thinking = stated_count(details.get("reasoning_tokens")) if isinstance(details, dict) else None
+    if thinking is None:
+        thinking = stated_count(raw.get("reasoning_tokens"))
+    return thinking
 
 
 def _answer_tokens(

@@ -139,7 +139,9 @@ def _cost_of(
     (from listed prices, here or when it was logged) or "unpriced"."""
     if raw.get("cost_estimated") and isinstance(raw.get("cost"), (int, float)):
         return float(raw["cost"]), "estimated"
-    if isinstance(raw.get("cost"), (int, float)) or isinstance(raw.get("total_cost"), (int, float)):
+    if usage.cost_reported:
+        # Only a cost that is one (`parse_usage`): a logged NaN, credit or
+        # `true` is priced below or shown unpriced, never as a charge of $0.
         return usage.cost, "reported"
     if price is not None and model:
         # The same lifetime the session prices with: an hour's cache

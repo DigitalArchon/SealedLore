@@ -22,6 +22,7 @@ from urllib.parse import urlparse
 import httpx
 
 from sealedlore.models.config import chutes_tee, key_problem, sealed_service
+from sealedlore.providers.base import stated_count
 from sealedlore.providers.http import make_client, reply_json
 
 TIMEOUT_SECONDS = 8.0
@@ -42,7 +43,19 @@ def _root(base_url: str) -> str:
 
 
 def _int(value: Any) -> int | None:
-    return int(value) if isinstance(value, (int, float)) and value > 0 else None
+    """A context size a server stated, or None for what is none: JSON lets it
+    write 1e999, NaN or true where the size goes."""
+    return stated_count(value) or None
+
+
+def _dict(value: Any) -> dict[str, Any]:
+    """`value` when it is a JSON object, else an empty one: a server may
+    answer with a list or a number where an object is read."""
+    return value if isinstance(value, dict) else {}
+
+
+def _list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
 
 
 def detect_context(
@@ -69,7 +82,10 @@ def detect_context(
         for probe in (_listing, _ollama, _lm_studio, _llama_cpp):
             try:
                 found = probe(http, base_url, headers, model)
-            except (httpx.HTTPError, ValueError, KeyError, TypeError):
+            except (httpx.HTTPError, ValueError, LookupError, TypeError, AttributeError):
+                # Each way of asking reads the shape its server answers in;
+                # this is for whatever one of them still didn't foresee, so
+                # that an answer nothing can read is a server that didn't say.
                 found = None
             if found is not None:
                 return found
@@ -88,10 +104,10 @@ def _get(http: httpx.Client, url: str, headers: dict, **kwargs) -> Any:
 
 def _listing(http, base_url, headers, model) -> ContextSize | None:
     body = _get(http, base_url.rstrip("/") + "/models", headers, params={"detailed": "true"})
-    for item in (body or {}).get("data") or []:
+    for item in _list(_dict(body).get("data")):
         if isinstance(item, dict) and item.get("id") == model:
             tokens = _int(item.get("context_length")) or _int(
-                (item.get("top_provider") or {}).get("context_length")
+                _dict(item.get("top_provider")).get("context_length")
             )
             if tokens:
                 return ContextSize(tokens, "the endpoint's model list")
@@ -101,22 +117,29 @@ def _listing(http, base_url, headers, model) -> ContextSize | None:
 def _ollama(http, base_url, headers, model) -> ContextSize | None:
     root = _root(base_url)
     running = _get(http, root + "/api/ps", headers)
-    for item in (running or {}).get("models") or []:
-        if isinstance(item, dict) and item.get("name", "").split(":")[0] == model.split(":")[0]:
+    for item in _list(_dict(running).get("models")):
+        name = item.get("name") if isinstance(item, dict) else None
+        if isinstance(name, str) and name.split(":")[0] == model.split(":")[0]:
             tokens = _int(item.get("context_length"))
             if tokens:
                 return ContextSize(tokens, "loaded in Ollama")
     response = http.post(root + "/api/show", json={"model": model}, headers=headers)
     if response.status_code >= 400:
         return None
-    show = reply_json(response)
-    for line in str(show.get("parameters") or "").splitlines():
+    show = _dict(reply_json(response))
+    parameters = show.get("parameters")
+    for line in parameters.splitlines() if isinstance(parameters, str) else ():
         parts = line.split()
-        if len(parts) == 2 and parts[0] == "num_ctx" and parts[1].isdigit():
-            return ContextSize(int(parts[1]), "the Ollama model's num_ctx")
-    info = show.get("model_info") or {}
+        # ASCII digits, and no more of them than a size has: "²" is a digit
+        # too, and `int` reads neither it nor thousands of them.
+        digits = parts[1] if len(parts) == 2 and parts[0] == "num_ctx" else ""
+        if digits.isascii() and digits.isdigit() and len(digits) <= 12:
+            tokens = _int(int(digits))
+            if tokens:
+                return ContextSize(tokens, "the Ollama model's num_ctx")
+    info = _dict(show.get("model_info"))
     arch = info.get("general.architecture")
-    tokens = _int(info.get(f"{arch}.context_length")) if arch else None
+    tokens = _int(info.get(f"{arch}.context_length")) if isinstance(arch, str) and arch else None
     if tokens:
         # The maximum: Ollama loads it with less unless told otherwise.
         return ContextSize(tokens, "the model's maximum (Ollama may load it with less)", False)
@@ -125,12 +148,12 @@ def _ollama(http, base_url, headers, model) -> ContextSize | None:
 
 def _lm_studio(http, base_url, headers, model) -> ContextSize | None:
     body = _get(http, _root(base_url) + "/api/v1/models", headers)
-    items = (body or {}).get("models") or (body or {}).get("data") or []
-    for item in items:
+    body = _dict(body)
+    for item in _list(body.get("models")) or _list(body.get("data")):
         if not isinstance(item, dict) or model not in (item.get("key"), item.get("id")):
             continue
-        for instance in item.get("loaded_instances") or []:
-            tokens = _int(((instance or {}).get("config") or {}).get("context_length"))
+        for instance in _list(item.get("loaded_instances")):
+            tokens = _int(_dict(_dict(instance).get("config")).get("context_length"))
             if tokens:
                 return ContextSize(tokens, "loaded in LM Studio")
         tokens = _int(item.get("max_context_length"))
@@ -141,6 +164,6 @@ def _lm_studio(http, base_url, headers, model) -> ContextSize | None:
 
 def _llama_cpp(http, base_url, headers, model) -> ContextSize | None:
     body = _get(http, _root(base_url) + "/props", headers)
-    settings = (body or {}).get("default_generation_settings") or {}
+    settings = _dict(_dict(body).get("default_generation_settings"))
     tokens = _int(settings.get("n_ctx"))
     return ContextSize(tokens, "llama.cpp's loaded context") if tokens else None

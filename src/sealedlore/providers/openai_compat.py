@@ -10,7 +10,6 @@ The HTTP machinery (one client, cancel, retries, siblings) is
 from __future__ import annotations
 
 import hashlib
-import json
 import time
 from collections.abc import Callable, Iterator
 from typing import Any
@@ -29,6 +28,8 @@ from sealedlore.providers.base import (
     TextDelta,
     checked_key,
     parse_usage,
+    stated_cost,
+    stated_count,
 )
 from sealedlore.providers.http import reply_json
 from sealedlore.providers.privacy import plain_refusal, privacy_for
@@ -56,10 +57,10 @@ def with_reported_cost(usage: dict[str, Any], pricing: dict[str, Any]) -> dict[s
     The usage block stays as the endpoint sent it otherwise, so the API log
     keeps the verbatim record plus the one field we could vouch for.
     """
-    if not pricing or isinstance(usage.get("cost"), (int, float)):
+    if not pricing or stated_cost(usage.get("cost")) is not None:
         return usage
     cost = pricing.get("cost", pricing.get("amount"))
-    if not isinstance(cost, (int, float)):
+    if stated_cost(cost) is None:
         return usage
     return {**usage, "cost": cost, "cost_source": "x_nanogpt_pricing"}
 
@@ -215,7 +216,9 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
 
                 try:
                     chunk = outside_json(data)
-                except (json.JSONDecodeError, RecursionError) as exc:
+                except (ValueError, RecursionError) as exc:
+                    # Any JSON nothing can read, a whole number of thousands
+                    # of digits among it (a ValueError of json's own).
                     raise _malformed(data) from exc
                 if not isinstance(chunk, dict):
                     raise _malformed(data)
@@ -303,7 +306,7 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
 def _reasoning_tokens(usage: dict[str, Any]) -> int:
     """The reply's reported reasoning tokens, wherever the endpoint put them."""
     details = usage.get("completion_tokens_details")
-    count = details.get("reasoning_tokens") if isinstance(details, dict) else None
-    if not isinstance(count, int):
-        count = usage.get("reasoning_tokens")
-    return count if isinstance(count, int) and not isinstance(count, bool) else 0
+    count = stated_count(details.get("reasoning_tokens")) if isinstance(details, dict) else None
+    if count is None:
+        count = stated_count(usage.get("reasoning_tokens"))
+    return count or 0
