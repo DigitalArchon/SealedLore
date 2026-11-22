@@ -5,12 +5,19 @@ mock answers; nothing here reaches a network."""
 
 from __future__ import annotations
 
+import pytest
+
+from sealedlore.engine.chronicle import clock_minutes
 from sealedlore.engine.session import StorySession
 from sealedlore.models.node import Node, NodeMeta
 from sealedlore.models.private import PrivateSpan
+from sealedlore.providers.base import StreamCancelled, TextDelta
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.tree import link_child
 from tests.test_branches import names, rewrite
+from tests.test_chronicle import PASSAGE, read
+from tests.test_chronicle import make_session as plot_session
+from tests.test_chronicle import turn as plot_turn
 from tests.test_phase7 import play, turn
 from tests.test_phase7 import session as session  # noqa: F401 (a fixture)
 
@@ -230,3 +237,61 @@ def test_in_an_open_private_scene_a_delete_stays_where_the_scene_is(session: Sto
     session.delete_from(first.id)
     assert session.in_private
     assert session.story.active_leaf_id == anchor.id
+
+
+# --- E2: a take stopped partway is a take of its branch, as a whole one is -------
+
+
+def stopped_partway(session: StorySession, job, how: str) -> None:
+    """Run `job` as the worker does and stop it at its first piece of text:
+    "cancel" is Stop (the stream raises), "close" the worker letting go of
+    the job where it stands."""
+    for event in job:
+        if isinstance(event, TextDelta):
+            break
+    if how == "close":
+        job.close()
+        return
+    session.provider.cancel()
+    with pytest.raises(StreamCancelled):
+        list(job)
+
+
+@pytest.mark.parametrize("how", ["cancel", "close"])
+def test_a_take_of_a_branchs_first_passage_stopped_partway_stays_on_the_branch(
+    session: StorySession, how: str
+):
+    """The take was named for its branch only after the job had run to its
+    end. Stopped partway it was kept, as any stopped passage, with no name:
+    an unnamed take beside Main's passage, so the story was back on Main
+    with the branch's own first passage out of the takes' reach."""
+    play(session, "one", "two")
+    rewrite(session, session.path()[3].id, "The author's reply.", name="Other way")
+    assert names(session) == [("Main", 1, False), ("Other way", 4, True)]
+
+    session.provider = MockChatProvider(["A take of it, long enough to be stopped partway. " * 3])
+    stopped_partway(session, session.regenerate(), how)
+
+    take = session.full_path()[-1]
+    assert take.content and take.content != "The author's reply."
+    assert take.meta.branch_name == "Other way"
+    assert names(session) == [("Main", 1, False), ("Other way", 4, True)]
+    assert session.take_position(take.id) == (2, 2)
+    # And it is saved so.
+    saved = {node.id: node for node in session.bundle_to_save().nodes}
+    assert saved[take.id].meta.branch_name == "Other way"
+
+
+@pytest.mark.parametrize("how", ["cancel", "close"])
+def test_a_take_stopped_partway_keeps_the_authors_plot_correction(tmp_path, how: str):
+    """As a whole take does: the clock the author set is their statement of
+    where the plot stands after the turn, whatever prose stands there."""
+    session = plot_session(
+        tmp_path, [PASSAGE, read(10), "Another take, long enough to be stopped partway. " * 3]
+    )
+    list(session.send(plot_turn(session)))
+    session.set_clock(clock_minutes(3, 8, 0))
+    stopped_partway(session, session.regenerate(), how)
+    assert session.path()[-1].content.startswith("Another take")
+    assert session.path()[-1].meta.chronicle.source == "author"
+    assert session.chronicle.minutes == clock_minutes(3, 8, 0)

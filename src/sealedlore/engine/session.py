@@ -2360,11 +2360,26 @@ class StorySession(
                 # passage had sent away (the review, Oct 20 2026).
                 self._sync_scene()
                 self.save()
-        taken = index_nodes(self.nodes).get(self.story.active_leaf_id or "")
-        if previous is not None and taken is not None and taken.parent_id == user_node.id:
-            # A take of a branch's first passage is a take of that branch's.
-            taken.meta.branch_name = previous.meta.branch_name
-            self.carry_plot_correction(previous, taken)
+            taken = index_nodes(self.nodes).get(self.story.active_leaf_id or "")
+            if (
+                span_id is None
+                and previous is not None
+                and taken is not None
+                and taken is not previous
+                and taken.parent_id == user_node.id
+            ):
+                # A take of a branch's first passage is a take of that
+                # branch's, and stands where the author's correction of the
+                # plot stood. Here and not after: a take stopped partway is
+                # kept too, and Stop ends this job at the stream. Named only
+                # once the job had run to its end, a stopped take was an
+                # unnamed one beside Main's passage: the story back on Main,
+                # the branch's first passage out of reach of ‹ › (the review,
+                # Nov 22 2026).
+                taken.meta.branch_name = previous.meta.branch_name
+                self.carry_plot_correction(previous, taken)
+                if taken.meta.branch_name or taken.meta.chronicle is not None:
+                    self.save()
         yield PassageDone()
         pick = self._start_lore_pick()
         yield from self.read_after_turn()
