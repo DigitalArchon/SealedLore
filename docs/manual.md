@@ -2262,7 +2262,10 @@ them anyway; **Hide** over them puts them away again. Once you've sent, they
 show under their passage, each with
 **Edit**. Edit an answer to the latest passage and the storyteller gets your
 version with your next turn; edit an older one and the passage that followed
-it is written again from your version.
+it is written again from your version. If you have since changed the story to
+have them answer after your turn, and the turn that followed was answered that
+way, its passage was written from those answers: an edit to the older answer
+is saved, and nothing is written again.
 
 ### When the cast's cards don't fit
 

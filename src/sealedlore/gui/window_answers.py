@@ -44,6 +44,13 @@ EDIT_HINT_REDO = (
 )
 
 
+EDIT_HINT_SPENT = (
+    "The passage after it wasn't written from this answer: the story has them answer after "
+    "your turn now, and the turn that followed was answered that way. Saving keeps your "
+    "words here; nothing is written again."
+)
+
+
 class AnswersWindow:
     def _answers_action(self, view_menu) -> None:
         """View → Show the characters' answers: off whenever the window opens
@@ -92,6 +99,20 @@ class AnswersWindow:
         # The passage after the author's turn that this answer went with: the
         # one written from it, and the one written again when it changes.
         after = next((n for n in path[index + 1 :] if n.kind == "assistant"), None)
+        # An answer to a passage goes with the next turn only while that turn
+        # wasn't answered after it was sent (`round_after`): the story changed
+        # to "after your turn" since, another take of the passage after it is
+        # written from the turn's own answers and never reads this one. A
+        # retake was offered all the same, and paid for.
+        answered = path[path.index(after) - 1] if after is not None else None
+        spent = (
+            answered is not None
+            and path[index].kind == "assistant"
+            and answered.kind == "user"
+            and answered.meta.round_after
+        )
+        if spent:
+            after = None
         dialog = NoteDialog(
             self._dialog_parent(),
             title=EDIT_TITLE.format(name=answer.name),
@@ -99,6 +120,8 @@ class AnswersWindow:
             button=EDIT_REDO if after is not None else EDIT_KEEP,
             hint=EDIT_HINT_REDO
             if after is not None
+            else EDIT_HINT_SPENT
+            if spent
             else EDIT_HINT_TURN
             if path[index].kind == "user"
             else EDIT_HINT_OPEN,

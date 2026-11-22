@@ -22,13 +22,19 @@ from sealedlore.engine.session_reactions import ROUND_SKIPPED  # noqa: E402
 from sealedlore.gui import lorebooks_page  # noqa: E402
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.gui.transcript import ANSWERS_SHOW  # noqa: E402
+from sealedlore.gui.window_answers import EDIT_HINT_SPENT, EDIT_KEEP, EDIT_REDO  # noqa: E402
 from sealedlore.models.character import Character  # noqa: E402
 from sealedlore.models.node import DIRECTOR_SPEAKER_ID  # noqa: E402
 from sealedlore.providers.mock import MockChatProvider  # noqa: E402
 from sealedlore.storage.lorebooks import load_lorebooks  # noqa: E402
 from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa: E402
 from tests.test_background_queue import _send, _window, wait_for  # noqa: E402
-from tests.test_reactions_gui import MODEL, answer_texts, own_window  # noqa: E402
+from tests.test_reactions_gui import (  # noqa: E402
+    MODEL,
+    answer_dialog,
+    answer_texts,
+    own_window,
+)
 
 
 @pytest.fixture
@@ -266,4 +272,47 @@ def test_show_pressed_while_a_passage_streams_leaves_the_stream_alone(
     latest = window.session.path()[-1]
     assert latest.content.strip() == long.strip()
     assert "MAELA-GOES-FIRST" in " ".join(answer_texts(window, latest.id))
+    window.close()
+
+
+# --- W6: an edit is redone only where the passage after it would read it ------------
+
+
+def test_an_old_blind_answer_no_take_would_read_is_just_saved(
+    app, tmp_path: Path, story, cast, monkeypatch
+) -> None:
+    """Changed from "at the same time" to "after your turn": the next turn
+    was answered after it was sent, so the passage after it is written from
+    those answers. Editing the older blind one paid for a new take of that
+    passage, which never read the edit."""
+    story.defaults.round_order = "together"
+    window = own_window(
+        tmp_path, story, cast, ["P1.", "BLIND-ANSWER-TO-P1", "AFTER-ANSWER-TO-T2", "P2.", "P3."]
+    )
+    window.config.scene_reads = "manual"
+    _send(window, "T1")
+    wait_for(app, lambda: not window._busy)
+    first = window.session.full_path()[-1]
+    window.session.story.defaults.round_order = "after"  # Setup → They answer
+    _send(window, "T2")
+    wait_for(app, lambda: not window._busy)
+    turn_node, second = window.session.full_path()[-2:]
+    assert turn_node.meta.round_after
+    seen: list = []
+    answer_dialog(monkeypatch, "EDITED-BLIND-ANSWER", seen)
+    before = len(window._provider.requests)
+    window._edit_answer(first.id, "char-maela")
+    wait_for(app, lambda: not window._busy)
+    assert seen[0].go.text() == EDIT_KEEP and seen[0].hint.text() == EDIT_HINT_SPENT
+    assert len(window._provider.requests) == before  # nothing written again
+    assert window.session.full_path()[-1].id == second.id
+    assert first.meta.reactions[0].text == "EDITED-BLIND-ANSWER"  # kept, as Save says
+    assert "EDITED-BLIND-ANSWER" in " ".join(answer_texts(window, first.id))
+    # The answer the passage was written from is redone as before (a guard).
+    answer_dialog(monkeypatch, "EDITED-AFTER-ANSWER", seen)
+    window._edit_answer(turn_node.id, "char-maela")
+    wait_for(app, lambda: not window._busy)
+    assert seen[1].go.text() == EDIT_REDO
+    assert window.session.full_path()[-1].content == "P3."
+    assert "EDITED-AFTER-ANSWER" in window.session.last_prompt.section("tail.round").text
     window.close()
