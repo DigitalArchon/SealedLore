@@ -12,7 +12,7 @@ import random
 import threading
 import time
 import weakref
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Generator, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -143,6 +143,7 @@ from sealedlore.engine.prompt import (
 )
 from sealedlore.engine.prompt_edits import texts_in_force
 from sealedlore.engine.prompt_texts import PromptTexts
+from sealedlore.engine.reactions import answers_turn
 from sealedlore.engine.recall import RecallItem
 from sealedlore.engine.retrieval import (
     LoreLayout,
@@ -2336,6 +2337,7 @@ class StorySession(
                 yield from self._private_turn(turn, user_node, history=history)
                 return
             turn = self._directed(turn, user_node.meta.direction, [*history, user_node])
+            turn = yield from self._answered_first(turn, user_node, history)
             # A rebuild the author asked for goes in before this turn's prompt,
             # and so do cards condensed since the last.
             for text in [*self.adopt_rebuild(), *self.adopt_condensed()]:
@@ -2371,6 +2373,35 @@ class StorySession(
         self.prepare_archival()
         self.start_background_merge()
         self.start_condensing()
+
+    def _round_owed(self, user_node: Node, history: Sequence[Node]) -> bool:
+        """Whether another take of this turn's passage asks the characters
+        played by their own model first: the story has them answer after the
+        author's turn, this one is theirs to answer (`reactions.answers_turn`),
+        and its round never ran to its end. Stopped, or the job failed in it,
+        the turn stayed marked as answered with nobody for good, and no take
+        of its passage ever asked them. A turn sent while they answered at
+        the same time is not owed one when the passage before has their
+        answers: those are what it was sent with, and go again."""
+        if self.story.chat or self.story.defaults.round_order != "after":
+            return False
+        if user_node.meta.round_after or user_node.meta.private_span is not None:
+            return False
+        if not answers_turn(user_node):
+            return False
+        before = history[-1] if history else None
+        return not (before is not None and before.kind == "assistant" and before.meta.reactions)
+
+    def _answered_first(
+        self, turn: TurnRequest, user_node: Node, history: Sequence[Node]
+    ) -> Generator[SessionNotice, None, TurnRequest]:
+        """`turn` for another take of its passage, the characters asked first
+        when its round is still owed (`_round_owed`): once, since the round
+        that runs to its end marks the turn."""
+        if not self._round_owed(user_node, history):
+            return turn
+        yield from self.react_to_turn(user_node, history)
+        return replace(turn, round_answers=tuple(user_node.meta.reactions))
 
     def _turn_of(self, user_node: Node) -> TurnRequest:
         """The turn an author's message was sent as, for another take of its
@@ -2688,6 +2719,7 @@ class StorySession(
                 yield from self._private_turn(turn, user_node, history=history)
             else:
                 turn = self._directed(turn, user_node.meta.direction, [*history, user_node])
+                turn = yield from self._answered_first(turn, user_node, history)
                 lore = self._retrieve_for_turn(turn, history, trigger=RETAKE)
                 recall = self._recall_for_turn(self._recall_query(turn, history), history)
                 prompt = self.assemble(turn, history_nodes=history, lore=lore, recall=recall)

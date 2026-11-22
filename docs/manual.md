@@ -2247,8 +2247,13 @@ Their answers show under your turn, each with **Edit**: edit one and the
 passage after it is written again from your version, as a new take, with the
 one there now kept (‹ ›). On the People page their card is marked MAIN · OWN
 MODEL. Their calls show under *Own-model characters* (and their memories under
-*Own-model characters' memories*) in Story → Usage and cost…, and Stop skips
-them.
+*Own-model characters' memories*) in Story → Usage and cost….
+
+**Stop** while their answers are waited for skips them. Your turn stays sent:
+the storyteller writes the passage without their answers (a second Stop stops
+the passage, as ever), and **Regenerate** asks them again, so a model that
+hangs can be got past. When they answer at the same time as you, Stop while
+they answer keeps the passage, and any answer that had already come.
 
 When they answer at the same time as you, the answers to the latest passage
 are hidden under it until you send your turn, so you answer it as they did.

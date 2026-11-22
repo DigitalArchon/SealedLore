@@ -51,6 +51,12 @@ from sealedlore.providers.base import (
 )
 from sealedlore.threads import BackgroundThread
 
+# Said when a Stop ends the wait for their answers to the author's turn.
+ROUND_SKIPPED = (
+    "Stopped waiting for the characters played by their own model: the storyteller writes "
+    "without their answers. Regenerate asks them again."
+)
+
 
 class ReactionRuntime:
     def own_route_body(self, character) -> dict[str, Any]:
@@ -101,16 +107,37 @@ class ReactionRuntime:
         (`reactions.answers_turn`): the turn is marked the same way, with
         nobody's answer, and nothing is asked, waited for or said. So no
         other take of its passage asks either, and the storyteller is never
-        told they answered."""
+        told they answered.
+
+        A Stop while their answers are waited for skips the wait, as the
+        wait's words say and as it does after a passage: the job goes on, the
+        storyteller writing without them (`ROUND_SKIPPED`). It used to end
+        the job, which took the author's turn back out of the story, so a
+        model that hung could not be got past. A round that didn't run to
+        its end (stopped, or the job failed in it) leaves the turn unmarked:
+        the next take of its passage asks them (`StorySession._round_owed`)."""
         turn_node.meta.round_after = True
         turn_node.meta.reactions = []
         if self.story.chat or self.in_private or not reactions.answers_turn(turn_node):
             return
+        turn_node.meta.round_after = False  # until the round has run to its end
         held = self._character(turn_node.meta.controlled_character_id)
         player = held.name if held is not None else "The author"
         yield from self.keep_public_record(history)
         yield from self.mark_views(history)
-        yield from self._round([*history, turn_node], turn_node, after_turn_of=player)
+        try:
+            yield from self._round([*history, turn_node], turn_node, after_turn_of=player)
+        except StreamCancelled:
+            # None of them is used: an answer that had come would stand as
+            # the whole round, and the others would never be asked.
+            turn_node.meta.reactions = []
+            self.save()
+            # The cancel stays set until a request starts: the passage's would
+            # be stopped by it at once.
+            self.provider.reset_cancel()
+            yield SessionNotice(ROUND_SKIPPED, stop_taken=True)
+            return
+        turn_node.meta.round_after = True
 
     def _round(self, history, store_on, *, after_turn_of: str | None = None):
         """One round: everyone in the scene who has a model of their own
@@ -204,6 +231,11 @@ class ReactionRuntime:
     def _keep_answers(self, calls, boxes, passage, after_turn_of) -> Iterator[SessionNotice]:
         """Each answer logged, priced and kept on the passage."""
         answers: list[Reaction] = []
+        # Said once everything is logged and kept, and not at all after a
+        # Stop: whoever runs the job ends a stopped one at the next thing
+        # said, which left the answers after it unlogged and none kept, and
+        # would end a round after the author's turn before it could go on.
+        said: list[SessionNotice] = []
         stopped = False
         for (character, request, log_ref), box in zip(calls, boxes, strict=True):
             error = box.get("error")
@@ -213,7 +245,7 @@ class ReactionRuntime:
                 continue
             if isinstance(error, (ProviderError, ValueError)):
                 self._log("own_response", {"request_log_ref": log_ref, "error": str(error)})
-                yield SessionNotice(f"{character.name}'s model couldn't answer: {error}")
+                said.append(SessionNotice(f"{character.name}'s model couldn't answer: {error}"))
                 continue
             if error is not None:
                 raise error
@@ -236,7 +268,7 @@ class ReactionRuntime:
             self.unreported_usage.append(usage)
             why = why_not_whole(completed) or ("it was empty" if not text.strip() else None)
             if why:
-                yield SessionNotice(f"{character.name}'s model gave no answer: {why}.")
+                said.append(SessionNotice(f"{character.name}'s model gave no answer: {why}."))
                 continue
             answers.append(
                 Reaction(
@@ -251,6 +283,7 @@ class ReactionRuntime:
         self.save()
         if stopped:
             raise StreamCancelled()
+        yield from said
         if answers:
             names = ", ".join(answer.name for answer in answers)
             yield SessionNotice(
@@ -318,6 +351,7 @@ class ReactionRuntime:
         )
         stopped = False
         written = 0
+        said: list[SessionNotice] = []  # after the save and the stop, as `_keep_answers`
         for (character, chunk), request, ref, box in zip(jobs, requests, refs, boxes, strict=True):
             error = box.get("error")
             if isinstance(error, StreamCancelled):
@@ -325,7 +359,9 @@ class ReactionRuntime:
                 continue
             if isinstance(error, (ProviderError, ValueError)):
                 self._log("recollect_response", {"request_log_ref": ref, "error": str(error)})
-                yield SessionNotice(f"{character.name}'s memory couldn't be written: {error}")
+                said.append(
+                    SessionNotice(f"{character.name}'s memory couldn't be written: {error}")
+                )
                 continue
             if error is not None:
                 raise error
@@ -338,7 +374,7 @@ class ReactionRuntime:
             self.unreported_usage.append(usage)
             why = why_not_whole(completed) or ("it was empty" if not text.strip() else None)
             if why:
-                yield SessionNotice(f"{character.name}'s memory wasn't written: {why}.")
+                said.append(SessionNotice(f"{character.name}'s memory wasn't written: {why}."))
                 continue
             ids = [node_id for node_id, _text in chunk]
             # One a stretch: an older account of the same start (an edit, a
@@ -363,6 +399,7 @@ class ReactionRuntime:
             self.save()
         if stopped:
             raise StreamCancelled()
+        yield from said
 
     def _answer_side_by_side(
         self, requests: list[ChatRequest], waiting: str

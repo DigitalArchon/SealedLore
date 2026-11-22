@@ -10,11 +10,22 @@ import pytest
 from sealedlore.engine.card_condense import fingerprint
 from sealedlore.engine.prompt import SECTION_ROUND
 from sealedlore.engine.session import SessionNotice, StorySession
+from sealedlore.engine.session_reactions import ROUND_SKIPPED
 from sealedlore.models.node import DIRECTOR_SPEAKER_ID, NARRATOR_SPEAKER_ID
-from sealedlore.storage.repository import read_api_log
+from sealedlore.providers.base import StreamCancelled
+from sealedlore.providers.mock import MockChatProvider
+from sealedlore.storage.repository import load_story_bundle, read_api_log
 from tests.test_cast_condense import by_id
 from tests.test_cast_condense import make_session as cast_session
-from tests.test_reactions import MAELA_MODEL, a_story, make_session, play, round_calls, turn
+from tests.test_reactions import (
+    MAELA_MODEL,
+    a_cast,
+    a_story,
+    make_session,
+    play,
+    round_calls,
+    turn,
+)
 
 # --- E5: the author's own condensed text outlasts a job begun before it -------
 
@@ -123,3 +134,134 @@ def test_a_turn_in_character_is_answered_as_before(tmp_path: Path) -> None:
     play(session, turn("I put my shoulder to the door."))
     assert [r.model for r in session.provider.requests] == [MAELA_MODEL, "story-model"]
     assert "[Maela Orr] I hold the lamp." in session.last_prompt.section(SECTION_ROUND).text
+
+
+# --- W4: Stop skips their answers and the turn goes on; an unfinished round is owed ---
+
+
+class HungOwnModel(MockChatProvider):
+    """Maela's model hangs until Stop, `hangs` times: the request ends with
+    the cancel, which stays set until something resets it, as a real
+    client's does."""
+
+    hangs = 1
+
+    def stream(self, request):
+        if request.model == MAELA_MODEL and self.hangs:
+            self.hangs -= 1
+            self.requests.append(request)
+            self._cancelled = True
+            raise StreamCancelled()
+        if self._cancelled:
+            self.requests.append(request)
+            raise StreamCancelled()
+        yield from super().stream(request)
+
+
+def test_a_stop_while_they_are_waited_for_goes_on_without_their_answers(tmp_path: Path) -> None:
+    """The wait says "Stop skips it", and after a passage it does. Before
+    one, Stop ended the job and the turn left the story with it: a model that
+    hung could never be got past."""
+    provider = HungOwnModel()
+    session = _after(
+        tmp_path, ["The door gives.", "MAELA-ANSWERS-NOW", "Another take."], provider=provider
+    )
+    events = play(session, turn("I put my shoulder to the door."))  # no StreamCancelled
+    turn_node, passage = session.path()[-2:]
+    assert passage.kind == "assistant" and passage.content == "The door gives."
+    assert session.last_prompt.section(SECTION_ROUND) is None
+    taken = [e for e in events if isinstance(e, SessionNotice) and e.stop_taken]
+    assert [e.text for e in taken] == [ROUND_SKIPPED]
+    # Not marked as answered with nobody: the next take asks them, once.
+    assert not turn_node.meta.round_after and turn_node.meta.reactions == []
+    before = len(provider.requests)
+    list(session.regenerate())
+    assert [r.model for r in provider.requests[before:]] == [MAELA_MODEL, "story-model"]
+    assert "[Maela Orr] MAELA-ANSWERS-NOW" in session.last_prompt.section(SECTION_ROUND).text
+    assert turn_node.meta.round_after
+    before = len(provider.requests)
+    list(session.regenerate())
+    assert [r.model for r in provider.requests[before:]] == ["story-model"]
+    assert "MAELA-ANSWERS-NOW" in session.last_prompt.section(SECTION_ROUND).text
+
+
+def test_an_answer_that_came_before_the_stop_is_not_the_whole_round(tmp_path: Path) -> None:
+    cast = a_cast(idris_model=MAELA_MODEL)
+    story = a_story()
+    story.defaults.round_order = "after"
+    story.scene.present_character_ids.append("char-idris")
+    provider = HungOwnModel()
+    provider.hangs = 0
+
+    def hang_the_second(request, plain=provider.stream):
+        if request.model == MAELA_MODEL and len(provider.requests) == 1:
+            provider.hangs = 1
+        yield from plain(request)
+
+    provider.stream = hang_the_second
+    session = make_session(
+        tmp_path, ["I hold the lamp.", "The door gives."], story=story, cast=cast, provider=provider
+    )
+    play(session, turn("I put my shoulder to the door."))
+    turn_node = session.path()[-2]
+    assert len(round_calls(session)) == 2  # one answered, one hung
+    assert turn_node.meta.reactions == [] and not turn_node.meta.round_after
+    assert session.last_prompt.section(SECTION_ROUND) is None
+    saved = load_story_bundle("story-1", root=tmp_path)
+    assert next(n for n in saved.nodes if n.id == turn_node.id).meta.reactions == []
+
+
+class FailsOnce(MockChatProvider):
+    fail = True
+
+    def stream(self, request):
+        if request.model == MAELA_MODEL and self.fail:
+            self.fail = False
+            self.requests.append(request)
+            raise RuntimeError("the round broke")
+        yield from super().stream(request)
+
+
+def test_a_turn_left_in_the_story_by_a_round_that_broke_is_asked_on_the_retry(
+    tmp_path: Path,
+) -> None:
+    """A phone's turn stays in the story when its job fails (the desktop
+    takes its own back). Marked as answered before anyone had been asked, its
+    retry never asked the characters."""
+    provider = FailsOnce()
+    session = _after(tmp_path, ["MAELA-ANSWERS-NOW", "The door gives."], provider=provider)
+    with pytest.raises(RuntimeError):
+        play(session, turn("I put my shoulder to the door."))
+    leaf = session.full_path()[-1]
+    assert leaf.kind == "user" and not leaf.meta.round_after
+    before = len(provider.requests)
+    list(session.regenerate())  # the retry
+    assert [r.model for r in provider.requests[before:]] == [MAELA_MODEL, "story-model"]
+    assert "MAELA-ANSWERS-NOW" in session.last_prompt.section(SECTION_ROUND).text
+
+
+def test_a_turn_answered_at_the_same_time_keeps_those_answers_on_another_take(
+    tmp_path: Path,
+) -> None:
+    """A guard: the story changed to "after" since, the turn sent with the
+    passage before's answers is not asked again, and they go as they went."""
+    session = make_session(
+        tmp_path, ["The door gives.", "BLIND-ANSWER", "The lock turns.", "It turns again."]
+    )
+    play(session, turn())
+    play(session, turn("I hold the lamp."))
+    session.story.defaults.round_order = "after"
+    before = len(session.provider.requests)
+    list(session.regenerate())
+    assert [r.model for r in session.provider.requests[before:]] == ["story-model"]
+    assert "BLIND-ANSWER" in session.last_prompt.section(SECTION_ROUND).text
+
+
+def test_a_stop_after_a_passage_still_ends_there_with_what_came_kept(tmp_path: Path) -> None:
+    """A guard for answering at the same time: Stop skips the round and the
+    passage is kept, as it was."""
+    provider = HungOwnModel()
+    session = make_session(tmp_path, ["The door gives."], provider=provider)
+    with pytest.raises(StreamCancelled):
+        play(session, turn())
+    assert session.path()[-1].content == "The door gives."

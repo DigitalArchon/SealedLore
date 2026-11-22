@@ -18,6 +18,7 @@ from PySide6.QtGui import QTextCursor  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
+from sealedlore.engine.session_reactions import ROUND_SKIPPED  # noqa: E402
 from sealedlore.gui import lorebooks_page  # noqa: E402
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.models.character import Character  # noqa: E402
@@ -25,8 +26,8 @@ from sealedlore.models.node import DIRECTOR_SPEAKER_ID  # noqa: E402
 from sealedlore.providers.mock import MockChatProvider  # noqa: E402
 from sealedlore.storage.lorebooks import load_lorebooks  # noqa: E402
 from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa: E402
-from tests.test_background_queue import _send, _window, wait_for  # noqa: E402, F401
-from tests.test_reactions_gui import own_window  # noqa: E402
+from tests.test_background_queue import _send, _window, wait_for  # noqa: E402
+from tests.test_reactions_gui import MODEL, answer_texts, own_window  # noqa: E402
 
 
 @pytest.fixture
@@ -182,4 +183,46 @@ def test_a_direction_has_no_answers_row_and_nothing_to_show(
     for node in (turn_node, passage):
         assert getattr(window.transcript.message_widget(node.id), "answers_box", None) is None
     assert not any("Waiting for the characters" in text for text in said)
+    window.close()
+
+
+# --- W4: Stop while their answers are waited for skips them; the turn stays ---------
+
+
+def test_stop_during_their_round_skips_it_and_the_passage_is_written(
+    app, tmp_path: Path, story, cast, monkeypatch
+) -> None:
+    """The wait's words are "Stop skips it". It ended the job instead: the
+    turn went back to the composer, and sent again it waited on the same
+    model again."""
+    story.defaults.round_order = "after"
+    window = own_window(
+        tmp_path, story, cast, ["MAELA-ANSWER " * 40, "The door gives.", "MAELA-ASKED-AGAIN"]
+    )
+    window.config.scene_reads = "manual"
+    failed: list[tuple] = []
+    monkeypatch.setattr(window, "_warn_plain", lambda *words: failed.append(words))
+    said: list[str] = []
+    window.statusBar().messageChanged.connect(said.append)
+    provider = window._provider
+    provider.delay = 0.05
+    _send(window, "I put my shoulder to the door.")
+    wait_for(app, lambda: any("Waiting for the characters" in text for text in said))
+    window.stop_generation()
+    provider.delay = 0.0
+    wait_for(app, lambda: not window._busy)
+    assert not failed
+    turn_node, passage = window.session.full_path()[-2:]
+    assert turn_node.kind == "user" and passage.content == "The door gives."
+    assert window.composer.input.toPlainText() == ""  # the turn stayed sent
+    assert ROUND_SKIPPED in said
+    assert not turn_node.meta.round_after
+    assert getattr(window.transcript.message_widget(turn_node.id), "answers_box", None) is None
+    # Regenerate asks them, as the notice says.
+    before = len(provider.requests)
+    window.regenerate()
+    wait_for(app, lambda: not window._busy)
+    assert [r.model for r in provider.requests[before:]] == [MODEL, window.session.model]
+    assert turn_node.meta.round_after
+    assert "MAELA-ASKED-AGAIN" in " ".join(answer_texts(window, turn_node.id))
     window.close()

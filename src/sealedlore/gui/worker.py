@@ -74,6 +74,11 @@ class GenerationWorker(QObject):
                 elif isinstance(event, ReasoningDelta):
                     self.reasoning_delta.emit(event.text)
                 elif isinstance(event, SessionNotice):
+                    if event.stop_taken:
+                        # The Stop skipped a wait and the session goes on from
+                        # it (the characters' answers to the author's turn):
+                        # used up there, it isn't this job's to end on.
+                        self._stopping = False
                     if event.waiting_since is not None:
                         self.waiting.emit(event.text, event.waiting_since)
                     else:

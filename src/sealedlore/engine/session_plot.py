@@ -158,6 +158,10 @@ class SessionNotice:
     # The message the note was kept under, if it was.
     node_id: str | None = None
     waiting_since: float | None = None
+    # A Stop was used up skipping a wait, and the job goes on from it (the
+    # characters' answers before the passage, session_reactions.py): whoever
+    # runs the job doesn't end it for that Stop.
+    stop_taken: bool = False
 
 
 @dataclass
