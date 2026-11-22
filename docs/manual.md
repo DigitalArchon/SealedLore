@@ -729,7 +729,10 @@ archiving, rebuilding summaries.
   was written. HTML in a message is shown as text, a picture by its
   description, and a link as its words with the address after them; nothing
   in a message opens or loads anything. Edit shows the text as written, and
-  Find searches the text as you see it.
+  Find searches the text as you see it. A message far past what anyone
+  writes in one go (over 100,000 characters, a table of many hundreds of
+  cells, thousands of list items, lists nested dozens deep) is shown as
+  written, marks and all: drawn as Markdown it could hold the window up.
 - **Text size**: View → Text size → Larger (Ctrl++) and Smaller (Ctrl+-)
   change every piece of text in the window, the story, the panels and the
   menus, from 90% to 200%; the same menu lists the sizes, and Normal
