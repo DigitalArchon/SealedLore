@@ -1493,8 +1493,12 @@ story backup and this one, put back on another computer, are still linked.
 **Backup → Restore from a backup…**, or **File → Import…** of the file, puts
 it back: characters you don't have come back as they were, and if some are
 here already you choose whether to keep yours (the default) or put the
-backup's in their place. Like a story backup, it holds the prompts their
-pictures were drawn from, so keep it as you keep your stories.
+backup's in their place. No file of a character you have is written over: a
+picture in the backup with the name of one of yours is kept beside it. A
+backup is put back whole or not at all: one that can't be written (a full
+disk), or that claims to hold far more than a file of its size can, is refused
+with your characters as they were. Like a story backup, it holds the prompts
+their pictures were drawn from, so keep it as you keep your stories.
 
 **Chat with them…** starts a simple chat (see "Simple chat") from their card.
 Before it starts you see, and can change, everything it is made of:

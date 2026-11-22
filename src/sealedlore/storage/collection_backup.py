@@ -60,6 +60,16 @@ FILES = "files/"
 # Past any real one: a card's file is read to 32 MB, its JSON far less.
 MAX_MEMBER_BYTES = 64 * 1024 * 1024
 MAX_MEMBERS = 200_000
+# What a backup's files may take once put back, by the size of the backup
+# itself: `ROOM_FACTOR` times it and `ROOM_SPARE` more. A member is read to
+# the size it claims, so the claims add up to the most a restore writes; with
+# no limit on the sum, a backup of 786 KB (a thousand card files of zeros)
+# wrote 805 MB. A backup made here stores its files as they are (pictures
+# and videos are compressed already), so they come to about its own size
+# however large the collection; zipped again by another program, pictures
+# gain next to nothing, and the spare is for card files of text.
+ROOM_FACTOR = 8
+ROOM_SPARE = 256 * 1024 * 1024
 # One entry of the log, past any a picture's request or reply writes: a line
 # longer is passed over, as a torn one is.
 MAX_LOG_LINE = 16 * 1024 * 1024
@@ -199,6 +209,16 @@ def open_backup(path: Path) -> Iterator[Backup]:
         manifest = _manifest(archive)
         if manifest is None:
             raise BackupError(f"{name} isn't a backup of characters.")
+        claimed = sum(i.file_size for i in archive.infolist() if i.filename.startswith(FILES))
+        try:
+            size = Path(path).stat().st_size
+        except OSError as exc:
+            raise BackupError(f"{name} couldn't be read ({exc}).") from exc
+        if claimed > ROOM_SPARE + ROOM_FACTOR * size:
+            raise BackupError(
+                f"{name} says its files take {_megabytes(claimed)} once put back, far more than "
+                f"a backup of its size ({_megabytes(size)}) holds: nothing was put back."
+            )
         version = manifest.get("version")
         if not isinstance(version, int) or version > BACKUP_VERSION:
             raise BackupError(
@@ -239,37 +259,55 @@ def restore(
     re-encode); a picture nothing can clean isn't written, as no picture
     comes in with its hidden data. No file here is written over: a backup's
     file whose name one here has, with other bytes, goes under a name of its
-    own (`_Files`). The bundle is the caller's to save."""
+    own (`_Files`). The bundle is the caller's to save.
+
+    All or nothing: when a file can't be written (a full disk), BackupError
+    says so, the files written so far are removed and the bundle is as it
+    was, so nothing is left that no saved record names."""
     done = Restored()
     files = _Files(backup, store, clean)
-    by_id = {character.id: index for index, character in enumerate(bundle.cast)}
-    for character in backup.characters:
-        index = by_id.get(character.id)
-        if index is not None and not replace:
-            done.kept.append(character.name)
-            continue
-        done.missing += files.put_for(character)
-        if index is None:
-            bundle.cast.append(character)
-            done.added.append(character.name)
-        else:
-            old = bundle.cast[index]
-            bundle.cast[index] = character
-            used = {file for other in bundle.cast for file in files_of(other)}
-            for file in files_of(old):
-                if file not in used:
-                    store.remove(file)
-            done.replaced.append(character.name)
-    known = {image.id for image in store.images()}
-    drawn = [image for image in backup.images if image.id not in known]
-    for image in drawn:
-        placed = files.put(image.file)
-        if placed is None:
-            done.missing += 1
-        else:
-            image.file = placed
-    if drawn:
-        store.add_images(drawn)
+    before = list(bundle.cast)
+    replaced: list[Character] = []
+    try:
+        by_id = {character.id: index for index, character in enumerate(bundle.cast)}
+        for character in backup.characters:
+            index = by_id.get(character.id)
+            if index is not None and not replace:
+                done.kept.append(character.name)
+                continue
+            done.missing += files.put_for(character)
+            if index is None:
+                bundle.cast.append(character)
+                done.added.append(character.name)
+            else:
+                replaced.append(bundle.cast[index])
+                bundle.cast[index] = character
+                done.replaced.append(character.name)
+        known = {image.id for image in store.images()}
+        drawn = [image for image in backup.images if image.id not in known]
+        for image in drawn:
+            placed = files.put(image.file)
+            if placed is None:
+                done.missing += 1
+            else:
+                image.file = placed
+        if drawn:
+            store.add_images(drawn)
+    except OSError as exc:
+        for file in files.written:
+            store.remove(file)
+        bundle.cast[:] = before
+        raise BackupError(
+            f"The backup's files couldn't be written here ({exc}). Nothing of it was put back: "
+            "your characters are as they were."
+        ) from exc
+    # Only now, with everything of the backup's in place: a replaced
+    # character's own files, where nobody names them any more.
+    used = {file for other in bundle.cast for file in files_of(other)}
+    for old in replaced:
+        for file in files_of(old):
+            if file not in used:
+                store.remove(file)
     return done
 
 
@@ -304,6 +342,8 @@ class _Files:
         # Where the numbering of a name got to: names that differ only in
         # case clash on some file systems, and each would count up from 2.
         self._numbers: dict[str, int] = {}
+        # Every file written, to take back if the restore can't be finished.
+        self.written: list[str] = []
 
     def put(self, name: str) -> str | None:
         """The backup's file `name` into the store; the name it has there,
@@ -336,6 +376,8 @@ class _Files:
             target = path.with_name(f"{path.stem}-{number}{path.suffix}").as_posix()
         self._numbers[name.casefold()] = number
         if held is None:
+            # Listed first: a write that fails may leave part of itself.
+            self.written.append(target)
             self.store.write(target, data)
         return target
 
@@ -352,6 +394,10 @@ def _without_hidden_data(data: bytes, clean: Callable[[bytes], bytes] | None) ->
         return strip_metadata(data)
     except MetadataError:
         return None
+
+
+def _megabytes(size: int) -> str:
+    return f"{size / (1024 * 1024):,.1f} MB"
 
 
 def _manifest(archive: zipfile.ZipFile) -> dict[str, Any] | None:

@@ -21,8 +21,8 @@ from sealedlore.engine.plot_md import parse_plot_markdown, read_clause
 from sealedlore.models.character import Character
 from sealedlore.models.image import ImageRef
 from sealedlore.models.tavern import CardAsset, TavernFields
-from sealedlore.storage import collection
-from sealedlore.storage.collection_backup import open_backup, restore
+from sealedlore.storage import collection, collection_backup
+from sealedlore.storage.collection_backup import BackupError, open_backup, restore
 from sealedlore.storage.paths import COLLECTION_ID
 from sealedlore.storage.picture_store import DiskPictures
 
@@ -216,3 +216,83 @@ def test_a_backup_of_characters_never_writes_over_a_picture_kept_here(tmp_path: 
     files = {p.name for p in (tmp_path / "data").rglob("*.png")}
     assert files == {Path(moved).name}, "Elena's is the backup's now, her old one gone"
     assert mine.cast[0].reference_images[0].file == moved
+
+
+# --- F2: a backup of characters takes the room its own size allows, or none --------
+
+
+def _with_card_files(name: str, files: int) -> tuple[Character, list[str]]:
+    character = collection.kept(name)
+    names = [f"images/assets/{character.id}/f{i}.bin" for i in range(files)]
+    character.tavern = TavernFields(
+        assets=[
+            CardAsset(type="other", name=f"f{i}", ext="bin", file=n) for i, n in enumerate(names)
+        ]
+    )
+    return character, names
+
+
+def test_a_backup_claiming_far_more_than_its_size_is_refused_before_anything_is_read(
+    tmp_path: Path, monkeypatch
+):
+    """A megabyte of zeros is a kilobyte in a zip: 786 KB wrote 805 MB."""
+    monkeypatch.setattr(collection_backup, "ROOM_SPARE", 1024 * 1024, raising=False)
+    elena, names = _with_card_files("Elena Ruiz", 6)
+    path = _characters_zip(tmp_path / "bomb.zip", [elena], dict.fromkeys(names, bytes(512 * 1024)))
+    assert path.stat().st_size < 64 * 1024
+    store = DiskPictures(COLLECTION_ID, tmp_path / "data")
+    mine = collection.new_collection()
+    with pytest.raises(BackupError, match="more than a backup of its size"), open_backup(path) as b:
+        restore(b, mine, store, replace=False)
+    assert not mine.cast and not list((tmp_path / "data").rglob("*.bin"))
+    # A backup as SealedLore writes one (its files stored as they are) is
+    # its own size, whatever it holds.
+    for name in names:
+        store.write(name, bytes(512 * 1024))
+    mine.cast.append(elena)
+    path = tmp_path / "real.zip"
+    collection_backup.write_backup(path, mine.cast, store)
+    there = collection.new_collection()
+    with open_backup(path) as b:
+        done = restore(b, there, DiskPictures(COLLECTION_ID, tmp_path / "there"), replace=False)
+    assert done.added == ["Elena Ruiz"] and not done.missing
+
+
+class _FullAfter(DiskPictures):
+    """A disk with room for so many more files."""
+
+    def __init__(self, root: Path, room: int) -> None:
+        super().__init__(COLLECTION_ID, root)
+        self.room = room
+
+    def write(self, relative: str, data: bytes) -> None:
+        if self.room <= 0:
+            raise OSError(28, "No space left on device")
+        self.room -= 1
+        super().write(relative, data)
+
+
+def test_a_full_disk_while_restoring_is_said_and_nothing_of_the_backup_is_kept(tmp_path: Path):
+    store = _FullAfter(tmp_path / "data", room=1)
+    mine = collection.new_collection()
+    elena = collection.kept("Elena Ruiz")
+    elena.reference_images = [ImageRef(id="p1", file="images/refs/p1.png")]
+    store.write("images/refs/p1.png", _png(10))
+    mine.cast.append(elena)
+    store.room = 3
+    # The backup's Elena has another picture; Marcus brings four files.
+    theirs = elena.model_copy(deep=True)
+    theirs.reference_images = [ImageRef(id="p2", file="images/refs/p2.png")]
+    marcus, names = _with_card_files("Marcus", 4)
+    files = {"images/refs/p2.png": _png(20)} | {name: name.encode() for name in names}
+    path = _characters_zip(tmp_path / "theirs.zip", [theirs, marcus], files)
+    with pytest.raises(BackupError, match="No space left") as raised, open_backup(path) as backup:
+        restore(backup, mine, store, replace=True)
+    assert "Nothing" in str(raised.value)
+    assert mine.cast == [elena] and elena.reference_images[0].file == "images/refs/p1.png"
+    kept = {
+        p.relative_to(tmp_path / "data" / "characters").as_posix()
+        for p in (tmp_path / "data").rglob("*")
+        if p.is_file()
+    }
+    assert kept == {"images/refs/p1.png"}, "hers is still here, and nothing of the backup's"

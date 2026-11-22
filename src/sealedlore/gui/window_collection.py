@@ -384,6 +384,7 @@ class CollectionWindow:
             return
         session = self._collection_session()
         self._flush_collection()
+        log_problem = ""
         try:
             with open_backup(path) as backup:
                 here = {character.id for character in session.cast}
@@ -401,12 +402,23 @@ class CollectionWindow:
                     )
                     # What drawing them cost comes back with them (the log is
                     # append-only), an entry at a time: never held whole.
-                    log = read_api_log(COLLECTION_ID, root=self.root)
-                    for entry in new_log_entries(backup, log):
-                        append_api_log(COLLECTION_ID, entry, root=self.root)
+                    try:
+                        log = read_api_log(COLLECTION_ID, root=self.root)
+                        for entry in new_log_entries(backup, log):
+                            append_api_log(COLLECTION_ID, entry, root=self.root)
+                    except OSError as exc:
+                        # The characters are back all the same; the save
+                        # below says so itself if it can't be made either.
+                        log_problem = str(exc)
         except BackupError as exc:
             self._warn_plain("Couldn't restore your characters", str(exc))
             return
+        if log_problem:
+            self._warn_plain(
+                "Their costs weren't all restored",
+                "The characters were put back, but what drawing them had cost couldn't be "
+                f"added to the log here ({log_problem}).",
+            )
         self._save_collection()
         self.collection_page.forget_pictures()
         self.collection_page.forget_forms()
