@@ -28,7 +28,7 @@ from sealedlore.models.image import ImageRef
 from sealedlore.models.plot import EventDef, Plot
 from sealedlore.models.story import BUDGET_MOST, StoryDefaults
 from sealedlore.models.tavern import CardAsset, TavernFields
-from sealedlore.storage import collection, collection_backup, tavern_cards
+from sealedlore.storage import collection, collection_backup, tavern_cards, tavern_lore
 from sealedlore.storage.collection_backup import BackupError, open_backup, restore
 from sealedlore.storage.image_meta import PNG_SIGNATURE, MetadataError, strip_metadata
 from sealedlore.storage.paths import COLLECTION_ID
@@ -486,3 +486,41 @@ def test_a_first_sentence_is_what_the_pattern_before_found():
         flat = " ".join(text.split())
         found = old.search(flat)
         assert tavern_cards.first_sentence(text, 10_000) == (found.group(1) if found else flat)
+
+
+# --- F12: a lorebook entry's keys on one line are split in one pass -----------------
+
+
+def _old_split_keys(text: str) -> list[str]:
+    keys: list[str] = []
+    start, opened, closed = 0, False, False
+    for index, char in enumerate(text):
+        if char == "/" and (index == 0 or text[index - 1] != "\\"):
+            if not opened and not text[start:index].strip():
+                opened = True
+            elif opened:
+                closed = True
+        elif char == "," and (not opened or closed):
+            keys += tavern_lore._finished(text[start:index])
+            start, opened, closed = index + 1, False, False
+    return keys + tavern_lore._finished(text[start:])
+
+
+def test_keys_on_one_long_line_are_split_at_once():
+    """Every slash had the line so far copied to see whether a keyword had
+    begun: a megabyte of them took nine seconds."""
+    began = time.perf_counter()
+    assert tavern_lore.split_keys("farm" + "/" * 600_000) == ["farm" + "/" * 600_000]
+    assert time.perf_counter() - began < 1.0
+
+
+def test_keys_are_split_as_they_were_split_before():
+    rng = random.Random(17)
+    pieces = ["/", ",", " ", "\\", "a", "barn", "/i", "\t", " ", "\\/", ", ", "/a,b/i", "x/y"]
+    seen: set[int] = set()
+    for _ in range(60_000):
+        text = "".join(rng.choice(pieces) for _ in range(rng.randint(0, 10)))
+        keys = tavern_lore.split_keys(text)
+        assert keys == _old_split_keys(text), repr(text)
+        seen.add(len(keys))
+    assert len(seen) > 4

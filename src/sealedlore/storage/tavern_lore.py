@@ -191,16 +191,21 @@ def split_keys(text: str) -> list[str]:
     keyword, though a pattern can only begin with its slash), and the
     line's end finishes the last one too (left open, "/me, barn" did)."""
     keys: list[str] = []
-    start, opened, closed = 0, False, False
+    # `blank`: nothing but spaces since the keyword began. Kept as the line
+    # is read: looked up at each slash by copying the line so far, a line
+    # of a megabyte of slashes took nine seconds.
+    start, opened, closed, blank = 0, False, False, True
     for index, char in enumerate(text):
         if char == "/" and (index == 0 or text[index - 1] != "\\"):
-            if not opened and not text[start:index].strip():
+            if not opened and blank:
                 opened = True
             elif opened:
                 closed = True
         elif char == "," and (not opened or closed):
             keys += _finished(text[start:index])
-            start, opened, closed = index + 1, False, False
+            start, opened, closed, blank = index + 1, False, False, True
+            continue
+        blank = blank and char.isspace()
     return keys + _finished(text[start:])
 
 
