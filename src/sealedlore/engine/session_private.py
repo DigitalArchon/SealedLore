@@ -1324,6 +1324,9 @@ class PrivateRuntime:
         parent = nodes[-1] if nodes else (full[-1] if full else None)
         span.status, span.ended_at = "closed", utc_now_iso()
         self._release_private()
+        # The last real turn was the scene's; nothing after it may read it
+        # (as `discard_private`). With a summary, the summary is what is read.
+        self.last_result = None
         if summary.strip() and nodes:
             node = Node(
                 kind="assistant",

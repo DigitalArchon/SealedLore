@@ -11,9 +11,10 @@ from pathlib import Path
 
 import pytest
 
-from sealedlore.engine.session import StorySession
+from sealedlore.engine.session import StorySession, TurnRequest
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
 from sealedlore.models.config import Config, ProviderConfig
+from sealedlore.models.node import CHAT_USER_ID
 from sealedlore.models.private import PrivacyRecord
 from sealedlore.providers.base import ProviderError
 from sealedlore.providers.mock import MockChatProvider, MockEmbeddings
@@ -427,3 +428,36 @@ def test_the_lorebook_is_not_embedded_again_while_a_private_scene_is_open(tmp_pa
     before = len(session.embeddings.calls)
     vectors = session.reembed_lore()
     assert vectors and len(session.embeddings.calls) > before
+
+
+# --- noted: two refusals a chat lacked, and a scene's last result left behind ------------------
+
+
+def test_reading_the_scene_and_scanning_for_characters_are_not_a_chats(tmp_path: Path):
+    """No caller reaches them in a chat today; their siblings refuse there,
+    and so do they, before anything of the chat is sent to another model."""
+    session, main = private_chat(tmp_path, "zai-org/glm-5.3-flash")
+    main.responses = ["A reply."]
+    list(session.send(TurnRequest(speaker_id=CHAT_USER_ID, user_text=f"About {MARKER}.")))
+    sent = len(main.payloads)
+    with pytest.raises(ValueError, match="isn't part of a simple chat"):
+        session.suggest_scene()
+    with pytest.raises(ValueError, match="isn't part of a simple chat"):
+        list(session.scan_recent())
+    assert len(main.payloads) == sent
+
+
+def test_a_scene_ended_with_no_summary_leaves_no_last_result_behind(tmp_path: Path):
+    """As a discarded scene leaves none: the last real turn was the scene's,
+    and nothing after it may read it."""
+    from tests.test_private import enter
+
+    session, main, held = build(tmp_path)
+    play(session, turn(held, "I walk in."))
+    enter(session, "disk")
+    play(session, turn(held, f"I whisper {MARKER} to her."))
+    assert MARKER in session.last_result.text
+    to_main = len(main.payloads)
+    list(session.close_private(""))
+    assert not session.in_private and session.last_result is None
+    assert len(main.payloads) == to_main

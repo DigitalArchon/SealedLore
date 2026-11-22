@@ -3693,6 +3693,7 @@ class StorySession(
         author accepts or edits the proposal.
         """
         self._refuse_in_private("Reading the scene")
+        self._refuse_in_chat("Reading the scene")
         recent = list(self.split().verbatim)[-nodes:]
         prose = render_chunk(recent, self.visible_cast(), texts=self.texts)
         if not prose.strip():
@@ -4062,6 +4063,7 @@ class StorySession(
     def scan_recent(self, nodes: int = 20) -> Iterator[SessionNotice]:
         """The on-demand scan: the most recent verbatim prose."""
         self._refuse_in_private("Scanning for characters")
+        self._refuse_in_chat("Scanning for characters")
         recent = list(self.split().verbatim)[-nodes:]
         found = self.scan_for_characters(recent)
         if found:
