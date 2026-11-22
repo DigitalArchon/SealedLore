@@ -612,3 +612,47 @@ def test_an_entry_written_here_with_a_decorator_follows_the_tick_too():
     # @@dont_activate is not Always on's to change.
     never = fire_entry(**common, always_on=False, decorators=["@@dont_activate"])
     assert "@@dont_activate" in never.decorators
+
+
+# --- L9: a pattern key with a space around it ---------------------------------------
+
+
+@pytest.mark.parametrize(
+    "keys",
+    [["/wol(f|ves)/i"], [" /wol(f|ves)/i"], ["/wol(f|ves)/i ", "pack"], ["\t/wol(f|ves)/i\n"]],
+)
+def test_a_pattern_key_with_a_space_around_it_fires(keys: list[str]):
+    """SillyTavern trims a key before it reads it as a pattern; here one
+    with a space before or after it was neither a pattern nor a keyword, and
+    its entry never fired."""
+    book = {
+        "entries": {
+            "0": {
+                "uid": 0,
+                "comment": "Wolves",
+                "content": "They hunt in threes.",
+                "key": keys,
+                "keysecondary": [" /road/ "],
+                "selective": True,
+                "constant": False,
+                "order": 100,
+            }
+        }
+    }
+    read = lore_from_book(book).entries[0]
+    wolves = fire_entry(
+        id=read.id,
+        title=read.title,
+        content=read.content,
+        keywords=read.keywords,
+        always_on=read.always_on,
+        enabled=read.enabled,
+        raw=read.tavern.fields,
+        numbered=read.tavern.numbered,
+        decorators=read.tavern.decorators,
+    )
+    assert "/wol(f|ves)/i" in wolves.keys
+    result = run([wolves], ["Two wolves cross the road."])
+    assert result.ids == [read.id]
+    assert not run([wolves], ["Two foxes cross the road."]).fired
+    assert not run([wolves], ["Two wolves in the yard."]).fired  # its secondary key, trimmed too

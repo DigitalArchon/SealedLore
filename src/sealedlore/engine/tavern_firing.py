@@ -340,6 +340,10 @@ def _strings(value: Any) -> tuple[str, ...]:
     return ()
 
 
+def _trimmed(value: Any) -> tuple[str, ...]:
+    return tuple(text.strip() for text in _strings(value))
+
+
 def fire_entry(
     *,
     id: str,  # noqa: A002 - the lore entry's
@@ -371,7 +375,10 @@ def fire_entry(
             disabled=not enabled,
             decorators=tuple(decorators),
         )
-    keys = _strings(
+    # Trimmed, as SillyTavern trims a key before it reads it: " /wol(f|ves)/i"
+    # was no pattern with its space, nor one of the entry's keywords, and so
+    # no key at all.
+    keys = _trimmed(
         raw.get("key") if numbered and "key" in raw else raw.get("keys", raw.get("key"))
     )
     # The entry's keywords as SealedLore has them win over those it brought
@@ -380,7 +387,7 @@ def fire_entry(
     plain = [key for key in keys if not is_pattern(key)]
     if list(dict.fromkeys(plain)) != list(keywords):
         keys = (*keywords, *(key for key in keys if is_pattern(key)))
-    secondary = _strings(
+    secondary = _trimmed(
         raw.get("keysecondary")
         if numbered and "keysecondary" in raw
         else raw.get("secondary_keys", raw.get("keysecondary"))
