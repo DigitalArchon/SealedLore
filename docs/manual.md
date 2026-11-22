@@ -3878,7 +3878,10 @@ whole when tapped.
 
 Some things wait for the desktop: while a question is open there (a summary
 to approve, say), the phone says "The desktop is waiting for an answer". A
-private scene is begun and ended on the desktop.
+private scene is begun and ended on the desktop. Something asked for from a
+phone that fails (the endpoint is down, say) is said on the phone, and on the
+desktop in the status bar and under the story's latest message, marked ⚠: it
+opens no dialog there, so the phones can go on with nobody at the computer.
 
 **Private scenes, memory-only chats and private models** can be played from
 the phone if their story is shared, and the computer asks first when you

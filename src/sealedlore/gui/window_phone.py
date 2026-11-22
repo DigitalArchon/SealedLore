@@ -1006,6 +1006,8 @@ class _Backend:
         in its status bar, and "started" sent the phone waiting on nothing."""
         if not self.window._busy:
             raise Refused(409, NOT_STARTED)
+        # The job is this phone's: failing, it opens no dialog on the desktop.
+        self.window._asked_by_phone = True
 
     def regenerate(self, retake: Retake) -> None:
         window = self.window

@@ -441,7 +441,8 @@ class MainWindow(
         self._background = False
         self._queued: Callable[[], None] | None = None
         self._queued_text: tuple[str, str | None] | None = None
-        # Where the queued turn came from: "desktop" (the composer) or "phone".
+        # Where the queued turn came from: "desktop" (the composer) or a
+        # phone (`window_phone.phone_origin`).
         self._queued_origin = "desktop"
         # The turn or Question the running job is answering (`_start(sent=)`).
         self._sent: _Sent | None = None
@@ -451,6 +452,9 @@ class MainWindow(
         # failure itself, kept until the job has let go of the story.
         self._job_name = "Generation"
         self._failed: str | None = None
+        # Whether a phone asked for the running job: its failure opens no
+        # dialog here (`_say_failed`).
+        self._asked_by_phone = False
         # What the plot holds back from the Cast and Lore tabs, as last shown.
         self._shown_hidden: set[str] = set()
         # The progress dialog of a background job (see _start's busy_text).
@@ -4030,6 +4034,9 @@ class MainWindow(
         self._progress_in_dialog = progress
         self._sent = sent
         self._failed = None
+        # A phone's turn or Question; a phone's retake says so once it has
+        # started (window_phone `_started`).
+        self._asked_by_phone = sent is not None and sent.origin != "desktop"
         if question is not None:
             self.transcript.begin_aside(question)
         elif continuing is not None:
@@ -4156,8 +4163,26 @@ class MainWindow(
                 "ready to send again."
             )
         self.statusBar().showMessage(f"{title}: {failed}", 10000)
+        if self._asked_by_phone:
+            # No dialog for a job a phone asked for: with nobody at the
+            # desktop to answer it, every phone was refused as "waiting for
+            # an answer" from then on. The phone is told by its own events.
+            self._keep_phone_failure(title, failed)
+            return
         # The message can carry the endpoint's own words; never render it as HTML.
         self._warn_plain(title, failed)
+
+    def _keep_phone_failure(self, title: str, failed: str) -> None:
+        """What failed, kept under the story's latest message (`NodeMeta.notes`,
+        as the session keeps its own failures) for the author to find at the
+        desktop: the status bar's word is gone in seconds."""
+        session = self.session
+        if session is None:
+            return
+        first = (failed.splitlines() or [""])[0][:300]
+        notice = session._kept_notice(f"{title}, asked from a phone: {first}", severity="failure")
+        if notice.node_id is not None:
+            self._reload_unless_editing()
 
     def _return_unanswered(self) -> bool:
         """After a job: a turn or Question whose answer never came goes back

@@ -25,7 +25,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
 from sealedlore.gui import phone_server, window_phone  # noqa: E402
 from sealedlore.models.config import PhoneDevice, ProviderConfig  # noqa: E402
@@ -33,6 +33,7 @@ from sealedlore.models.node import NARRATOR_SPEAKER_ID  # noqa: E402
 from sealedlore.phone.api import Api  # noqa: E402
 from sealedlore.phone.page import page_files  # noqa: E402
 from sealedlore.phone.pairing import Pairing, token_hash  # noqa: E402
+from sealedlore.providers.base import ProviderError  # noqa: E402
 from sealedlore.providers.mock import MockChatProvider  # noqa: E402
 from tests import test_phone_window as desk  # noqa: E402
 from tests.test_phone_api import ONION, TOKEN, FakeBackend  # noqa: E402
@@ -385,3 +386,74 @@ def test_the_page_gates_a_turn_and_a_returned_turn_by_their_own_tags():
     assert "S.returned" in kinds
     # Acknowledged, what was held back is put where it belongs.
     assert "showReturned()" in page_function(script, "askToShow")
+
+
+# --- P4: a phone's job that fails ------------------------------------------------------------
+
+
+@pytest.fixture
+def boxes(monkeypatch) -> list[tuple[str, str]]:
+    """Every message box the desktop opens: its title and text, answered at once."""
+    opened: list[tuple[str, str]] = []
+
+    def exec_(box) -> int:
+        opened.append((box.windowTitle(), box.text()))
+        return 0
+
+    monkeypatch.setattr(QMessageBox, "exec", exec_)
+    return opened
+
+
+OVERLOADED = "HTTP 503: the endpoint is overloaded"
+
+
+def notes_shown(window) -> list[str]:
+    return [note for node in window.session.full_path() for note in node.meta.notes]
+
+
+def test_a_phones_turn_that_fails_opens_no_dialog_on_the_desktop(app, desktop, boxes):
+    """It opened "Generation failed" there, modal: with nobody at the desktop
+    every phone was refused, as waiting for an answer, until someone was."""
+    window, phone = desktop([])
+    window.show()
+    window._provider = MockChatProvider(error=ProviderError(OVERLOADED))
+    stream = phone.stream()
+    stream.wait_for("hello")
+    assert phone.ask("POST", "/api/turn", narration("I open the door."))[0] == 202
+    stream.wait_for("job_finished")
+    desk.wait_for(app, lambda: not window._busy and window._failed is None)
+    assert boxes == [], "a dialog stood on the desktop"
+    assert "failed" in stream.names()
+    # Said where the author will find it: under the turn, and in the status bar.
+    assert [n.content for n in window.session.full_path()] == ["I open the door."]
+    (note,) = notes_shown(window)
+    assert "failed" in note and "phone" in note and OVERLOADED in note
+    assert OVERLOADED in window.statusBar().currentMessage()
+    widget = window.transcript.message_widget(window.session.full_path()[-1].id)
+    assert any(OVERLOADED in label.text() for label in widget.findChildren(type(widget.body)))
+    # And the phones go on.
+    assert phone.ask("GET", "/api/state")[1]["desktop_waiting"] is False
+    window._provider = MockChatProvider(["The door gives."])
+    assert phone.ask("POST", "/api/regenerate", {})[0] == 409  # no passage to retake
+    assert phone.ask("POST", "/api/turn", narration("Again."))[0] == 202
+    desk.wait_for(app, lambda: not window._busy)
+
+
+def test_a_phones_retake_that_fails_opens_no_dialog_either(app, desktop, boxes):
+    window, phone = played_one_turn(app, desktop, ["Passage one."])
+    window._provider = MockChatProvider(error=ProviderError(OVERLOADED))
+    assert phone.ask("POST", "/api/regenerate", {})[0] == 202
+    desk.wait_for(app, lambda: not window._busy and window._failed is None)
+    assert boxes == []
+    assert any(OVERLOADED in note for note in notes_shown(window))
+
+
+def test_the_desktops_own_turn_that_fails_still_says_so_in_its_dialog(app, desktop, boxes):
+    window, phone = desktop([])
+    window._provider = MockChatProvider(error=ProviderError(OVERLOADED))
+    window.composer.input.setPlainText("I open the door.")
+    window.send_turn()
+    desk.wait_for(app, lambda: not window._busy and window._failed is None)
+    assert [title for title, _ in boxes] == ["Generation failed"]
+    assert OVERLOADED in boxes[0][1]
+    assert notes_shown(window) == []

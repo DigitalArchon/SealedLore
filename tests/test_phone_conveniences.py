@@ -568,15 +568,18 @@ def test_when_no_suggestions_come_the_phone_is_told_so_and_stops_waiting(
     wait_for(app, lambda: not window._busy)
     wait_for(app, lambda: suggested(events) == [{"ask": "ask-1", **none}])
 
-    # A reply that can't be read: the failure is said, and nothing is offered.
+    # A reply that can't be read: the failure is said, on the phone and in
+    # the desktop's status bar (no dialog there for a phone's asking), and
+    # nothing is offered.
     warned: list[tuple] = []
     monkeypatch.setattr(window, "_warn_plain", lambda *words: warned.append(tuple(words)))
     window._provider = MockChatProvider(["I'd rather write on."])
     assert phone.ask("POST", "/api/suggest", {"ask": "ask-2"})[0] == 202
-    wait_for(app, lambda: not window._busy and bool(warned))
+    wait_for(app, lambda: not window._busy and window._failed is None)
     wait_for(app, lambda: len(suggested(events)) == 2)
     assert suggested(events)[1] == {"ask": "ask-2", **none}
     assert "failed" in events.names()
+    assert not warned and "failed" in window.statusBar().currentMessage()
 
     # The story stops being shared while they are written: none of them go.
     slow = MockChatProvider([json.dumps(OPTIONS)], chunk_size=4)
