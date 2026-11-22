@@ -29,7 +29,9 @@ from typing import Literal
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.node import Node
 
-Reason = Literal["always_on", "picked", "named", "matched", "semantic", "keyword", "tavern"]
+Reason = Literal[
+    "always_on", "picked", "named", "matched", "semantic", "keyword", "tavern", "in_full"
+]
 LoreMode = Literal["whole", "select"]
 
 # The order entries are offered to the room in (`fit_lore`). What the
@@ -45,6 +47,7 @@ REASON_ORDER: dict[Reason, int] = {
     "semantic": 3,
     "keyword": 4,
     "tavern": 0,
+    "in_full": 5,
 }
 
 # How many just-missed entries to keep for the panel. Enough to see where the
@@ -63,6 +66,7 @@ REASON_LABELS: dict[Reason, str] = {
     "semantic": "semantic match",
     "keyword": "keyword match",
     "tavern": "fired as SillyTavern would",
+    "in_full": "in full this turn",
 }
 
 
@@ -79,10 +83,18 @@ class Injection:
     rank: int | None = None
     # Why SillyTavern's rules fired it (engine/tavern_firing.py).
     why: str = ""
+    # The entry's own title, when `entry` is sent under another: an always-on
+    # entry given in full with the turn (engine/lore_whole_back.py).
+    title: str = ""
 
     @property
     def fitted(self) -> bool:
         return self.whole is not None
+
+    @property
+    def name(self) -> str:
+        """The entry's own title, for the Lore page."""
+        return self.title or self.entry.title
 
     def describe(self) -> str:
         if self.reason == "semantic" and self.score is not None:
@@ -95,6 +107,10 @@ class Injection:
             said = f"picked by Jev ({self.score:.2f})"
         elif self.reason == "tavern" and self.why:
             said = f"fired as SillyTavern would: {self.why}"
+        elif self.reason == "in_full" and self.rank is not None:
+            said = f"in full this turn: the turn's match no. {self.rank}"
+            if self.score is not None:
+                said += f" (similarity {self.score:.2f})"
         else:
             said = REASON_LABELS[self.reason]
         if self.whole is not None:
@@ -146,6 +162,12 @@ class RetrievalReport:
     @property
     def semantic_count(self) -> int:
         return sum(1 for injection in self.injected if injection.reason == "semantic")
+
+    @property
+    def in_full(self) -> tuple[Injection, ...]:
+        """The always-on entries sent condensed that go in full with this
+        turn as well (engine/lore_whole_back.py)."""
+        return tuple(injection for injection in self.injected if injection.reason == "in_full")
 
 
 def content_hash(text: str) -> str:
@@ -661,11 +683,12 @@ def fit_lore(
     *,
     query: str,
     count_tokens: Callable[[str], int],
+    most_share: float = ENTRY_MOST_SHARE,
 ) -> tuple[list[Injection], list[Injection]]:
     """`ordered` (best first) fitted to `room` tokens: (sent, left out).
 
     Each goes whole while it fits what is left and takes no more than
-    `ENTRY_MOST_SHARE` of the room; else in part (`fitted_entry`), down to
+    `most_share` of the room; else in part (`fitted_entry`), down to
     `FIT_LEAST_TOKENS`; only below that is it left out. A fixed 2,000 tokens,
     each entry whole or not at all, left out the entries a turn was about on
     a lorebook of long entries (a character's profile is 1,400 tokens): on a
@@ -674,7 +697,7 @@ def fit_lore(
     injected: list[Injection] = []
     dropped: list[Injection] = []
     used = 0
-    most = max(FIT_LEAST_TOKENS, int(room * ENTRY_MOST_SHARE))
+    most = max(FIT_LEAST_TOKENS, int(room * most_share))
     for injection in ordered:
         space = min(room - used, most)
         if injection.tokens <= space:

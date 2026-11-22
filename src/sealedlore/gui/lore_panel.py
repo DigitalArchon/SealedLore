@@ -528,9 +528,9 @@ class LorePanel(QWidget):
             shorter = ", condensed" if entry.id in report.condensed else ""
             self.injected.addItem(f"{entry.title} — always on, sent with the world{shorter}")
         for injection in report.injected:
-            self.injected.addItem(f"{injection.entry.title} — {injection.describe()}")
+            self.injected.addItem(f"{injection.name} — {injection.describe()}")
         for injection in report.dropped:
-            self.injected.addItem(f"{injection.entry.title} — left out: no room left this turn")
+            self.injected.addItem(f"{injection.name} — left out: no room left this turn")
         # Fired as SillyTavern fires: what didn't, and SillyTavern's reason.
         for entry, why in report.not_fired:
             item = QListWidgetItem(f"{entry.title} — not fired: {why}")

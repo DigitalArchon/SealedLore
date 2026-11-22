@@ -1210,8 +1210,26 @@ class StorySession(
         back to keywords silently and show an indicator, so the report carries
         the reason and the caller decides how loudly to say it.
         """
-        layout = self.lore_layout()
+        named = self._layout_named()
+        layout = self._fit_layout(named)  # as `lore_layout`
         query = query_text(turn.user_text, history, turns=self.config.lore_query_turns)
+        report = self._chosen_lore(layout, turn, history, query, allow_network, trigger)
+        # The always-on entries sent condensed that the turn is about, in full
+        # beside it (engine/lore_whole_back.py).
+        return self._with_in_full(
+            report, turn, history, layout, named=named, allow_network=allow_network
+        )
+
+    def _chosen_lore(
+        self,
+        layout: LoreLayout,
+        turn: TurnRequest,
+        history: Sequence[Node],
+        query: str,
+        allow_network: bool,
+        trigger: Sequence[str],
+    ) -> RetrievalReport:
+        """The lore the turn chooses, by the rules the story's lore fires by."""
         if layout.mode == "whole":
             # Nothing to choose: every entry is standing in the system block.
             return RetrievalReport(
@@ -1619,7 +1637,7 @@ class StorySession(
         ]
 
     def ensure_lore_vectors(
-        self, *, stopped: Callable[[], bool] | None = None
+        self, *, stopped: Callable[[], bool] | None = None, embed: bool = True
     ) -> dict[str, tuple[float, ...]]:
         """Embed any entry whose text or model has changed; return id → vector.
 
@@ -1629,7 +1647,8 @@ class StorySession(
         the entries done by then are kept and saved, and `EmbeddingStopped`
         is raised. While a private scene is open nothing is embedded,
         whoever asks: only the scene's own model is called then, and what
-        has a vector already is all that is returned.
+        has a vector already is all that is returned, as it is with `embed`
+        off (the prompt's preview: never the network).
         """
         settings = self.config.embeddings()
         model = settings.model if settings else ""
@@ -1660,7 +1679,7 @@ class StorySession(
             if (digest, model) not in cache:
                 pending.append(entry)
 
-        if pending and self.embeddings is not None and not self.in_private:
+        if pending and embed and self.embeddings is not None and not self.in_private:
             texts = [texts_of[entry.id] for entry in pending]
             try:
                 done = dict(enumerate(self.embed_in_batches(texts, stopped=stopped)))

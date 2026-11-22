@@ -696,6 +696,21 @@ _text(
     "the roster says so.",
 )
 
+# An always-on entry the system block holds condensed, given whole with a
+# turn that is about it (engine/lore_whole_back.py): the same title twice,
+# once above with the world and once here, so this says which is which. Only
+# the title is marked: the heading above is the measured one, and this entry
+# is under it like any other the turn has.
+_text(
+    "turn.lore.in_full",
+    TURN,
+    "Retrieved lore: an always-on entry given in full",
+    "Heads an always-on entry, sent condensed with the world, when the turn is about it and "
+    "its whole text goes with the turn, in the lore chosen for it.",
+    "{title} (in full)",
+    (("title", "the entry's title"),),
+)
+
 # Recall (engine/recall.py, Oct 2026): fuller accounts of the story's own past,
 # chosen by similarity like lore. Framed as the past, so a recalled chapter
 # isn't taken for the present scene (the timeline errors lore taught us).

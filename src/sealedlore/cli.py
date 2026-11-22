@@ -1041,7 +1041,7 @@ class Repl:
             how = f"keyword matching (embeddings unavailable: {report.fallback_reason})"
         print(f"  {how}, ~{report.tokens} tokens")
         for injection in report.injected:
-            print(f"    {injection.entry.title:<30} {injection.describe()}")
+            print(f"    {injection.name:<30} {injection.describe()}")
         for injection in report.dropped:
             print(f"    {injection.entry.title:<30} left out: no room left this turn")
 

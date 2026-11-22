@@ -10,13 +10,20 @@ SealedLore's; a private scene's of the private model's context.
 
 Condensed versions are written on the authoring model, one entry a call,
 only of entries every model may see (never one the plot hides or one held
-back until mentioned), never in a chat or a private scene."""
+back until mentioned), never in a chat or a private scene.
+
+An entry sent condensed goes in full with a turn that is about it as well
+(engine/lore_whole_back.py, `_with_in_full`): ranked against the turn with
+the rest of the lore, by similarity where there are embeddings (the
+preview's from vectors already made, never embedding), by keyword scoring
+alone without them and in a private scene."""
 
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
+from sealedlore.engine import lore_whole_back
 from sealedlore.engine.archival import why_not_whole
 from sealedlore.engine.lore_condense import (
     StandingFit,
@@ -28,11 +35,31 @@ from sealedlore.engine.lore_condense import (
     unasked_placeholders,
     worth_condensing,
 )
-from sealedlore.engine.retrieval import LoreLayout
+from sealedlore.engine.retrieval import (
+    LoreLayout,
+    RetrievalReport,
+    cosine_scores,
+    turn_query,
+    turn_ranking,
+)
 from sealedlore.engine.session_plot import SessionNotice
 from sealedlore.engine.tavern_firing import budget_of
 from sealedlore.models.lore import LoreEntry, lore_fingerprint
+from sealedlore.models.node import Node
 from sealedlore.providers.base import ChatRequest, ProviderError
+
+
+@dataclass(frozen=True)
+class InFullRanking:
+    """The turn's ranking of the lore (`in_full_ranking`): best first, the
+    similarities and why there are none, the text ranked by, and the
+    standing entries' whole texts by id."""
+
+    ranked: list[tuple[str, float | None]]
+    similarity: dict[str, float] | None
+    why: str | None
+    text: str
+    whole: dict[str, LoreEntry]
 
 
 class LoreCondenseRuntime:
@@ -84,6 +111,106 @@ class LoreCondenseRuntime:
             least_first=least_important_first(order or list(standing), self._importance()),
             use_condensed=self.story.defaults.condense_lore,
         )
+
+    # --- given in full with the turn ----------------------------------------------
+
+    def _with_in_full(
+        self,
+        report: RetrievalReport,
+        turn,  # noqa: ANN001 - TurnRequest
+        history: Sequence[Node],
+        layout: LoreLayout,
+        *,
+        named: LoreLayout | None = None,
+        allow_network: bool,
+    ) -> RetrievalReport:
+        """`report` with the always-on entries sent condensed that the turn
+        is about added, in full (engine/lore_whole_back.py). `layout` as
+        sent, `named` before any entry was condensed."""
+        top = lore_whole_back.WHOLE_BACK_TOP
+        if top <= 0 or not layout.condensed or self.story.chat:
+            return report
+        ranking = self.in_full_ranking(
+            turn, history, layout, named=named, allow_network=allow_network
+        )
+        texts = self.texts
+        sent, _left = lore_whole_back.whole_back(
+            [ranking.whole[i] for i in layout.condensed if i in ranking.whole],
+            ranking.ranked,
+            top=top,
+            room=self._lore_room(),
+            query=ranking.text,
+            count_tokens=self._count_lore_tokens,
+            label=lambda title: texts.fill("turn.lore.in_full", title=title),
+        )
+        if not sent:
+            return report
+        return replace(
+            report,
+            injected=(*report.injected, *sent),
+            tokens=report.tokens + sum(injection.tokens for injection in sent),
+        )
+
+    def in_full_ranking(
+        self,
+        turn,  # noqa: ANN001 - TurnRequest
+        history: Sequence[Node],
+        layout: LoreLayout,
+        *,
+        named: LoreLayout | None = None,
+        allow_network: bool,
+    ) -> InFullRanking:
+        """The turn's ranking of the lore for `_with_in_full`. The pool is
+        every entry the layout has, the standing ones by their whole texts,
+        names filled."""
+        named = named or self._layout_named()
+        whole = {entry.id: entry for entry in named.standing}
+        pool = [*layout.selectable, *named.standing]
+        text = turn_query(turn.user_text, history)
+        similarity, why = self._in_full_similarity(pool, text, allow_network=allow_network)
+        ranked = turn_ranking(
+            pool, text, similarity, threshold=self.config.lore_similarity_threshold
+        )
+        return InFullRanking(ranked, similarity, why, text, whole)
+
+    def _in_full_similarity(
+        self, pool: Sequence[LoreEntry], text: str, *, allow_network: bool
+    ) -> tuple[dict[str, float] | None, str | None]:
+        """Each of `pool`'s similarity to `text`, or None with why. Without
+        the network (the prompt's preview, on the window's own thread) only
+        vectors already made, the turn's included; in a private scene none:
+        nothing but the scene's own model is called, and its lore is chosen
+        by words alone."""
+        if self.embeddings is None:
+            return None, None
+        if self.in_private:
+            return None, "private scene: words only"
+        if not text.strip() or not pool:
+            return None, None
+        try:
+            if allow_network:
+                vectors = self.ensure_lore_vectors()
+                target = self.query_vector(text)
+            else:
+                vectors = self.ensure_lore_vectors(embed=False)
+                target = self._remembered_query_vector(text)
+        except ProviderError as exc:
+            return None, str(exc)
+        if target is None:
+            return None, "preview: not embedded" if not allow_network else "no vector"
+        scored = [(entry.id, vectors[entry.id]) for entry in pool if entry.id in vectors]
+        try:
+            found = cosine_scores(target, [vector for _, vector in scored])
+        except ValueError as exc:
+            # Vectors of another width (a model changed): words alone this turn.
+            return None, str(exc)
+        return {entry_id: score for (entry_id, _), score in zip(scored, found, strict=True)}, None
+
+    def _remembered_query_vector(self, text: str) -> tuple[float, ...] | None:
+        """The turn's vector if a selection has already embedded it, else None."""
+        settings = self.config.embeddings()
+        model = settings.model if settings else ""
+        return (self._query_vectors or {}).get((text, model))
 
     def always_on_entries(self) -> list[LoreEntry]:
         """The always-on entries a model may see, in the lorebook's order:
