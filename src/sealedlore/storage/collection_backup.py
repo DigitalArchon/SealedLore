@@ -26,7 +26,7 @@ import zlib
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from pydantic import ValidationError
@@ -237,15 +237,18 @@ def restore(
     as it is, or with `replace` the backup's in its place. `clean`: what the
     window does to a picture whose hidden data can't be stripped (a
     re-encode); a picture nothing can clean isn't written, as no picture
-    comes in with its hidden data. The bundle is the caller's to save."""
+    comes in with its hidden data. No file here is written over: a backup's
+    file whose name one here has, with other bytes, goes under a name of its
+    own (`_Files`). The bundle is the caller's to save."""
     done = Restored()
+    files = _Files(backup, store, clean)
     by_id = {character.id: index for index, character in enumerate(bundle.cast)}
     for character in backup.characters:
         index = by_id.get(character.id)
         if index is not None and not replace:
             done.kept.append(character.name)
             continue
-        done.missing += _put_files(backup, files_of(character), store, clean)
+        done.missing += files.put_for(character)
         if index is None:
             bundle.cast.append(character)
             done.added.append(character.name)
@@ -260,7 +263,11 @@ def restore(
     known = {image.id for image in store.images()}
     drawn = [image for image in backup.images if image.id not in known]
     for image in drawn:
-        done.missing += _put_files(backup, [image.file], store, clean)
+        placed = files.put(image.file)
+        if placed is None:
+            done.missing += 1
+        else:
+            image.file = placed
     if drawn:
         store.add_images(drawn)
     return done
@@ -274,23 +281,63 @@ def new_log_entries(backup: Backup, log: Sequence[dict[str, Any]]) -> Iterator[d
     return (entry for entry in backup.log() if entry.get("id") and entry["id"] not in known)
 
 
-def _put_files(
-    backup: Backup,
-    names: Sequence[str],
-    store: PictureStore,
-    clean: Callable[[bytes], bytes] | None,
-) -> int:
-    """The files written, from the backup; how many couldn't be."""
-    missing = 0
-    for name in names:
-        data = backup.read(name)
-        if data is not None:
-            data = _without_hidden_data(data, clean)
-        if data is None:
-            missing += 1
-            continue
-        store.write(name, data)
-    return missing
+class _Files:
+    """A backup's files on their way into the store, each read and written
+    once however many records name it.
+
+    A file's name is whatever the backup says it is, and Marcus's picture in
+    someone's backup may have the name of Elena's here: written over hers, a
+    character the author chose to keep had another's picture (and a card's
+    file other bytes). So a file the store has is never written over: the
+    same bytes are left as they are, other bytes go beside it under the
+    name numbered, and the backup's records are pointed at that."""
+
+    def __init__(
+        self, backup: Backup, store: PictureStore, clean: Callable[[bytes], bytes] | None
+    ) -> None:
+        self.backup = backup
+        self.store = store
+        self.clean = clean
+        # A backup's name for a file → where it is in the store; None for
+        # one that couldn't be put there.
+        self.placed: dict[str, str | None] = {}
+        # Where the numbering of a name got to: names that differ only in
+        # case clash on some file systems, and each would count up from 2.
+        self._numbers: dict[str, int] = {}
+
+    def put(self, name: str) -> str | None:
+        """The backup's file `name` into the store; the name it has there,
+        None when the backup holds none or nothing could clean it."""
+        if name not in self.placed:
+            data = self.backup.read(name)
+            if data is not None:
+                data = _without_hidden_data(data, self.clean)
+            self.placed[name] = None if data is None else self._write(name, data)
+        return self.placed[name]
+
+    def put_for(self, character: Character) -> int:
+        """Every file `character` names, their records pointed at where each
+        went; how many couldn't be put."""
+        missing = 0
+        held = character.tavern.assets if character.tavern is not None else []
+        for record in (*character.reference_images, *(a for a in held if a.held)):
+            placed = self.put(record.file)
+            if placed is None:
+                missing += 1
+            else:
+                record.file = placed
+        return missing
+
+    def _write(self, name: str, data: bytes) -> str:
+        path = PurePosixPath(name)
+        target, number = name, self._numbers.get(name.casefold(), 1)
+        while (held := self.store.read(target)) is not None and held != data:
+            number += 1
+            target = path.with_name(f"{path.stem}-{number}{path.suffix}").as_posix()
+        self._numbers[name.casefold()] = number
+        if held is None:
+            self.store.write(target, data)
+        return target
 
 
 def _without_hidden_data(data: bytes, clean: Callable[[bytes], bytes] | None) -> bytes | None:
