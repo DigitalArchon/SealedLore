@@ -20,7 +20,12 @@ from sealedlore.models.prompt_edit import (
     PromptEdit,
     PromptSet,
 )
-from sealedlore.storage.atomic import NestedTooDeep, atomic_write_json, outside_json
+from sealedlore.storage.atomic import (
+    NestedTooDeep,
+    NumberTooLong,
+    atomic_write_json,
+    outside_json,
+)
 
 PROMPT_SET_SUFFIX = ".sealedlore-prompts.json"
 # Far past any real set (every text the program has, edited, is ~200 KB):
@@ -56,6 +61,10 @@ def read_prompt_set(path: Path) -> PromptSet:
         raise PromptSetError(f"{name} isn't a text file.") from exc
     except NestedTooDeep as exc:
         raise PromptSetError(f"{name} is nested deeper than any prompt set.") from exc
+    except NumberTooLong as exc:
+        raise PromptSetError(
+            f"{name} holds a whole number of thousands of digits, so it can't be read."
+        ) from exc
     except json.JSONDecodeError as exc:
         raise PromptSetError(f"{name} isn't valid JSON (line {exc.lineno}).") from exc
     if not isinstance(data, dict) or data.get("format") != PROMPT_SET_FORMAT:

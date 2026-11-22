@@ -20,19 +20,24 @@ import pytest
 
 from sealedlore.engine import plot_md
 from sealedlore.engine.chronicle import schedule
+from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.plot_md import parse_plot_markdown, read_clause
 from sealedlore.engine.usage import usage_report
 from sealedlore.models.character import Character
 from sealedlore.models.config import Config
-from sealedlore.models.image import ImageRef
+from sealedlore.models.image import GeneratedImage, ImageRef
 from sealedlore.models.plot import EventDef, Plot
-from sealedlore.models.story import BUDGET_MOST, StoryDefaults
+from sealedlore.models.story import BUDGET_MOST, Story, StoryDefaults
 from sealedlore.models.tavern import CardAsset, TavernFields
-from sealedlore.storage import collection, collection_backup, tavern_cards, tavern_lore
+from sealedlore.storage import archive, collection, collection_backup, tavern_cards, tavern_lore
+from sealedlore.storage import scenario as scenario_files
+from sealedlore.storage.atomic import outside_json
 from sealedlore.storage.collection_backup import BackupError, open_backup, restore
 from sealedlore.storage.image_meta import PNG_SIGNATURE, MetadataError, strip_metadata
 from sealedlore.storage.paths import COLLECTION_ID
 from sealedlore.storage.picture_store import DiskPictures
+from sealedlore.storage.prompt_sets import PromptSetError, read_prompt_set
+from sealedlore.storage.repository import StoryBundle
 from sealedlore.storage.video_meta import strip_video_metadata
 
 # --- F1: a plot file's lines are read in the time their length takes ---------------
@@ -524,3 +529,95 @@ def test_keys_are_split_as_they_were_split_before():
         assert keys == _old_split_keys(text), repr(text)
         seen.add(len(keys))
     assert len(seen) > 4
+
+
+# --- F8: a number of thousands of digits is unreadable JSON, said as any is ---------
+
+LONG = "1" + "0" * 5000  # past the 4,300 digits Python reads as a whole number
+
+
+def _long(text: str) -> str:
+    """`text` with that number written where it says LONG."""
+    return text.replace("LONG", LONG)
+
+
+def test_a_number_of_thousands_of_digits_is_json_that_cant_be_read():
+    with pytest.raises(json.JSONDecodeError, match="digits"):
+        outside_json(_long('{"a": LONG}'))
+    with pytest.raises(json.JSONDecodeError):
+        outside_json((_long('{"a": [LONG]}')).encode())
+    assert outside_json(_long('{"a": 1e5000, "b": "LONG"}'))["b"] == LONG, (
+        "text, and a float, are read"
+    )
+    with pytest.raises(UnicodeDecodeError):
+        outside_json(b'{"a": "\xff"}')
+
+
+def test_a_models_reply_with_such_a_number_is_a_reply_that_cant_be_read():
+    with pytest.raises(ValueError, match="list of characters wasn't valid JSON"):
+        extract_json(_long('[{"name": "Elena", "age": LONG}]'), list, "list of characters")
+    # The last whole value before it is still found.
+    assert extract_json(_long('{"a": 1} then {"b": LONG}'), dict, "answer") == {"a": 1}
+
+
+def test_every_reader_says_so_in_its_own_words(tmp_path: Path):
+    def file(name: str, text: str) -> Path:
+        path = tmp_path / name
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    backup = file(
+        "big.sealedlore-archive.json", _long('{"format": "sealedlore-archive", "x": LONG}')
+    )
+    scenario = file(
+        "big.sealedlore-scenario.json", _long('{"format": "sealedlore-scenario", "x": LONG}')
+    )
+    card = file(
+        "card.json",
+        _long(
+            '{"spec": "chara_card_v2", "data": {"name": "Elena Ruiz", "extensions": {"x": LONG}}}'
+        ),
+    )
+    book = file(
+        "book.json", _long('{"entries": {"0": {"key": ["a"], "content": "c", "order": LONG}}}')
+    )
+    prompts = file(
+        "big.sealedlore-prompts.json", _long('{"format": "sealedlore-prompts", "x": LONG}')
+    )
+    assert archive.file_format(backup) is None
+    with pytest.raises(archive.ArchiveError, match="digits"):
+        archive.read_archive(backup)
+    with pytest.raises(scenario_files.ScenarioError, match="digits"):
+        scenario_files.read_scenario(scenario)
+    assert tavern_cards.tavern_kind(card) is None and not tavern_lore.is_converted_lorebook(book)
+    with pytest.raises(tavern_cards.CardError):
+        tavern_cards.read_card(card)
+    with pytest.raises(tavern_lore.LorebookError, match="digits"):
+        tavern_lore.open_lorebook(book)
+    with pytest.raises(PromptSetError, match="digits"):
+        read_prompt_set(prompts)
+
+
+def test_a_backups_records_and_log_with_such_a_number_are_passed_over(tmp_path: Path):
+    assert not archive._records(_long('[{"id": LONG}]').encode(), GeneratedImage)
+    path = tmp_path / "theirs.zip"
+    with zipfile.ZipFile(path, "w") as zipped:
+        zipped.writestr(
+            "manifest.json", json.dumps({"format": "sealedlore-characters", "version": 1})
+        )
+        zipped.writestr("characters.json", "[]")
+        zipped.writestr("api_log.jsonl", _long('{"id": "a", "n": LONG}\n{"id": "b"}\n'))
+    with open_backup(path) as backup:
+        assert [entry["id"] for entry in collection_backup.new_log_entries(backup, [])] == ["b"]
+
+
+@pytest.mark.parametrize("memories", [5, True, "abc", {"a": 1}, [5], [[]]])
+def test_a_backup_whose_memories_arent_a_list_of_them_is_refused_in_words(tmp_path: Path, memories):
+    """`"memories": 5` was a TypeError out of the window's import."""
+    story = Story(title="Doomsville")
+    data = archive.archive_data(StoryBundle(story=story), [], {})
+    data = json.loads(json.dumps(data)) | {"memories": memories}
+    path = tmp_path / "theirs.sealedlore-archive.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(archive.ArchiveError, match="invalid content"):
+        archive.read_archive(path)

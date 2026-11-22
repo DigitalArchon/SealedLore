@@ -32,7 +32,12 @@ from pathlib import Path
 from typing import Any
 
 from sealedlore.models.lore import LoreEntry, TavernEntry, lore_fingerprint
-from sealedlore.storage.atomic import NestedTooDeep, atomic_write_json, outside_json
+from sealedlore.storage.atomic import (
+    NestedTooDeep,
+    NumberTooLong,
+    atomic_write_json,
+    outside_json,
+)
 from sealedlore.storage.image_meta import PNG_SIGNATURE
 from sealedlore.storage.png_text import PngTextError, text_chunks
 
@@ -1422,6 +1427,10 @@ def json_of(data: bytes, name: str) -> Any:
     except NestedTooDeep as exc:
         # Kept, it would be nested in the story past what its backup reads.
         raise NestedLorebook(f"{name} is nested deeper than any lorebook.") from exc
+    except NumberTooLong as exc:
+        raise LorebookError(
+            f"{name} holds a whole number of thousands of digits, so it can't be read."
+        ) from exc
     except json.JSONDecodeError as exc:
         raise LorebookError(f"{name} isn't valid JSON (line {exc.lineno}).") from exc
 

@@ -444,8 +444,10 @@ def _log(archive: zipfile.ZipFile) -> Iterator[dict[str, Any]]:
         for line in member_lines(archive, info, MAX_MEMBER_BYTES * 4, MAX_LOG_LINE):
             try:
                 entry = json.loads(line) if line.strip() else None
-            except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
-                continue  # a torn line, as a log reader skips one
+            except (ValueError, RecursionError):
+                # A torn line, as a log reader skips one; one that isn't
+                # text; a number of more digits than Python reads.
+                continue
             if isinstance(entry, dict):
                 yield entry
     except _DAMAGED:

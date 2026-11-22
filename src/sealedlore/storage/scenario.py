@@ -17,7 +17,13 @@ from sealedlore.models.scenario import SCENARIO_FORMAT, SCENARIO_VERSION, Scenar
 from sealedlore.models.scene import SceneState
 from sealedlore.models.story import Story, StorySetup
 from sealedlore.models.supporting import SupportingCast
-from sealedlore.storage.atomic import atomic_write_json, nests_deeper, whole_characters
+from sealedlore.storage.atomic import (
+    NumberTooLong,
+    atomic_write_json,
+    loads,
+    nests_deeper,
+    whole_characters,
+)
 from sealedlore.storage.image_meta import MetadataError, strip_metadata, stripped_or_same
 from sealedlore.storage.images import is_safe_relative
 from sealedlore.storage.repository import StoryBundle
@@ -253,9 +259,14 @@ def read_scenario(path: Path) -> Scenario:
     # document), so every way a file fails to be read is said in words.
     try:
         # A lone surrogate as U+FFFD: nothing holding one can be saved.
-        data = whole_characters(json.loads(Path(path).read_text(encoding="utf-8")))
+        data = whole_characters(loads(Path(path).read_text(encoding="utf-8")))
     except OSError as exc:
         raise ScenarioError(f"Couldn't read {path}: {exc.strerror or exc}") from exc
+    except NumberTooLong as exc:
+        raise ScenarioError(
+            f"{Path(path).name} holds a whole number of thousands of digits, which no scenario "
+            "has, so it can't be read."
+        ) from exc
     except json.JSONDecodeError as exc:
         raise ScenarioError(f"{Path(path).name} isn't valid JSON (line {exc.lineno}).") from exc
     except UnicodeDecodeError as exc:

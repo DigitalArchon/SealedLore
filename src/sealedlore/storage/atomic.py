@@ -124,6 +124,28 @@ class NestedTooDeep(json.JSONDecodeError):
         super().__init__(f"nested deeper than {limit} levels", "", 0)
 
 
+class NumberTooLong(json.JSONDecodeError):
+    """JSON holding a whole number of more digits than Python reads (4,300:
+    `sys.get_int_max_str_digits`). json says so with a bare ValueError,
+    which no reader of a file expects (File → Import… did nothing); as a
+    JSONDecodeError every reader's handling of JSON it can't read takes it."""
+
+    def __init__(self) -> None:
+        super().__init__("a whole number of thousands of digits, more than can be read", "", 0)
+
+
+def loads(data: str | bytes | bytearray) -> Any:
+    """`json.loads`, with the one error of its own that isn't a
+    JSONDecodeError made one (`NumberTooLong`). For a reader with words of
+    its own for nesting; any other reads with `outside_json`."""
+    try:
+        return json.loads(data)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        raise
+    except ValueError:
+        raise NumberTooLong() from None
+
+
 def outside_json(data: str | bytes | bytearray, limit: int = MAX_NESTING) -> Any:
     """JSON that came from outside the app (an endpoint's reply, a stream's
     event, a file someone else made, a phone's request), parsed and held to
@@ -133,10 +155,11 @@ def outside_json(data: str | bytes | bytearray, limit: int = MAX_NESTING) -> Any
     walked, copied or saved into a RecursionError later, far from here, and
     crash whatever thread met it. Bytes are read as json.loads reads them
     (UTF-8, -16 or -32 by their first bytes). A lone surrogate comes back as
-    U+FFFD (`whole_characters`). (The DA apps' standard: depth at most 200,
-    never a crash.)"""
+    U+FFFD (`whole_characters`). A whole number of thousands of digits is
+    `NumberTooLong`, a JSONDecodeError too. (The DA apps' standard: depth at
+    most 200, never a crash.)"""
     try:
-        value = json.loads(data)
+        value = loads(data)
     except RecursionError:
         raise NestedTooDeep(limit) from None
     if nests_deeper(value, limit):

@@ -201,7 +201,9 @@ def _last_whole(text: str, opener: str, kind: type) -> Any:
     while position >= 0:
         try:
             value, stop = decoder.raw_decode(text, position)
-        except json.JSONDecodeError:
+        except ValueError:
+            # Not JSON from here; or a whole number of more digits than
+            # Python reads, which json says with a bare ValueError.
             position = text.find(opener, position + 1)
             continue
         if isinstance(value, kind):

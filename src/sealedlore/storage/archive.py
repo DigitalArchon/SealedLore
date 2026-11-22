@@ -35,7 +35,13 @@ from sealedlore.models.story import Story
 from sealedlore.models.summary import Summary
 from sealedlore.models.supporting import SupportingCast
 from sealedlore.models.video import GeneratedVideo
-from sealedlore.storage.atomic import atomic_write_json, nests_deeper, whole_characters
+from sealedlore.storage.atomic import (
+    NumberTooLong,
+    atomic_write_json,
+    loads,
+    nests_deeper,
+    whole_characters,
+)
 from sealedlore.storage.formats import STORY_FORMAT
 from sealedlore.storage.image_meta import stripped_or_same
 from sealedlore.storage.images import IMAGES_FILE, RECORD_FILES, VIDEOS_FILE, is_story_file
@@ -59,10 +65,10 @@ def file_format(path: Path) -> str | None:
     archive are both `.json`, and nothing in a file dialog tells them apart.
     """
     try:
-        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        data = loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, RecursionError):
-        # Not text (a picture, a zip), or nested past any file of ours: not
-        # one of ours.
+        # Not text (a picture, a zip), nested past any file of ours, or
+        # holding a number no file of ours has: not one of ours.
         return None
     value = data.get("format") if isinstance(data, dict) else None
     return value if isinstance(value, str) else None
@@ -141,7 +147,7 @@ def _records(data: bytes, model: type[GeneratedImage] | type[GeneratedVideo]) ->
     """Whether a backup's images.json or videos.json is a list of records
     this version reads, as the story reads them each time."""
     try:
-        records = json.loads(data.decode("utf-8")) if data else []
+        records = loads(data.decode("utf-8")) if data else []
     except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
         return False
     if not isinstance(records, list) or nests_deeper(records):
@@ -167,9 +173,14 @@ def _items(data: dict[str, Any], section: str, name: str) -> list[Any]:
 def read_archive(path: Path) -> tuple[StoryBundle, list[dict[str, Any]]]:
     name = Path(path).name
     try:
-        data = whole_characters(json.loads(Path(path).read_text(encoding="utf-8")))
+        data = whole_characters(loads(Path(path).read_text(encoding="utf-8")))
     except OSError as exc:
         raise ArchiveError(f"Couldn't read {path}: {exc.strerror or exc}") from exc
+    except NumberTooLong as exc:
+        raise ArchiveError(
+            f"{name} holds a whole number of thousands of digits, which no story backup has, "
+            "so it can't be read."
+        ) from exc
     except json.JSONDecodeError as exc:
         raise ArchiveError(f"{name} isn't valid JSON (line {exc.lineno}).") from exc
     except UnicodeDecodeError as exc:
@@ -211,7 +222,7 @@ def read_archive(path: Path) -> tuple[StoryBundle, list[dict[str, Any]]]:
             asides=[Aside.model_validate(a) for a in _items(data, "asides", name)],
             reviews=[ReviewRecord.model_validate(r) for r in _items(data, "reviews", name)],
             # Older backups have none.
-            memories=[Recollection.model_validate(m) for m in data.get("memories") or []],
+            memories=[Recollection.model_validate(m) for m in _items(data, "memories", name)],
             pending_files=_decoded_files(data.get("files"), name),
         )
     except KeyError as exc:
