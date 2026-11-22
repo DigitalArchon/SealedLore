@@ -481,9 +481,11 @@ class PhoneWindow:
             self._phone.suggested(device, ask, options or [], private)
 
     def _phone_scene_changed(self) -> None:
-        """A private scene began or ended on the desktop: the phones are told
-        now. Nothing else said so until the next job, and a scene's first
-        turn came to a page that still took the story for public."""
+        """A private scene began on the desktop (or was called off as it
+        began): the phones are told now. Nothing else said so until the
+        scene's first job, and its first turn came to a page that still took
+        the story for public. A scene's end is told with the transcript's
+        rebuild, as before."""
         if self._phone is not None:
             self._phone.publish_state()
 

@@ -294,7 +294,7 @@ def test_a_private_scene_begun_on_the_desktop_is_told_to_the_phones_at_once(
 
     start = len(stream.events())
     window.session.discard_private()
-    window._sync_private_ui()  # as every way out of a scene ends
+    window._after_private_ended("The private scene was discarded.")  # as every way out ends
     for _ in range(50):
         app.processEvents()
     told = [data["private"] for name, data in stream.events()[start:] if name == "state"]
