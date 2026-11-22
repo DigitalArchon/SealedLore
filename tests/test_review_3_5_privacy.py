@@ -243,3 +243,78 @@ def test_carrying_a_scene_on_never_makes_it_less_private(tmp_path: Path):
     with pytest.raises(ValueError):
         session.carry_scene_on(At(plain))
     assert session.open_span.privacy.origin == "https://nano-gpt.com"
+
+
+# --- V2: a TEE/ scene's looks are chosen by the model that was attested ----------------------
+
+
+class FakeTee:
+    """The scene's attested TEE/ model, as the window sets it on the session."""
+
+    model = "TEE/glm-5.3"
+
+    def __init__(self) -> None:
+        self.checked: list[str | None] = []
+
+    def due(self) -> bool:
+        return False
+
+    def check_reply(self, response_id: str | None, **_record) -> str:
+        self.checked.append(response_id)
+        return "verified"
+
+    def close(self) -> None:
+        pass
+
+
+def tee_scene(tmp_path: Path, look_model: str) -> tuple[StorySession, MockChatProvider, str]:
+    """A scene on TEE/glm-5.3, attested, two people in it with pictures to
+    choose between, and Settings → Private → Model for looks as given."""
+    from sealedlore.models.image import ImageRef
+
+    session, _main, held = build(tmp_path)
+    for character in session.cast[:2]:
+        character.reference_images = [
+            ImageRef(file=f"images/refs/{character.id}-a.png", look="coat", expression="neutral"),
+            ImageRef(file=f"images/refs/{character.id}-b.png", look="coat", expression="angry"),
+        ]
+    session.story.scene.present_character_ids = [c.id for c in session.cast[:2]]
+    play(session, turn(held, "I walk in."))
+    nano = ProviderConfig(
+        name="private", base_url="https://nano-gpt.com/api/v1", model="TEE/glm-5.3"
+    )
+    session.config.private_provider = nano
+    session.config.private_look_model = look_model
+    private = MockChatProvider([f"A quiet reply that holds {MARKER} close."])
+    session.enter_private(keep="memory", provider=private, model=nano.model, base_url=nano.base_url)
+    session.private_tee = FakeTee()
+    return session, private, held
+
+
+def test_a_tee_scenes_looks_are_chosen_by_its_own_attested_model(tmp_path: Path):
+    """Settings → Private → Model for looks named another TEE/ model: each
+    scene passage, and the author's turn with it, went to a model whose
+    enclave was never attested and whose reply nothing checked."""
+    session, private, held = tee_scene(tmp_path, "TEE/kimi-k3")
+    assert session.open_span.privacy.kind == "tee"
+    play(session, turn(held, f"I whisper {MARKER} to her."))
+    picks = [p for p in private.payloads if "THE LATEST PASSAGE" in json.dumps(p)]
+    assert picks, "the looks were chosen"
+    assert MARKER in json.dumps(picks[-1]), "the pick reads the scene's passage"
+    assert {p["model"] for p in private.payloads} == {"TEE/glm-5.3"}
+    assert session._private_look_model(session.open_span) == "TEE/glm-5.3"
+
+
+def test_an_encrypted_scene_keeps_the_model_chosen_for_its_looks(tmp_path: Path):
+    """End-to-end encrypted models are attested by the client that seals to
+    them, whichever model is asked: Settings' choice stands there, as before."""
+    session, _private, _held = tee_scene(tmp_path, "private/kimi-k3")
+    sealed = session.open_span.model_copy(update={"model": "private/glm-5-3"})
+    assert session._private_look_model(sealed) == "private/kimi-k3"
+    # And never a less private one, as before.
+    session.config.private_look_model = "TEE/glm-5.3-flash"
+    assert session._private_look_model(sealed) == "private/glm-5-3"
+    # A scene on an ordinary private model keeps the setting too.
+    plain = session.open_span.model_copy(update={"model": "local/model"})
+    session.config.private_look_model = "local/small"
+    assert session._private_look_model(plain) == "local/small"

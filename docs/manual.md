@@ -838,7 +838,7 @@ model, chosen when it was made; a TEE or encrypted chat's calls all go to it.
 | Portrait model ★ | Settings → Images | portraits and the cards' pictures | starts as FLUX.3 Klein |
 | Video model ★ | Settings → Video | videos | starts as Seedance 2.5 |
 | Private model | Settings → Private | private scenes | — |
-| Model for looks | Settings → Private | choosing the pictures a private scene's characters are shown with | the scene's own model |
+| Model for looks | Settings → Private | choosing the pictures a private scene's characters are shown with (never in a scene on a `TEE/` model, which uses its own) | the scene's own model |
 | Embeddings model | Settings → Lore | lore vectors | `BAAI/bge-m3` (or the built-in bge-m3 on this computer) |
 
 A model's reasoning is kept with its passage for you to read, and is never
@@ -2346,8 +2346,10 @@ like. When none of their pictures fits well, it shows the nearest, and their
 card's menu offers to draw the look that would ("Draw them as combat armour ·
 grinning…"). In a private scene
 the choice is made by the private model, or by Settings → Private → **Model
-for looks** (a small one, such as TEE/glm-5.3-flash, is quicker) when the
-scene could move to it.
+for looks** (a small one is quicker) when the scene could move to it. A
+scene on a `TEE/` model always chooses with its own model, whatever is set
+there: it is the one whose enclave was attested and whose replies are
+checked.
 
 **Drawing new looks.** **Change this picture…** on a character's picture
 starts from its Look and Expression or pose: change either, and the new

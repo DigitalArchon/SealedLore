@@ -2287,9 +2287,10 @@ class SettingsDialog(QDialog):
         self.private_look_model.setPlaceholderText("the scene's own model")
         self.private_look_model.setToolTip(
             "In a private scene, the model that chooses characters' looks after each passage, "
-            "on the same private endpoint: a small one is quicker (TEE/glm-5.3-flash). Used only "
-            "when the scene could move to it (an encrypted scene to encrypted models, a TEE "
-            "scene to TEE ones); else the scene's own model chooses."
+            "on the same private endpoint: a small one is quicker. Used only when the scene "
+            "could move to it (an end-to-end encrypted scene to encrypted models); else the "
+            "scene's own model chooses. A scene on a TEE/ model always chooses with its own "
+            "model: it is the one whose enclave was attested and whose replies are checked."
         )
         # Before choosing it: does this model's enclave attest? (The author:
         # rather than start a scene and have it refused.)

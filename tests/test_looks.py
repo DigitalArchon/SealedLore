@@ -275,12 +275,17 @@ def test_in_a_private_scene_the_looks_are_chosen_on_a_private_model_only(tmp_pat
     sent = "\n".join(part.text for part in private.requests[-1].messages[-1].parts)
     assert "THE AUTHOR'S TURN" in sent and "I tell her the joke." in sent
     # Settings' private model for looks, only when the scene could move to it:
-    # a TEE scene's looks never go to a model that isn't.
+    # a TEE scene's looks never go to a model that isn't, nor to another
+    # TEE/ model, which the scene never attested (the review of Nov 22 2026).
     span = session.open_span.model_copy(update={"model": "TEE/kimi-k3"})
     session.config.private_look_model = "zai/glm-5.3"
     assert session._private_look_model(span) == "TEE/kimi-k3"
     session.config.private_look_model = "TEE/glm-5.3-flash"
-    assert session._private_look_model(span) == "TEE/glm-5.3-flash"
+    assert session._private_look_model(span) == "TEE/kimi-k3"
+    # An end-to-end encrypted scene's go to another encrypted model.
+    span = session.open_span.model_copy(update={"model": "private/glm-5-3"})
+    session.config.private_look_model = "private/kimi-k3"
+    assert session._private_look_model(span) == "private/kimi-k3"
 
 
 # --- the faces on each passage -------------------------------------------------------------

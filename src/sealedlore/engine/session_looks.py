@@ -144,7 +144,15 @@ class LooksRuntime:
 
     def _private_look_model(self, span: PrivateSpan) -> str:
         """The model a private scene's looks are chosen on: Settings' choice
-        when the scene could move to it, else the scene's own."""
+        when the scene could move to it, else the scene's own. A scene on a
+        TEE/ model always chooses with its own: that is the one enclave the
+        scene attested and the one whose replies are checked (`private_tee`),
+        and the pick carries the scene's turn and passage. Another TEE/ model
+        named in Settings got them unattested and unchecked. An end-to-end
+        encrypted scene keeps the choice: the client that seals attests
+        whichever model it is asked for."""
+        if self.privacy(span.model).kind == "tee":
+            return span.model
         chosen = self.config.private_look_model.strip()
         # Both on the scene's own endpoint (`privacy`).
         if chosen and move_refusal(span.model, chosen, privacy=self.privacy) is None:
