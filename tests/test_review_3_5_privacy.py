@@ -318,3 +318,75 @@ def test_an_encrypted_scene_keeps_the_model_chosen_for_its_looks(tmp_path: Path)
     plain = session.open_span.model_copy(update={"model": "local/model"})
     session.config.private_look_model = "local/small"
     assert session._private_look_model(plain) == "local/small"
+
+
+# --- V3: a TEE or encrypted chat's portrait prompts are written by its own model -------------
+
+CARD_SECRET = "CARD-SECRET-ZQX"
+
+
+def private_chat(tmp_path: Path, model: str) -> tuple[StorySession, MockChatProvider]:
+    """A chat on a TEE or end-to-end encrypted model, a character brought in
+    for their pictures, and Settings naming another model to write picture
+    prompts (and for every other job)."""
+    from sealedlore.models.character import Character
+    from sealedlore.models.story import Story
+    from sealedlore.storage.repository import StoryBundle, save_story_bundle
+
+    story = Story(title="A plan with Mara", mode="chat", chat_prompt="You are helpful.")
+    story.defaults.main_model = model
+    bundle = StoryBundle(story=story)
+    bundle.cast.append(
+        Character(
+            name="Mara Venn",
+            summary="A smuggler.",
+            full_description=f"Mara Venn, {CARD_SECRET}, runs guns past the blockade.",
+        )
+    )
+    save_story_bundle(bundle, root=tmp_path)
+    config = Config(
+        providers=[ProviderConfig(name="nano", base_url="https://nano-gpt.com/api/v1")],
+        active_provider_name="nano",
+        image_prompt_model="zai-org/glm-5.3",
+        authoring_model="zai-org/glm-5.3",
+        scene_model="zai-org/glm-5.3",
+        summarization_model="zai-org/glm-5.3",
+    )
+    main = MockChatProvider(['{"prompts": []}'])
+    session = StorySession(
+        bundle,
+        config,
+        main,
+        root=tmp_path,
+        estimator=TokenEstimator(counter=fallback_counter),
+        learn_corrections=False,
+    )
+    return session, main
+
+
+@pytest.mark.parametrize("model", ["TEE/glm-5.3-flash", "private/glm-5-3"])
+def test_a_private_chats_portrait_prompts_are_written_by_its_own_model(tmp_path: Path, model: str):
+    """The chat's characters' cards went to Settings' image prompt writer:
+    an ordinary model, from a chat whose every call is promised to its own."""
+    session, main = private_chat(tmp_path, model)
+    assert session.tee_chat
+    people, lore = session.picture_cards()
+    session.write_card_prompts(people, lore)
+    assert main.payloads, "the writer was asked"
+    assert CARD_SECRET in json.dumps(main.payloads[-1])
+    assert {p["model"] for p in main.payloads} == {model}
+    assert session.image_prompt_model == model, "and the dialogs name it truly"
+    # Whatever a caller names: the cards never leave the chat's model.
+    session.write_card_prompts(people, lore, model="zai-org/glm-5.3")
+    assert {p["model"] for p in main.payloads} == {model}
+    # Nor a picture whose style is put into words (From a picture…).
+    session.describe_picture_style(b"not a real picture", "image/png", model="zai-org/glm-5.3")
+    assert {p["model"] for p in main.payloads} == {model}
+
+
+def test_an_ordinary_chats_portrait_prompts_keep_the_writer_settings_names(tmp_path: Path):
+    session, main = private_chat(tmp_path, "zai-org/glm-5.3-flash")
+    assert not session.tee_chat and session.image_prompt_model == "zai-org/glm-5.3"
+    people, lore = session.picture_cards()
+    session.write_card_prompts(people, lore)
+    assert {p["model"] for p in main.payloads} == {"zai-org/glm-5.3"}

@@ -201,3 +201,29 @@ def test_a_disk_scene_reopened_where_it_began_asks_nothing(app, window: MainWind
     assert boxes == [] and window.session.privacy_held() is None
     send(app, window, "And then?")
     assert window.made[-1].payloads[-1]["model"] == "local/tiny"
+
+
+# --- V3: a TEE or encrypted chat's portrait prompts are written by its own model -------------
+
+
+def test_the_portraits_dialog_names_the_model_that_writes_a_private_chats_prompts(
+    app, tmp_path: Path
+):
+    from PySide6.QtWidgets import QLabel
+
+    from sealedlore.gui.portraits_dialog import PortraitsDialog
+    from tests.test_review_3_5_privacy import private_chat
+
+    session, main = private_chat(tmp_path, "private/glm-5-3")
+    people, _lore = session.picture_cards()
+    dialog = PortraitsDialog(session, people, catalog=None, browse=None)
+    try:
+        said = " ".join(label.text() for label in dialog.findChildren(QLabel))
+        assert "private/glm-5-3 writes a prompt for each" in said
+        assert "zai-org/glm-5.3 writes" not in said
+        wait_for(app, lambda: not dialog.writing())
+        assert main.payloads and {p["model"] for p in main.payloads} == {"private/glm-5-3"}
+    finally:
+        wait_for(app, lambda: not dialog.writing())
+        dialog.done(0)
+        dialog.deleteLater()

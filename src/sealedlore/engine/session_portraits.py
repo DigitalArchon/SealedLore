@@ -133,9 +133,10 @@ class PortraitRuntime:
         prompts: dict[str, str] = {}
         problems: list[str] = []
         if characters or lore:
-            # A TEE chat's prompt writer is its own model (`_role_in_use`).
+            # A TEE chat's prompt writer is its own model (`_role_in_use`),
+            # whatever a caller names: the cards never leave it.
             self._tee_guard()
-            model = model or self.image_prompt_model
+            model = self.model if self.tee_chat else model or self.image_prompt_model
             params = self.side_params(model, max_tokens=PORTRAIT_MAX_TOKENS, temperature=0.7)
             batches = [
                 (characters[i : i + PORTRAIT_BATCH], [])
@@ -309,7 +310,8 @@ class PortraitRuntime:
         default), which must see pictures. Logged without the picture's
         bytes. Raises ProviderError, or ValueError for an empty reply."""
         self._refuse_in_private("Describing a picture's style")
-        model = model or self.image_prompt_model
+        # As `write_card_prompts`: a TEE chat's own model, whatever is named.
+        model = self.model if self.tee_chat else model or self.image_prompt_model
         url = f"data:{mime};base64," + base64.b64encode(data).decode("ascii")
         request = ChatRequest(
             model=model,

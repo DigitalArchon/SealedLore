@@ -56,6 +56,14 @@ DEFAULT_MAX_REFS = 4
 class ImageRuntime:
     @property
     def image_prompt_model(self) -> str:
+        """The model that writes picture prompts: this story's own writer,
+        else the settings', else the story's model. A TEE or end-to-end
+        encrypted chat's is its own model, whatever those name (as
+        `_role_in_use` has every role of such a chat): its characters' cards
+        went to Settings' writer for their portrait prompts, from a chat
+        whose every call is promised to its own model."""
+        if self.tee_chat:
+            return self.model
         return (
             self.story.defaults.image_prompt_model or self.config.image_prompt_model or self.model
         )
