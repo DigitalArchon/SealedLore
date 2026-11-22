@@ -804,7 +804,11 @@ def unread_macros(texts: Sequence[str]) -> int:
 
 def first_sentence(text: str, limit: int = 240) -> str:
     text = " ".join(text.split())
-    match = re.search(r"(.+?[.!?])(?=\s|$)", text)
+    # From the start only: a sentence that ends anywhere ends for a match
+    # begun there. Searched for, the pattern began again at every character
+    # of a text with no sentence end (a description of bracketed traits):
+    # 60 KB took 14 seconds.
+    match = re.match(r"(.+?[.!?])(?=\s|$)", text)
     sentence = match.group(1) if match else text
     if len(sentence) <= limit:
         return sentence

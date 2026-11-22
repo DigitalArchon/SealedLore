@@ -28,7 +28,7 @@ from sealedlore.models.image import ImageRef
 from sealedlore.models.plot import EventDef, Plot
 from sealedlore.models.story import BUDGET_MOST, StoryDefaults
 from sealedlore.models.tavern import CardAsset, TavernFields
-from sealedlore.storage import collection, collection_backup
+from sealedlore.storage import collection, collection_backup, tavern_cards
 from sealedlore.storage.collection_backup import BackupError, open_backup, restore
 from sealedlore.storage.image_meta import PNG_SIGNATURE, MetadataError, strip_metadata
 from sealedlore.storage.paths import COLLECTION_ID
@@ -463,3 +463,26 @@ def test_a_png_that_isnt_animated_keeps_no_animation_frames():
         PNG_SIGNATURE + header + control + _png_chunk(b"fcTL", bytes(26)) + picture + frame + end
     )
     assert strip_metadata(moving) == moving
+
+
+# --- F7: a card's summary is taken from its description in one pass -----------------
+
+
+def test_a_description_with_no_sentence_end_gives_its_summary_at_once():
+    text = "[Elena Ruiz: doctor; keeps the farmhouse; " + "likes tea; " * 3_000 + "]"
+    began = time.perf_counter()
+    summary = tavern_cards.first_sentence(text)
+    assert time.perf_counter() - began < 0.5
+    assert summary.startswith("[Elena Ruiz: doctor;") and summary.endswith("…")
+    assert len(summary) <= 241
+
+
+def test_a_first_sentence_is_what_the_pattern_before_found():
+    old = re.compile(r"(.+?[.!?])(?=\s|$)")
+    rng = random.Random(13)
+    pieces = ["Elena", " ", ".", "!", "?", "...", "\n", "e.g.", "3.5", " keeps the farm", "\t", ""]
+    for _ in range(40_000):
+        text = "".join(rng.choice(pieces) for _ in range(rng.randint(0, 9)))
+        flat = " ".join(text.split())
+        found = old.search(flat)
+        assert tavern_cards.first_sentence(text, 10_000) == (found.group(1) if found else flat)
