@@ -119,6 +119,9 @@ WRITTEN = {
 # Setup → About's {{user}} and {{char}} (engine/placeholders.py).
 PLACEHOLDER_FIRST_PLAYED = "Whoever you play when it begins"
 PLACEHOLDER_NOBODY = "Nobody (“the character”)"
+# One of them set to someone this dialog doesn't list (the plot keeps them
+# hidden, or the caller named no supporting cards): kept unless changed.
+PLACEHOLDER_KEPT = "As it is set (someone not listed here)"
 PLACEHOLDER_HINT = (
     "Character cards and lorebooks write {{user}} for the person their character talks to, "
     "and {{char}} for their character. They stay as written, and the names here go in "
@@ -164,14 +167,20 @@ class SetupDialog(QDialog):
         saved_prompts: SavedPrompts | None = None,
         hidden: frozenset[str] = frozenset(),
         placeholders_used: bool = True,
+        supporting: Sequence[Character] = (),
     ) -> None:
         """`cast`: the story's own list, read again whenever the Starting
         scene tab is shown, since `characters` (the Cast page, lent) may
         have changed it. `models`: for the Models tab, shown with it.
         `saved_prompts`: the system prompts kept for chats.
         `placeholders_used`: whether any of the story's texts write {{user}}
-        or {{char}}; without, About doesn't offer whom they name."""
+        or {{char}}; without, About doesn't offer whom they name.
+        `supporting`: the story's own list of supporting cards, whom {{char}}
+        may name (a story made from a card, its character moved there)."""
         self._placeholders_used = placeholders_used
+        self._supporting = supporting
+        # Ids {{user}} or {{char}} were set to that the lists don't offer.
+        self._kept_ids: set[str] = set()
         self._saved_prompts = saved_prompts
         super().__init__(parent)
         self.setWindowTitle("Story setup")
@@ -665,12 +674,15 @@ class SetupDialog(QDialog):
         self.user_is.addItem(PLACEHOLDER_FIRST_PLAYED, None)
         for character in self.cast:
             self.user_is.addItem(character.name, character.id)
-        self.user_is.setCurrentIndex(max(self.user_is.findData(chosen.user_id), 0))
+        self._show_placeholder(self.user_is, chosen.user_id)
         self.char_is = QComboBox()
         self.char_is.addItem(chosen.char_name.strip() or PLACEHOLDER_NOBODY, None)
-        for character in self.cast:
-            self.char_is.addItem(character.name, character.id)
-        self.char_is.setCurrentIndex(max(self.char_is.findData(chosen.char_id), 0))
+        # {{char}} may be a supporting character (the card a story was made
+        # from, moved there); {{user}} is someone played, so a main one.
+        for character in (*self.cast, *self._supporting):
+            if character.id not in self._hidden:
+                self.char_is.addItem(character.name, character.id)
+        self._show_placeholder(self.char_is, chosen.char_id)
         hint = _hint(PLACEHOLDER_HINT)
         form.addRow("{{user}} is", self.user_is)
         form.addRow("{{char}} is", self.char_is)
@@ -680,6 +692,17 @@ class SetupDialog(QDialog):
         # saved as they are, only out of sight.
         for row in (self.user_is, self.char_is, hint):
             form.setRowVisible(row, self._placeholders_used)
+
+    def _show_placeholder(self, combo: QComboBox, set_to: str | None) -> None:
+        """`combo` showing whom the placeholder is set to. Someone it doesn't
+        list gets a line of their own (their name, unless the plot hides
+        them): shown as nobody, any Save made them nobody."""
+        if set_to is not None and combo.findData(set_to) == -1:
+            known = {c.id: c.name for c in (*self._live_cast, *self._supporting)}
+            named = set_to in known and set_to not in self._hidden
+            combo.addItem(known[set_to] if named else PLACEHOLDER_KEPT, set_to)
+            self._kept_ids.add(set_to)
+        combo.setCurrentIndex(max(combo.findData(set_to), 0))
 
     def _world_tab(self) -> QWidget:
         widget = QWidget()
@@ -1061,7 +1084,9 @@ class SetupDialog(QDialog):
         if self.suggested is not None:
             suggested = self.suggested.currentData()
             setup.suggested_character_id = suggested if suggested in self._live_ids() else None
-        live = self._live_ids()
+        # Someone taken out while Setup was open is let go; one the lists
+        # never offered (`_kept_ids`) stays as set.
+        live = self._live_ids() | {c.id for c in self._supporting} | self._kept_ids
         user, char = self.user_is.currentData(), self.char_is.currentData()
         setup.placeholders.user_id = user if user in live else None
         setup.placeholders.char_id = char if char in live else None

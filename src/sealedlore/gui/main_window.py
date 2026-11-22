@@ -2033,6 +2033,7 @@ class MainWindow(
             ),
             saved_prompts=self.saved_prompts(),
             placeholders_used=bool(placeholders_view(self.session.bundle)),
+            supporting=self.session.supporting,
         )
         self._setup_dialog = dialog
         style_picture: tuple[str, tuple[bytes, str] | None] = ("keep", None)
