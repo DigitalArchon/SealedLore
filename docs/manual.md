@@ -2842,8 +2842,13 @@ that repeats something which itself repeats or has alternatives (`/(\w+\s?)+/`,
 JavaScript's own syntax that Python has no word for (`\p{L}`), is never run.
 One with an open-ended repeat that has something after it (`/dragon.*fire/`)
 reads only the newest part of what is scanned: 8,000 characters with one such
-repeat, 1,000 with two, 150 with three. A repeat that ends a pattern
-(`/drag\w*/`) reads everything. The Lore tab says so beside any entry this
+repeat, 1,000 with two, 150 with three. A repeat inside a look-ahead counts
+as one with something after it, and so do counts inside counts that multiply
+to more than sixteen (`/(?:\w{8} ){8}/`). No pattern reads more than the
+newest 500,000 characters, which is more than a story scans: a repeat that
+ends a pattern (`/drag\w*/`) and a plain one (`/wol(f|ves)/`) read that
+much. One with many alternatives before long counted repeats reads less, by
+how many ways it can be taken. The Lore tab says so beside any entry this
 kept from firing.
 
 Where the entries go is SealedLore's, so caching keeps working: a constant

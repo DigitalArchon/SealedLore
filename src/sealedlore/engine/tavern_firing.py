@@ -110,9 +110,17 @@ VARIED_REPEAT = 4
 SCAN_CAPS = {1: 8000, 2: 1000, 3: 150}
 # The most ways a pattern's optional parts and alternatives can be taken.
 WAYS_MOST = 4096
-# The ways past which a pattern with no open-ended repeat reads only so much.
-WAYS_FREE = 32
-WAYS_WORK = 20_000_000
+# A pattern with no such repeat still tries, at each place in the text, every
+# way it can be taken, each reading as far as its counted repeats reach
+# (`_work`), so it reads only as much text as keeps that under this many
+# steps (Nov 2026: twelve two-way choices before 2,400 counted characters
+# took 12 s on 4,900 characters; at this, the slowest shape found takes
+# 0.7 s). /wol(f|ves)/ is nine steps a place: far past SCAN_MOST.
+BOUNDED_WORK = 50_000_000
+# The most characters any pattern reads, whatever the screen makes of it:
+# more than a story scans (its newest messages and the lore that fired), and
+# a few thousandths of a second for a pattern that reads straight through.
+SCAN_MOST = 500_000
 PATTERN_SECONDS = 2.0
 OUT_OF_TIME = "this turn's patterns had taken too long by then"
 
@@ -431,10 +439,10 @@ def fire_entry(
 @dataclass(frozen=True)
 class KeyPattern:
     """A key written /like this/, as it is run: `compiled` None when it never
-    is (`refused` says why), `cap` the most characters it reads (None: all)."""
+    is (`refused` says why), `cap` the most characters it reads."""
 
     compiled: re.Pattern[str] | None = None
-    cap: int | None = None
+    cap: int = 0
     refused: str = ""
 
 
@@ -464,10 +472,11 @@ def _varies(items: Any) -> bool:
     return False
 
 
-def _degree(items: Any, follow: bool) -> int:
+def _degree(items: Any, follow: bool, times: int = 1) -> int:
     """How many open-ended repeats a failed match can go back into: each
     makes a search one power slower in the text's length. `follow`: something
-    comes after `items` that can still fail."""
+    comes after `items` that can still fail. `times`: how often the repeats
+    around `items` run them."""
     total = 0
     items = list(items)
     for at, (op, av) in enumerate(items):
@@ -478,23 +487,32 @@ def _degree(items: Any, follow: bool) -> int:
             if _varies(body):
                 if high > VARIED_REPEAT:
                     raise _Refused("it repeats something that itself repeats or has alternatives")
-                total += high * _degree(body, True)
+                total += high * _degree(body, True, times * high)
             else:
-                total += _degree(body, after or high > 1)
+                total += _degree(body, after or high > 1, times * high)
                 # One that must repeat many times can fail part-way through
-                # them, whatever comes after it.
-                if high > OPEN_REPEAT and (after or low > OPEN_REPEAT):
+                # them, whatever comes after it. Counts inside counts
+                # multiply, ((x{16}){16}){16} being x{4096}: counted where
+                # they first come to more than a repeat may be.
+                many = high > OPEN_REPEAT or times <= OPEN_REPEAT < times * high
+                if many and (after or low > OPEN_REPEAT):
                     total += 1
         elif name == "BRANCH":
-            total += max((_degree(alt, after) for alt in av[1]), default=0)
+            total += max((_degree(alt, after, times) for alt in av[1]), default=0)
         elif name == "SUBPATTERN":
-            total += _degree(av[3], after)
+            total += _degree(av[3], after, times)
         elif name == "ATOMIC_GROUP":
-            total += _degree(av, after)
-        elif name in _ASSERTS:
-            total += _degree(av[1], False)
+            total += _degree(av, after, times)
+        elif name == "ASSERT":
+            # A look-ahead that holds isn't the end of the match unless it
+            # ends the pattern: what follows it can still fail, at every
+            # place in the text.
+            total += _degree(av[1], after, times)
+        elif name == "ASSERT_NOT":
+            # What a negative one reads through is the match failing.
+            total += _degree(av[1], True, times)
         elif name == "GROUPREF_EXISTS":
-            total += max(_degree(alt, after) for alt in av[1:] if alt is not None)
+            total += max(_degree(alt, after, times) for alt in av[1:] if alt is not None)
         elif name == "GROUPREF":
             total += 1
     return total
@@ -519,6 +537,9 @@ def _ways(items: Any) -> int:
             total *= _ways(av[3])
         elif name == "ATOMIC_GROUP":
             total *= _ways(av)
+        elif name in _ASSERTS:
+            # What a look-ahead reads is tried every way it can be taken too.
+            total *= _ways(av[1])
         elif name == "GROUPREF_EXISTS":
             total *= max(1, sum(_ways(alt) for alt in av[1:] if alt is not None))
         if total > WAYS_MOST:
@@ -526,9 +547,40 @@ def _ways(items: Any) -> int:
     return total
 
 
-def _screened(source: str, flags: int) -> int | None:
-    """The most characters a pattern may read (None: all it is given), or
-    `_Refused` for one that is never run."""
+def _work(items: Any) -> int:
+    """The most steps a failed try at one place in the text takes through a
+    pattern's counted repeats, every way it can be taken: each part's own
+    (a character read is a step, and so is each turn of a repeat; a group
+    that keeps what it matched or a look-ahead is two more), times the ways
+    there are to have come to it. An open-ended repeat counts as OPEN_REPEAT:
+    what it costs past that is `_degree`'s."""
+    total, ways = 0, 1
+    for op, av in items:
+        name = op.name
+        own = 1
+        if name in _REPEATS:
+            count = min(av[1], OPEN_REPEAT)
+            own = count * _ways(av[2]) ** max(0, count - 1) * (_work(av[2]) + 1)
+        elif name == "BRANCH":
+            own = sum(_work(alt) for alt in av[1])
+        elif name == "SUBPATTERN":
+            own = _work(av[3]) + (0 if av[0] is None else 2)
+        elif name == "ATOMIC_GROUP":
+            own = _work(av)
+        elif name in _ASSERTS:
+            own = _work(av[1]) + 2
+        elif name == "GROUPREF_EXISTS":
+            own = sum(_work(alt) for alt in av[1:] if alt is not None)
+        elif name == "AT":
+            own = 0
+        total += ways * own
+        ways *= _ways([(op, av)])
+    return total
+
+
+def _screened(source: str, flags: int) -> int:
+    """The most characters a pattern may read, or `_Refused` for one that is
+    never run."""
     try:
         from re import _parser  # the parser `re.compile` itself uses
     except ImportError:  # pragma: no cover - a Python without it
@@ -537,7 +589,7 @@ def _screened(source: str, flags: int) -> int | None:
     ways = _ways(tree)
     degree = _degree(tree, False)
     if degree == 0:
-        return None if ways <= WAYS_FREE else max(2000, WAYS_WORK // ways)
+        return max(100, min(SCAN_MOST, BOUNDED_WORK // max(1, _work(tree))))
     if degree not in SCAN_CAPS:
         raise _Refused("it has too many open-ended repeats")
     return max(100, int(SCAN_CAPS[degree] / ways ** (1 / (degree + 1))))
@@ -675,7 +727,7 @@ class Buffer:
         if self.spent > PATTERN_SECONDS:
             self.unread.setdefault(key, f"its pattern {key} wasn't run: {OUT_OF_TIME}")
             return False
-        if pattern.cap is not None and len(haystack) > pattern.cap:
+        if len(haystack) > pattern.cap:
             self.unread.setdefault(
                 key,
                 f"its pattern {key} read only the newest {pattern.cap:,} characters "
