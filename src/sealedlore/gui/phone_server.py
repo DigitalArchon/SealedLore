@@ -13,7 +13,9 @@ connection until the phone goes or falls too far behind.
 Anyone with the onion address can open connections, so none may be held by
 sending slowly: a request has REQUEST_MS from its first byte to its last,
 however the bytes come, and with every slot taken a new connection takes the
-place of the oldest no paired phone has used.
+place of the oldest no paired phone has used. Nor by not reading: with
+MAX_UNSENT of its answers still to go a connection is read and answered no
+further, and asking for more gives it no more time to take them.
 """
 
 from __future__ import annotations
@@ -21,21 +23,32 @@ from __future__ import annotations
 import itertools
 import os
 import traceback
+from collections import deque
 from pathlib import Path
 
-from PySide6.QtCore import QByteArray, QObject, QTimer, Signal
+from PySide6.QtCore import QByteArray, QObject, Qt, QTimer, Signal
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
 from sealedlore.phone.api import Api
-from sealedlore.phone.http import HttpError, RequestParser, error_response, render
+from sealedlore.phone.http import HttpError, Request, RequestParser, error_response, render
 
 MAX_CONNECTIONS = 32
 IDLE_MS = 20_000  # a kept-alive connection waits this long for its next request
 REQUEST_MS = 20_000  # a request, head and body, arrives whole within this
 HEARTBEAT_MS = 20_000
 # An event stream this far behind is dropped: the phone reconnects and
-# reloads what it missed.
+# reloads what it missed. Any other connection with this much of its answers
+# unsent is read and answered no further until some has gone: whoever asks
+# without reading (pipelined requests for the page need no token) otherwise
+# has every answer held here for them, a gigabyte in about a second.
 MAX_UNSENT = 1024 * 1024
+# What Qt takes off a connection ahead of the server reading it. Unbounded,
+# the requests left unread while answers wait would be held here instead of
+# at the other end.
+READ_BUFFER = 64 * 1024
+# A paired phone's connection with an answer still to go is given up after
+# this many deadlines in a row at which none of it had gone: five minutes.
+STALLED_DEADLINES = 15
 
 
 class PhoneServer(QObject):
@@ -122,12 +135,18 @@ class _Connection(QObject):
         self._closing = False
         self._done = False
         self._between_requests = False  # waiting for the next on a kept-alive connection
+        self._waiting: deque[Request] = deque()  # read, answered once enough has been sent
+        self._taken = False  # some of what was unsent has gone since the last deadline
+        self._stalled = 0  # deadlines in a row at which a paired phone had taken nothing
         # One deadline at a time, never put off by bytes arriving: a request
         # trickled a byte at a time would otherwise hold its slot for ever.
         self._deadline = QTimer(self)
         self._deadline.setSingleShot(True)
         self._deadline.timeout.connect(self._out_of_time)
+        socket.setReadBufferSize(READ_BUFFER)
         socket.readyRead.connect(self._read)
+        # Queued: Qt emits it from inside a write, in the middle of answering.
+        socket.bytesWritten.connect(self._written, Qt.ConnectionType.QueuedConnection)
         socket.disconnected.connect(self._gone)
         self._deadline.start(REQUEST_MS)  # opened to send a request: it has this long
 
@@ -146,20 +165,26 @@ class _Connection(QObject):
         if gone:
             self._gone()
 
-    def _out_of_time(self) -> None:
+    def _unsent(self) -> int:
         try:
-            unsent = self._socket.bytesToWrite()
+            return self._socket.bytesToWrite()
         except RuntimeError:  # Qt deleted the socket with its server
-            unsent = 0
-        if self.trusted and unsent:
+            return 0
+
+    def _out_of_time(self) -> None:
+        if self.trusted and self._unsent():
             # A paired phone still taking a picture over a slow circuit keeps
-            # its connection while some of its answer is still to go, until
-            # tor closes the stream. It isn't held to showing progress by each
-            # deadline: the socket takes more only once the other end has
-            # drained most of what it holds, which on a slow circuit can take
-            # longer than one.
-            self._deadline.start(IDLE_MS)
-            return
+            # its connection while some of its answer is still to go. It
+            # isn't held to showing progress by each deadline: the socket
+            # takes more only once the other end has drained most of what it
+            # holds, which on a slow circuit can take longer than one. But
+            # not for ever: one that has taken nothing at all for
+            # STALLED_DEADLINES in a row isn't reading.
+            self._stalled = 0 if self._taken else self._stalled + 1
+            self._taken = False
+            if self._stalled < STALLED_DEADLINES:
+                self._deadline.start(IDLE_MS)
+                return
         self.drop()
 
     def drop(self) -> None:
@@ -174,13 +199,32 @@ class _Connection(QObject):
         self._socket.write(QByteArray(data))
         self._socket.flush()
 
+    def _written(self) -> None:
+        """Some of what was unsent has gone: the requests that waited for
+        that are answered, and the connection is read again."""
+        self._taken = True
+        if self._done or self._closing or self._handle is not None:
+            return
+        try:
+            self._answer()
+            if not self._waiting and self._socket.bytesAvailable():
+                self._read()
+        except RuntimeError:  # Qt deleted the socket with its server
+            pass
+
     def _read(self) -> None:
-        data = bytes(self._socket.readAll().data())
         if self._handle is not None or self._closing:
+            self._socket.readAll()
             return  # an event stream reads nothing more
+        if self._waiting or self._unsent() > MAX_UNSENT:
+            # Left unread until what is owed has gone (`_written`): Qt's
+            # buffer is bounded, so the rest waits at the other end.
+            return
+        data = bytes(self._socket.readAll().data())
         if data and self._between_requests:
             self._between_requests = False
-            self._deadline.start(REQUEST_MS)  # a request begins: this long for all of it
+            if not self._unsent():
+                self._deadline.start(REQUEST_MS)  # a request begins: this long for all of it
         try:
             requests = self._parser.feed(data)
         except HttpError as exc:
@@ -195,7 +239,16 @@ class _Connection(QObject):
             self._write(render(error_response(400), keep_alive=False))
             self.close()
             return
-        for request in requests:
+        self._waiting.extend(requests)
+        self._answer()
+
+    def _answer(self) -> None:
+        """Answer the requests read, in order, for as long as the answers
+        are being taken."""
+        answered = False
+        while self._waiting and self._unsent() <= MAX_UNSENT:
+            request = self._waiting.popleft()
+            answered = True
             try:
                 response = self._server.api.handle(request)
             except Exception:  # noqa: BLE001 - a bug must not take the window down
@@ -204,6 +257,7 @@ class _Connection(QObject):
             if response.device:
                 self.trusted = True
             if response.stream:
+                self._waiting.clear()
                 self._write(render(response, keep_alive=False))
                 hub = self._server.api.hub
                 self._handle = hub.subscribe(response.device, self._send_event, self.close)
@@ -214,15 +268,20 @@ class _Connection(QObject):
                 return
             self._write(render(response, keep_alive=request.keep_alive))
             if not request.keep_alive:
+                self._waiting.clear()
                 self.close()
                 return
-        if not requests:
+        if not answered:
             return  # the request so far keeps the deadline it had
-        if self._parser.pending:
-            self._deadline.start(REQUEST_MS)  # the next one has begun
-        else:
-            self._between_requests = True
-            self._deadline.start(IDLE_MS)
+        begun = bool(self._waiting) or self._parser.pending
+        self._between_requests = not begun
+        if self._unsent():
+            # Answers not yet taken: the deadline already running stands.
+            # Restarted here, whole requests sent every few seconds by
+            # someone who never reads kept the connection, and what it was
+            # owed, for good.
+            return
+        self._deadline.start(REQUEST_MS if begun else IDLE_MS)  # the next has begun, or is awaited
 
     def _send_event(self, data: bytes) -> bool:
         if self._closing or self._socket.state() != QLocalSocket.LocalSocketState.ConnectedState:
