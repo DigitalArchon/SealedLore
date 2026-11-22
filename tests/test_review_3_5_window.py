@@ -14,21 +14,25 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
+from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtGui import QTextCursor  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
-from PySide6.QtWidgets import QApplication, QMessageBox, QToolButton  # noqa: E402
+from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QToolButton  # noqa: E402
 
 from sealedlore.engine.session_reactions import ROUND_SKIPPED  # noqa: E402
 from sealedlore.gui import lorebooks_page  # noqa: E402
+from sealedlore.gui.always_on_dialog import OPTIONAL_PATTERNS, AlwaysOnDialog  # noqa: E402
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.gui.transcript import ANSWERS_SHOW  # noqa: E402
 from sealedlore.gui.window_answers import EDIT_HINT_SPENT, EDIT_KEEP, EDIT_REDO  # noqa: E402
 from sealedlore.models.character import Character  # noqa: E402
+from sealedlore.models.lore import LoreEntry, TavernEntry  # noqa: E402
 from sealedlore.models.node import DIRECTOR_SPEAKER_ID  # noqa: E402
 from sealedlore.providers.mock import MockChatProvider  # noqa: E402
 from sealedlore.storage.lorebooks import load_lorebooks  # noqa: E402
 from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa: E402
 from tests.test_background_queue import _send, _window, wait_for  # noqa: E402
+from tests.test_lore_condense_gui import window_with  # noqa: E402
 from tests.test_reactions_gui import (  # noqa: E402
     MODEL,
     answer_dialog,
@@ -315,4 +319,57 @@ def test_an_old_blind_answer_no_take_would_read_is_just_saved(
     assert seen[1].go.text() == EDIT_REDO
     assert window.session.full_path()[-1].content == "P3."
     assert "EDITED-AFTER-ANSWER" in window.session.last_prompt.section("tail.round").text
+    window.close()
+
+
+# --- a leftover: an entry keyed only by patterns is not "never sent" ----------------
+
+
+def _always_on_notes(window, monkeypatch) -> list[str]:
+    notes: list[str] = []
+
+    def exec_(dialog: AlwaysOnDialog) -> int:
+        for row in range(dialog.table.rowCount()):
+            dialog.table.item(row, 0).setCheckState(Qt.Unchecked)
+        notes.extend(dialog.table.item(row, 4).text() for row in range(dialog.table.rowCount()))
+        return QDialog.Rejected
+
+    monkeypatch.setattr(AlwaysOnDialog, "exec", exec_)
+    window.open_always_on()
+    return notes
+
+
+def test_an_entry_keyed_only_by_patterns_is_not_said_to_be_never_sent(
+    app, tmp_path: Path, story, cast, monkeypatch
+) -> None:
+    """Under SillyTavern's rules an entry's patterns are its keys, kept with
+    its SillyTavern settings and not among its keywords: unticked, the dialog
+    said it would never be sent."""
+
+    def lore() -> list[LoreEntry]:
+        fields = {"key": ["/wol(f|ves)/i"], "keysecondary": [], "constant": True, "order": 100}
+        return [
+            LoreEntry(
+                title="Wolves",
+                content="wolves " * 1500,
+                always_on=True,
+                tavern=TavernEntry(numbered=True, fields=fields),
+            ),
+            LoreEntry(title="Gate", content="gate " * 1500, always_on=True),
+        ]
+
+    story.defaults.lore_firing = "sillytavern"
+    window = window_with(tmp_path / "st", story, cast, lore())
+    assert _always_on_notes(window, monkeypatch) == [
+        OPTIONAL_PATTERNS,
+        "Optional, but it has no keywords: it would never be sent",
+    ]
+    window.close()
+    # SealedLore's own rules don't read patterns: there it is as the dialog said.
+    story.defaults.lore_firing = "sealedlore"
+    window = window_with(tmp_path / "own", story, cast, lore())
+    assert (
+        _always_on_notes(window, monkeypatch)
+        == ["Optional, but it has no keywords: it would never be sent"] * 2
+    )
     window.close()

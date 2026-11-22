@@ -88,6 +88,10 @@ class AlwaysOnWindow:
             fit=fit,
             tokens=session._count_lore_tokens,
             condense=lambda entries: self._condense_story_lore(entries, parent=dialog),
+            # Under SillyTavern's rules an entry's patterns are keys too.
+            fired_keys=(lambda entry: session._fire_entry(entry).keys)
+            if session.fires_like_tavern
+            else None,
             parent=self._dialog_parent(),
         )
         accepted = dialog.exec() == QDialog.Accepted

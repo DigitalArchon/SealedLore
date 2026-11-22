@@ -44,6 +44,9 @@ INTRO = (
     "under SillyTavern's rules, lowest priority under SealedLore's, then the lowest in the "
     "list). The entries themselves are never changed."
 )
+OPTIONAL_KEYWORDS = "Optional: sent when its keywords come up"
+OPTIONAL_PATTERNS = "Optional: sent when one of its patterns matches"
+OPTIONAL_NEVER = "Optional, but it has no keywords: it would never be sent"
 USE_CONDENSED = (
     "Use the condensed versions when the always-on entries are more than the lore budget"
 )
@@ -74,7 +77,11 @@ class AlwaysOnDialog(QDialog):
     """`entries`: the always-on entries a model may see, in the lorebook's
     order; `fit(standing, use)` the always-on entries as they would be sent;
     `tokens(text)` a count; `condense(entries)` writes condensed versions of
-    those (the window's, while a progress dialog waits)."""
+    those (the window's, while a progress dialog waits). `fired_keys(entry)`:
+    an entry's keys as the story's rules read them, where those are more
+    than its keywords (SillyTavern's keep an entry's patterns, with the
+    settings it brought): judged by its keywords alone, an entry keyed only
+    by patterns was said never to be sent."""
 
     def __init__(
         self,
@@ -84,11 +91,13 @@ class AlwaysOnDialog(QDialog):
         fit: Callable[[list[LoreEntry], bool], StandingFit],
         tokens: Callable[[str], int],
         condense: Callable[[list[LoreEntry]], None],
+        fired_keys: Callable[[LoreEntry], Sequence[str]] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(TITLE)
         self._entries = list(entries)
+        self._fired_keys = fired_keys
         self._fit = fit
         self._tokens = tokens
         self._condense = condense
@@ -183,11 +192,12 @@ class AlwaysOnDialog(QDialog):
         self._loading = True
         for row, entry in enumerate(self._entries):
             if not self._is_on(row):
-                note = (
-                    "Optional: sent when its keywords come up"
-                    if entry.keywords
-                    else "Optional, but it has no keywords: it would never be sent"
-                )
+                if entry.keywords:
+                    note = OPTIONAL_KEYWORDS
+                elif self._fired_keys is not None and self._fired_keys(entry):
+                    note = OPTIONAL_PATTERNS
+                else:
+                    note = OPTIONAL_NEVER
             elif entry.id in sent_condensed:
                 note = "Sent condensed"
             elif not entry.condensed_now() and worth_condensing(entry.content):
