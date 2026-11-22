@@ -30,6 +30,9 @@ from sealedlore.providers.base import StreamCancelled, TextDelta
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.storage.repository import StoryBundle, read_api_log, save_story_bundle
 from sealedlore.tree import link_child
+from tests.conftest import make_exchange
+from tests.test_background_archival import Background, Storyteller
+from tests.test_background_archival import turn as wait_turn
 from tests.test_branches import names, rewrite
 from tests.test_chronicle import PASSAGE, read
 from tests.test_chronicle import make_session as plot_session
@@ -39,7 +42,7 @@ from tests.test_phase7 import play, turn
 from tests.test_phase7 import session as session  # noqa: F401 (a fixture)
 from tests.test_plot_v2 import gap_session
 from tests.test_plot_v2 import turn as gap_turn
-from tests.test_session import make_config
+from tests.test_session import FILLER, make_config
 
 # --- E1, E10: deleting a branch's first message leaves the story on a line -------
 
@@ -538,3 +541,83 @@ def test_a_name_only_ever_spoken_is_told_so_whichever_apostrophe():
     card = Character(id="c1", name="T'Kara")
     passage = "“Where is T’Kara?” the smith asked."
     assert _named_in_speech(passage, 0, len(passage), card) == "talked about"
+
+
+# --- E6: a Stop on the notice that adopts background chapters loses nothing ------
+
+
+@pytest.fixture
+def background(tmp_path, story, cast) -> StorySession:
+    """A long story on a client that writes its chapters in the background
+    (tests/test_background_archival.py's), a turn short of its budget."""
+    story.defaults.main_model = "anthropic/claude-sonnet-4.5"
+    nodes = make_exchange(24)
+    for node in nodes:
+        node.content = f"{node.content} {FILLER * 12}".strip()
+    bundle = StoryBundle(story=story, cast=cast, nodes=nodes)
+    story.active_leaf_id = nodes[-1].id
+    story.held_character_id = "char-serrik"
+    save_story_bundle(bundle, root=tmp_path)
+    made = StorySession(
+        bundle,
+        make_config(),
+        Storyteller(["A passage."], Background()),
+        root=tmp_path,
+        estimator=TokenEstimator(counter=fallback_counter),
+        learn_corrections=False,
+    )
+    full = made.assemble(wait_turn()).full_total
+    made.story.defaults.context_token_budget = int(full / 0.95)
+    return made
+
+
+BACKGROUND_KINDS = {
+    "summary": "summary_response",
+    "scan": "characters_response",
+    "suggest": "story_suggestions_response",
+}
+
+
+def answered_in_the_log(session: StorySession) -> dict[str, int]:
+    """How many background replies of each kind the API log holds."""
+    log = read_api_log(session.story.id, root=session.root)
+    asked = {e["id"] for e in log if e["kind"].endswith("_request") and e.get("background")}
+    return {
+        kind: sum(1 for e in log if e["kind"] == logged and e.get("request_log_ref") in asked)
+        for kind, logged in BACKGROUND_KINDS.items()
+    }
+
+
+@pytest.mark.parametrize("edited", [False, True])
+def test_a_stop_on_the_adoption_notice_leaves_every_paid_call_in_the_log(
+    background: StorySession, edited: bool
+):
+    """The worker lets go of the job at the event Stop lands on. That was
+    the first notice of the adoption, ahead of the rest of it: the scan and
+    the suggestions read in the background were never taken in, and their
+    calls, and those of chapters not used, never reached the log or the
+    cost."""
+    session = background
+    list(session.send(wait_turn()))
+    job = session._archive_job
+    assert job is not None and job.done.wait(5)
+    calls = session.provider.background.calls
+    paid = {kind: calls.count(kind) for kind in BACKGROUND_KINDS}
+    assert paid["summary"] and paid["scan"] == 1 and paid["suggest"] == 1
+    if edited:
+        # The author corrects an old message meanwhile: nothing is adopted.
+        session.edit_node(session.path()[0].id, "An old turn, corrected.")
+    session.story.defaults.context_token_budget = int(
+        session.assemble(wait_turn()).full_total * 0.9
+    )
+
+    sending = session.send(wait_turn())
+    first = next(sending)
+    assert isinstance(first, SessionNotice) and "written in the background" in first.text
+    sending.close()
+
+    assert session._archive_job is None
+    assert answered_in_the_log(session) == paid
+    suggested = [s.title for s in session.story.story_suggestions]
+    assert bool(session.summaries) is not edited
+    assert suggested == ([] if edited else ["The Undercroft"])

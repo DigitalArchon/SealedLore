@@ -399,6 +399,11 @@ class ArchivalRuntime:
         self._archive_job = None
         by_id = {node.id: node for node in self.nodes}
         on_path_ids = {node.id for node in history}
+        # Said once everything is in: the worker lets go of the job at the
+        # event a Stop lands on, and on the first notice that was the rest of
+        # the adoption, the scan and the suggestions never taken in and what
+        # was paid for never logged or counted (the review, Nov 22 2026).
+        notices: list[SessionNotice] = []
         adopted: list[Summary] = []
         archived: list[Node] = []
         scanned: list[Node] = []
@@ -416,36 +421,46 @@ class ArchivalRuntime:
         if adopted and archived:
             prompt = self._measure(history)
             here = len(adopted) - elsewhere
-            yield SessionNotice(
-                f"Archived {turns_in(archived)} turns into {here} "
-                f"chapter{'s' if here != 1 else ''}, written in the background — "
-                f"prompt now ~{prompt.full_total:,} tokens."
+            notices.append(
+                SessionNotice(
+                    f"Archived {turns_in(archived)} turns into {here} "
+                    f"chapter{'s' if here != 1 else ''}, written in the background — "
+                    f"prompt now ~{prompt.full_total:,} tokens."
+                )
             )
         if elsewhere:
-            yield SessionNotice(
-                f"{elsewhere} chapter{'s' if elsewhere != 1 else ''} written in the background "
-                f"belong{'s' if elsewhere == 1 else ''} to the branch you left; "
-                f"{'it is' if elsewhere == 1 else 'they are'} kept for it."
+            notices.append(
+                SessionNotice(
+                    f"{elsewhere} chapter{'s' if elsewhere != 1 else ''} written in the "
+                    f"background belong{'s' if elsewhere == 1 else ''} to the branch you left; "
+                    f"{'it is' if elsewhere == 1 else 'they are'} kept for it."
+                )
             )
         if adopted:
             problems = [c.ledger_problem for c in job.ready[: len(adopted)] if c.ledger_problem]
             if problems:
-                yield self._kept_notice(
-                    f"The story ledger wasn't updated for {len(problems)} of them "
-                    f"({problems[0]}); it carries on from before, and their summaries hold "
-                    "what it would have added.",
-                    turn=turn,
+                notices.append(
+                    self._kept_notice(
+                        f"The story ledger wasn't updated for {len(problems)} of them "
+                        f"({problems[0]}); it carries on from before, and their summaries hold "
+                        "what it would have added.",
+                        turn=turn,
+                    )
                 )
             if job.error:
-                yield self._kept_notice(
-                    f"The next chapter couldn't be written in the background ({job.error}); "
-                    "it is tried again when the story next fills its budget.",
-                    turn=turn,
+                notices.append(
+                    self._kept_notice(
+                        f"The next chapter couldn't be written in the background ({job.error}); "
+                        "it is tried again when the story next fills its budget.",
+                        turn=turn,
+                    )
                 )
         elif job.ready or job.error:
             reason = job.error or "the story changed while they were written"
-            yield self._kept_notice(
-                f"The chapters written in the background weren't used ({reason}).", turn=turn
+            notices.append(
+                self._kept_notice(
+                    f"The chapters written in the background weren't used ({reason}).", turn=turn
+                )
             )
         # Paid calls that weren't used still go in the log and the cost: the
         # chapters after the first mismatch, the one that failed, and the scan
@@ -456,15 +471,16 @@ class ArchivalRuntime:
             if chapter.ledger is not None:
                 self._log_dropped("ledger", chapter.ledger, reason)
         if job.scan is not None and adopted:
-            yield from self._adopt_scan(job.scan, scanned, turn=turn)
+            notices.extend(self._adopt_scan(job.scan, scanned, turn=turn))
         elif job.scan is not None:
             self._log_dropped("characters", job.scan, reason)
         # Only for prose all adopted: a chapter dropped was edited or left
         # behind since, and what was read of it is no longer the story's.
         if job.suggest is not None and adopted and len(adopted) == len(job.chapters):
-            yield from self._adopt_suggestions(job.suggest, scanned, turn=turn)
+            notices.extend(self._adopt_suggestions(job.suggest, scanned, turn=turn))
         elif job.suggest is not None:
             self._log_dropped("story_suggestions", job.suggest, reason)
+        yield from notices
 
     def _log_dropped(self, kind: str, call: _Call, reason: str, **extra: Any) -> None:
         """A background reply that isn't used was paid for all the same."""

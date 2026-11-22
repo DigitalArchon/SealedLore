@@ -3133,12 +3133,14 @@ class StorySession(
         if part is not None:
             yield SessionNotice(f"Merged {part.chapters} old chapters into one part.")
         elif self.merge_problem:
+            # Taken before it is said: a Stop on the notice left it to be
+            # said again at the next archive.
+            problem, self.merge_problem = self.merge_problem, None
             yield self._kept_notice(
-                f"Old chapters weren't merged into a part ({self.merge_problem}); they "
+                f"Old chapters weren't merged into a part ({problem}); they "
                 "stand as they are, and the merge is tried again later.",
                 turn=turn,
             )
-            self.merge_problem = None
         prompt = self.assemble(turn, history_nodes=history)
         if not (prompt.budget.over_budget or prompt.needs_archival):
             return
