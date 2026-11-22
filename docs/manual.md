@@ -2289,7 +2289,9 @@ changed; until one is ready, its card is sent whole.
 
 The cast board says when the cast is over its room, and which cards are
 sent condensed. A character's card shows its **Condensed** text under its
-other fields: edit it, and your words are sent instead; **Write it again** has the
+other fields: edit it, and your words are sent instead (words you write there
+while the model is still writing one are kept, and the model's are dropped);
+**Write it again** has the
 model write it afresh from the card as it is now. **Condense this card** writes
 one for a card that has none, even while the cast fits, so you can read it or
 edit it before it is needed. Change a card, and its old

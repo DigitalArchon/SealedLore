@@ -192,8 +192,11 @@ class NodeMeta(BaseModel):
     # of the history sees them, rendered as that character's intention.
     reactions: list[Reaction] = Field(default_factory=list)
     # On an author's turn sent with the story's round after it ("after"):
-    # its round ran, so `reactions` here (perhaps none) are what the
-    # storyteller is given with it, never the passage before's.
+    # its round ran to its end, or it is a turn nobody answers (a Direction,
+    # a Narration), so `reactions` here (perhaps none) are what the
+    # storyteller is given with it, never the passage before's. Unset on a
+    # turn whose round was stopped or failed: the next take of its passage
+    # asks them (engine/session_reactions.py `react_to_turn`).
     round_after: bool = False
     # On a passage the public record was kept after (engine/public_record.py):
     # the record as it stood after it, a snapshot as `scene` is (the record
