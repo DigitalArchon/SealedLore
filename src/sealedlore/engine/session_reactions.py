@@ -11,7 +11,9 @@ fine-tuned local model is reached on its own server.
 The answers are kept on the passage (`NodeMeta.reactions`) and reach the
 storyteller once, in the tail of the turn that answers that passage
 (`rules.render_round_block`): Regenerate sends them again, edited if the
-author edited one. No other model reads them.
+author edited one. No other model reads them. One answer can be asked for
+again (`regenerate_reaction`), with the request the round built for that
+character there and nobody else asked.
 
 The round never costs the turn: an answer that fails, is declined, cut off
 or empty is a notice. A Stop skips the round, as it skips the reads. A
@@ -56,6 +58,15 @@ ROUND_SKIPPED = (
     "Stopped waiting for the characters played by their own model: the storyteller writes "
     "without their answers. Regenerate asks them again."
 )
+# Said with whatever stops an answer asked for again: the one there stands.
+ANSWER_KEPT = "Their answer stays as it was."
+
+
+def _not_asked(character, exc: Exception) -> str:
+    """Why a character's model couldn't be asked: their request couldn't
+    even be built (their model names an endpoint that isn't set up)."""
+    model = (character.own_model or "").strip()
+    return f"{character.name}'s model ({model or 'none named'}) couldn't be asked: {exc}"
 
 
 class ReactionRuntime:
@@ -121,12 +132,12 @@ class ReactionRuntime:
         if self.story.chat or self.in_private or not reactions.answers_turn(turn_node):
             return
         turn_node.meta.round_after = False  # until the round has run to its end
-        held = self._character(turn_node.meta.controlled_character_id)
-        player = held.name if held is not None else "The author"
         yield from self.keep_public_record(history)
         yield from self.mark_views(history)
         try:
-            yield from self._round([*history, turn_node], turn_node, after_turn_of=player)
+            yield from self._round(
+                [*history, turn_node], turn_node, after_turn_of=self._turn_taker(turn_node)
+            )
         except StreamCancelled:
             # None of them is used: an answer that had come would stand as
             # the whole round, and the others would never be asked.
@@ -138,6 +149,12 @@ class ReactionRuntime:
             yield SessionNotice(ROUND_SKIPPED, stop_taken=True)
             return
         turn_node.meta.round_after = True
+
+    def _turn_taker(self, turn_node) -> str:
+        """Who took the turn a round after it answers, for their ask: the
+        character the author played, else the author."""
+        held = self._character(turn_node.meta.controlled_character_id)
+        return held.name if held is not None else "The author"
 
     def _round(self, history, store_on, *, after_turn_of: str | None = None):
         """One round: everyone in the scene who has a model of their own
@@ -190,38 +207,50 @@ class ReactionRuntime:
         never costs the turn: built outside any guard, that failed the whole
         job, and with the round after the author's turn no passage could be
         written until the card was changed."""
+        try:
+            request, payload = self._own_request(character, cast, history, count, after_turn_of)
+        except (ProviderError, ValueError) as exc:
+            yield SessionNotice(_not_asked(character, exc))
+            return None
+        return self._own_logged(character, request, payload, passage)
+
+    def _own_request(
+        self, character, cast, history, count, after_turn_of
+    ) -> tuple[ChatRequest, dict[str, Any]]:
+        """One character's request and its payload, built as the round sends
+        it: the round's and asking one of them again (`regenerate_reaction`)
+        are built here alike, so an answer asked for again is asked for as
+        the round asked. Raises ProviderError or ValueError when it can't be
+        built."""
         model = (character.own_model or "").strip()  # "Endpoint::model", kept whole
         names = self.placeholder_names()
-        try:
-            request = ChatRequest(
-                model=model,
-                messages=reaction_messages(
-                    # The names in, as the storyteller reads them.
-                    story=names.story(self.story),
-                    cast=names.characters(cast),
-                    character=names.character(character),
-                    history=history,
-                    # Their model's own wording, where SealedLore adjusts for it.
-                    texts=tuned_texts(self.texts, model, "character"),
-                    count=count,
-                    budget=reactions.HISTORY_TOKENS,
-                    recollections=self.bundle.memories,
-                    after_turn_of=after_turn_of,
-                    public_record=self.public_record(history),
-                ),
-                params=self.side_params(model),
-                # The character's own route: a route is otherwise a role's,
-                # and their model is no role's.
-                extra_body=self.own_route_body(character),
-                use_cache_control=self._cache_control_for(model),
-                cache_ttl=self.config.cache_ttl,
-            )
-            payload = self.provider.build_payload(request)
-        except (ProviderError, ValueError) as exc:
-            yield SessionNotice(
-                f"{character.name}'s model ({model or 'none named'}) couldn't be asked: {exc}"
-            )
-            return None
+        request = ChatRequest(
+            model=model,
+            messages=reaction_messages(
+                # The names in, as the storyteller reads them.
+                story=names.story(self.story),
+                cast=names.characters(cast),
+                character=names.character(character),
+                history=history,
+                # Their model's own wording, where SealedLore adjusts for it.
+                texts=tuned_texts(self.texts, model, "character"),
+                count=count,
+                budget=reactions.HISTORY_TOKENS,
+                recollections=self.bundle.memories,
+                after_turn_of=after_turn_of,
+                public_record=self.public_record(history),
+            ),
+            params=self.side_params(model),
+            # The character's own route: a route is otherwise a role's,
+            # and their model is no role's.
+            extra_body=self.own_route_body(character),
+            use_cache_control=self._cache_control_for(model),
+            cache_ttl=self.config.cache_ttl,
+        )
+        return request, self.provider.build_payload(request)
+
+    def _own_logged(self, character, request, payload, passage) -> tuple[Any, ChatRequest, str]:
+        """(character, request, log ref): the request logged before it goes."""
         log_ref = self._log(
             "own_request",
             {"node_id": passage.id, "character": character.name, "payload": payload},
@@ -238,47 +267,12 @@ class ReactionRuntime:
         said: list[SessionNotice] = []
         stopped = False
         for (character, request, log_ref), box in zip(calls, boxes, strict=True):
-            error = box.get("error")
-            if isinstance(error, StreamCancelled):
-                stopped = True
-                self._log("own_response", {"request_log_ref": log_ref, "stopped_early": True})
-                continue
-            if isinstance(error, (ProviderError, ValueError)):
-                self._log("own_response", {"request_log_ref": log_ref, "error": str(error)})
-                said.append(SessionNotice(f"{character.name}'s model couldn't answer: {error}"))
-                continue
-            if error is not None:
-                raise error
-            text, completed = box["reply"]
-            # Logged whatever came of it, so its cost counts.
-            self._log(
-                "own_response",
-                {
-                    "request_log_ref": log_ref,
-                    "node_id": passage.id,
-                    "character": character.name,
-                    "text": text,
-                    "usage": completed.raw_usage,
-                    "finish_reason": completed.finish_reason,
-                },
-            )
-            # In the session's spend too, whatever came of it (the status
-            # bar's readout left every character's answers out).
-            usage = self.priced(completed.usage, request.model)
-            self.unreported_usage.append(usage)
-            why = why_not_whole(completed) or ("it was empty" if not text.strip() else None)
-            if why:
-                said.append(SessionNotice(f"{character.name}'s model gave no answer: {why}."))
-                continue
-            answers.append(
-                Reaction(
-                    character_id=character.id,
-                    name=character.name,
-                    text=text.strip(),
-                    model=request.model,
-                    usage=usage,
-                )
-            )
+            answer, notice, was_stopped = self._taken(character, request, log_ref, box, passage)
+            stopped = stopped or was_stopped
+            if notice is not None:
+                said.append(notice)
+            if answer is not None:
+                answers.append(answer)
         passage.meta.reactions = answers
         if after_turn_of is not None and not stopped:
             # The round has run to its end, and is marked so before anything
@@ -299,6 +293,51 @@ class ReactionRuntime:
                 else f"{names} answered. The storyteller gets their answers with your next "
                 "turn, as what they mean to do."
             )
+
+    def _taken(
+        self, character, request: ChatRequest, log_ref: str, box: dict[str, Any], passage
+    ) -> tuple[Reaction | None, SessionNotice | None, bool]:
+        """One character's reply, logged and priced: (their answer, what is
+        said in its place, whether the call was stopped). The round's and
+        asking one of them again (`regenerate_reaction`) go through here, so
+        both are logged and counted alike."""
+        error = box.get("error")
+        if isinstance(error, StreamCancelled):
+            self._log("own_response", {"request_log_ref": log_ref, "stopped_early": True})
+            return None, None, True
+        if isinstance(error, (ProviderError, ValueError)):
+            self._log("own_response", {"request_log_ref": log_ref, "error": str(error)})
+            return None, SessionNotice(f"{character.name}'s model couldn't answer: {error}"), False
+        if error is not None:
+            raise error
+        text, completed = box["reply"]
+        # Logged whatever came of it, so its cost counts.
+        self._log(
+            "own_response",
+            {
+                "request_log_ref": log_ref,
+                "node_id": passage.id,
+                "character": character.name,
+                "text": text,
+                "usage": completed.raw_usage,
+                "finish_reason": completed.finish_reason,
+            },
+        )
+        # In the session's spend too, whatever came of it (the status
+        # bar's readout left every character's answers out).
+        usage = self.priced(completed.usage, request.model)
+        self.unreported_usage.append(usage)
+        why = why_not_whole(completed) or ("it was empty" if not text.strip() else None)
+        if why:
+            return None, SessionNotice(f"{character.name}'s model gave no answer: {why}."), False
+        answer = Reaction(
+            character_id=character.id,
+            name=character.name,
+            text=text.strip(),
+            model=request.model,
+            usage=usage,
+        )
+        return answer, None, False
 
     def _recollect_due(self, characters, history, cast, count) -> Iterator[SessionNotice]:
         """Write what each character remembers of the stretches of the story
@@ -522,3 +561,87 @@ class ReactionRuntime:
         else:
             raise ValueError("that character didn't answer this passage")
         self.save()
+
+    def reaction_refusal(self, node_id: str, character_id: str) -> str | None:
+        """Why one character's answer to a message can't be asked for again,
+        in words for the author, or None when it can (`regenerate_reaction`).
+        Never in a chat or a private scene, where no round runs, nor for a
+        Direction, a Narration or the opening, which nobody answers."""
+        if self.story.chat:
+            return "A chat has no characters played by their own model."
+        try:
+            self._refuse_in_private("Asking a character's model again")
+        except ValueError as exc:
+            return str(exc)
+        node = next((n for n in self.nodes if n.id == node_id), None)
+        if node is None:
+            return "That message is no longer in the story."
+        if node.meta.private_span is not None:
+            return "Nobody answers a private scene's messages."
+        if node.kind == "user" and not reactions.answers_turn(node):
+            return "Nobody answers a Direction, a Narration or the opening."
+        answer = next((a for a in node.meta.reactions if a.character_id == character_id), None)
+        if answer is None:
+            return "That character didn't answer this message."
+        cast = self.visible_cast(self._path_to(node.id))
+        character = next((c for c in cast if c.id == character_id), None)
+        if character is None:
+            return f"{answer.name} is no longer in the story."
+        if not (character.own_model or "").strip():
+            return (
+                f"{character.name} isn't played by a model of their own any more "
+                "(Played by, on their card)."
+            )
+        return None
+
+    def regenerate_reaction(self, node_id: str, character_id: str) -> Iterator[SessionNotice]:
+        """Ask one character's model again for their answer to a message: a
+        passage they answered at the same time as the author, or the author's
+        turn they answered after it. The request is the round's for them at
+        that message (`_own_request`): the story as they saw it up to it,
+        their card and notes, the public record there and what they remember,
+        written first where the round would write it; never another's answer.
+        Their answer alone is replaced, in its place, the others' untouched.
+        A Stop, a failure, or a reply declined, cut off or empty leaves the
+        answer as it was; logged and counted as the round's are.
+
+        The record and who saw which part of a passage are read as the round
+        left them on the messages: asking one character again is not a reason
+        to read the story for everyone."""
+        refusal = self.reaction_refusal(node_id, character_id)
+        if refusal is not None:
+            raise ValueError(refusal)
+        node = next(n for n in self.nodes if n.id == node_id)
+        history = self._path_to(node.id)
+        cast = self.visible_cast(history)
+        character = next(c for c in cast if c.id == character_id)
+        # A turn's answers were given having seen it; a passage's, blind to
+        # the turn after it: asked again the way they were asked.
+        after_turn_of = self._turn_taker(node) if node.kind == "user" else None
+
+        def count(text: str) -> int:
+            return self.estimator.estimate(text)
+
+        yield from self._recollect_due([character], history, cast, count)
+        try:
+            request, payload = self._own_request(character, cast, history, count, after_turn_of)
+        except (ProviderError, ValueError) as exc:
+            raise ProviderError(f"{_not_asked(character, exc)} {ANSWER_KEPT}") from exc
+        call = self._own_logged(character, request, payload, node)
+        [box] = yield from self._answer_side_by_side(
+            [request], f"Asking {character.name}'s model again…"
+        )
+        answer, notice, stopped = self._taken(*call, box, node)
+        if stopped:
+            raise StreamCancelled()
+        if answer is None:
+            raise ProviderError(f"{notice.text} {ANSWER_KEPT}")
+        for index, given in enumerate(node.meta.reactions):
+            if given.character_id == character_id:
+                node.meta.reactions[index] = answer
+                break
+        else:
+            raise ValueError("that character didn't answer this message")
+        # Kept before it is said: a Stop landing on the notice ends the job there.
+        self.save()
+        yield SessionNotice(f"{character.name} answered again.")
