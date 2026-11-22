@@ -34,7 +34,14 @@ from dataclasses import dataclass, field
 from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.scene_state import diff, same_person
-from sealedlore.engine.validators import locate_quote, mentions, name_forms, opens_elsewhere
+from sealedlore.engine.validators import (
+    fold_apostrophes,
+    locate_quote,
+    mentions,
+    name_forms,
+    name_pattern,
+    opens_elsewhere,
+)
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.character import Character
 from sealedlore.models.scene import (
@@ -74,6 +81,11 @@ class Resolved:
     character_id: str | None = None
 
 
+def _name_key(name: str) -> str:
+    """A name for comparing whole: any case, whichever apostrophe."""
+    return fold_apostrophes(name).lower()
+
+
 def resolve_name(
     name: str, *, cast: Sequence[Character], supporting: Sequence[Character] = ()
 ) -> Resolved | None:
@@ -87,12 +99,12 @@ def resolve_name(
     cleaned = " ".join(name.split())
     if not cleaned:
         return None
-    lowered = cleaned.lower()
+    lowered = _name_key(cleaned)
     for character in cast:
-        if lowered in {character.name.lower(), *(a.lower() for a in character.aliases)}:
+        if lowered in {_name_key(character.name), *map(_name_key, character.aliases)}:
             return Resolved(character.name, character.id)
     for character in supporting:
-        if lowered in {character.name.lower(), *(a.lower() for a in character.aliases)}:
+        if lowered in {_name_key(character.name), *map(_name_key, character.aliases)}:
             return Resolved(character.name)
     cast_hits = [character for character in cast if same_person(cleaned, character)]
     if len(cast_hits) == 1:
@@ -246,7 +258,7 @@ def _named_in_speech(text: str, start: int, end: int, person: Character) -> str 
     """
     positions: list[tuple[int, int]] = []
     for name in name_forms(person):
-        for match in re.finditer(rf"\b{re.escape(name)}\b", text[start:end], re.IGNORECASE):
+        for match in re.finditer(name_pattern(name), text[start:end], re.IGNORECASE):
             positions.append((start + match.start(), start + match.end()))
     if not positions or not all(_in_speech(text, left) for left, _ in positions):
         return None
@@ -424,11 +436,11 @@ class SceneDelta:
         the next passage, reading the roster, made her Elena, "mid-twenties".
         """
         by_id = {character.id: character for character in people}
-        by_name = {character.name.lower(): character for character in people}
+        by_name = {_name_key(character.name): character for character in people}
         dropped: list[Resolved] = []
         kept: list[Resolved] = []
         for person in self.arrived:
-            card = by_id.get(person.character_id or "") or by_name.get(person.name.lower())
+            card = by_id.get(person.character_id or "") or by_name.get(_name_key(person.name))
             character = card or Character(id="", name=person.name)
             if any(mentions(text, character) for text in texts if text):
                 kept.append(person)

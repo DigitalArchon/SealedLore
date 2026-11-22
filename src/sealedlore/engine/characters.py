@@ -18,19 +18,25 @@ from sealedlore.engine.cast_fit import has_condensed
 from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.rules import CardForm, full_description_text, summary_repeated
-from sealedlore.engine.validators import mentions, name_forms
+from sealedlore.engine.validators import fold_apostrophes, mentions, name_forms
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.character import Character
 from sealedlore.models.supporting import CharacterSuggestion
 
 
 def known_names(characters: Iterable[Character], extra: Iterable[str] = ()) -> set[str]:
-    """Every lowercased form by which an existing card, or a refused name, is known."""
+    """Every lowercased form by which an existing card, or a refused name, is
+    known, its apostrophes folded (`_known_as`): the prose's "T’Kara" is the
+    card's "T'Kara", not someone new to suggest a card for."""
     names: set[str] = set()
     for character in characters:
-        names.update(form.lower() for form in name_forms(character))
-    names.update(name.strip().lower() for name in extra if name.strip())
+        names.update(_known_as(form) for form in name_forms(character))
+    names.update(_known_as(name.strip()) for name in extra if name.strip())
     return names
+
+
+def _known_as(form: str) -> str:
+    return fold_apostrophes(form).lower()
 
 
 def build_extraction_messages(
@@ -83,7 +89,7 @@ def parse_suggestions(text: str, *, known: set[str]) -> list[CharacterSuggestion
             if alias and alias.lower() != name.lower()
         ]
         candidate = Character(name=name, aliases=aliases)
-        if seen.intersection(form.lower() for form in name_forms(candidate)):
+        if seen.intersection(_known_as(form) for form in name_forms(candidate)):
             continue
         canon = _clean_text(item.get("canon"))
         found.append(
@@ -94,7 +100,7 @@ def parse_suggestions(text: str, *, known: set[str]) -> list[CharacterSuggestion
                 description=_clean_text(item.get("description")),
             )
         )
-        seen.update(form.lower() for form in name_forms(candidate))
+        seen.update(_known_as(form) for form in name_forms(candidate))
     return found
 
 

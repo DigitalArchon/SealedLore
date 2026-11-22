@@ -34,7 +34,7 @@ from collections.abc import Sequence
 from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.retrieval import mentions_entry
-from sealedlore.engine.validators import mentions, name_forms
+from sealedlore.engine.validators import fold_apostrophes, mentions, name_forms
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.character import Character
 from sealedlore.models.lore import LoreEntry
@@ -274,16 +274,21 @@ def _why(item: dict) -> str:
     return said if len(said) <= WHY_CHARS else said[: WHY_CHARS - 1].rstrip() + "…"
 
 
+def _as_named(name: str) -> str:
+    """A name for comparing: any case, whichever apostrophe it was written with."""
+    return fold_apostrophes(name).casefold()
+
+
 def _card_named(name: str, cards: Sequence[Character]) -> Character | None:
     """The card a name is: its whole name first, else the one card a name
     form answers to (never a guess between two)."""
     if not name:
         return None
-    wanted = name.casefold()
+    wanted = _as_named(name)
     for card in cards:
-        if card.name.casefold() == wanted:
+        if _as_named(card.name) == wanted:
             return card
-    found = [c for c in cards if wanted in {form.casefold() for form in name_forms(c)}]
+    found = [c for c in cards if wanted in {_as_named(form) for form in name_forms(c)}]
     return found[0] if len(found) == 1 else None
 
 

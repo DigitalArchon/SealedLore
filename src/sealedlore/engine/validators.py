@@ -34,6 +34,25 @@ _TITLES = frozenset(
 # For code elsewhere that has to recognise a rank before a name.
 TITLES = _TITLES
 
+# The apostrophes a name is written with: the typewriter's, the typographic
+# one and its opening twin, and the modifier letter. A card says "T'Kara" and
+# every model that sets its own apostrophes writes "T’Kara": the same name,
+# and it was nobody's (off the roster, unknown to the summariser, an arrival
+# never matched to her card) unless a second word of the name matched in its
+# place (the review, Nov 22 2026).
+_APOSTROPHES = "'’‘ʼ"
+_APOSTROPHE = re.compile(f"[{_APOSTROPHES}]")
+
+
+def fold_apostrophes(text: str) -> str:
+    """`text` with every apostrophe the typewriter's, for comparing names."""
+    return _APOSTROPHE.sub("'", text)
+
+
+def _any_apostrophe(pattern: str) -> str:
+    """An escaped word or name, its apostrophes matching whichever is written."""
+    return _APOSTROPHE.sub(f"[{_APOSTROPHES}]", pattern)
+
 
 def name_forms(character: Character) -> list[str]:
     """Every string that plausibly refers to this character, longest first.
@@ -65,7 +84,8 @@ def named_only(written: str, character: Character) -> bool:
     words: their name or an alias whole, or every distinctive word of it one
     of theirs ("Sergeant Hale" for Tom Hale; never "Mary Smith" for John
     Smith, which `mentions` takes for him by the surname they share)."""
-    forms = {form.lower() for form in name_forms(character)}
+    forms = {fold_apostrophes(form).lower() for form in name_forms(character)}
+    written = fold_apostrophes(written)
     if written.strip().lower() in forms:
         return True
     words = [
@@ -84,7 +104,12 @@ def _name_pattern(name: str, *, allow_possessive: bool = False) -> str:
     # checking the author's own turn we do want them — "Nils's eye level"
     # still means they are addressing Nils.
     suffix = "" if allow_possessive else r"(?!['’]s)"
-    return rf"\b{re.escape(name)}\b{suffix}"
+    return rf"\b{_any_apostrophe(re.escape(name))}\b{suffix}"
+
+
+def name_pattern(name: str) -> str:
+    """The pattern `mentions` finds a name by, for code that needs where."""
+    return _name_pattern(name, allow_possessive=True)
 
 
 _PARAGRAPH_BREAK = re.compile(r"\n\s*\n")
@@ -174,7 +199,9 @@ def locate_quote(text: str, quote: str) -> tuple[int, int] | None:
 
     Models copying a sentence change its quotation marks, its spacing, and now
     and then a word's case. Match on the words in order, with anything between
-    them; failing that, on the first eight.
+    them; failing that, on the first eight. An apostrophe inside a word is
+    whichever the text has: a quote that names T'Kara is of the passage's
+    T’Kara.
     """
     if not quote.strip():
         return None
@@ -185,7 +212,7 @@ def locate_quote(text: str, quote: str) -> tuple[int, int] | None:
     for run in (words, words[:8]):
         if len(run) < 3:
             continue
-        pattern = r"\W+".join(re.escape(word) for word in run)
+        pattern = r"\W+".join(_any_apostrophe(re.escape(word)) for word in run)
         match = re.search(pattern, text, flags=re.IGNORECASE)
         if match:
             return match.start(), match.end()

@@ -5,16 +5,25 @@ mock answers; nothing here reaches a network."""
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from sealedlore.engine import session as session_module
 from sealedlore.engine import session_plot
+from sealedlore.engine.archival import characters_in
+from sealedlore.engine.characters import known_names, parse_suggestions
 from sealedlore.engine.chronicle import clock_minutes
 from sealedlore.engine.chronicle_read import parse_read
 from sealedlore.engine.director import parse_gap
 from sealedlore.engine.lore_pick import parse_pick
+from sealedlore.engine.scene_state import same_person
+from sealedlore.engine.scene_update import Resolved, _named_in_speech, parse_delta, resolve_name
 from sealedlore.engine.session import SessionNotice, StorySession
+from sealedlore.engine.story_suggestions import _card_named
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
+from sealedlore.engine.validators import locate_quote, mentions, named_only
+from sealedlore.models.character import Character
 from sealedlore.models.node import Node, NodeMeta
 from sealedlore.models.private import PrivateSpan
 from sealedlore.providers.base import StreamCancelled, TextDelta
@@ -452,3 +461,80 @@ def test_accounts_of_a_skip_that_cant_be_read_still_settle_the_event(
         assert logged["what"] == "skipped-over events"
     else:
         assert errors_logged(session) == []
+
+
+# --- E4: a name's apostrophe is whichever one the prose writes -------------------
+
+APOSTROPHES = ["'", "’", "‘", "ʼ"]
+
+
+@pytest.mark.parametrize("on_card", ["'", "’"])
+@pytest.mark.parametrize("in_prose", APOSTROPHES)
+def test_a_name_with_an_apostrophe_is_found_whichever_the_prose_writes(on_card: str, in_prose: str):
+    """A card's "T'Kara" was nobody in prose that wrote "T’Kara", as every
+    model that sets its own apostrophes does: off the roster, unknown to the
+    summariser, an arrival never matched to her card. Only a second word
+    ("Sean" of Sean O'Brien) hid it for longer names."""
+    card = Character(id="c1", name=f"T{on_card}Kara")
+    name = f"T{in_prose}Kara"
+    passage = f"The door opened and {name} came in from the yard, shaking off the rain."
+    assert mentions(passage, card)
+    assert same_person(name, card)
+    assert named_only(name, card)
+    assert characters_in(passage, [card]) == [card]
+    # The scene read's arrival is hers, by her card.
+    delta = parse_delta(
+        json.dumps({"arrived": [{"name": name, "how": "came in from the yard"}]}), cast=[card]
+    )
+    assert [(person.name, person.character_id) for person in delta.arrived] == [(card.name, "c1")]
+    assert delta.unnamed_arrivals((passage, ""), people=[card]) == []
+    # And on a supporting card, or kept as written with no card at all.
+    assert resolve_name(name, cast=[], supporting=[card]) == Resolved(card.name)
+    assert same_person(card.name, Character(id="", name=name))
+
+
+@pytest.mark.parametrize("apostrophe", APOSTROPHES[:3])
+def test_possessives_still_count_and_parts_of_words_still_do_not(apostrophe: str):
+    card = Character(id="c1", name="T'Kara")
+    for possessive in ("'", "’"):
+        assert mentions(f"It was T{apostrophe}Kara{possessive}s knife on the table.", card)
+    brien = Character(id="c2", name="Sean O'Brien")
+    assert mentions(f"O{apostrophe}Brien nodded.", brien)
+    assert not mentions("The O and the Brien of it.", brien)
+    ann = Character(id="c3", name="Ann")
+    assert mentions("Ann’s coat hung by the door.", ann)
+    assert not mentions("The announcer cleared his throat.", ann)
+    assert not mentions("T Kara, said the sign.", card)
+
+
+def test_a_person_already_on_file_is_not_suggested_under_the_other_apostrophe():
+    known = known_names([Character(id="c1", name="T'Kara", aliases=["Sean O'Brien"])])
+    reply = json.dumps(
+        [
+            {"name": "T’Kara", "description": "A smith."},
+            {"name": "O’Brien", "description": "A carter."},
+            {"name": "D’Arcy", "description": "A clerk."},
+            {"name": "D'Arcy", "description": "The same clerk."},
+        ]
+    )
+    assert [s.name for s in parse_suggestions(reply, known=known)] == ["D’Arcy"]
+    # A change suggested for her card finds it by either spelling.
+    card = Character(id="c1", name="T'Kara")
+    assert _card_named("T’Kara", [card, Character(id="c2", name="Maela Orr")]) is card
+
+
+def test_a_sentence_is_found_whichever_apostrophe_its_quote_was_retyped_with():
+    """The reads quote the passage back, and a quote is believed only when
+    it is found there: retyped with the other apostrophe in a name, the
+    sentence that showed her arriving was no sentence of the passage."""
+    passage = "Rain on the roof. Then T’Kara’s lantern showed at the gate, and she came in."
+    found = locate_quote(passage, "Then T'Kara's lantern showed at the gate, and she came in.")
+    assert found is not None
+    assert passage[found[0] : found[1]].startswith("Then T’Kara’s lantern")
+    assert locate_quote(passage, "Then T'Kara's horse showed at the gate") is None
+
+
+def test_a_name_only_ever_spoken_is_told_so_whichever_apostrophe():
+    card = Character(id="c1", name="T'Kara")
+    passage = "“Where is T’Kara?” the smith asked."
+    assert _named_in_speech(passage, 0, len(passage), card) == "talked about"
