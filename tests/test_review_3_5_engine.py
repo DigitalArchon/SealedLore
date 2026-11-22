@@ -7,19 +7,30 @@ from __future__ import annotations
 
 import pytest
 
+from sealedlore.engine import session as session_module
+from sealedlore.engine import session_plot
 from sealedlore.engine.chronicle import clock_minutes
-from sealedlore.engine.session import StorySession
+from sealedlore.engine.chronicle_read import parse_read
+from sealedlore.engine.director import parse_gap
+from sealedlore.engine.lore_pick import parse_pick
+from sealedlore.engine.session import SessionNotice, StorySession
+from sealedlore.engine.tokens import TokenEstimator, fallback_counter
 from sealedlore.models.node import Node, NodeMeta
 from sealedlore.models.private import PrivateSpan
 from sealedlore.providers.base import StreamCancelled, TextDelta
 from sealedlore.providers.mock import MockChatProvider
+from sealedlore.storage.repository import StoryBundle, read_api_log, save_story_bundle
 from sealedlore.tree import link_child
 from tests.test_branches import names, rewrite
 from tests.test_chronicle import PASSAGE, read
 from tests.test_chronicle import make_session as plot_session
 from tests.test_chronicle import turn as plot_turn
+from tests.test_lore_pick import ACCORD, LOCKS, entries, large
 from tests.test_phase7 import play, turn
 from tests.test_phase7 import session as session  # noqa: F401 (a fixture)
+from tests.test_plot_v2 import gap_session
+from tests.test_plot_v2 import turn as gap_turn
+from tests.test_session import make_config
 
 # --- E1, E10: deleting a branch's first message leaves the story on a line -------
 
@@ -295,3 +306,149 @@ def test_a_take_stopped_partway_keeps_the_authors_plot_correction(tmp_path, how:
     assert session.path()[-1].content.startswith("Another take")
     assert session.path()[-1].meta.chronicle.source == "author"
     assert session.chronicle.minutes == clock_minutes(3, 8, 0)
+
+
+# --- E3: no reply of a side call's model costs the turn ---------------------------
+
+
+@pytest.mark.parametrize("reply", ['{"pick": 2}', '{"pick": true}', '{"pick": "12"}'])
+@pytest.mark.parametrize("more", ["", ', "why": {"1": "the treaty"}'])
+def test_picks_that_are_no_list_are_no_picks(reply: str, more: str):
+    """A number raised TypeError out of the parser, and so out of the job,
+    after the passage was written; a string was read a character at a time
+    ("12" picked the first and the second)."""
+    with pytest.raises(ValueError, match="list"):
+        parse_pick(reply[:-1] + more + "}", entries())
+
+
+def test_a_pick_that_is_no_whole_number_is_passed_over():
+    reply = '{"pick": [Infinity, NaN, true, 1e400, [1], {"n": 1}, 2.0, "1"]}'
+    assert parse_pick(reply, entries()) == [LOCKS, ACCORD]
+    assert parse_pick('{"pick": null}', entries()) == []
+    assert parse_pick('{"other": 1}', entries()) == []
+
+
+@pytest.mark.parametrize(
+    "elapsed",
+    [
+        '{"amount": Infinity}',
+        '{"amount": NaN}',
+        '{"amount": "1e999"}',
+        '{"amount": 1e308, "unit": "days"}',
+        '{"amount": true, "unit": "days"}',
+        '{"amount": 1' + "0" * 400 + ', "unit": "weeks"}',
+    ],
+    ids=["infinity", "nan", "a string past any float", "past any float in minutes", "true", "huge"],
+)
+@pytest.mark.parametrize("day", ["true", "1" + "0" * 400, "2.5"])
+def test_an_elapsed_time_that_is_no_amount_is_no_time(elapsed: str, day: str):
+    """Infinity was an OverflowError out of the read (a float JSON allows),
+    and so out of the job after the passage."""
+    delta = parse_read('{"elapsed": ' + elapsed + ', "day": ' + day + "}")
+    assert delta.elapsed == 0 and delta.day is None
+
+
+def test_an_elapsed_time_is_still_read_in_its_unit():
+    assert parse_read('{"elapsed": {"amount": "2.5", "unit": "hours"}, "day": "4"}').elapsed == 150
+    assert parse_read('{"elapsed": {"amount": 3, "unit": "weeks"}, "day": 4}').day == 4
+
+
+@pytest.mark.parametrize("accounts", ["3", "true", "NaN", '"the raid"', '{"event": "the_raid"}'])
+def test_accounts_that_are_no_list_are_no_accounts(accounts: str):
+    assert parse_gap('{"accounts": ' + accounts + "}", ["the_raid"]) == {}
+
+
+def notices(events) -> list[str]:
+    return [event.text for event in events if isinstance(event, SessionNotice)]
+
+
+def errors_logged(session: StorySession) -> list[dict]:
+    log = read_api_log(session.story.id, root=session.root)
+    return [entry for entry in log if entry["kind"] == "side_call_error"]
+
+
+@pytest.fixture
+def picker(tmp_path, story, cast) -> StorySession:
+    """A story whose lorebook is chosen from by the lore model."""
+    story.defaults.main_model = "anthropic/claude-sonnet-4.5"
+    bundle = StoryBundle(story=story, cast=cast)
+    save_story_bundle(bundle, root=tmp_path)
+    return StorySession(
+        bundle,
+        make_config(),
+        MockChatProvider(["The door gives with a groan."]),
+        root=tmp_path,
+        estimator=TokenEstimator(counter=fallback_counter),
+        learn_corrections=False,
+    )
+
+
+def test_a_pick_that_is_a_number_is_a_notice_and_the_next_turn_uses_similarity(picker):
+    large(picker, "picker")
+    picker.provider = MockChatProvider(["They talk of the treaty.", '{"pick": 2}', "Later."])
+    events = list(picker.send(turn("I ask about the accord.")))
+    assert any("Lore pick failed" in text for text in notices(events))
+    assert picker.path()[-1].meta.lore_picks is None
+    list(picker.send(turn("Mind the lock.")))
+    assert "no picks" in (picker.last_retrieval.selector_note or "")
+    # The parser's own refusal is no fault of the program's to put on record.
+    assert errors_logged(picker) == []
+
+
+def boom(*args, **kwargs):
+    raise TypeError("'int' object is not iterable")
+
+
+def test_a_fault_reading_the_pick_costs_no_turn_and_is_put_on_record(picker, monkeypatch):
+    """The boundary, whatever the parser lets through: the passage is
+    written and paid for, so the job goes on; and since the fault is the
+    program's, it is in the API log to be found, not only in a notice."""
+    large(picker, "picker")
+    picker.provider = MockChatProvider(["They talk of the treaty.", '{"pick": [1]}'])
+    monkeypatch.setattr(session_module, "parse_pick", boom)
+    events = list(picker.send(turn("I ask about the accord.")))
+    assert any("Lore pick failed" in t and "TypeError" in t for t in notices(events))
+    assert picker.path()[-1].content == "They talk of the treaty."
+    (logged,) = errors_logged(picker)
+    assert logged["what"] == "lore pick" and logged["error"].startswith("TypeError: ")
+    assert "boom" in logged["traceback"]
+
+
+def test_a_fault_reading_the_clock_costs_no_turn_and_is_put_on_record(tmp_path, monkeypatch):
+    session = plot_session(tmp_path, [PASSAGE, read(10)])
+    monkeypatch.setattr(session_plot, "parse_chronicle", boom)
+    events = list(session.send(plot_turn(session)))
+    assert any("Couldn't read the clock" in t and "TypeError" in t for t in notices(events))
+    assert session.path()[-1].content == PASSAGE
+    (logged,) = errors_logged(session)
+    assert logged["what"] == "clock and facts read"
+
+
+def test_a_clock_read_of_no_amount_is_read_as_no_time(tmp_path):
+    session = plot_session(tmp_path, [PASSAGE, '{"elapsed": {"amount": Infinity}}'])
+    before = session.chronicle.minutes
+    events = list(session.send(plot_turn(session)))
+    assert not any("Couldn't read the clock" in text for text in notices(events))
+    assert session.chronicle.minutes == before
+
+
+@pytest.mark.parametrize("fault", ["reply", "program"])
+def test_accounts_of_a_skip_that_cant_be_read_still_settle_the_event(
+    tmp_path, monkeypatch, fault: str
+):
+    """A scalar under "accounts" was a TypeError before the passage: the
+    turn was attached and never answered."""
+    session = gap_session(tmp_path, '{"accounts": 3}')
+    if fault == "program":
+        monkeypatch.setattr(session_plot, "parse_gap", boom)
+    events = list(session.send(gap_turn(session, "I sweep the floor.")))
+    status = session.chronicle.events["the_raid"]
+    assert status.state == "happened"
+    assert status.account.startswith("Raiders come; Mara the trader limps in")
+    assert session.path()[-1].kind == "assistant"
+    if fault == "program":
+        assert any("Couldn't ask how the skipped-over events went" in t for t in notices(events))
+        (logged,) = errors_logged(session)
+        assert logged["what"] == "skipped-over events"
+    else:
+        assert errors_logged(session) == []

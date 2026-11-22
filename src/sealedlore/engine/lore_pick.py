@@ -95,13 +95,25 @@ def build_pick_messages(
 
 
 def parse_pick(text: str, candidates: Sequence[LoreEntry]) -> list[str]:
-    """The picked entries' ids, in the order given; numbers off the list are ignored."""
+    """The picked entries' ids, in the order given; numbers off the list are ignored.
+
+    Raises ValueError when there is no JSON to read, or its picks are no
+    list: a bare number raised TypeError out of the job after its passage,
+    and a string was read a character at a time ("12" picked two entries).
+    """
     data = extract_json(text, dict, "list of picks")
+    numbers = data.get("pick")
+    if numbers is None:
+        return []
+    if not isinstance(numbers, list):
+        raise ValueError("the reply's picks weren't a list of numbers")
     picked: list[str] = []
-    for number in data.get("pick") or []:
+    for number in numbers:
+        if isinstance(number, bool):
+            continue  # int(True) is 1: the first entry, picked by nobody
         try:
             index = int(number) - 1
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):  # Infinity is JSON to Python
             continue
         if 0 <= index < len(candidates) and candidates[index].id not in picked:
             picked.append(candidates[index].id)

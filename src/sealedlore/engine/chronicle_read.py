@@ -739,6 +739,20 @@ def _norm(value: object) -> str:
     return _clean(value).lower()
 
 
+# The longest a read's elapsed time may be, in minutes: some two million
+# years, past any story's skip and far short of what arithmetic balks at.
+_MOST_MINUTES = 10**12
+
+
+def _is_day(day: object) -> bool:
+    """A day number a story's clock can hold (true is 1 to `isinstance`)."""
+    return (
+        isinstance(day, int)
+        and not isinstance(day, bool)
+        and 0 < day <= _MOST_MINUTES // MINUTES_PER_DAY
+    )
+
+
 def _elapsed(data: object) -> tuple[int, str]:
     if not isinstance(data, dict):
         return 0, ""
@@ -748,10 +762,19 @@ def _elapsed(data: object) -> tuple[int, str]:
             amount = float(amount)
         except ValueError:
             amount = None
-    if not isinstance(amount, (int, float)) or amount < 0:
-        return 0, _clean(data.get("quote"))
     unit = _norm(data.get("unit")).rstrip("s") or "minute"
     per = _UNITS.get(_UNIT_ALIASES.get(unit, unit), 1)
+    # An amount that is no span of a story's time is no amount: Python reads
+    # JSON's Infinity and NaN, and `round` of either raised out of the read
+    # (and the job, after its passage); true is 1 to `isinstance`; and a
+    # number of hundreds of digits is a clock nothing can print.
+    if (
+        isinstance(amount, bool)
+        or not isinstance(amount, (int, float))
+        or not 0 <= amount <= _MOST_MINUTES
+        or amount * per > _MOST_MINUTES
+    ):
+        return 0, _clean(data.get("quote"))
     return round(amount * per), _clean(data.get("quote"))
 
 
@@ -798,7 +821,7 @@ def parse_read(text: str) -> ChronicleDelta:
     if isinstance(day, str) and day.strip().isdigit():
         day = int(day)
     return ChronicleDelta(
-        day=day if isinstance(day, int) and day > 0 else None,
+        day=day if _is_day(day) else None,
         place=place,
         place_quote=place_quote,
         happened=happened,

@@ -11,6 +11,7 @@ import json
 import random
 import threading
 import time
+import traceback
 import weakref
 from collections.abc import Callable, Generator, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -817,6 +818,29 @@ class StorySession(
             return SessionNotice(text)
         return self._kept_notice(text, node=node, turn=turn, severity="failure")
 
+    def _side_failure(self, what: str, exc: BaseException) -> str:
+        """What stopped a side call, in words for its notice.
+
+        A failure of the call or of its reply (`ProviderError`, `ValueError`)
+        is said as it is. Anything else is a fault of the program's own, most
+        likely a reply in a shape its parser never met: caught with the rest
+        all the same, since no side call may cost the turn its passage, and
+        put in the API log (`side_call_error`, with where it was raised) so
+        that it is there to be found, not only read past in a notice.
+        """
+        if isinstance(exc, (ProviderError, ValueError)):
+            return str(exc)
+        words = f"{type(exc).__name__}: {exc}"
+        self._log(
+            "side_call_error",
+            {
+                "what": what,
+                "error": words,
+                "traceback": "".join(traceback.format_exception(exc, limit=-8, chain=False)),
+            },
+        )
+        return words
+
     # --- what the plot has brought into the story -------------------------------
 
     def character_by_name(self, name: str) -> Character | None:
@@ -1463,9 +1487,10 @@ class StorySession(
             if pick.error is not None:
                 raise pick.error
             picks = parse_pick(pick.reply[0], pick.candidates) if pick.reply else []
-        except (ProviderError, ValueError) as exc:
+        except Exception as exc:  # noqa: BLE001 - the passage is written: never the job
+            why = self._side_failure("lore pick", exc)
             yield self._failed_notice(
-                f"Lore pick failed on {pick.model} ({exc}); the next turn uses similarity. "
+                f"Lore pick failed on {pick.model} ({why}); the next turn uses similarity. "
                 "The lore model is set under Settings → Lore.",
                 exc,
                 node=pick.node,

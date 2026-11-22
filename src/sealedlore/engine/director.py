@@ -458,7 +458,10 @@ def parse_gap(text: str, ids: Sequence[str]) -> dict[str, str]:
     have happened yet. Events the reply leaves out are missing."""
     data = extract_json(text, dict, "accounts")
     accounts: dict[str, str] = {}
-    for item in data.get("accounts") or []:
+    items = data.get("accounts")
+    # Anything but a list is no accounts: a number here was a TypeError out
+    # of the turn, before its passage.
+    for item in items if isinstance(items, list) else []:
         if not isinstance(item, dict):
             continue
         event_id = _clean(item.get("event"))

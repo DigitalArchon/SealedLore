@@ -682,7 +682,8 @@ class PlotRuntime:
             )
             self.unreported_usage.append(self.priced(completed.usage, self.scene_model))
             delta = parse_chronicle(text)
-        except (ProviderError, ValueError) as exc:
+        except Exception as exc:  # noqa: BLE001 - the passage is written: never the job
+            why = self._side_failure("clock and facts read", exc)
             begun = self._confirm_by_introductions(node, before, plot)
             also = (
                 " " + ", ".join(event.title for event in begun) + " taken as begun: the passage "
@@ -691,7 +692,7 @@ class PlotRuntime:
                 else ""
             )
             yield self._failed_notice(
-                f"Couldn't read the clock and facts from this passage ({exc}). "
+                f"Couldn't read the clock and facts from this passage ({why}). "
                 "They are as they were; set them on the Plot page if they moved." + also,
                 exc,
                 node=node,
@@ -1221,8 +1222,8 @@ class PlotRuntime:
         failure = ""
         try:
             accounts = self._ask_gap(question, [*history, user_node], [e.id for e, _, _ in dated])
-        except (ProviderError, ValueError) as exc:
-            failure = str(exc)
+        except Exception as exc:  # noqa: BLE001 - the plot's own words stand in: never the turn
+            failure = self._side_failure("skipped-over events", exc)
         directions: list[Direction] = []
         for event, variant, at in dated:
             if accounts.get(event.id) == NOT_YET:
