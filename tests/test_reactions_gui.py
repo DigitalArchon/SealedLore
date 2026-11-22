@@ -512,6 +512,59 @@ def test_the_hidden_answers_have_a_show_button(app, tmp_path: Path, story, cast)
     window.close()
 
 
+def test_shown_answers_have_a_hide_button(app, tmp_path: Path, story, cast) -> None:
+    """Shown on request, they could be put away again only from the View menu (the
+    author, Nov 22 2026): Hide stands over them, and unticks the menu's choice."""
+    from PySide6.QtWidgets import QToolButton
+
+    from sealedlore.gui.transcript import ANSWERS_HIDDEN, ANSWERS_HIDE, ANSWERS_SHOW
+
+    window = own_window(tmp_path, story, cast, ["The door gives.", "{}", "MAELA-PICKS-THE-LOCK"])
+    _send(window, "I put my shoulder to the door.")
+    wait_for(app, lambda: not window._busy)
+    passage = window.session.path()[-1]
+
+    def buttons() -> list[str]:
+        box = window.transcript.message_widget(passage.id).answers_box
+        return [b.text() for b in box.findChildren(QToolButton)]
+
+    assert ANSWERS_HIDE not in buttons()
+    window.answers_action.setChecked(True)
+    assert "MAELA-PICKS-THE-LOCK" in answer_texts(window, passage.id)
+    box = window.transcript.message_widget(passage.id).answers_box
+    hide = next(b for b in box.findChildren(QToolButton) if b.text() == ANSWERS_HIDE)
+    hide.click()
+    assert not window.answers_action.isChecked()
+    shown = " ".join(answer_texts(window, passage.id))
+    assert "MAELA-PICKS-THE-LOCK" not in shown
+    assert ANSWERS_HIDDEN.format(names="Maela Orr") in shown
+    assert ANSWERS_SHOW in buttons() and ANSWERS_HIDE not in buttons()
+    window.close()
+
+
+def test_an_answered_rounds_answers_have_no_hide_button(app, tmp_path: Path, story, cast):
+    """Once the author has sent, the answers are no secret: nothing to hide."""
+    from PySide6.QtWidgets import QToolButton
+
+    from sealedlore.gui.transcript import ANSWERS_HIDE
+
+    window = own_window(
+        tmp_path,
+        story,
+        cast,
+        ["The door gives.", "{}", "MAELA-PICKS-THE-LOCK", "The lock turns.", "{}", "Hm."],
+    )
+    window.answers_action.setChecked(True)
+    _send(window, "I put my shoulder to the door.")
+    wait_for(app, lambda: not window._busy)
+    first = window.session.path()[-1]
+    _send(window, "I hold the lamp for her.")
+    wait_for(app, lambda: not window._busy)
+    box = window.transcript.message_widget(first.id).answers_box
+    assert ANSWERS_HIDE not in [b.text() for b in box.findChildren(QToolButton)]
+    window.close()
+
+
 def test_the_people_page_says_who_their_own_model_plays(app) -> None:
     from sealedlore.gui.character_roles import OWN_TAG
     from sealedlore.gui.people_page import _person

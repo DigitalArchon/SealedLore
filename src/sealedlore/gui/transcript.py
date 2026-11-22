@@ -299,7 +299,15 @@ ANSWERS_HIDDEN = (
 ANSWERS_SHOW = "Show"
 ANSWERS_SHOW_TIP = (
     "See what they answered before you send your turn (the same as View → Show the "
-    "characters' answers, which hides them again)"
+    "characters' answers; Hide puts them away again)"
+)
+# Over the open round's answers once shown: put away where they were shown,
+# not only from the View menu (the author, Nov 22 2026).
+ANSWERS_SHOWN = "Shown before you send your turn, as you asked."
+ANSWERS_HIDE = "Hide"
+ANSWERS_HIDE_TIP = (
+    "Hide what they answered until you send your turn (the same as unticking View → Show "
+    "the characters' answers)"
 )
 
 
@@ -335,6 +343,7 @@ class MessageWidget(QFrame):
     # The hidden answers' Show: the window turns View → Show the characters'
     # answers on.
     answers_show_requested = Signal()
+    answers_hide_requested = Signal()
 
     def __init__(
         self,
@@ -528,15 +537,22 @@ class MessageWidget(QFrame):
             self.layout_.insertWidget(index, note)
 
     def add_answers(
-        self, answers: Sequence[Reaction], *, hidden: bool, after: bool = False
+        self,
+        answers: Sequence[Reaction],
+        *,
+        hidden: bool,
+        after: bool = False,
+        hideable: bool = False,
     ) -> None:
         """What each character played by their own model answered this
         passage with (the trial, engine/reactions.py): their intention, which
         the storyteller works in with the author's next turn. `hidden` while
         the round is still open and the author hasn't asked to see them (the
         author: answers that come in early are invisible to the others,
-        unless shown as a spoiler). `after`: under the author's turn, which
-        they answered having seen it (`StoryDefaults.round_order` "after")."""
+        unless shown as a spoiler). `hideable`: the open round's, shown on
+        request, with a Hide beside them. `after`: under the author's turn,
+        which they answered having seen it (`StoryDefaults.round_order`
+        "after")."""
         if not answers:
             return
         box = QFrame(self)
@@ -562,6 +578,21 @@ class MessageWidget(QFrame):
             row.addWidget(show, 0, Qt.AlignTop)
             lines.addLayout(row)
         else:
+            if hideable:
+                head = TextBody(ANSWERS_SHOWN)
+                head.setTextFormat(Qt.PlainText)
+                head.setObjectName("answersHidden")
+                head.setWordWrap(True)
+                row = QHBoxLayout()
+                row.setSpacing(8)
+                row.addWidget(head, 1)
+                hide = QToolButton()
+                hide.setText(ANSWERS_HIDE)
+                hide.setObjectName("messageAction")
+                hide.setToolTip(ANSWERS_HIDE_TIP)
+                hide.clicked.connect(self.answers_hide_requested)
+                row.addWidget(hide, 0, Qt.AlignTop)
+                lines.addLayout(row)
             for answer in answers:
                 row = QHBoxLayout()
                 row.setSpacing(8)
@@ -1705,6 +1736,7 @@ class TranscriptView(QScrollArea):
     # The hidden answers' Show: the window turns View → Show the characters'
     # answers on.
     answers_show_requested = Signal()
+    answers_hide_requested = Signal()
     regenerate_note_requested = Signal(str)
     revise_requested = Signal(str)
     continue_requested = Signal(str)
@@ -1954,6 +1986,7 @@ class TranscriptView(QScrollArea):
         widget.keep_full_requested.connect(self.keep_full_requested)
         widget.answer_edit_requested.connect(self.answer_edit_requested)
         widget.answers_show_requested.connect(self.answers_show_requested)
+        widget.answers_hide_requested.connect(self.answers_hide_requested)
         widget.review_mark_requested.connect(self.review_mark_requested)
         widget.reroll_requested.connect(self.reroll_requested)
         widget.rewrite_committed.connect(self.rewrite_committed)
@@ -2319,7 +2352,11 @@ class TranscriptView(QScrollArea):
         if self._answers_here and node.kind == "assistant" and node.meta.reactions:
             # Nothing after the passage yet: the round is open, and its
             # answers are the others' secret until the author sends.
-            widget.add_answers(node.meta.reactions, hidden=reply is None and not self.answers_shown)
+            widget.add_answers(
+                node.meta.reactions,
+                hidden=reply is None and not self.answers_shown,
+                hideable=reply is None and self.answers_shown,
+            )
         elif self._answers_here and node.kind == "user" and node.meta.reactions:
             # The story has them answer after the author's turn: given having
             # seen it, so nothing to keep from the author, who sent it.

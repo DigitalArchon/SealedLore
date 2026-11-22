@@ -518,6 +518,9 @@ class MainWindow(
         self.transcript.regenerate_requested.connect(self._regenerate_node)
         self.transcript.answer_edit_requested.connect(self._edit_answer)
         self.transcript.answers_show_requested.connect(lambda: self.answers_action.setChecked(True))
+        self.transcript.answers_hide_requested.connect(
+            lambda: self.answers_action.setChecked(False)
+        )
         self.transcript.regenerate_note_requested.connect(self._regenerate_with_note)
         self.transcript.revise_requested.connect(self._change_passage)
         self.transcript.continue_requested.connect(self._continue_node)
