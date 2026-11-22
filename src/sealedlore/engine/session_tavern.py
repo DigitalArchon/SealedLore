@@ -24,7 +24,8 @@ Each author turn records what fired and the chat's length then
 (`NodeMeta.tavern_fired`, `tavern_length`), fired or not, and the timed
 effects are replayed along the path from those records: every branch, take
 and turn taken back has its own. Regenerate fires afresh (a SillyTavern
-swipe scans again, and rolls again)."""
+swipe scans again, and rolls again); Continue scans again too, and what it
+fires is added to the turn's record."""
 
 from __future__ import annotations
 
@@ -197,13 +198,21 @@ class TavernRuntime:
         if pending is not None and came:
             self.record_tavern(*pending)
 
-    def record_tavern(self, turn, report: RetrievalReport) -> None:  # noqa: ANN001
-        """What fired for a turn sent, on its author's node."""
+    def record_tavern(self, turn, report: RetrievalReport, added: bool = False) -> None:  # noqa: ANN001
+        """What fired for a turn sent, on its author's node. `added`: for
+        more of its passage (Continue), which keeps what fired for the
+        passage so far, at the turn's own length: replaced by Continue's own
+        scan, an entry that fired for the passage lost its sticky, and one
+        cooling down fired again the next turn."""
         if report.selector != "sillytavern" or report.tavern_record is None:
             return
         node = next((n for n in self.nodes if n.id == turn.turn_node_id), None)
         if node is None:
             return
         length, fired = report.tavern_record
+        if added and node.meta.tavern_length is not None:
+            before = node.meta.tavern_fired or []
+            node.meta.tavern_fired = [*before, *(i for i in fired if i not in before)]
+            return
         node.meta.tavern_length = length
         node.meta.tavern_fired = list(fired)

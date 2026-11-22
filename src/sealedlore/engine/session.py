@@ -1698,8 +1698,9 @@ class StorySession(
         if tuple(trigger) == NEW_TURN:
             self.record_tavern(turn, report)
         else:
-            # Another take, or more of one: recorded once it has text.
-            self._tavern_pending = (turn, report)
+            # Another take, or more of one: recorded once it has text. More
+            # of one is added to what fired for the passage so far.
+            self._tavern_pending = (turn, report, tuple(trigger) == CONTINUE)
         self.last_retrieval = report
         return report.entries
 

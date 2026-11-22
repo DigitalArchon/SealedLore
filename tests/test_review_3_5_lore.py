@@ -23,7 +23,7 @@ from sealedlore.engine.tavern_firing import (
     fire_entry,
 )
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
-from sealedlore.models.lore import LoreEntry, lore_fingerprint
+from sealedlore.models.lore import LoreEntry, TavernEntry, lore_fingerprint
 from sealedlore.models.plot import Direction
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.storage.repository import StoryBundle
@@ -458,3 +458,74 @@ def test_a_condensed_version_stays_current_when_its_owner_leaves(tmp_path, story
     kept = session.bundle.lore[0]
     assert kept is entry  # the page's own object, changed where it is
     assert kept.condensed_now() == "Maela Orr: the clinic."
+
+
+# --- L6: Continue and a turn's SillyTavern firing ----------------------------------
+
+
+def _tavern_entry(title: str, keys: list[str], **more) -> LoreEntry:
+    fields = {
+        "key": keys,
+        "keysecondary": [],
+        "comment": title,
+        "constant": False,
+        "selective": True,
+        "order": 100,
+        "disable": False,
+        **more,
+    }
+    return LoreEntry(
+        title=title,
+        content=f"{title} lore text.",
+        keywords=list(keys),
+        tavern=TavernEntry(numbered=True, fields=fields),
+    )
+
+
+def _tavern_session(tmp_path: Path, story, cast) -> StorySession:
+    story.held_character_id = SERRIK
+    story.defaults.lore_firing = "sillytavern"
+    lore = [
+        # For new turns only: a Continue scans again and it doesn't fire.
+        _tavern_entry("Wolves", ["wolf"], sticky=6, triggers=["normal"]),
+        _tavern_entry("Cooling", ["barn"], cooldown=6, triggers=["normal"]),
+        _tavern_entry("Lantern", ["door"], sticky=6, triggers=["continue"]),
+    ]
+    return session_with(tmp_path, story, cast, lore)
+
+
+def fired(session: StorySession) -> list[str]:
+    return [injection.entry.title for injection in session.last_retrieval.injected]
+
+
+def test_continue_keeps_what_fired_for_the_turn(tmp_path, story, cast):
+    """Continue fired again and its firing replaced the turn's record: an
+    entry that fired for the passage lost its sticky, and one on cooldown
+    fired again on the next turn."""
+    session = _tavern_session(tmp_path, story, cast)
+    list(session.send(turn("A wolf howls by the barn door.")))
+    author = session.path()[-2]
+    assert sorted(author.meta.tavern_fired) == sorted(e.id for e in session.bundle.lore[:2])
+    length = author.meta.tavern_length
+    list(session.continue_passage())
+    assert fired(session) == ["Lantern"]  # what Continue's own scan fired
+    # The turn's record: all three, at the turn's own length.
+    assert sorted(author.meta.tavern_fired) == sorted(e.id for e in session.bundle.lore)
+    assert author.meta.tavern_length == length
+
+    list(session.send(turn("I shut it.")))
+    assert "Wolves" in fired(session)  # still sticky
+    list(session.send(turn("I look at the barn again.")))
+    assert "Cooling" not in fired(session)  # still cooling down
+    assert "Wolves" in fired(session)
+
+
+def test_a_continue_that_brings_nothing_leaves_the_record(tmp_path, story, cast):
+    session = _tavern_session(tmp_path, story, cast)
+    list(session.send(turn("A wolf howls by the barn door.")))
+    author = session.path()[-2]
+    before = list(author.meta.tavern_fired)
+    session.provider.error = RuntimeError("the endpoint is down")
+    with pytest.raises(RuntimeError):
+        list(session.continue_passage())
+    assert author.meta.tavern_fired == before
