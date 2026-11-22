@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import httpx
 import pytest
 
 from sealedlore.engine.card_condense import fingerprint
@@ -13,10 +14,13 @@ from sealedlore.engine.session import SessionNotice, StorySession
 from sealedlore.engine.session_reactions import ROUND_SKIPPED
 from sealedlore.models.node import DIRECTOR_SPEAKER_ID, NARRATOR_SPEAKER_ID
 from sealedlore.providers.base import StreamCancelled
+from sealedlore.providers.images import ImageClient, build_image_payload
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.storage.repository import load_story_bundle, read_api_log
 from tests.test_cast_condense import by_id
 from tests.test_cast_condense import make_session as cast_session
+from tests.test_local_images import CHECKPOINTS, Comfy
+from tests.test_local_images import client as image_client
 from tests.test_reactions import (
     MAELA_MODEL,
     a_cast,
@@ -299,3 +303,38 @@ def test_a_user_whose_card_is_there_stays_whoever_is_played(tmp_path: Path, stor
     session = session_with(tmp_path, story, cast, _debt())
     list(session.send(lore_turn("I open the door.")))
     assert session.story.setup.placeholders.user_id == MAELA
+
+
+# --- a leftover: Stop on a ComfyUI whose queue answers in no shape we know ------
+
+
+@pytest.mark.parametrize(
+    "queue",
+    [
+        {"queue_running": 5, "queue_pending": 7},
+        {"queue_running": {"p1": True}, "queue_pending": "none"},
+        {"queue_running": [5, None, "p1", [0]], "queue_pending": None},
+    ],
+)
+def test_stop_never_raises_over_a_queue_that_is_no_list(monkeypatch, queue: dict) -> None:
+    """Stop is quick and never raises (the picture is given up either way):
+    a `queue_running` that wasn't a list came out of it as a TypeError, in
+    place of the stop."""
+    monkeypatch.setattr("sealedlore.providers.local_images.POLL_SECONDS", 0.001)
+    comfy = Comfy(finish_after=10**6)
+    image: ImageClient
+    base = comfy.__call__
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.url.path.startswith("/history/") and comfy.history_asks >= 2:
+            image.cancel()
+        if req.url.path == "/queue" and req.method == "GET":
+            return httpx.Response(200, json=queue)
+        return base(req)
+
+    image = image_client("comfyui", handler)
+    with pytest.raises(StreamCancelled):
+        image.generate(build_image_payload(CHECKPOINTS[0], "p", "1k", 1, [], api="comfyui"))
+    # Ours left the queue all the same; nothing we can't see is ours to interrupt.
+    assert any(r.url.path == "/queue" and r.method == "POST" for r in comfy.seen)
+    assert not any(r.url.path == "/interrupt" for r in comfy.seen)

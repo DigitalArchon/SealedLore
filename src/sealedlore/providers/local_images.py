@@ -829,11 +829,15 @@ class LocalDrawing:
             )
             queue = client.get(f"{self.root}/queue", headers=self._headers, timeout=quick)
             running = reply_json(queue).get("queue_running") if queue.status_code < 400 else []
+            if not isinstance(running, list):
+                # A queue in no shape we know (a number came out of here as a
+                # TypeError, in place of the stop): nothing seen running is
+                # ours to interrupt.
+                running = []
             # ComfyUI's /interrupt stops whatever is running, someone else's
             # too on a shared server: only while it is ours.
             if any(
-                isinstance(item, list) and len(item) > 1 and item[1] in pending
-                for item in running or ()
+                isinstance(item, list) and len(item) > 1 and item[1] in pending for item in running
             ):
                 client.post(
                     f"{self.root}/interrupt",
@@ -841,7 +845,7 @@ class LocalDrawing:
                     headers=headers,
                     timeout=quick,
                 )
-        except (httpx.HTTPError, ProviderError, ValueError, AttributeError, OSError):
+        except (httpx.HTTPError, ProviderError, ValueError, AttributeError, TypeError, OSError):
             pass
 
 
