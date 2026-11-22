@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QEvent, QSize, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, QSize, Qt, Signal
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -433,6 +433,8 @@ class CastPanel(QWidget):
         # The Condensed row follows the tick at once, not at the next refresh.
         self.keep_whole.toggled.connect(lambda _on: self._show_condensed())
         self.condensed.textChanged.connect(self._condensed_edited)
+        # A text that landed while the author was in the box shows once they leave it.
+        self.condensed.installEventFilter(self)
 
         # The portrait at the left of the card, tall, with the other pictures
         # under it; the card's text on the right (the author, Oct 15 2026:
@@ -1009,6 +1011,28 @@ class CastPanel(QWidget):
         self._current.condensed_from = fingerprint(self._current) if text else None
         self.changed.emit()
 
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802 - Qt naming
+        if watched is self.condensed and event.type() == QEvent.FocusOut:
+            self._land_condensed()
+        return super().eventFilter(watched, event)
+
+    def _land_condensed(self) -> None:
+        """A condensed text written for the card showing (its button, or the
+        background job) goes into the box. Left showing what it had, the box
+        was the card's text again at the next key typed there: one keystroke
+        replaced the written text, unseen. Never under the author's hands:
+        while they are in the box it stays as they have it, and what they
+        type is what is kept, as ever."""
+        character = self._current
+        if character is None or self._loading or self.condensed.hasFocus():
+            return
+        text = character.condensed or ""
+        if self.condensed.toPlainText().strip() == text.strip():
+            return
+        self._loading = True
+        self.condensed.setPlainText(text)
+        self._loading = False
+
     def set_room(self, room: CastRoom | None) -> None:
         """How the cast fits its room in the prompt (None: not said, as in a
         chat): the banner, and the shown card's condensed text."""
@@ -1021,6 +1045,7 @@ class CastPanel(QWidget):
         self._show_condensed()
 
     def _show_condensed(self) -> None:
+        self._land_condensed()
         character = self._current
         cast_card = character is not None and not self._is_supporting(character)
         if character is None:

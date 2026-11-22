@@ -3,6 +3,7 @@ tests/test_review_3_5_play.py has the engine's). Offscreen, mock clients only.""
 
 from __future__ import annotations
 
+import gc
 import json
 import os
 from pathlib import Path
@@ -13,11 +14,16 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
+from PySide6.QtGui import QTextCursor  # noqa: E402
+from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
 from sealedlore.gui import lorebooks_page  # noqa: E402
+from sealedlore.gui.main_window import MainWindow  # noqa: E402
+from sealedlore.models.character import Character  # noqa: E402
 from sealedlore.providers.mock import MockChatProvider  # noqa: E402
 from sealedlore.storage.lorebooks import load_lorebooks  # noqa: E402
+from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa: E402
 from tests.test_background_queue import _window  # noqa: E402
 
 
@@ -69,4 +75,85 @@ def test_a_kept_lorebook_is_condensed_on_its_own_client_never_the_storys(
     assert len(own.requests) == 1 and not theirs.requests
     (saved,) = load_lorebooks(tmp_path / "data").books
     assert list(saved.condensed.values()) == ["A valley."]
+    window.close()
+
+
+# --- W2: a condensed text that lands is shown on the card it is for ----------------
+
+JANE = "Jane keeps the farmhouse stove going through the long winter. " * 90
+
+
+def _card_window(tmp_path: Path, story, replies: list[str]) -> MainWindow:
+    cast = [
+        Character(id="char-john", name="John Jacobs", summary="A survivor who walks alone."),
+        Character(
+            id="char-jane", name="Jane Jacobs", summary="John's wife.", full_description=JANE
+        ),
+    ]
+    story.held_character_id = "char-john"
+    story.scene.present_character_ids = ["char-john", "char-jane"]
+    save_story_bundle(StoryBundle(story=story, cast=cast), root=tmp_path)
+    window = MainWindow(root=tmp_path, use_mock=True)
+    window.config.scene_reads = "manual"
+    window.config.cast_limit = "tokens"
+    window.config.cast_token_cap = 100_000
+    window._provider = MockChatProvider(replies)
+    window.open_story(story.id)
+    window.show_cast_page()
+    window._condense_soon.stop()
+    window.cast_panel.select_character("char-jane")
+    return window
+
+
+def test_a_condensed_text_written_for_the_card_showing_is_shown_there(
+    app, tmp_path: Path, story
+) -> None:
+    """The box kept what it had (nothing), and the next key typed in it was
+    saved as the card's whole condensed text over the one just written."""
+    window = _card_window(tmp_path, story, ["Jane: John's steady, practical wife."])
+    panel = window.cast_panel
+    jane = panel.current
+    assert panel.condensed.toPlainText() == ""
+    panel.condense_button.click()
+    window._poll_condensing()
+    assert jane.condensed == "Jane: John's steady, practical wife."
+    assert panel.condensed.toPlainText() == "Jane: John's steady, practical wife."
+    # A change to it is a change to the text shown, not a new text of one key.
+    panel.condensed.moveCursor(QTextCursor.End)
+    panel.condensed.insertPlainText(" Loyal.")
+    assert jane.condensed == "Jane: John's steady, practical wife. Loyal."
+    window.close()
+
+
+def test_a_condensed_text_never_lands_under_the_authors_hands(app, tmp_path: Path, story) -> None:
+    """In the box when it lands, the author keeps the box as they have it:
+    what they type next is what is kept, and the written text shows once they
+    leave the box without typing."""
+    window = _card_window(tmp_path, story, ["The model's card.", "The model's second card."])
+    # Earlier tests' windows go first: one collected while this is activated
+    # took PySide down (tests/test_retake_keys.py).
+    app.processEvents()
+    gc.collect()
+    app.processEvents()
+    window.show()
+    window.activateWindow()
+    QTest.qWaitForWindowActive(window, 2000)
+    panel = window.cast_panel
+    jane = panel.current
+    panel.condense_button.click()
+    panel.condensed.setFocus()
+    assert panel.condensed.hasFocus()
+    window._poll_condensing()
+    assert jane.condensed == "The model's card."
+    assert panel.condensed.toPlainText() == ""  # not under their cursor
+    panel.name.setFocus()
+    assert panel.condensed.toPlainText() == "The model's card."  # they left: shown
+    # And typing while one is written: theirs stands (the engine drops the job's).
+    panel.condense_button.click()
+    panel.condensed.setFocus()
+    panel.condensed.setPlainText("My own words for Jane.")
+    window._poll_condensing()
+    panel.name.setFocus()
+    assert jane.condensed == "My own words for Jane."
+    assert panel.condensed.toPlainText() == "My own words for Jane."
     window.close()
