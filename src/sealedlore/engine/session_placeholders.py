@@ -20,11 +20,18 @@ class PlaceholdersRuntime:
         sent (`playing`: whom that turn is played as) and around a change of
         who is played, so it is whom {{user}} has meant until now, not
         whoever is played next ("Marcus owes Marcus", and the cached system
-        block rewritten at every switch)."""
+        block rewritten at every switch).
+
+        A {{user}} whose card has since been removed names nobody, and is
+        settled again the same way: left as it was, it read as whoever is
+        played (`names_for`) and followed every switch for good."""
         chosen = self.story.setup.placeholders
         held = self.story.held_character_id or playing
-        if chosen.user_id is not None or held is None or self.story.chat:
+        if held is None or self.story.chat:
+            return
+        cards = {character.id for character in (*self.cast, *self.supporting)}
+        if chosen.user_id is not None and chosen.user_id in cards:
             return
         # A held id no card answers to names nobody: left for one that does.
-        if any(character.id == held for character in (*self.cast, *self.supporting)):
+        if held in cards:
             chosen.user_id = held

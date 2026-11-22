@@ -26,6 +26,9 @@ from tests.test_reactions import (
     round_calls,
     turn,
 )
+from tests.test_review_3_5_lore import MAELA, SERRIK, _debt, session_with
+from tests.test_review_3_5_lore import sent as sent_text
+from tests.test_review_3_5_lore import turn as lore_turn
 
 # --- E5: the author's own condensed text outlasts a job begun before it -------
 
@@ -265,3 +268,34 @@ def test_a_stop_after_a_passage_still_ends_there_with_what_came_kept(tmp_path: P
     with pytest.raises(StreamCancelled):
         play(session, turn())
     assert session.path()[-1].content == "The door gives."
+
+
+# --- a leftover: {{user}} naming a card since removed is settled again --------
+
+
+def test_user_naming_a_card_no_longer_there_is_settled_again(tmp_path: Path, story, cast) -> None:
+    """The card the story's {{user}} named was removed: read as nobody, it
+    followed whoever was played from then on ("Maela Orr owes Maela Orr"),
+    and was never settled again, since something was still written there."""
+    story.held_character_id = SERRIK
+    story.setup.placeholders.user_id = "char-removed"
+    story.setup.placeholders.char_id = "char-also-removed"
+    session = session_with(tmp_path, story, cast, _debt())
+    list(session.send(lore_turn("I open the door.")))
+    assert session.story.setup.placeholders.user_id == SERRIK
+    assert "Maela Orr owes Serrik Vaun forty rounds." in sent_text(session)
+    session.hold(MAELA)
+    list(session.send(lore_turn("I count the rounds.", held=MAELA)))
+    assert session.story.setup.placeholders.user_id == SERRIK
+    assert "Maela Orr owes Serrik Vaun forty rounds." in sent_text(session)
+    # {{char}}'s own choice is not this fix's: left as it was.
+    assert session.story.setup.placeholders.char_id == "char-also-removed"
+
+
+def test_a_user_whose_card_is_there_stays_whoever_is_played(tmp_path: Path, story, cast) -> None:
+    """A guard: the author's choice of {{user}} stands while its card does."""
+    story.held_character_id = SERRIK
+    story.setup.placeholders.user_id = MAELA
+    session = session_with(tmp_path, story, cast, _debt())
+    list(session.send(lore_turn("I open the door.")))
+    assert session.story.setup.placeholders.user_id == MAELA
