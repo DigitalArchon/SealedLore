@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import ipaddress
 import os
+import shutil
 import socket
+import uuid
+from pathlib import Path
 
 import pytest
 
@@ -284,6 +287,32 @@ def _unanswered_boxes_fail(monkeypatch):
     for kind in ("question", "information", "warning", "critical"):
         monkeypatch.setattr(QMessageBox, kind, static(kind))
     monkeypatch.setattr(QMessageBox, "exec", exec_)
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _trash_of_its_own(monkeypatch, tmp_path_factory):
+    """Nothing a test deletes reaches the desktop's trash. QFile.moveToTrash puts a
+    test's folder in the real one wherever the test's temp folder shares the home
+    folder's file system: a story every run, 391 of them in one trash before this.
+    So it moves to a trash of the run's own, under pytest's temp folder."""
+    try:
+        from PySide6.QtCore import QFile
+    except ImportError:
+        yield
+        return
+    trash = tmp_path_factory.getbasetemp() / "trash"
+
+    def to_trash(path: str) -> tuple[bool, str]:
+        source = Path(path)
+        if not source.exists() and not source.is_symlink():
+            return (False, "")
+        trash.mkdir(exist_ok=True)
+        moved = trash / f"{uuid.uuid4().hex}-{source.name}"
+        shutil.move(str(source), moved)
+        return (True, str(moved))
+
+    monkeypatch.setattr(QFile, "moveToTrash", staticmethod(to_trash))
     yield
 
 
