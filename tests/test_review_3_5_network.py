@@ -1,7 +1,7 @@
 """What the review of 3.5.0b1 found in what endpoints and servers may answer
-(Nov 22 2026), one test a fault: each fails on 0f289da, but those marked as
-guards. Every server is a MockTransport or one on 127.0.0.1 started here;
-every key is made up."""
+(Nov 22 2026), one test a fault: each fails on 0f289da, but those that hold
+a rewritten reader to what it read before. Every server is a MockTransport
+made here, every address one that is never asked, every key made up."""
 
 from __future__ import annotations
 
