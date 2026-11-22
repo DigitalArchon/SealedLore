@@ -2289,11 +2289,8 @@ class TranscriptView(QScrollArea):
                 label += f"  ·  {chip_text(node.meta.roll)}"
         if unsent:
             label += "  ·  not sent: over the budget"
-        # A chat's private part is a part, as it says everywhere else
-        # (private_dialogs.chat_words); a story's is a scene.
-        part = "part" if self._chat else "scene"
         if node.meta.private_summary_of:
-            label = f"Private {part}  ·  summary"
+            label = "Private scene  ·  summary"
         elif node.meta.private_span or self._tee_look:
             if node.meta.private_span:
                 label += "  ·  private"
@@ -2326,7 +2323,7 @@ class TranscriptView(QScrollArea):
             )
         if node.meta.private_span:
             widget.setProperty("private", "true")
-            widget.setToolTip(f"Written in a private {part}: only the private model ever saw it.")
+            widget.setToolTip("Written in a private scene: only the private model ever saw it.")
         if tee in TEE_MARK_TIPS:
             widget.setToolTip(
                 tee_tip(tee, node.meta.tee_upstream, node.meta.tee_service, node.meta.tee_instance)
@@ -2334,7 +2331,7 @@ class TranscriptView(QScrollArea):
         if node.meta.private_summary_of:
             widget.setProperty("privatesummary", "true")
             widget.setToolTip(
-                f"The approved summary of a private {part}: all any other model knows of it."
+                "The approved summary of a private scene: all any other model knows of it."
             )
         if node.meta.retake_note:
             widget.add_take_note(f"{RETAKE_NOTE_SHOWN} — {node.meta.retake_note}")

@@ -3115,20 +3115,22 @@ _text(
 )
 
 
-# A chat's private part (engine/session_private.py): the same leak rule as a
-# story's private scene, with a conversation's wording. The part's summary is
-# all the chat's own model ever reads of it.
+# A chat's private scene (engine/session_private.py): the same leak rule as a
+# story's, with a conversation's wording. Its summary is all the chat's own
+# model ever reads of it. The titles call it a private scene, as the window
+# does (Nov 22 2026); the texts sent tell the model of a part of the
+# conversation held in private, which is what it reads.
 _text(
     "chat.private.lead",
     CHAT,
-    "A private part's summary: how it reads in the chat",
-    "Stands before the approved summary of a private part where it sits in the "
+    "A chat's private scene: how its summary reads",
+    "Stands before the approved summary of a chat's private scene where it sits in the "
     "conversation, so the chat's model knows what it is reading.",
     "[Part of this conversation was held in private with another assistant. This is a "
     "summary of that part, approved by the user; the messages themselves are not shown.]",
 )
 
-# A story's scene summary carries the plot across; a chat's private part has
+# A story's scene summary carries the plot across; a chat's private scene has
 # no plot, only what the user chose not to pass on. The first wording ("keep
 # what the rest of the conversation may need") repeated it all: live on an
 # encrypted GLM, a code word and the reason for a tight budget, given in
@@ -3139,8 +3141,8 @@ _text(
 _text(
     "chat.private.summary",
     CHAT,
-    "Summarising a private part",
-    "The system prompt of the private model's summary when a chat's private part ends. "
+    "Summarising a chat's private scene",
+    "The system prompt of the private model's summary when a chat's private scene ends. "
     "The summary joins the chat for its own model.",
     """\
 You summarise one part of a conversation between a user and an assistant that
@@ -3167,9 +3169,9 @@ user. Reply with the summary only.
 _text(
     "chat.private.condense",
     CHAT,
-    "Condensing a long private part",
-    "The private model's rolling summary of a private part's oldest messages, once the "
-    "part outgrows its budget.",
+    "Condensing a chat's long private scene",
+    "The private model's rolling summary of the oldest messages of a chat's private "
+    "scene, once the scene outgrows its budget.",
     """You keep the running summary of the private part of a conversation for the
 assistant that is holding it, so it can go on after its oldest messages no
 longer fit the model's context. You are given the summary so far (it may be
@@ -3186,7 +3188,7 @@ words.
 _text(
     "chat.private.handoff",
     CHAT,
-    "Condensing the chat for a private part",
+    "Condensing the chat for a private scene",
     "Asked of the chat's own model when the conversation is too long for the private "
     "model: one account of the conversation so far.",
     """You condense a long conversation so far into a single account for another

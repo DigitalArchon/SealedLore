@@ -106,12 +106,12 @@ def describe_session(session, *, tee_state: str = "") -> tuple[str, str]:
 
     if span is not None:
         where = "in memory only" if span.keep == "memory" else "on disk"
-        word = "part" if story.chat else "scene"
-        parts.insert(0, f"🔒 Private {word} open: {span.model}, {where}")
+        parts.insert(0, f"🔒 Private scene open: {span.model}, {where}")
         tips.insert(
             0,
-            f"A private {word} is open on {span.model}, kept {where}: nothing from it "
-            "reaches any other model, and the rest of the story waits until it ends.",
+            f"A private scene is open on {span.model}, kept {where}: nothing from it "
+            f"reaches any other model, and the rest of the {'chat' if story.chat else 'story'} "
+            "waits until it ends.",
         )
 
     if not story.chat:

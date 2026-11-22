@@ -335,7 +335,7 @@ encrypted private models, as well as their standard TEE models and local
 servers. But that alone isn't that special.
 
 What makes it more useful is that you can switch from your usual model to a
-private one seamlessly, mid-story, and nothing from the private part reaches
+private one seamlessly, mid-story, and nothing from the private scene reaches
 your usual model except a summary you approve.
 
 Let's say you're using Claude Sonnet for your roleplay, as it is one of the
@@ -351,9 +351,9 @@ it, and the approved summary is added to your main story. You then continue
 with the smarter model, and all it knows of that part are the key plot
 points, without the material that might cause refusals.
 
-A simple chat can do the same: the Private button holds the next part of the
-conversation on your private model, and the chat's own model reads only the
-summary you approve.
+A simple chat can do the same: the Private scene button holds the next part
+of the conversation on your private model, and the chat's own model reads
+only the summary you approve.
 
 Of NanoGPT's models, the end-to-end encrypted `private/` ones are the
 stronger choice. A `TEE/` model's text still passes NanoGPT's gateway in the

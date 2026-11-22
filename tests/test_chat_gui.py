@@ -461,7 +461,7 @@ def test_a_chat_can_hold_a_part_in_private_and_take_back_a_summary(app, window, 
     composer.private_keep.setCurrentIndex(composer.private_keep.findData("disk"))
     window.begin_private()
     assert window.session.in_private
-    assert composer.private_toggle.text() == "End private part"
+    assert composer.private_toggle.text() == "End private scene"
     assert composer.input.property("private") == "true"
     assert "chat's own model" in window.statusBar().currentMessage()
     assert not window.stories.isEnabled()
@@ -485,9 +485,9 @@ def test_a_chat_can_hold_a_part_in_private_and_take_back_a_summary(app, window, 
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
     window.end_private()
     wait_for(app, lambda: not window._busy and not window.session.in_private)
-    assert seen == ["Private part summary"]
+    assert seen == ["Private scene summary"]
     assert not window.session.in_private
-    assert composer.private_toggle.text() == "Private part"
+    assert composer.private_toggle.text() == "Private scene"
     assert composer.input.property("private") == "false"
     last = window.session.path()[-1]
     assert last.meta.private_summary_of and "settled it" in last.content

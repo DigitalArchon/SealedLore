@@ -17,7 +17,7 @@ how much they matter:
    messages are dropped from what is written and its calls are logged without
    content, so the story's cost still adds up.
 
-A simple chat has private parts on the same terms (a beta tester asked to
+A simple chat has private scenes on the same terms (a beta tester asked to
 switch mid-chat, as a story can): the same span, the same three rules, with a
 conversation's prompts in place of a story's (`engine/chat.py`). A chat on a
 TEE model is private throughout and has none.

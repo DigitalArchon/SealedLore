@@ -17,20 +17,14 @@ from PySide6.QtWidgets import (
 from sealedlore.engine.session_private import PrivateFit
 from sealedlore.gui.sizing import may_discard, size_to_screen, typed_texts
 
-# A simple chat has private parts on a story's terms, so every message about
-# one is written once, of a story, and said of a chat by these. In order: the
-# longer phrase first, or "the story's model" would become "the chat's model"
-# by way of "the chat".
+# A simple chat has private scenes on a story's terms, so every message about
+# one is written once, of a story, and said of a chat by these. A chat's is a
+# private scene too (the author, Nov 22 2026: it was a "private part" in a chat,
+# and two names for one thing confused), so only the story's own words change.
+# In order: the longer phrase first, or "the story's model" would become "the
+# chat's model" by way of "the chat".
 _CHAT_WORDS = (
-    ("Private scene", "Private part"),
-    ("private scene", "private part"),
-    ("Back to the scene", "Back to the private part"),
-    ("Keep playing the private scene", "Stay in the private part"),
-    ("Discard the scene", "Discard the private part"),
-    ("before this scene", "before this part"),
-    ("the scene itself", "the part itself"),
-    ("The scene", "The private part"),
-    ("the scene", "the private part"),
+    ("Keep playing the private scene", "Stay in the private scene"),
     ("joins the story as a passage", "joins the chat as a message"),
     ("The story's own model", "The chat's own model"),
     ("the story's own model", "the chat's own model"),

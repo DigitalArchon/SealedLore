@@ -159,8 +159,9 @@ def test_the_stories_list_says_what_kind_each_is_in_words(tmp_path: Path) -> Non
 
 
 def test_the_private_button_says_what_it_begins_and_where_it_is_kept(app):
-    """ "Private" beside "In memory" said what neither was: a story's begins a
-    private scene, a chat's holds a private part, kept in memory or on disk."""
+    """ "Private" beside "In memory" said what neither was: it begins a private
+    scene, in a story or a chat alike (a chat's was a "private part", and two
+    names for one thing confused), kept in memory or on disk."""
     from sealedlore.gui.composer import Composer
 
     composer = Composer()
@@ -171,10 +172,40 @@ def test_the_private_button_says_what_it_begins_and_where_it_is_kept(app):
     assert composer.private_toggle.text() == "End private scene"
     composer.set_private_state(False)
     composer.set_chat_mode(True)
-    assert composer.private_toggle.text() == "Private part"
+    assert composer.private_toggle.text() == "Private scene"
     composer.set_private_state(True, "disk")
-    assert composer.private_toggle.text() == "End private part"
+    assert composer.private_toggle.text() == "End private scene"
     composer.deleteLater()
+
+
+def test_a_chat_calls_its_private_scene_a_private_scene_everywhere():
+    """Every message about a private scene is written of a story and said of a
+    chat by `chat_words`: only the story's own words change now, the scene's
+    stay, and no sentence comes out ungrammatical."""
+    from sealedlore.gui.private_dialogs import chat_words
+    from sealedlore.gui.window_private import PAUSED_IN_PRIVATE_CHAT
+
+    said = [
+        chat_words(text)
+        for text in (
+            "Private scene summary",
+            "The private scene ended; nothing was written in it.",
+            "Keep playing the private scene",
+            "Back to the scene",
+            "Discard the scene",
+            "The story is too long for the private model",
+        )
+    ]
+    assert said == [
+        "Private scene summary",
+        "The private scene ended; nothing was written in it.",
+        "Stay in the private scene",
+        "Back to the scene",
+        "Discard the scene",
+        "The chat is too long for the private model",
+    ]
+    assert "End private scene" in PAUSED_IN_PRIVATE_CHAT
+    assert "private part" not in PAUSED_IN_PRIVATE_CHAT
 
 
 def test_a_lore_entry_s_words_come_before_its_pictures(app, tmp_path: Path, story, cast):

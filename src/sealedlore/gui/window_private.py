@@ -131,12 +131,12 @@ PAUSED_IN_PRIVATE = (
 )
 # A chat has no scene card, plot or character to pause.
 PAUSED_IN_PRIVATE_CHAT = (
-    "While a private part of the chat is open, some of the app is paused so nothing from "
+    "While a private scene is open in the chat, some of the app is paused so nothing from "
     "it can reach another model or be saved where it shouldn't:\n\n"
     "• Settings\n"
     "• switching to another chat, story or branch\n"
     "• changing this chat's model\n\n"
-    "To use them again, press End private part beside the message box. The private "
+    "To use them again, press End private scene beside the message box. The private "
     "model then writes a summary for you to approve, or you can end it without one."
 )
 if sys.platform == "win32":
@@ -187,8 +187,8 @@ class PrivateWindow:
         return self.config.private()
 
     def _say(self, text: str) -> str:
-        """A message about a private scene, as it is said of a chat's private
-        part when the open story is a chat (private_dialogs.chat_words)."""
+        """A message about a private scene, in a chat's words when the open
+        story is a chat (private_dialogs.chat_words)."""
         return chat_words(text, self.in_chat)
 
     def _paused_text(self) -> str:

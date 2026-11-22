@@ -173,7 +173,7 @@ class ChatWindow:
         self.cast_page.set_chat_mode(chat)
         tee = self.session is not None and self.session.tee_chat
         # A chat on a TEE model is private throughout: no part to set apart.
-        # One kept in memory only keeps its private parts in memory too.
+        # One kept in memory only keeps its private scenes in memory too.
         self.composer.fix_private_keep("memory" if chat and self.memory_chat else None)
         self.composer.set_private_offered(not tee)
         self.composer.set_private_look(self._shows_private())

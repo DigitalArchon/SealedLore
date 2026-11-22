@@ -3735,18 +3735,18 @@ story is (Settings → Context), with a plain summariser.
   (also set at the start) is fixed text sent after your message at the end
   of every request (a style reminder, a standing rule). It is never saved
   into the conversation.
-- **A part of a chat can be held in private**, as a scene of a story can
-  (see "Private scenes"). The **Private part** button beside the message box sends
-  what you write next to your private model (Settings → Private) and to
-  nothing else; the chat's own model sees none of it. Beside it you choose
-  whether that part is **Kept in memory** (gone when the app closes) or **Kept
-  on disk**; a chat kept in memory only keeps its private parts in memory too,
-  so it doesn't ask. **End private part** has the private model write a summary for you to
-  approve, change, or do without; what you approve joins the chat, marked as
-  a summary of a private part, and is all the chat's model ever reads of it.
-  While a part is open, Settings and switching to another chat or story are
-  paused. A chat on a TEE model has no Private button: all of it is private
-  already.
+- **A chat can have private scenes**, as a story can (see "Private
+  scenes"). The **Private scene** button beside the message box sends what
+  you write next to your private model (Settings → Private) and to nothing
+  else; the chat's own model sees none of it. Beside it you choose whether
+  the scene is **Kept in memory** (gone when the app closes) or **Kept on
+  disk**; a chat kept in memory only keeps its private scenes in memory too,
+  so it doesn't ask. **End private scene** has the private model write a
+  summary for you to approve, change, or do without; what you approve joins
+  the chat, marked as the summary of a private scene, and is all the chat's
+  model ever reads of it. While a scene is open, Settings and switching to
+  another chat or story are paused. A chat on a TEE model has no Private
+  scene button: all of it is private already.
 - **On a NanoGPT `TEE/` model** the chat is private as a private scene is:
   the enclave is attested when the chat opens, and again before a message
   once that is 15 minutes old (unless Check TEE models is off
