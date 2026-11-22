@@ -16,11 +16,12 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtGui import QTextCursor  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
-from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
+from PySide6.QtWidgets import QApplication, QMessageBox, QToolButton  # noqa: E402
 
 from sealedlore.engine.session_reactions import ROUND_SKIPPED  # noqa: E402
 from sealedlore.gui import lorebooks_page  # noqa: E402
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
+from sealedlore.gui.transcript import ANSWERS_SHOW  # noqa: E402
 from sealedlore.models.character import Character  # noqa: E402
 from sealedlore.models.node import DIRECTOR_SPEAKER_ID  # noqa: E402
 from sealedlore.providers.mock import MockChatProvider  # noqa: E402
@@ -225,4 +226,44 @@ def test_stop_during_their_round_skips_it_and_the_passage_is_written(
     assert [r.model for r in provider.requests[before:]] == [MODEL, window.session.model]
     assert turn_node.meta.round_after
     assert "MAELA-ASKED-AGAIN" in " ".join(answer_texts(window, turn_node.id))
+    window.close()
+
+
+# --- W5: Show and Hide wait for the passage being written ---------------------------
+
+
+def test_show_pressed_while_a_passage_streams_leaves_the_stream_alone(
+    app, tmp_path: Path, story, cast
+) -> None:
+    """Show (and View → Show the characters' answers) rebuilt the transcript
+    mid-job: the text streamed so far vanished from the page."""
+    long = "The lock turns slowly and the long corridor beyond it opens. " * 6
+    window = own_window(
+        tmp_path,
+        story,
+        cast,
+        ["The door gives.", "{}", "MAELA-PICKS-THE-LOCK", long, "{}", "MAELA-GOES-FIRST"],
+    )
+    window.show()
+    _send(window, "I put my shoulder to the door.")
+    wait_for(app, lambda: not window._busy)
+    first = window.session.path()[-1]
+    box = window.transcript.message_widget(first.id).answers_box
+    show = next(b for b in box.findChildren(QToolButton) if b.text() == ANSWERS_SHOW)
+    window._provider.delay = 0.05
+    _send(window, "I step through.")
+    streaming = lambda: window.transcript._streaming  # noqa: E731
+    wait_for(app, lambda: streaming() is not None and len(streaming().body.source) > 60)
+    widget = streaming()
+    show.click()
+    app.processEvents()
+    after_click = streaming()
+    window._provider.delay = 0.0
+    wait_for(app, lambda: not window._busy)  # before anything is judged: no job left running
+    assert after_click is widget
+    assert window.answers_action.isChecked()
+    # The choice took effect with the job's own rebuild: the open round's are shown.
+    latest = window.session.path()[-1]
+    assert latest.content.strip() == long.strip()
+    assert "MAELA-GOES-FIRST" in " ".join(answer_texts(window, latest.id))
     window.close()

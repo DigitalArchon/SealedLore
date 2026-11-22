@@ -70,7 +70,10 @@ class AnswersWindow:
 
     def _show_answers(self, on: bool) -> None:
         self.transcript.answers_shown = on
-        if self.session is not None:
+        # Not while a job runs, as the other view switches: rebuilt then, the
+        # passage being written lost the text streamed so far. The job's own
+        # rebuild shows the choice.
+        if self.session is not None and not self._busy:
             self._reload_unless_editing()
 
     def _edit_answer(self, node_id: str, character_id: str) -> None:
