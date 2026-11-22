@@ -181,11 +181,17 @@ def test_the_story_defaults_lead_with_their_value(app, window: MainWindow):
 
 
 def test_the_keep_selector_does_not_take_the_row(app, window: MainWindow):
+    # It is in the More row: closed, it is never laid out and keeps any width.
+    window.composer.set_more(True)
     window.resize(1920, 1080)
     settle(app)
     keep = window.composer.private_keep
+    assert keep.isVisibleTo(window)
     widest = max(keep.fontMetrics().horizontalAdvance(keep.itemText(i)) for i in range(2))
-    assert keep.width() <= widest + 60
+    # Never narrower than its own minimum, which Qt counts in capital X's: in
+    # a font whose X is wide for its letters (Liberation Sans, Omarchy's) that
+    # is past the longest label. Uncapped, it took the row's spare width.
+    assert keep.width() <= max(widest + 60, keep.minimumSizeHint().width())
 
 
 def test_delete_is_in_the_message_menu_not_on_the_card(app, window: MainWindow):
