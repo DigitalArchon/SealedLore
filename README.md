@@ -35,6 +35,37 @@ were too experimental and not progressing quickly enough to a playable state.
 I plan to release that as an entirely separate game later when it is actually
 fun to play. This app will remain focused on text based roleplay.
 
+### New in version 3.5
+
+Version 3.5 is mostly tweaks and bug fixes to what the 3.1 betas brought,
+from playing with them:
+
+- **Characters played by their own model answer after your turn** by
+  default, so what they say follows what you just did. Answering at the same
+  time as you is still there and is faster, but they ran a beat behind your
+  turn (Story → Setup… → About → **They answer**, shown once someone has a
+  model of their own). Their answers, when you choose to see them before
+  sending, have a **Hide** button where they are shown.
+- **Menus are shorter and clearer**: the Story menu's picture and plot items
+  are submenus of their own (**Pictures and video**, **Plot**), and every
+  item in File, Story and View has a key of its own. The button that begins
+  a private scene says so, **Private scene**, in a story and a chat alike,
+  with **Kept in memory** or **Kept on disk** beside it.
+- **Pages read more easily**: a lore entry's words come before its pictures,
+  the Media page shows a picture's look and expression whole, Setup shows
+  `{{user}}` and `{{char}}` only when the story uses them, and the Stories
+  list says whether each is a story, a story with a plot or a simple chat.
+- **A character's card always offers its condensed version**, where it used
+  to appear only after ticking "Always send the whole card".
+- **Regenerate one character's answer**: beside each answer of a character
+  played by their own model, next to **Edit**, asks just their model again.
+- **Always-on lore, from the full entry**: when long always-on lore is sent
+  shortened, the paragraphs of the full entry your turn is about go with it
+  too (not to Claude storytellers, which wrote no better with them).
+- **Fixed after a review of the whole app**: phone access, private scenes,
+  lorebooks and files from other people, characters on their own model,
+  branches, and servers that answer oddly (the release notes list them).
+
 ### New in version 3
 
 - **Long lorebooks that still fit, and `{{user}}` and `{{char}}` kept**
