@@ -2245,7 +2245,14 @@ tab, the wording under File → Prompts (advanced)…, the story by editing it.
 
 Their answers show under your turn, each with **Edit**: edit one and the
 passage after it is written again from your version, as a new take, with the
-one there now kept (‹ ›). On the People page their card is marked MAIN · OWN
+one there now kept (‹ ›). Beside it, **Regenerate** asks that character's
+model for the answer again, sent what it would be sent there (the story as
+they saw it up to that point, your notes for their model, what they
+remember); nobody else is asked, and the others' answers stay as they are. Once the new answer is in, you are
+asked whether to have the passage after it written again from it (**Write it
+again**, a new take beside the one there now) or **Keep the passage**. Stop,
+or a model that fails or gives no answer, leaves their answer as it was, and
+the failure says why. On the People page their card is marked MAIN · OWN
 MODEL. Their calls show under *Own-model characters* (and their memories under
 *Own-model characters' memories*) in Story → Usage and cost….
 
@@ -2260,12 +2267,15 @@ are hidden under it until you send your turn, so you answer it as they did.
 **Show** beside that line, or **View → Show the characters' answers**, shows
 them anyway; **Hide** over them puts them away again. Once you've sent, they
 show under their passage, each with
-**Edit**. Edit an answer to the latest passage and the storyteller gets your
-version with your next turn; edit an older one and the passage that followed
-it is written again from your version. If you have since changed the story to
-have them answer after your turn, and the turn that followed was answered that
-way, its passage was written from those answers: an edit to the older answer
-is saved, and nothing is written again.
+**Edit** and **Regenerate**. Edit an answer to the latest passage and the
+storyteller gets your version with your next turn; edit an older one and the
+passage that followed it is written again from your version. Regenerate one
+the same way: the latest passage's new answer goes with your next turn, and
+for an older one you are offered the passage that followed it written again
+from the new answer. If you have since changed the story to have them answer
+after your turn, and the turn that followed was answered that way, its
+passage was written from those answers: an edit to the older answer is saved,
+a regenerated one kept, and nothing is written again.
 
 ### When the cast's cards don't fit
 

@@ -309,6 +309,12 @@ ANSWERS_HIDE_TIP = (
     "Hide what they answered until you send your turn (the same as unticking View → Show "
     "the characters' answers)"
 )
+# Beside each answer's Edit: their model asked again, for theirs alone.
+ANSWER_REGENERATE = "Regenerate"
+ANSWER_REGENERATE_TIP = (
+    "Ask {name}'s model for this answer again, from the story as they saw it here; the "
+    "others' answers stay as they are"
+)
 
 
 class MessageWidget(QFrame):
@@ -340,6 +346,9 @@ class MessageWidget(QFrame):
     # (passage id, character id): edit what a character's own model answered it
     # with (engine/reactions.py, the trial).
     answer_edit_requested = Signal(str, str)
+    # (message id, character id): ask that character's model for that answer
+    # again, nobody else's.
+    answer_regenerate_requested = Signal(str, str)
     # The hidden answers' Show: the window turns View → Show the characters'
     # answers on.
     answers_show_requested = Signal()
@@ -561,6 +570,7 @@ class MessageWidget(QFrame):
         lines.setContentsMargins(0, 0, 0, 0)
         lines.setSpacing(6)
         self.answer_buttons: list[QToolButton] = []
+        self.answer_regenerate_buttons: list[QToolButton] = []
         if hidden:
             names = ", ".join(answer.name for answer in answers)
             head = TextBody(ANSWERS_HIDDEN.format(names=names))
@@ -625,6 +635,18 @@ class MessageWidget(QFrame):
                 )
                 row.addWidget(edit)
                 self.answer_buttons.append(edit)
+                again = QToolButton()
+                again.setText(ANSWER_REGENERATE)
+                again.setObjectName("messageAction")
+                again.setToolTip(ANSWER_REGENERATE_TIP.format(name=answer.name))
+                again.setEnabled(not self._busy)
+                again.clicked.connect(
+                    lambda _=False, cid=answer.character_id: self.answer_regenerate_requested.emit(
+                        self.node_id, cid
+                    )
+                )
+                row.addWidget(again)
+                self.answer_regenerate_buttons.append(again)
                 lines.addLayout(row)
                 body = TextBody(answer.text)
                 body.setTextFormat(Qt.PlainText)
@@ -1055,7 +1077,10 @@ class MessageWidget(QFrame):
         self.edit_button.setEnabled(not busy and self._editor is None)
         if self.more_button is not None:
             self.more_button.setEnabled(not busy)
-        for button in getattr(self, "answer_buttons", ()):
+        for button in (
+            *getattr(self, "answer_buttons", ()),
+            *getattr(self, "answer_regenerate_buttons", ()),
+        ):
             button.setEnabled(not busy)
         self._sync_save()
 
@@ -1733,6 +1758,7 @@ def sent_mark(message: Node, reply: Node | None) -> str | None:
 class TranscriptView(QScrollArea):
     regenerate_requested = Signal(str)
     answer_edit_requested = Signal(str, str)
+    answer_regenerate_requested = Signal(str, str)
     # The hidden answers' Show: the window turns View → Show the characters'
     # answers on.
     answers_show_requested = Signal()
@@ -1985,6 +2011,7 @@ class TranscriptView(QScrollArea):
         )
         widget.keep_full_requested.connect(self.keep_full_requested)
         widget.answer_edit_requested.connect(self.answer_edit_requested)
+        widget.answer_regenerate_requested.connect(self.answer_regenerate_requested)
         widget.answers_show_requested.connect(self.answers_show_requested)
         widget.answers_hide_requested.connect(self.answers_hide_requested)
         widget.review_mark_requested.connect(self.review_mark_requested)

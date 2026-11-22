@@ -9,16 +9,24 @@ characters' answers: the author's "visible as a spoiler"). Editing an answer
 is the author's ruling too: change what a character means to do, and redo
 the turn with it. An answer to the latest passage is simply kept for the
 author's next turn; one to an older passage writes the passage that followed
-it again, which is how the turn is redone.
+it again, which is how the turn is redone. Regenerate beside Edit asks that
+character's model for the answer again (the author: "a regenerate option that
+regenerates just their response"), and offers the same passage again once
+the new answer is in.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
+from PySide6.QtWidgets import QMessageBox
 
 from sealedlore.engine.reactions import independent_cast
 from sealedlore.gui.character_prompt_dialog import show_character_prompt
 from sealedlore.gui.note_dialog import NoteDialog
+from sealedlore.models.node import Node, Reaction
 
 SHOW_ANSWERS = "Show the characters' ans&wers"
 SHOW_ANSWERS_TIP = (
@@ -49,6 +57,61 @@ EDIT_HINT_SPENT = (
     "your turn now, and the turn that followed was answered that way. Saving keeps your "
     "words here; nothing is written again."
 )
+
+
+# An answer's Regenerate (beside its Edit): their model asked again for it.
+REGENERATE_BUSY = "Asking {name}'s model for their answer again…"
+# The job's name, in "… failed" when it does.
+REGENERATE_JOB = "Asking {name}'s model again"
+# Once the new answer is in, when a passage was written from the old one.
+REDO_TITLE = "Write the next passage again?"
+REDO_ASKS = "{name} answered again. Write the passage after it again from the new answer?"
+REDO_HINT = (
+    "The passage there now was written from their answer as it was. Written again, it is a "
+    "new take, and the one there now is kept (‹ ›). Kept as it is, the new answer goes with "
+    "the next take of that passage you ask for."
+)
+REDO_WRITE = "Write it again"
+REDO_KEEP = "Keep the passage"
+# Said in the status bar once the new answer is in, as Edit's hints say it.
+ANSWERED_AGAIN_OPEN = (
+    "{name} answered again. The storyteller is given the new answer with your next turn, "
+    "as what they mean to do."
+)
+ANSWERED_AGAIN_TURN = (
+    "{name} answered your turn again. The storyteller is given it when the passage is "
+    "written (Regenerate)."
+)
+ANSWERED_AGAIN_SPENT = (
+    "{name} answered again. The passage after it wasn't written from this answer, so "
+    "nothing is written again."
+)
+ANSWERED_AGAIN_KEPT = "{name}'s new answer is kept; the passage after it stays as it was."
+STOPPED_KEPT = "Stopped: {name}'s answer stays as it was."
+# The most of the new answer the question quotes: the rest is under the message.
+QUOTED_MOST = 600
+
+
+def written_from(path: Sequence[Node], index: int) -> tuple[Node | None, bool]:
+    """(the passage written from the answers on `path[index]`, whether they
+    are spent): what Edit and Regenerate on an answer offer to write again,
+    worked out once for both, so the two never disagree about when another
+    take would read the answer. The passage is the next on the path, the one
+    after the author's turn the answers went with; None for the open round
+    or a turn with no passage yet. Spent: answers to a passage go with the
+    next turn only while that turn wasn't answered after it was sent
+    (`round_after`). The story changed to "after your turn" since, another
+    take of the passage after it is written from the turn's own answers and
+    never reads these: a retake was offered all the same, and paid for."""
+    after = next((n for n in path[index + 1 :] if n.kind == "assistant"), None)
+    answered = path[path.index(after) - 1] if after is not None else None
+    spent = (
+        answered is not None
+        and path[index].kind == "assistant"
+        and answered.kind == "user"
+        and answered.meta.round_after
+    )
+    return (None if spent else after), spent
 
 
 class AnswersWindow:
@@ -96,23 +159,7 @@ class AnswersWindow:
         )
         if answer is None:
             return
-        # The passage after the author's turn that this answer went with: the
-        # one written from it, and the one written again when it changes.
-        after = next((n for n in path[index + 1 :] if n.kind == "assistant"), None)
-        # An answer to a passage goes with the next turn only while that turn
-        # wasn't answered after it was sent (`round_after`): the story changed
-        # to "after your turn" since, another take of the passage after it is
-        # written from the turn's own answers and never reads this one. A
-        # retake was offered all the same, and paid for.
-        answered = path[path.index(after) - 1] if after is not None else None
-        spent = (
-            answered is not None
-            and path[index].kind == "assistant"
-            and answered.kind == "user"
-            and answered.meta.round_after
-        )
-        if spent:
-            after = None
+        after, spent = written_from(path, index)
         dialog = NoteDialog(
             self._dialog_parent(),
             title=EDIT_TITLE.format(name=answer.name),
@@ -145,6 +192,102 @@ class AnswersWindow:
             self._regenerate_node(after.id)
         else:
             self._reload_unless_editing()
+
+    def _regenerate_answer(self, node_id: str, character_id: str) -> None:
+        """An answer's Regenerate: that character's model is asked for it
+        again, nobody else's, as a job (Stop keeps the answer there). Asked
+        at once, with nothing to decide first: whether the passage after it
+        is written again is asked once the new answer is in and can be read
+        (`_answer_regenerated`), so a passage is paid for only from an answer
+        the author has seen; and the open round's answers have no passage
+        after them to ask about."""
+        session = self.session
+        if session is None or self._busy:
+            return
+        refusal = session.reaction_refusal(node_id, character_id)
+        if refusal is not None:
+            self.statusBar().showMessage(refusal, 8000)
+            return
+        node = next((n for n in session.full_path() if n.id == node_id), None)
+        answer = (
+            next((a for a in node.meta.reactions if a.character_id == character_id), None)
+            if node is not None
+            else None
+        )
+        if answer is None:
+            return
+        session.provider = self._current_provider()
+        self._after_job = lambda: self._answer_regenerated(session, node_id, character_id, answer)
+        self._start(
+            lambda: session.regenerate_reaction(node_id, character_id),
+            streaming=False,
+            busy_text=REGENERATE_BUSY.format(name=answer.name),
+            job=REGENERATE_JOB.format(name=answer.name),
+        )
+
+    def _answer_regenerated(
+        self, session, node_id: str, character_id: str, before: Reaction
+    ) -> None:
+        """Once their new answer is in: when a passage was written from the
+        old one, that passage offered again, as Edit offers it
+        (`written_from`); otherwise said where the new answer goes. A failure
+        left the old answer and its dialog said so; a Stop left it too, and
+        is said here. Run before any next job starts, so `_worker` is still
+        this one's."""
+        if self.session is not session:
+            return
+        path = session.full_path()
+        index = next((i for i, node in enumerate(path) if node.id == node_id), None)
+        if index is None:
+            return
+        answer = next(
+            (a for a in path[index].meta.reactions if a.character_id == character_id), None
+        )
+        stopped = self._worker is not None and self._worker.stopping
+        if answer is None or answer is before:
+            if stopped:
+                self.statusBar().showMessage(STOPPED_KEPT.format(name=before.name), 10000)
+            return
+        after, spent = written_from(path, index)
+        if after is not None and stopped:
+            # In before the Stop landed: kept, and nothing more is paid for.
+            self.statusBar().showMessage(ANSWERED_AGAIN_KEPT.format(name=answer.name), 10000)
+            return
+        if after is None:
+            words = (
+                ANSWERED_AGAIN_SPENT
+                if spent
+                else ANSWERED_AGAIN_TURN
+                if path[index].kind == "user"
+                else ANSWERED_AGAIN_OPEN
+            )
+            self.statusBar().showMessage(words.format(name=answer.name), 10000)
+            return
+        if self._busy or not self._write_again_asked(answer):
+            self.statusBar().showMessage(ANSWERED_AGAIN_KEPT.format(name=answer.name), 10000)
+            return
+        self._regenerate_node(after.id)
+
+    def _write_again_asked(self, answer: Reaction) -> bool:
+        """Whether the author has the passage after a new answer written
+        again from it. Keep is the default: Enter mustn't pay for a passage."""
+        text = answer.text.strip()
+        if len(text) > QUOTED_MOST:
+            text = text[:QUOTED_MOST].rstrip() + "…"
+        box = QMessageBox(self._dialog_parent())
+        box.setIcon(QMessageBox.Question)
+        box.setWindowTitle(REDO_TITLE)
+        box.setTextFormat(Qt.PlainText)
+        box.setText(REDO_ASKS.format(name=answer.name))
+        box.setInformativeText(f"{text}\n\n{REDO_HINT}")
+        write = box.addButton(REDO_WRITE, QMessageBox.AcceptRole)
+        keep = box.addButton(REDO_KEEP, QMessageBox.RejectRole)
+        box.setDefaultButton(keep)
+        try:
+            box.exec()
+            return box.clickedButton() is write
+        finally:
+            box.deleteLater()  # read, then freed
 
     def _show_character_prompt(self, character_id: str) -> None:
         """Played by → What their model is sent…: their request, your notes
