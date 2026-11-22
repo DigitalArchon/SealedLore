@@ -45,8 +45,12 @@ Lock = Callable[[str, Any], str | None] | None
 # first request names (`make_chat_provider` chooses the client by it).
 Make = Callable[[ProviderConfig], ChatProvider]
 # A client is one endpoint's, and a sealing client (an end-to-end encrypted
-# model's, `privacy_for`) is kept apart from the plain one on the same endpoint.
-Key = tuple[str, bool]
+# model's, `privacy_for`) is kept apart from the plain one on the same
+# endpoint, by the service that seals it ("" for the plain one): one endpoint
+# may hold two (a `private/` id is NanoGPT's wherever it is typed, a -TEE one
+# on a Chutes endpoint Chutes'), and kept as one "sealed" client, whichever
+# was made first was handed the other's models and refused them all.
+Key = tuple[str, str]
 
 
 def listing_key(config: Config) -> str:
@@ -68,7 +72,8 @@ class EndpointsProvider(ChatProvider):
         """`config` is read live (its endpoints and default), so the clients
         follow a Settings change; one made for settings since changed is
         made again. `make` builds a client (tests give one that hands out
-        mocks); `providers` are clients already made, by (endpoint, sealed)."""
+        mocks); `providers` are clients already made, by (endpoint, sealing
+        service or "")."""
         self.config = config
         self._make: Make = make or _make_chat_provider
         self._lock = threading.Lock()
@@ -95,7 +100,7 @@ class EndpointsProvider(ChatProvider):
     def route_watch(self, watch: Watch) -> None:
         self._route_watch = watch
         with self._lock:
-            for (name, _sealed), provider in self._providers.items():
+            for (name, _service), provider in self._providers.items():
                 provider.route_watch = self._wrapped(name, watch)
 
     @property
@@ -106,7 +111,7 @@ class EndpointsProvider(ChatProvider):
     def reasoning_watch(self, watch: Watch) -> None:
         self._reasoning_watch = watch
         with self._lock:
-            for (name, _sealed), provider in self._providers.items():
+            for (name, _service), provider in self._providers.items():
                 provider.reasoning_watch = self._wrapped(name, watch)
 
     @property
@@ -117,7 +122,7 @@ class EndpointsProvider(ChatProvider):
     def tee_watch(self, watch: Watch) -> None:
         self._tee_watch = watch
         with self._lock:
-            for (name, _sealed), provider in self._providers.items():
+            for (name, _service), provider in self._providers.items():
                 provider.tee_watch = self._wrapped(name, watch)
 
     @property
@@ -171,9 +176,10 @@ class EndpointsProvider(ChatProvider):
 
     def _provider(self, settings: ProviderConfig) -> ChatProvider:
         """The client for `settings` (its model the one asked for now): the
-        plain one, or the sealing one for an end-to-end encrypted model (every
-        model on a sealed endpoint)."""
-        key = (settings.name, privacy_for(settings.model, settings).sealed)
+        plain one, or its service's sealing one for an end-to-end encrypted
+        model (every model on a sealed endpoint)."""
+        privacy = privacy_for(settings.model, settings)
+        key = (settings.name, privacy.service if privacy.sealed else "")
         with self._lock:
             made = self._providers.get(key)
             made_for = self._made_for.get(key)

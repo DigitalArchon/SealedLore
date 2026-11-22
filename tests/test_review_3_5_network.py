@@ -39,8 +39,10 @@ from sealedlore.providers.base import (
     parse_usage,
 )
 from sealedlore.providers.card_links import LinkError, fetch_link, read_link
+from sealedlore.providers.chutes_provider import ChutesE2EEProvider
 from sealedlore.providers.context_probe import detect_context
 from sealedlore.providers.embeddings import OpenAICompatibleEmbeddings
+from sealedlore.providers.endpoints import EndpointsProvider
 from sealedlore.providers.http import make_client
 from sealedlore.providers.images import list_image_models, list_own_models
 from sealedlore.providers.local_embeddings import LocalEmbeddings
@@ -55,6 +57,7 @@ from sealedlore.providers.local_images import (
 from sealedlore.providers.media_http import MediaHttp
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
+from sealedlore.providers.private_mode import PrivateModeProvider
 from sealedlore.providers.streaming import read_lines
 from sealedlore.providers.videos import list_video_models
 from sealedlore.storage.repository import StoryBundle, save_story_bundle
@@ -869,3 +872,58 @@ def test_a_card_link_on_the_network_is_fetched_but_not_into_this_computer():
     with pytest.raises(LinkError):
         fetch_link("http://192.168.1.50/card.json", transport=httpx.MockTransport(handler))
     assert hops == ["http://192.168.1.50/card.json"]
+
+
+# --- N7: one sealed service's client is never handed another's models -------------
+
+
+def _chutes_routing() -> EndpointsProvider:
+    chutes = ProviderConfig(
+        name="Chutes",
+        base_url="https://llm.chutes.ai/v1",
+        api_key=KEY,
+        model="m",
+        key_saved_for="https://llm.chutes.ai",
+    )
+    return EndpointsProvider(Config(providers=[chutes], active_provider_name="Chutes"))
+
+
+@pytest.mark.parametrize(
+    "order",
+    [
+        ("private/glm-5-3", "Qwen/Qwen3-32B-TEE"),
+        ("Qwen/Qwen3-32B-TEE", "private/glm-5-3"),
+    ],
+)
+def test_each_sealed_service_on_an_endpoint_has_its_own_client(order):
+    """A `private/` id is NanoGPT's wherever it is typed (its client refuses
+    it on any other endpoint, sending nothing), and a -TEE one on Chutes is
+    Chutes'. The cache kept one "sealed" client an endpoint, so whichever
+    was looked at first was handed the other's requests: after a `private/`
+    id on a Chutes endpoint, every -TEE model there was refused as "isn't a
+    Private Mode model" until the app was started again."""
+    routing = _chutes_routing()
+    clients = {model: routing.provider_for(model) for model in order}
+    assert isinstance(clients["private/glm-5-3"], PrivateModeProvider)
+    assert isinstance(clients["Qwen/Qwen3-32B-TEE"], ChutesE2EEProvider)
+    # The same service again is the same client, and the plain one is apart.
+    assert routing.provider_for("Other/Model-TEE") is clients["Qwen/Qwen3-32B-TEE"]
+    assert routing.provider_for("private/kimi-k3-1-pro") is clients["private/glm-5-3"]
+    plain = routing.provider_for("zai-org/GLM-5.3")
+    assert type(plain) is OpenAICompatibleProvider and plain not in clients.values()
+    routing.close()
+
+
+def test_a_tee_request_after_a_private_one_reaches_chutes_own_client(monkeypatch):
+    routing = _chutes_routing()
+    routing.provider_for("private/glm-5-3")
+    asked: list[str] = []
+
+    def stream(self, request):
+        asked.append(request.model)
+        yield StreamCompleted(finish_reason="stop")
+
+    monkeypatch.setattr(ChutesE2EEProvider, "stream", stream)
+    list(routing.stream(_request("Qwen/Qwen3-32B-TEE")))
+    assert asked == ["Qwen/Qwen3-32B-TEE"]
+    routing.close()

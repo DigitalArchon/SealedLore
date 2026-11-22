@@ -160,7 +160,7 @@ def test_a_private_model_gets_its_endpoints_sealing_client_apart_from_the_plain_
     provider.provider_for("z-ai/glm-5.3")
     provider.provider_for("private/glm-5-3")
     assert [s.model for s in made.asked] == ["z-ai/glm-5.3", "private/glm-5-3"]
-    assert sorted(provider._providers) == [("NanoGPT", False), ("NanoGPT", True)]
+    assert sorted(provider._providers) == [("NanoGPT", ""), ("NanoGPT", "nanogpt-private")]
     # The same kind again is the same client.
     provider.provider_for("private/kimi-k3")
     assert len(made.asked) == 2
