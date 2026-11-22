@@ -95,10 +95,16 @@ class ReactionRuntime:
         having seen it, blind to the others; before the storyteller writes,
         which is given their answers with the turn (`TurnRequest.round_answers`).
         Kept on the turn, marked as answered so (`round_after`) even with none,
-        so Regenerate sends the same and never the passage before's."""
+        so Regenerate sends the same and never the passage before's.
+
+        A Direction, a Narration and the opening get no round
+        (`reactions.answers_turn`): the turn is marked the same way, with
+        nobody's answer, and nothing is asked, waited for or said. So no
+        other take of its passage asks either, and the storyteller is never
+        told they answered."""
         turn_node.meta.round_after = True
         turn_node.meta.reactions = []
-        if self.story.chat or self.in_private:
+        if self.story.chat or self.in_private or not reactions.answers_turn(turn_node):
             return
         held = self._character(turn_node.meta.controlled_character_id)
         player = held.name if held is not None else "The author"

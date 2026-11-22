@@ -47,7 +47,7 @@ from sealedlore.engine.validators import far_shift, named_only, scene_break_ends
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.character import Character
 from sealedlore.models.memory import Recollection
-from sealedlore.models.node import DIRECTOR_SPEAKER_ID, Node
+from sealedlore.models.node import DIRECTOR_SPEAKER_ID, NARRATOR_SPEAKER_ID, Node
 from sealedlore.models.scene import SceneState
 from sealedlore.models.story import Story
 
@@ -106,6 +106,21 @@ def is_opening_direction(node: Node) -> bool:
         and node.kind == "user"
         and node.speaker_id == DIRECTOR_SPEAKER_ID
         and bool(node.content.strip())
+    )
+
+
+def answers_turn(node: Node) -> bool:
+    """Whether the round after the author's turn (`StoryDefaults.round_order`
+    "after") is held for this turn: only for one sent in character. After a
+    Direction (the generated opening is one) or a Narration nobody is asked
+    (the author's ruling, Nov 22 2026): a Direction is to the storyteller
+    alone, so they answered the moment before it, never having seen it, and a
+    Narration is prose that already stands; the storyteller was then told
+    they had answered a turn that "hasn't happened yet". Answering at the
+    same time ("together") they answer the passage either gets, as ever."""
+    return node.kind == "user" and node.speaker_id not in (
+        DIRECTOR_SPEAKER_ID,
+        NARRATOR_SPEAKER_ID,
     )
 
 

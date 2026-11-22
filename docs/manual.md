@@ -2172,6 +2172,14 @@ answers run a step behind your turn, and the storyteller sometimes works in
 one your turn has already answered or moved past (a question you just
 answered, say).
 
+They answer the turns you send in character. After a Direction or a
+Narration, and for the story's opening, nobody is asked and nothing waits: a
+Direction is to the storyteller alone and they never see it, and what you
+narrate has already happened, so there is no moment before it for them to act
+in. The storyteller writes that passage by itself, and they answer your next
+turn in character, having read it. (Answering at the same time as you, they
+answer every passage, the one a Direction or a Narration gets included.)
+
 **Which model plays them.** Choose beside their model under Played by lists
 the models measured best at it. Claude Opus 5.5 plays a character best, and is
 the one model tried that doesn't make up what it said or did when a question

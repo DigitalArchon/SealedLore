@@ -21,10 +21,12 @@ from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 from sealedlore.gui import lorebooks_page  # noqa: E402
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.models.character import Character  # noqa: E402
+from sealedlore.models.node import DIRECTOR_SPEAKER_ID  # noqa: E402
 from sealedlore.providers.mock import MockChatProvider  # noqa: E402
 from sealedlore.storage.lorebooks import load_lorebooks  # noqa: E402
 from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa: E402
-from tests.test_background_queue import _window  # noqa: E402
+from tests.test_background_queue import _send, _window, wait_for  # noqa: E402, F401
+from tests.test_reactions_gui import own_window  # noqa: E402
 
 
 @pytest.fixture
@@ -156,4 +158,28 @@ def test_a_condensed_text_never_lands_under_the_authors_hands(app, tmp_path: Pat
     panel.name.setFocus()
     assert jane.condensed == "My own words for Jane."
     assert panel.condensed.toPlainText() == "My own words for Jane."
+    window.close()
+
+
+# --- W3: nobody answers a Direction, and nothing shows as if they had --------------
+
+
+def test_a_direction_has_no_answers_row_and_nothing_to_show(
+    app, tmp_path: Path, story, cast
+) -> None:
+    story.defaults.round_order = "after"
+    window = own_window(tmp_path, story, cast, ["Three weeks later, snow.", "MAELA-WAS-ASKED"])
+    window.config.scene_reads = "manual"
+    said: list[str] = []
+    window.statusBar().messageChanged.connect(said.append)
+    window.composer.select_speaker(DIRECTOR_SPEAKER_ID)
+    window.composer.input.setPlainText("Three weeks pass.")
+    window.send_turn()
+    wait_for(app, lambda: not window._busy)
+    turn_node, passage = window.session.full_path()[-2:]
+    assert turn_node.speaker_id == DIRECTOR_SPEAKER_ID and passage.content.startswith("Three")
+    assert [r.model for r in window._provider.requests] == [window.session.model]
+    for node in (turn_node, passage):
+        assert getattr(window.transcript.message_widget(node.id), "answers_box", None) is None
+    assert not any("Waiting for the characters" in text for text in said)
     window.close()
