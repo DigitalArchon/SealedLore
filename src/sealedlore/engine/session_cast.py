@@ -8,8 +8,9 @@ window when nothing runs), the calls go out on a thread with a `detached()`
 client, and the results are adopted by the writer at the start of the next
 turn or by the window's poll. Meanwhile a card to be condensed is sent whole
 (`CastFit.waiting`). A condensed text written from a card that has changed
-since is not used. A provider without `detached` (the scripted mock)
-condenses inline.
+since is not used, nor one for a card the author has written their own
+condensed text for meanwhile. A provider without `detached` (the scripted
+mock) condenses inline.
 
 A supporting card is condensed, to about 150 words, when its description
 is too long to ride the turns that name it whole (engine/characters.py).
@@ -48,6 +49,9 @@ class _Condense:
     # The card as it was asked from: a card changed meanwhile isn't given it.
     fingerprint: str
     request: ChatRequest
+    # Their condensed text as it was then, which `fingerprint` leaves out:
+    # one the author has written since is never given the model's.
+    condensed: str | None = None
     reply: tuple[str, Any] | None = None
     error: str | None = None
 
@@ -163,6 +167,7 @@ class CastRuntime:
                 c.name,
                 fingerprint(c),
                 self._condense_request(c, CONDENSE_LEAST_WORDS if c.id in supporting else None),
+                c.condensed,
             )
             for c in wanted
         ]
@@ -231,6 +236,9 @@ class CastRuntime:
                 dropped = "not adopted: the character is gone"
             elif fingerprint(character) != item.fingerprint:
                 dropped = "not adopted: the card changed while it was written"
+            elif character.condensed and character.condensed != item.condensed:
+                # Their own words, typed while the model wrote: theirs stand.
+                dropped = "not adopted: the author wrote their own condensed text meanwhile"
             elif unfit is not None:
                 dropped = f"not adopted: {unfit}"
             self._log(
