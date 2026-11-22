@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from sealedlore.engine import tavern_firing
+from sealedlore.engine.plot_md import parse_plot_markdown
 from sealedlore.engine.prompt import TurnRequest
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.tavern_firing import (
@@ -23,8 +24,10 @@ from sealedlore.engine.tavern_firing import (
 )
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
 from sealedlore.models.lore import LoreEntry
+from sealedlore.models.plot import Direction
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.storage.repository import StoryBundle
+from sealedlore.storage.scenario import bundle_from_scenario
 from sealedlore.storage.tavern_lore import lore_from_book
 from tests.test_session import make_config
 
@@ -345,3 +348,54 @@ def test_settling_user_changes_nothing_else(tmp_path, story, cast):
     story.setup.placeholders.user_id = None
     story.held_character_id = "char-gone"
     assert reopened(session, tmp_path).story.setup.placeholders.user_id is None
+
+
+# --- L3: a plot's begin direction ------------------------------------------------
+
+DOOMSVILLE = Path(__file__).resolve().parents[1] / "SampleStories" / "Doomsville.md"
+
+
+def test_a_plots_begin_direction_has_the_names_in(tmp_path):
+    """The cards of whoever an event brings, and the lore it reveals, went
+    to the storyteller with {{char}} and {{user}} as written: the one place
+    a hidden card is first sent."""
+    parsed = parse_plot_markdown(DOOMSVILLE.read_text(encoding="utf-8"))
+    bundle = bundle_from_scenario(parsed.scenario)
+    story = bundle.story
+    event = next(e for e in story.plot.events if e.brings)
+    people = {c.id: c for c in (*bundle.cast, *bundle.supporting.characters)}
+    hidden = people[event.brings[0]]
+    assert hidden.plot_hidden
+    hidden.full_description = "{{char}} has traded with {{user}} for years and trusts nobody else."
+    place = next(entry for entry in bundle.lore if entry.plot_hidden)
+    place.content = "{{user}} has never been let in; {{char}} holds the gate."
+    place.of_character = hidden.id
+    player = next(c for c in bundle.cast if not c.plot_hidden)
+    story.held_character_id = player.id
+    story.setup.placeholders.user_id = player.id
+    config = make_config()
+    config.scene_reads = "manual"
+    session = StorySession(
+        bundle,
+        config,
+        MockChatProvider(["A passage."]),
+        root=tmp_path,
+        estimator=TokenEstimator(counter=fallback_counter),
+        learn_corrections=False,
+    )
+    request = TurnRequest(
+        speaker_id=player.id, user_text="I wait by the road.", controlled_character_id=player.id
+    )
+    directed = session._directed(
+        request,
+        [Direction(event_id=event.id, kind="begin", text="They arrive.")],
+        [],
+    )
+    direction = directed.direction or ""
+    cards = session._cards([hidden.id, place.id])
+    for text in (direction, cards):
+        assert f"{hidden.name} has traded with {player.name} for years" in text
+        assert "{{" not in text
+    assert f"{player.name} has never been let in; {hidden.name} holds the gate." in cards
+    # The story's own cards keep them as written.
+    assert hidden.full_description.startswith("{{char}} has traded with {{user}}")

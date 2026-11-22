@@ -1288,11 +1288,15 @@ class PlotRuntime:
     def _cards(self, ids: Sequence[str]) -> str:
         people = {c.id: c for c in [*self.cast, *self.supporting]}
         places = {entry.id: entry for entry in self.bundle.lore}
+        # With {{user}} and {{char}} written out, as every card and entry is
+        # sent: a hidden one is first sent here.
+        names = self.placeholder_names()
         blocks: list[str] = []
         for item_id in dict.fromkeys(ids):
             if (character := people.get(item_id)) is not None:
-                blocks.append(render_cast_sheet(character))
+                blocks.append(render_cast_sheet(names.character(character)))
             elif (entry := places.get(item_id)) is not None:
+                entry = names.entry(entry)
                 blocks.append(f"{entry.title}: {entry.content}")
         return "\n\n".join(blocks)
 
