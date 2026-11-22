@@ -153,6 +153,15 @@ def make(backend: FakeBackend | None = None, clock: Clock | None = None):
     return api, backend
 
 
+def changes_the_story(method: str, path: str) -> bool:
+    """Whether the page sends the story's id with it: what changes the open story."""
+    return (
+        method == "POST"
+        and "/stories/" not in path
+        and not path.startswith(("/api/pair", "/api/forget"))
+    )
+
+
 def request(
     method: str,
     path: str,
@@ -161,7 +170,13 @@ def request(
     token: str | None = TOKEN,
     host: str = ONION,
     content_type: str = "application/json",
+    story: str | None = "shared",
 ) -> Request:
+    """`story`: the story the page takes to be open, sent with whatever
+    changes it, as the page sends it (the stand-in opens on "shared")."""
+    if story and isinstance(body, dict) and "story" not in body:
+        if changes_the_story(method, path):
+            body = {**body, "story": story}
     lines = [f"{method} {path} HTTP/1.1", f"Host: {host}"]
     if token is not None:
         lines.append(f"Authorization: Bearer {token}")

@@ -156,9 +156,7 @@ def test_a_change_is_asked_under_its_passage_and_written_in_its_place():
     assert 'openNote(message.id, "change")' in offered
     assert card.index("if (hidden(kind))") < card.index("if (message.can_revise)")
     assert f'asks: "{CHANGE_ASKS}"' in script and f'go: "{CHANGE_BUTTON}"' in script
-    assert 'call("POST", "/api/revise", { node_id: n.id, change: words })' in function(
-        script, "sendNote"
-    )
+    assert 'act("/api/revise", { node_id: n.id, change: words })' in function(script, "sendNote")
     # A job that says which passage it writes again never opens a new card.
     events = function(script, "onEvent")
     started = events[events.index('case "job_started"') : events.index('case "thinking"')]
@@ -198,9 +196,9 @@ def test_suggestions_are_offered_above_the_box_and_never_sent():
     # Taken: into the box, after asking when it holds text; nothing is sent.
     taken = function(script, "takeSuggestion")
     assert taken.index("window.confirm(") < taken.index("box.value = words")
-    for sends in ("send(", "call(", "fetch(", "submit"):
+    for sends in ("send(", "call(", "act(", "fetch(", "submit"):
         assert sends not in taken, sends
-    assert 'call("POST", "/api/suggest", { ask })' in function(script, "suggest")
+    assert 'act("/api/suggest", { ask })' in function(script, "suggest")
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node isn't installed")

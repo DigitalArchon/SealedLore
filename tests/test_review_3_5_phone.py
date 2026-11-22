@@ -32,6 +32,7 @@ from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.models.config import PhoneDevice, ProviderConfig  # noqa: E402
 from sealedlore.models.node import NARRATOR_SPEAKER_ID  # noqa: E402
 from sealedlore.models.summary import Summary  # noqa: E402
+from sealedlore.phone import api as phone_api  # noqa: E402
 from sealedlore.phone.api import Api  # noqa: E402
 from sealedlore.phone.page import page_files  # noqa: E402
 from sealedlore.phone.pairing import Pairing, token_hash  # noqa: E402
@@ -40,7 +41,7 @@ from sealedlore.providers.mock import MockChatProvider  # noqa: E402
 from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa: E402
 from tests import test_phone_window as desk  # noqa: E402
 from tests.conftest import make_exchange  # noqa: E402
-from tests.test_phone_api import ONION, TOKEN, FakeBackend  # noqa: E402
+from tests.test_phone_api import ONION, TOKEN, FakeBackend, answer, make  # noqa: E402
 from tests.test_phone_server import CONNECTED, Client, wait_for  # noqa: E402
 
 
@@ -519,3 +520,78 @@ def test_a_phone_opening_another_story_never_asks_about_a_chapters_edit(
     finally:
         window.summaries_panel.drop_edit()
         window.close()
+
+
+# --- P6: a page that is behind ------------------------------------------------------------------
+
+# Every request that changes the open story, as the page sends it but for the story.
+CHANGES = [
+    ("/api/turn", {"text": "Hi", "speaker": "c1"}),
+    ("/api/turn", {"text": "Why?", "speaker": "question"}),
+    ("/api/stop", {}),
+    ("/api/regenerate", {}),
+    ("/api/reroll", {"node_id": "n1"}),
+    ("/api/continue", {"node_id": "n1"}),
+    ("/api/revise", {"node_id": "n1", "change": "It was raining."}),
+    ("/api/suggest", {"ask": "ask-1f"}),
+    ("/api/take", {"node_id": "n1", "step": 1}),
+    ("/api/branch", {"start_id": "n5"}),
+]
+
+
+@pytest.mark.parametrize(("path", "body"), CHANGES)
+def test_what_a_page_sends_for_one_story_never_lands_in_another(path, body):
+    """A turn named no story: from a page that was behind (its events late
+    over Tor, or missed) it went into whichever shared story was open by
+    then. The page says which story it means, and the desktop refuses when
+    that isn't the one open now."""
+    api, backend = make()
+    backend.open_id = "chat"  # the desktop has moved on to another shared story
+    status, said = answer(api, "POST", path, {**body, "story": "shared"})
+    assert (status, said.get("error")) == (409, phone_api.ANOTHER_STORY)
+    assert said["another_story"] is True  # the page catches up by it
+    assert backend.calls == []
+
+    status, _ = answer(api, "POST", path, {**body, "story": "chat"})
+    assert status in (200, 202) and len(backend.calls) == 1
+
+
+@pytest.mark.parametrize(("path", "body"), CHANGES)
+def test_a_page_that_names_no_story_is_asked_to_reload(path, body):
+    """A page loaded before the desktop was updated says nothing of the
+    story: it is refused, in words that say what to do, rather than trusted
+    to be showing the story that is open."""
+    api, backend = make()
+    status, said = answer(api, "POST", path, body, story=None)
+    assert (status, said.get("error")) == (409, phone_api.OLD_PAGE)
+    assert backend.calls == []
+
+
+def test_a_story_not_shared_is_still_answered_as_before_whatever_story_is_named():
+    api, backend = make()
+    backend.open_id = "private"
+    for story in ("private", "shared", None):
+        body = {"text": "Hi", "speaker": "c1"}
+        status, said = answer(api, "POST", "/api/turn", body, story=story)
+        assert (status, said) == (423, {"error": phone_api.NOT_SHARED, "shared": False})
+
+
+def test_a_turn_for_another_story_stays_out_of_the_one_open(app, desktop):
+    window, phone = desktop(["The door gives."])
+    status, said = phone.ask("POST", "/api/turn", {**narration("Night falls."), "story": "gone"})
+    assert (status, said.get("error")) == (409, phone_api.ANOTHER_STORY)
+    assert not window._busy and desk.user_texts(window) == []
+    story = window.session.story.id
+    assert phone.ask("POST", "/api/turn", {**narration("Night falls."), "story": story})[0] == 202
+    desk.wait_for(app, lambda: not window._busy)
+    assert desk.user_texts(window) == ["Night falls."]
+
+
+def test_the_page_says_which_story_it_means_with_everything_it_changes():
+    script = page_files("test")["/app.js"][0].decode("utf-8")
+    act = page_function(script, "act")
+    assert "S.state.story.id" in act and "story" in act
+    assert "another_story" in act and "refreshAll()" in act
+    for path, _body in CHANGES:
+        assert f'act("{path}"' in script, path
+        assert f'call("POST", "{path}"' not in script, path

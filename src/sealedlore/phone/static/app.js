@@ -109,6 +109,16 @@
     return { status: response.status, ok: response.ok, data };
   }
 
+  // What changes the open story says which story this page takes that to
+  // be: the desktop refuses it when another is open by then, and this page
+  // (which was behind) catches up.
+  async function act(path, body) {
+    const story = S.state && S.state.story ? S.state.story.id : null;
+    const answer = await call("POST", path, Object.assign({ story }, body));
+    if (answer.status === 409 && answer.data.another_story) refreshAll();
+    return answer;
+  }
+
   function messageOf(answer) {
     return (answer.data && answer.data.error) || "The desktop didn't answer as expected.";
   }
@@ -849,11 +859,11 @@
     let answer;
     try {
       if (n.mode === "change") {
-        answer = await call("POST", "/api/revise", { node_id: n.id, change: words });
+        answer = await act("/api/revise", { node_id: n.id, change: words });
       } else {
         const body = retakeBody(n.id);
         if (words) body.note = words;
-        answer = await call("POST", "/api/regenerate", body);
+        answer = await act("/api/regenerate", body);
       }
     } catch (e) {
       if (!S.ended) toast("The desktop couldn't be reached. What you wrote is still here.", true);
@@ -1037,7 +1047,7 @@
     syncSendButton();
     let answer;
     try {
-      answer = await call("POST", "/api/suggest", { ask });
+      answer = await act("/api/suggest", { ask });
     } catch (e) {
       failed(S.ended ? "" : "The desktop couldn't be reached.");
       return;
@@ -1116,7 +1126,7 @@
   async function send() {
     const state = S.state || {};
     if (state.busy && !state.background) {
-      await call("POST", "/api/stop", {});
+      await act("/api/stop", {});
       return;
     }
     const text = $("turn");
@@ -1135,7 +1145,7 @@
     S.sending = true;
     syncSendButton();
     try {
-      const answer = await call("POST", "/api/turn", body);
+      const answer = await act("/api/turn", body);
       if (answer.status === 202) {
         text.value = "";
         if (answer.data.queued) toast("Your turn goes once the desktop finishes reading the passage.");
@@ -1159,24 +1169,24 @@
   }
 
   async function regenerate(nodeId) {
-    const answer = await call("POST", "/api/regenerate", retakeBody(nodeId));
+    const answer = await act("/api/regenerate", retakeBody(nodeId));
     if (!answer.ok) toast(messageOf(answer), true);
   }
 
   async function continuePassage(nodeId) {
     const body = { node_id: nodeId };
     if (S.choices.length) body.length = S.choices.length;
-    const answer = await call("POST", "/api/continue", body);
+    const answer = await act("/api/continue", body);
     if (!answer.ok) toast(messageOf(answer), true);
   }
 
   async function reroll(nodeId) {
-    const answer = await call("POST", "/api/reroll", { node_id: nodeId });
+    const answer = await act("/api/reroll", { node_id: nodeId });
     if (!answer.ok) toast(messageOf(answer), true);
   }
 
   async function switchTake(nodeId, step) {
-    const answer = await call("POST", "/api/take", { node_id: nodeId, step });
+    const answer = await act("/api/take", { node_id: nodeId, step });
     if (!answer.ok) toast(messageOf(answer), true);
   }
 
@@ -1223,7 +1233,7 @@
 
   async function switchBranch(startId) {
     closeOverlay();
-    const answer = await call("POST", "/api/branch", { start_id: startId });
+    const answer = await act("/api/branch", { start_id: startId });
     if (!answer.ok) toast(messageOf(answer), true);
   }
 

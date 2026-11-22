@@ -3882,6 +3882,10 @@ private scene is begun and ended on the desktop. Something asked for from a
 phone that fails (the endpoint is down, say) is said on the phone, and on the
 desktop in the status bar and under the story's latest message, marked ⚠: it
 opens no dialog there, so the phones can go on with nobody at the computer.
+And if another story has been opened on the desktop before the page caught
+up, what you send is refused rather than sent into that story: the page says
+so, shows the story that is open now, and keeps your text in the box. A page
+left open from before SealedLore was updated is asked to reload first.
 
 **Private scenes, memory-only chats and private models** can be played from
 the phone if their story is shared, and the computer asks first when you

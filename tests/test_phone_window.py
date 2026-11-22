@@ -39,6 +39,7 @@ from sealedlore.phone import api as phone_api  # noqa: E402
 from sealedlore.phone.pairing import token_hash  # noqa: E402
 from sealedlore.providers.mock import MockChatProvider  # noqa: E402
 from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa: E402
+from tests.test_phone_api import changes_the_story  # noqa: E402
 
 ONION = "a" * 56 + ".onion"
 TOKEN = "the-phone-s-token"
@@ -70,9 +71,11 @@ def wait_for(app: QApplication, condition, timeout: float = 20.0) -> None:
 class Phone:
     """A phone's requests, over the socket tor would forward to."""
 
-    def __init__(self, app: QApplication, path: Path) -> None:
+    def __init__(self, app: QApplication, path: Path, story: str | None = None) -> None:
         self.app = app
         self.path = path
+        # The story the page takes to be open, sent with whatever changes it.
+        self.story = story
 
     def _connect(self) -> QLocalSocket:
         socket = QLocalSocket()
@@ -118,6 +121,9 @@ class Phone:
         if token:
             lines.append(f"Authorization: Bearer {token}")
         data = b""
+        if self.story and isinstance(body, dict) and "story" not in body:
+            if changes_the_story(method, path):
+                body = {**body, "story": self.story}
         if body is not None:
             data = json.dumps(body).encode()
             lines += ["Content-Type: application/json", f"Content-Length: {len(data)}"]
@@ -194,7 +200,7 @@ def open_window(
     if shared:
         window.config.phone.shared_stories = [story.id]
     window.start_phone_server(sockets / "h.sock", ONION)
-    return window, Phone(QApplication.instance(), sockets / "h.sock")
+    return window, Phone(QApplication.instance(), sockets / "h.sock", story.id)
 
 
 def user_texts(window: MainWindow) -> list[str]:

@@ -8,6 +8,8 @@ to itself are here, once, for every route:
 - only stories the author shared reach a phone. A story that isn't available is
   answered as if it didn't exist, and while one is open on the desktop every
   route about the open story answers 423 with no title;
+- whatever would change the open story says which story it is for, and is
+  refused when another is open by then;
 - every value a phone sends is checked against what the composer offers now.
 """
 
@@ -46,6 +48,11 @@ _ID = re.compile(r"[A-Za-z0-9_.-]{1,96}")
 
 NOT_SHARED = "The story open on the desktop isn't shared with this phone."
 NO_STORY = "No story is open on the desktop."
+ANOTHER_STORY = (
+    "Another story is open on the desktop now, so that wasn't sent. "
+    "Look at what this page shows now, then send it again."
+)
+OLD_PAGE = "This page is from before SealedLore was updated. Reload it, then send that again."
 
 
 @dataclass(frozen=True)
@@ -252,6 +259,8 @@ class Api:
                 self.backend.seen(device)
             try:
                 response = self._story_refusal() if route.story else None
+                if response is None and route.story and route.method == "POST":
+                    response = self._other_story(request)
                 if response is None:
                     response = route.handler(request, *match.groups(), device=device)
             except HttpError as exc:
@@ -302,6 +311,22 @@ class Api:
             return json_response(423, {"error": NO_STORY, "shared": False})
         if not self.available(row):
             return json_response(423, {"error": NOT_SHARED, "shared": False})
+        return None
+
+    def _other_story(self, request: Request) -> Response | None:
+        """A request that would change the open story says which story its
+        page took that to be (`story`), and is refused when that isn't the
+        one open now: a page that is behind (its events late over Tor, or
+        missed) sent a turn into whichever shared story was open by then.
+        Every such request, those naming a message too: a copy of a story
+        has its messages' ids. One that names no story is from a page loaded
+        before this was asked, and is refused rather than trusted."""
+        row = self.backend.open_story()
+        story = _object(request).get("story")
+        if story is None:
+            return error_response(409, OLD_PAGE)
+        if row is None or story != row.id:
+            return json_response(409, {"error": ANOTHER_STORY, "another_story": True})
         return None
 
     # --- pairing -------------------------------------------------------------
