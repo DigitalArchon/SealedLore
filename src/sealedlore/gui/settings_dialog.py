@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -225,6 +226,10 @@ def _note_label() -> QLabel:
     label.setObjectName("hintLabel")
     label.setWordWrap(True)
     label.setTextFormat(Qt.PlainText)
+    # No taller than its text: a page with height to spare gave these notes
+    # 75 pixels for a line, and an empty one left a gap under Endpoints'
+    # buttons (Nov 22 2026).
+    label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
     return label
 
 
@@ -989,11 +994,13 @@ class SettingsDialog(QDialog):
         self._loading_rows = False
         self._provider_at_open = provider.name if provider else None
 
+        # One note, at the top: the page said what an endpoint is twice, here
+        # and again under the keys (Nov 22 2026).
         intro = QLabel(
-            "Each endpoint has an address and a key of its own; a model chosen from one "
-            'names it ("Anthropic::claude-opus-5-5"), and a model named without an '
-            "endpoint goes to the default one. NanoGPT and Anthropic both serve Claude: with "
-            "a key for each, Choose on the Models page shows which is which."
+            "Any OpenAI-compatible endpoint, or Anthropic's own API, each with an address "
+            'and a key of its own. A model chosen from one names it ("Anthropic::claude-'
+            'opus-5-5"); a model named without an endpoint goes to the default one. Which '
+            "models run where is on the Models page."
         )
         intro.setObjectName("hintLabel")
         intro.setWordWrap(True)
@@ -1125,14 +1132,6 @@ class SettingsDialog(QDialog):
         form.addRow(every)
         form.addRow("Keep API keys in", self.key_storage)
         form.addRow(self._key_note())
-        hint = QLabel(
-            "Any OpenAI-compatible /chat/completions endpoint, or Anthropic's own API "
-            "(https://api.anthropic.com with an Anthropic key). Which models run where is "
-            "on the Models page."
-        )
-        hint.setObjectName("hintLabel")
-        hint.setWordWrap(True)
-        form.addRow(hint)
         caching = Fold(form, "Prompt caching (advanced)")
         caching.add_row("Prompt caching", self.cache_mode)
         caching.add_row("Cache lifetime", self.cache_ttl)
@@ -1144,6 +1143,12 @@ class SettingsDialog(QDialog):
         caching_hint.setObjectName("hintLabel")
         caching_hint.setWordWrap(True)
         caching.add_row(caching_hint)
+        # The page's spare height goes below everything: given to the form's
+        # rows, it opened gaps round the notes and the held-back keys' holder
+        # (Nov 22 2026).
+        filler = QWidget()
+        filler.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        form.addRow(filler)
         self._load_endpoint_fields()
         self._refresh_endpoint_rows()
         return widget
@@ -1436,7 +1441,7 @@ class SettingsDialog(QDialog):
         form.addRow("Plot model", self.plot_model)
 
         self.lore_model = self._routed_field(self.config.lore_model, "lore_model")
-        self.lore_model.setPlaceholderText("blank: same as the scene model")
+        self.lore_model.setPlaceholderText("same as the scene model")
         self.lore_model.setToolTip(
             "Picks lore after each passage when a lorebook is too large to send whole and "
             'Lore → Large lorebooks is "Model picks". The default is a NanoGPT model id; '
@@ -1454,7 +1459,7 @@ class SettingsDialog(QDialog):
         form.addRow("Image prompt writer", self.image_prompt_model)
 
         self.record_model = self._routed_field(self.config.record_model or "", "record_model")
-        self.record_model.setPlaceholderText("blank: same as the scene model")
+        self.record_model.setPlaceholderText("same as the scene model")
         self.record_model.setToolTip(
             "Keeps the public record for characters played by their own model (a trial): "
             "after each passage, what everyone where the story is set knows by now, so a "
@@ -1879,6 +1884,9 @@ class SettingsDialog(QDialog):
         self.budget = QSpinBox()
         self.budget.setRange(1_000, 1_000_000)
         self.budget.setSingleStep(1_000)
+        # As the cast's room and the private budget beside it say theirs.
+        self.budget.setGroupSeparatorShown(True)
+        self.budget.setSuffix(" tokens")
         self.budget.setValue(
             self.story.defaults.context_token_budget if self.story is not None else 60_000
         )
@@ -2024,12 +2032,10 @@ class SettingsDialog(QDialog):
         chapters.add_row("Keep a Question's recall for", self.recall_carry)
 
         hint = QLabel(
-            "Archival summarises the oldest whole chunk of the story rather than "
-            "one turn at a time, so the summary block stays stable and the cached "
-            "prompt prefix survives. The most recent turns always stay verbatim. "
-            "When it runs it keeps going until the prompt is back down to the share "
-            "of the budget above, so it happens rarely rather than every few turns. "
-            "The model that writes the chapters is on the Models page."
+            "When the story outgrows its budget, its oldest passages are summarised "
+            "into chapters, several at a time, so it happens rarely rather than every "
+            "turn; the latest passages always go as written. The model that writes the "
+            "chapters is on the Models page."
         )
         hint.setObjectName("hintLabel")
         hint.setWordWrap(True)
@@ -2796,8 +2802,8 @@ class SettingsDialog(QDialog):
         self.builtin_row = BuiltinModelRow(self._root)
         form.addRow(self.builtin_row)
         hint = QLabel(
-            "Keyword matching always runs, and is the whole story when this is off "
-            "or the endpoint fails. A small lorebook is sent whole and needs neither."
+            "Keyword matching always runs, and is all that runs when this is off or "
+            "the endpoint fails. A small lorebook is sent whole and needs neither."
         )
         hint.setObjectName("hintLabel")
         hint.setWordWrap(True)

@@ -82,8 +82,8 @@ class ImagesWindow:
         self.composer.image_requested.connect(lambda: self.generate_image())
 
     def _image_actions(self, story_menu) -> None:
-        """Called from `_build_actions`: the Story menu's picture entries."""
-        story_menu.addSeparator()
+        """Called from `_build_actions`: the picture entries, in the Story
+        menu's Pictures and video."""
         # The window says "picture" everywhere else.
         self.image_action = QAction("Draw a &picture…", self)
         self.image_action.setShortcut(QKeySequence("Ctrl+Shift+I"))
@@ -101,7 +101,7 @@ class ImagesWindow:
         story_menu.addAction(self.portraits_action)
         # Pictures redrawn in a style, keeping what each shows (the author,
         # Nov 3 2026: imported pictures quickly made to suit the style).
-        self.restyle_action = QAction("Restyle pictures…", self)
+        self.restyle_action = QAction("Re&style pictures…", self)
         self.restyle_action.setStatusTip(
             "The cards' pictures redrawn in a style, keeping what each shows; you see every "
             "prompt first"
@@ -200,7 +200,7 @@ class ImagesWindow:
 
     def draw_place_picture(self) -> bool:
         """A picture of the place the scene is at (the button above the
-        story, Story → Picture of this place…)."""
+        story, Story → Pictures and video → Picture of this place…)."""
         if not self._place_wanted():
             return False
         return self.generate_image(place=True)

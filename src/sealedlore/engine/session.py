@@ -4251,7 +4251,7 @@ class StorySession(
         if plot_uses(self.story.plot, card.id):
             raise ValueError(
                 f"The plot brings {card.name} in: change the plot first "
-                "(Story → Open in the plot editor…)."
+                "(Story → Plot → Open in the plot editor…)."
             )
         if self.in_private and card.id == self.story.held_character_id:
             raise ValueError(

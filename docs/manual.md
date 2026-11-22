@@ -611,8 +611,8 @@ the Stories list, show the same choices. A story saves itself as you go
 
 ![The start page with no stories yet: the sample stories first, each with its picture and a line on what it is, then the ways to start your own and Your characters](screenshots/start-page.webp)
 
-**The Stories list.** Each row says what kind of story it is (**Simple**,
-**Standard** or **With Plot**), how many messages it has, when it was started
+**The Stories list.** Each row says what kind of story it is (**Story**,
+**Story with a plot** or **Simple chat**), how many messages it has, when it was started
 and when it was last played, and **own models** when it is on models other than
 those in Settings (the tooltip says which). **Sort by** puts them in order of
 when they were last played, or by title. A Visual Story from a version before
@@ -1221,7 +1221,7 @@ them, so in the new story they are unread under Story → Setup… →
 Storyteller's notes until **Show them** is pressed, as a draft's are. The
 importer notes it when they name a character, place or lore entry the file
 keeps hidden, since the storyteller would then know of them before the
-event that brings them in. **Story → Add a plot from a file…** takes a file's
+event that brings them in. **Story → Plot → Add a plot from a file…** takes a file's
 facts and events only, never its notes.
 
 How a plot is worded matters as much as what is in it: a trigger the
@@ -1235,7 +1235,7 @@ examples in the style of the samples.
 
 ### A plot written by the model
 
-A story can have a plot without anyone writing one by hand. **Story → Write a
+A story can have a plot without anyone writing one by hand. **Story → Plot → Write a
 plot with the model…** gives the open story one, the last step of **Write a
 story from scratch** offers one, and so does **Draft a story from an idea**.
 Choose:
@@ -1300,7 +1300,7 @@ surprise: if the Plot page shows spoilers, that is turned off too.
 rather not: the plot is written again with that change, checked as before,
 and still hidden, and the dialog says only that it was done unless you look.
 Ask again as often as you like; **Undo the last change** puts the plot back
-as it was before the last request. **Story → Change the plot with the
+as it was before the last request. **Story → Plot → Change the plot with the
 model…** does the same for any story with a plot. Notes the plot itself wrote
 for the storyteller may be written again with it, for as long as you have
 not changed them (the dialog then says "The storyteller's notes were
@@ -1310,7 +1310,7 @@ touched.
 
 ### The plot editor on a story
 
-**Story → Open in the plot editor…** opens the plot editor on the open
+**Story → Plot → Open in the plot editor…** opens the plot editor on the open
 story with everything a plot file can hold of it filled in: its title and
 settings, world, opening, characters, places, lore, their pictures and its
 plot. **Open a story…** in the editor's File menu does the same for any of
@@ -1946,8 +1946,8 @@ suggestions the story has made that you haven't looked at, and names the
 Settings that would help when they are off (Keep the prose fresh, Let the
 storyteller make the next move when I wait). Asking for changes before the
 story begins can change the lore's rules and settings too. When the
-cause is the plot itself, it says so, and where it is changed: Story → Open in
-the plot editor…, or Story → Write a plot with the model…. You choose how many exchanges
+cause is the plot itself, it says so, and where it is changed: Story → Plot → Open in
+the plot editor…, or Story → Plot → Write a plot with the model…. You choose how many exchanges
 from the story it sees as examples, from none to all of them: each is your turn
 and the reply to it. By default it sees the last three. The dialog shows about
 how many tokens that is, and a review too big for the model is refused before
@@ -2074,7 +2074,7 @@ so the next turn costs one cache miss. Choose one and the right side has two tab
 cast board" under The People page). **Everyone** shows each character's
 pictures in a row; click one for their sheet. **Add** and **Remove** under
 the list make a card and take one off. A character the plot brings in or
-names can't be removed until the plot no longer does (change it with Story →
+names can't be removed until the plot no longer does (change it with Story → Plot →
 Open in the plot editor… first), nor the one you are playing while a private
 scene is open. When turns are archived, or when you
 press **Scan recent story** (under the list too), the model suggests named
@@ -2301,7 +2301,7 @@ with no portrait has **Draw a portrait…** and **Choose a picture…** on it.
 
 Until the story has them, a panel at the top offers **Draw portraits…** for
 everyone who has none (you see and can change every prompt first, as in
-Story → Draw pictures for the cards…) and a background behind the story
+Story → Pictures and video → Draw pictures for the cards…) and a background behind the story
 (**Draw a background…**, or **Choose a background…** from your computer).
 Pictures need an image model: without one, **Set up pictures…** opens
 Settings → Images. **Not now** puts the panel away until you next open the
@@ -2958,7 +2958,7 @@ applying as they stood; the rest are easy to turn down.
 
 ![The picture dialog: a direction, the picture's style, the prompt the story's model wrote from it, the herbwife's and the ranger's portraits as the reference pictures, numbered, and the model, size and price, with Generate](screenshots/picture-dialog.png)
 
-**Story → Draw a picture…** (Ctrl+Shift+I), the **Picture…** button beside the
+**Story → Pictures and video → Draw a picture…** (Ctrl+Shift+I), the **Picture…** button beside the
 composer, or **Illustrate this passage…** in a passage's ⋯ menu asks the
 story's model to write an image prompt from where the story is, choosing
 among the reference pictures on cast sheets and lore entries. **Add…** under
@@ -3085,7 +3085,7 @@ SVG, say, which could draw in files from your computer) is never read as one.
 
 ### Pictures for the cards
 
-**Story → Draw pictures for the cards…**, **Draw a portrait…** on a
+**Story → Pictures and video → Draw pictures for the cards…**, **Draw a portrait…** on a
 character's card, **Draw a picture…** on a lore entry, or the box in the Start dialog
 gives each character a portrait and each lore entry a picture, drawn from
 what their cards say. The Start dialog counts the characters and lore entries
@@ -3212,7 +3212,7 @@ style or another, keeping what it shows (the same person, pose, clothes and
 framing), or show them from the waist up or as a whole figure. The new picture
 keeps the old one's labels and is labelled with its framing.
 
-**Story → Restyle pictures…**, or **Restyle…** on the cast board (everyone's
+**Story → Pictures and video → Restyle pictures…**, or **Restyle…** on the cast board (everyone's
 with **Everyone** chosen), redraws many pictures at once: pictures you imported
 from a character card, say, to suit the story's style. Every picture is
 listed with its prompt, ticked to begin with if it isn't in the style chosen,
@@ -3272,7 +3272,7 @@ stays among the card's pictures.
 
 ## Videos
 
-**Story → Generate video…**, **Video…** in the Media tab, or **Video of this
+**Story → Pictures and video → Generate video…**, **Video…** in the Media tab, or **Video of this
 passage…** in a passage's ⋯ menu makes a few seconds of video of the story.
 
 **Video costs far more than pictures**: a picture is a few cents, a video tens
@@ -3714,7 +3714,7 @@ story is (Settings → Context), with a plain summariser.
   **Show as** chooses which of their pictures they are shown with, from the
   chat's start. When you ask for a picture (**Picture…**), the pictures of
   those here now, as they are shown, are offered first to go with it, as a
-  story's characters' are; **Story → Draw pictures for the cards…** draws
+  story's characters' are; **Story → Pictures and video → Draw pictures for the cards…** draws
   portraits for those with none.
 
   ![A chat's People page: the line saying its characters are for their pictures alone, Bring someone in, John under Here now in his combat armour, and Jane under Set aside](screenshots/chat-people.webp)

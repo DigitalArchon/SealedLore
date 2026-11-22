@@ -175,7 +175,7 @@ def test_the_listing_says_what_kind_a_story_is_when_it_was_played_and_its_models
     save_story_bundle(StoryBundle(story=Story(id="chat", title="C", mode="chat")), root=tmp_path)
     listed = {row.id: row for row in story_listings(tmp_path)}
     row = listed["plain"]
-    assert row.kind == "Standard" and row.models == {"scene": "o/scene"}
+    assert row.kind == "Story" and row.models == {"scene": "o/scene"}
     assert row.started.startswith("2026-02-01") and row.played.startswith("2026-03-01")
     assert row.made.startswith("2026-01-01")
-    assert listed["chat"].kind == "Simple" and not listed["chat"].started
+    assert listed["chat"].kind == "Simple chat" and not listed["chat"].started

@@ -80,7 +80,7 @@ class CastBoardWindow:
         self._board_waiting: list[tuple[str, Waiting]] = []
 
     def _board_action(self, view_menu) -> None:
-        self.board_action = QAction(f"{BOARD_LABEL}…", self)
+        self.board_action = QAction(f"&{BOARD_LABEL}…", self)
         self.board_action.setStatusTip(BOARD_TIP)
         self.board_action.triggered.connect(lambda: self.show_cast_board(True))
         view_menu.addAction(self.board_action)

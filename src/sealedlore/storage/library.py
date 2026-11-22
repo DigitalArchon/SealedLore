@@ -42,7 +42,9 @@ class StoryListing:
 
     @property
     def kind(self) -> str:
-        return "Simple" if self.chat else "With Plot" if self.plot else "Standard"
+        # What it is in words (Nov 22 2026): "Simple", "Standard" and "With
+        # Plot" didn't say a chat from a story.
+        return "Simple chat" if self.chat else "Story with a plot" if self.plot else "Story"
 
     @property
     def last_active(self) -> str:

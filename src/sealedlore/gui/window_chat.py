@@ -126,7 +126,7 @@ class ChatWindow:
         self.view_toggle.set_chat(chat)
         # The View menu's copy of the toggle says the same as the toggle.
         self.storyteller_view_action.setText(
-            "What the &model sees" if chat else "What the &storyteller sees"
+            "What the &model sees" if chat else "What the storyteller s&ees"
         )
         self.find_action.setText("&Find in chat…" if chat else "&Find in story…")
         # A chat's summaries are parts, as its cards say.

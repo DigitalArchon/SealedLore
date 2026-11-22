@@ -80,7 +80,7 @@ class TextSizeWindow:
             group.addAction(action)
             menu.addAction(action)
             self.theme_choices[key] = action
-        fonts = QAction("&Fonts…", self)
+        fonts = QAction("Fo&nts…", self)
         fonts.setStatusTip("Choose the fonts for the window, the story and the Prompt page")
         fonts.triggered.connect(self.choose_fonts)
         view_menu.addAction(fonts)

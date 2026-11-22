@@ -347,11 +347,11 @@ class LorePanel(QWidget):
         layout.setContentsMargins(0, 8, 0, 0)
         layout.setSpacing(6)
 
-        caption = QLabel("INJECTED LAST TURN")
+        caption = QLabel("SENT WITH THE LAST TURN")
         caption.setObjectName("composerCaption")
         self._caption = caption
 
-        self.status = QLabel("Nothing retrieved yet.")
+        self.status = QLabel("Nothing sent yet.")
         self.status.setObjectName("hintLabel")
         self.status.setWordWrap(True)
 
@@ -376,7 +376,7 @@ class LorePanel(QWidget):
         layout.addLayout(heading)
         layout.addWidget(self.status)
         layout.addWidget(self.injected, 1)
-        # An empty list under "Nothing retrieved yet." said nothing twice.
+        # An empty list under "Nothing sent yet." said nothing twice.
         self.injected.hide()
         self._report_layout = layout
         return host
@@ -505,7 +505,7 @@ class LorePanel(QWidget):
     def _show_retrieval(self, report: RetrievalReport | None) -> None:
         self.injected.clear()
         if report is None:
-            self.status.setText("Nothing retrieved yet.")
+            self.status.setText("Nothing sent yet.")
             return
         if report.mode == "whole":
             for entry in report.standing:

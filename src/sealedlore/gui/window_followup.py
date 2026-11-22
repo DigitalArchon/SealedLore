@@ -105,14 +105,15 @@ class FollowUpWindow:
     def change_plot_with_model(
         self, *, then: Callable[[], None] | None = None, go_on: str = "Close"
     ) -> None:
-        """Story → Change the plot with the model…: requests for changes to
+        """Story → Plot → Change the plot with the model…: requests for changes to
         the story's plot, which is written again with each."""
         session = self.session
         if session is None or session.story.chat:
             return
         if session.story.plot is None:
             self.statusBar().showMessage(
-                "The story has no plot: Story → Write a plot with the model… writes one.", 8000
+                "The story has no plot: Story → Plot → Write a plot with the model… writes one.",
+                8000,
             )
         elif self._may_follow_up("Changing the plot"):
             self._open_follow_up(PLOT, then=then, go_on=go_on)

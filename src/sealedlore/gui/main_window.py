@@ -36,7 +36,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore import __version__
 from sealedlore.engine.archival import chapter_number, chapter_numbers, turns_in
-from sealedlore.engine.authoring import describe, stale_voicing_notes
+from sealedlore.engine.authoring import describe, placeholders_view, stale_voicing_notes
 from sealedlore.engine.branches import next_branch_name, unique_branch_name
 from sealedlore.engine.chronicle import format_clock
 from sealedlore.engine.export import markdown_user_name, render_markdown
@@ -878,6 +878,10 @@ class MainWindow(
         self.settings_action = QAction("Se&ttings…", self)
         # Explicit: QKeySequence.Preferences is empty on GNOME.
         self.settings_action.setShortcut(QKeySequence("Ctrl+,"))
+        self.settings_action.setStatusTip(
+            "Your endpoints and models, and how SealedLore writes, archives, finds lore, "
+            "draws and keeps things private, for every story"
+        )
         self.settings_action.triggered.connect(self.open_settings)
         file_menu.addAction(self.settings_action)
         self.prompts_action = QAction("&Prompts (advanced)…", self)
@@ -890,14 +894,14 @@ class MainWindow(
         file_menu.addSeparator()
         # Phone access (gui/window_phone.py): on or off for this run; whether
         # it starts with the app is Settings → Phone.
-        self.phone_action = QAction("Phone access", self)
+        self.phone_action = QAction("P&hone access", self)
         self.phone_action.setCheckable(True)
         self.phone_action.setStatusTip(
             "Play shared stories from a phone's Tor Browser, through SealedLore's own tor"
         )
         self.phone_action.toggled.connect(self.set_phone_access)
         file_menu.addAction(self.phone_action)
-        self.phone_devices_action = QAction("Phone devices…", self)
+        self.phone_devices_action = QAction("Phone de&vices…", self)
         self.phone_devices_action.setStatusTip(
             "Pair a phone, choose the stories it may see, revoke a phone"
         )
@@ -930,9 +934,13 @@ class MainWindow(
         self.restart_action.triggered.connect(lambda: self.restart_story(review=True))
         story_menu.addAction(self.restart_action)
         self._retake_actions(story_menu)
-        # Pictures before the rarer things: they are what play reaches for.
-        self._image_actions(story_menu)
-        self._video_menu_actions(story_menu)
+        # Pictures before the rarer things: they are what play reaches for. In a
+        # submenu of their own (Nov 22 2026): the Story menu had twenty items.
+        story_menu.addSeparator()
+        self.pictures_menu = story_menu.addMenu("&Pictures and video")
+        self._image_actions(self.pictures_menu)
+        self.pictures_menu.addSeparator()
+        self._video_menu_actions(self.pictures_menu)
 
         story_menu.addSeparator()
         # The author (Nov 6 2026): "I like the world, but I'd prefer the
@@ -959,7 +967,7 @@ class MainWindow(
         )
         self.last_review_action.triggered.connect(self.show_last_review)
         story_menu.addAction(self.last_review_action)
-        self.undo_review_action = QAction("&Undo review changes", self)
+        self.undo_review_action = QAction("Un&do review changes", self)
         self.undo_review_action.setStatusTip(
             "Put the settings back as they were before the last review was applied"
         )
@@ -967,31 +975,31 @@ class MainWindow(
         story_menu.addAction(self.undo_review_action)
 
         story_menu.addSeparator()
+        # The plot's four in a submenu (Nov 22 2026), hidden in a chat.
+        self.plot_menu = story_menu.addMenu("Pl&ot")
         # The author (Nov 2026): a plot without writing one by hand.
         self.write_plot_action = QAction("&Write a plot with the model…", self)
         self.write_plot_action.setStatusTip(WRITE_PLOT_TIP)
         self.write_plot_action.triggered.connect(self.write_plot)
-        story_menu.addAction(self.write_plot_action)
+        self.plot_menu.addAction(self.write_plot_action)
         self.follow_up_plot_action = QAction("C&hange the plot with the model…", self)
         self.follow_up_plot_action.setStatusTip(FOLLOW_UP_PLOT_TIP)
         self.follow_up_plot_action.triggered.connect(lambda: self.change_plot_with_model())
-        story_menu.addAction(self.follow_up_plot_action)
+        self.plot_menu.addAction(self.follow_up_plot_action)
         # "Import plot…" beside File → Import… read as the same thing.
-        self.import_plot_action = QAction("Add a &plot from a file…", self)
+        self.import_plot_action = QAction("Add a plot from a &file…", self)
         self.import_plot_action.setStatusTip(
             "Give this story the facts and events from a plot file (.md)"
         )
         self.import_plot_action.triggered.connect(self.import_plot_into_story)
-        story_menu.addAction(self.import_plot_action)
+        self.plot_menu.addAction(self.import_plot_action)
         # The story's own world and cast filled in, so only the plot is written
         # (the author, Nov 2026: the editor could only start from nothing).
         self.edit_plot_action = QAction("&Open in the plot editor…", self)
         self.edit_plot_action.setStatusTip(EDIT_PLOT_TIP)
         self.edit_plot_action.triggered.connect(self.edit_story_plot)
-        story_menu.addAction(self.edit_plot_action)
+        self.plot_menu.addAction(self.edit_plot_action)
         # Four ways out of the app, one submenu: the Story menu had seventeen items.
-        # Apart from the plot's four above it, which it ran on from.
-        story_menu.addSeparator()
         self.export_menu = story_menu.addMenu("&Export")
         self.export_action = QAction("&Scenario…", self)
         self.export_action.setStatusTip("The shareable base story, without the playthrough")
@@ -1016,7 +1024,7 @@ class MainWindow(
         )
         self.export_menu.addAction(self.chapter_markdown_action)
         self.export_menu.addSeparator()
-        self.card_export_action = QAction("SillyTavern &card…", self)
+        self.card_export_action = QAction("SillyTavern c&ard…", self)
         self.card_export_action.setStatusTip(
             "A character as a SillyTavern card, with their portrait: for SillyTavern, Chub "
             "and the rest"
@@ -1027,7 +1035,7 @@ class MainWindow(
         self.lorebook_export_action.setStatusTip("The story's lore as a SillyTavern lorebook")
         self.lorebook_export_action.triggered.connect(self.export_lorebook)
         self.export_menu.addAction(self.lorebook_export_action)
-        self.usage_action = QAction("&Usage and cost…", self)
+        self.usage_action = QAction("Usage &and cost…", self)
         self.usage_action.setStatusTip(
             "What this story has cost so far, call by call and model by model"
         )
@@ -1038,7 +1046,7 @@ class MainWindow(
         # The Stories list, put away while a story is open (window_layout.py).
         view_menu.addAction(self.stories_list_action)
         view_menu.addSeparator()
-        self.storyteller_view_action = QAction("What the &storyteller sees", self)
+        self.storyteller_view_action = QAction("What the storyteller s&ees", self)
         self.storyteller_view_action.setCheckable(True)
         self.storyteller_view_action.setShortcut(QKeySequence("Ctrl+Shift+V"))
         self.storyteller_view_action.setStatusTip(
@@ -2020,6 +2028,7 @@ class MainWindow(
                 self._setup_dialog, self.session, self.catalog.models
             ),
             saved_prompts=self.saved_prompts(),
+            placeholders_used=bool(placeholders_view(self.session.bundle)),
         )
         self._setup_dialog = dialog
         style_picture: tuple[str, tuple[bytes, str] | None] = ("keep", None)
@@ -4689,7 +4698,11 @@ class MainWindow(
             else:
                 self.statusBar().showMessage(
                     "The draft is saved but not begun: Story → Start story… when it's ready"
-                    + (", and Story → Write a plot with the model… for its plot" if wishes else ""),
+                    + (
+                        ", and Story → Plot → Write a plot with the model… for its plot"
+                        if wishes
+                        else ""
+                    ),
                     10000,
                 )
 
@@ -5984,6 +5997,8 @@ class MainWindow(
             self.undo_review_action,
         ):
             action.setVisible(not self.in_chat)
+        # A chat has none of the plot's four: the submenu goes with them.
+        self.plot_menu.menuAction().setVisible(not self.in_chat)
         if self.in_chat:
             # And nothing written for a memory-only chat.
             for action in (

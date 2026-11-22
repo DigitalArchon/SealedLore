@@ -20,7 +20,7 @@ from sealedlore.engine.reactions import independent_cast
 from sealedlore.gui.character_prompt_dialog import show_character_prompt
 from sealedlore.gui.note_dialog import NoteDialog
 
-SHOW_ANSWERS = "Show the characters' &answers"
+SHOW_ANSWERS = "Show the characters' ans&wers"
 SHOW_ANSWERS_TIP = (
     "Show what characters played by their own model answered the latest passage before you "
     "send your turn. Hidden, you answer it as they did, without seeing theirs; the storyteller "

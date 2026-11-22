@@ -218,11 +218,16 @@ def test_the_session_line_says_where_to_set_up_what_is_missing(app, window):
 
 
 def test_the_menus_say_what_their_items_do(app, window):
-    texts = {
-        action.text().replace("&", "")
-        for action in window.story_menu.actions()
-        if not action.isSeparator()
-    }
+    def items(menu):
+        for action in menu.actions():
+            if action.isSeparator():
+                continue
+            yield action.text().replace("&", "")
+            # The pictures and the plot have submenus of their own (Nov 22 2026).
+            if action.menu() is not None:
+                yield from items(action.menu())
+
+    texts = set(items(window.story_menu))
     assert {
         "Review settings with the model…",
         "Add a plot from a file…",

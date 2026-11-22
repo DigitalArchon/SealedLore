@@ -290,7 +290,7 @@ def test_a_long_title_wraps_to_two_lines_and_no_more(app, tmp_path: Path, cast):
         heights[item.data(Qt.UserRole)] = rows.visualItemRect(item).height()
     assert heights["long"] > heights["short"], "the title wraps rather than being cut"
     assert heights["longer"] == heights["long"], "past two lines it is cut with …"
-    assert rows.item(0).text().split("\n")[1] == "Standard · Not begun"
+    assert rows.item(0).text().split("\n")[1] == "Story · Not begun"
     panel.close()
 
 

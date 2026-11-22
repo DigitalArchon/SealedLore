@@ -297,7 +297,7 @@ class NewStoryGuide(QDialog):
             _hint(
                 "The model writes it from everything the steps before hold, when you "
                 "create the story, before it begins. A plot can also be added or changed "
-                "later: Story → Write a plot with the model…, or the plot editor."
+                "later: Story → Plot → Write a plot with the model…, or the plot editor."
             )
         )
         layout.addStretch(1)

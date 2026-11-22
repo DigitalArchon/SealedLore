@@ -33,9 +33,9 @@ _WORDS: dict[bool, dict[str, str]] = {
     False: {
         "chapter": "chapter",
         "caption": (
-            "Archived history. These chapters replace the original prose in every later "
-            "prompt: what is written here is what the model sees of them (older chapters "
-            "may be merged into one part, and the story ledger, if on, rides alongside)."
+            "Once the story outgrows its budget, the storyteller gets these chapters in "
+            "place of its oldest passages: what is written here is what it reads. Older "
+            "chapters are merged into parts as the story grows."
         ),
         "empty": "Chapters appear here once the oldest turns are archived.",
         "list_tip": "Double-click a chapter to go to it in the story",

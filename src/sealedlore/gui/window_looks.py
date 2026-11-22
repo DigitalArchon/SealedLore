@@ -20,8 +20,8 @@ from sealedlore.storage.repository import save_config
 
 # The height of a face on a passage.
 FACE_HEIGHT = 56
-STAGE_LABEL = "Characters above the box you type in"
-PASSAGES_LABEL = "Characters on each passage"
+STAGE_LABEL = "Characters above the bo&x you type in"
+PASSAGES_LABEL = "Characters &on each passage"
 
 
 class LooksWindow:

@@ -428,7 +428,7 @@ def test_a_chats_story_so_far_branch_bar_and_menus_speak_of_a_chat(
     # Back in a story, a story's words.
     window.open_story(story.id)
     app.processEvents()
-    assert "These chapters replace the original prose" in panel.caption.text()
+    assert "the storyteller gets these chapters" in panel.caption.text()
     assert panel.detail.text() == "Chapters appear here once the oldest turns are archived."
     assert "the line of the story" in bar.button.toolTip().lower()
     assert window.restart_action.text() == "&Restart as new playthrough…"

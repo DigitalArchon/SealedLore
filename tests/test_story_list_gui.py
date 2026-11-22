@@ -113,12 +113,12 @@ def test_a_row_says_its_kind_when_it_was_started_and_when_it_was_last_played(app
     panel.refresh()
     assert row_of(panel, "plain").text().split("\n") == [
         "Plain",
-        "Standard · 2 messages",
+        "Story · 2 messages",
         "Started 3 Feb 2026 · Played 4 Mar 2026",
     ]
-    assert row_of(panel, "plotted").text().split("\n")[1] == "With Plot · Not begun"
+    assert row_of(panel, "plotted").text().split("\n")[1] == "Story with a plot · Not begun"
     assert row_of(panel, "plotted").text().split("\n")[2].startswith("Made ")
-    assert row_of(panel, "simple").text().split("\n")[1] == "Simple · 1 message"
+    assert row_of(panel, "simple").text().split("\n")[1] == "Simple chat · 1 message"
     panel.deleteLater()
 
 
@@ -132,7 +132,7 @@ def test_a_narrow_row_wraps_between_its_parts_and_a_wide_one_doesnt(app, tmp_pat
     font = panel.font()
     assert _StoryRow._meta_lines(meta, font, 2000) == meta
     narrow = _StoryRow._meta_lines(meta, font, 140)
-    assert "Standard" in narrow[0] and len(narrow) > len(meta)
+    assert "Story" in narrow[0] and len(narrow) > len(meta)
     assert all(not line.startswith(" · ") and not line.endswith(" · ") for line in narrow)
     panel.deleteLater()
 

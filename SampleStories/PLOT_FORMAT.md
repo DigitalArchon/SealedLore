@@ -11,7 +11,7 @@ misread, lead-ins and aftermaths that hold) is in `WRITING_PLOTS.md` beside
 it, also under Help → Writing a plot that plays well.
 
 Import one with **File → Import…** to start a new story, or with
-**Story → Add a plot from a file…** to give an existing story just its facts
+**Story → Plot → Add a plot from a file…** to give an existing story just its facts
 and events.
 Anything the importer can't read is listed with its line number. Errors stop
 the import; notes don't.
@@ -21,11 +21,11 @@ a form for everything below, picks conditions, `brings:`, `reveals:`, `sets:`
 and `at:` from what the file already holds, and runs the importer over the
 file as you go, so its problems list is what an import would say. It opens
 hand-written files too, and keeps what it can't make sense of as written so
-the importer can point at it. **Story → Open in the plot editor…** opens it
+the importer can point at it. **Story → Plot → Open in the plot editor…** opens it
 on a story you already have, everything filled in, to write its plot or
 change anything, and saves it all as a new story.
 
-Nor do you have to write a plot at all: **Story → Write a plot with the
+Nor do you have to write a plot at all: **Story → Plot → Write a plot with the
 model…** (also the last step of a new story) has the model write one in this
 format, from the story alone or from what you describe, checked as an
 import would check it.
@@ -177,7 +177,7 @@ Whoever imports the file has not read them. In the new story they are under
 **Story → Setup… → Storyteller's notes**, which says only how long they are
 until its author asks to see them, so a file's secrets can still surprise
 whoever plays it. An empty section is no notes, and
-**Story → Add a plot from a file…** takes a file's facts and events alone,
+**Story → Plot → Add a plot from a file…** takes a file's facts and events alone,
 never its notes.
 
 The importer notes it when the notes name a character, a place or a lore

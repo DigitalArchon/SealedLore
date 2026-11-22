@@ -65,8 +65,8 @@ class _Gallery(QListWidget):
         self.setResizeMode(QListWidget.Adjust)
         self.setMovement(QListWidget.Static)
         self.setIconSize(QSize(thumb, thumb))
-        # Room for two lines of caption under the picture.
-        self.setGridSize(QSize(thumb + 40, thumb + 64))
+        self._thumb = thumb
+        self._size_grid()
         self.setSpacing(4)
         self.setWordWrap(True)
         self.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -74,7 +74,19 @@ class _Gallery(QListWidget):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setContextMenuPolicy(Qt.CustomContextMenu)
 
+    def _size_grid(self) -> None:
+        """Room for three lines of caption under the picture, in the font as it
+        is now: a card picture's name, its look and its expression, a line
+        each. With two (a fixed 64 pixels), "winter coat · neutral" was cut to
+        "winter coat · …", losing the expression that tells a character's
+        pictures apart (Nov 22 2026)."""
+        lines = 3 * self.fontMetrics().lineSpacing()
+        # The delegate's own margins round the icon and text come to about
+        # 28 pixels (a three-line item asks 190 for a 110 picture at 100%).
+        self.setGridSize(QSize(self._thumb + 40, self._thumb + lines + 28))
+
     def fit(self) -> None:
+        self._size_grid()
         grid = self.gridSize()
         columns = max(1, (self.viewport().width() or self.width()) // max(1, grid.width()))
         rows = -(-self.count() // columns)
@@ -127,9 +139,10 @@ class ImagesPanel(QWidget):
         self.lore_heading = _heading()
         self.story_heading = _heading()
         self.hint = QLabel(
-            "No pictures or videos yet. Picture… beside Send (or Story → Draw a picture…) "
-            "pictures what is happening, and Story → Generate video… makes a few seconds of "
-            "it. Double-click one here to see it whole; right-click it for more."
+            "No pictures or videos yet. Picture… beside Send (or Story → Pictures and "
+            "video → Draw a picture…) pictures what is happening, and Story → Pictures and "
+            "video → Generate video… makes a few seconds of it. Double-click one here to "
+            "see it whole; right-click it for more."
         )
         self.hint.setObjectName("hintLabel")
         self.hint.setWordWrap(True)
@@ -268,7 +281,10 @@ class ImagesPanel(QWidget):
                         if ref.caption and ref.caption != "portrait"
                         else ""
                     )
-                    caption = f"{name}\n{shown}" if shown else name
+                    # Look and expression a line each: on one, the icon view cut
+                    # "winter coat · neutral" short rather than wrap it, losing
+                    # the expression that tells the pictures apart.
+                    caption = f"{name}\n{shown.replace(' · ', chr(10))}" if shown else name
                     item = QListWidgetItem(caption)
                     item.setData(Qt.UserRole, card.id)
                     item.setData(Qt.UserRole + 1, ref.id)

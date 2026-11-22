@@ -164,8 +164,8 @@ fun to play. This app will remain focused on text based roleplay.
   plot: made up from the story's world and characters, or from what you
   describe (how many events, how often, how big, how disruptive, what kinds).
   Offered as the last step of Write a story from scratch, when drafting from
-  an idea, and in Story → Write a plot with the model…. It stays hidden unless
-  you ask to see it. Story → Open in the plot editor… opens a story you
+  an idea, and in Story → Plot → Write a plot with the model…. It stays hidden unless
+  you ask to see it. Story → Plot → Open in the plot editor… opens a story you
   already have in the plot editor with everything filled in: write its plot,
   change anything else, and save it as a new story, the old one left as it
   is. The editor now shows which parts are the story's and which the plot's.
@@ -400,11 +400,11 @@ with it.
 The plot file editor (File → Plot file editor…) lets you write your own
 plots and share them, with reference pictures for their characters, places
 and lore if you like (kept in a folder beside the file). It also opens a
-story you already have (Story → Open in the plot editor…), everything filled
+story you already have (Story → Plot → Open in the plot editor…), everything filled
 in, to write its plot or change anything else; saving makes a new story, and
 the one you opened stays as it was.
 
-If you'd rather not write one at all, the model can (Story → Write a plot
+If you'd rather not write one at all, the model can (Story → Plot → Write a plot
 with the model…, or the last step of a new story): from the story alone, or
 from what you tell it you want. The plot it writes is checked the way a plot
 file is, and kept hidden from you too unless you choose to look.

@@ -10,7 +10,7 @@ from __future__ import annotations
 from sealedlore.gui.story_suggestions_dialog import StorySuggestionsDialog
 from sealedlore.models.story_suggestion import StorySuggestion
 
-ACTION_WORDS = "Suggestions from the &story…"
+ACTION_WORDS = "Suggestions &from the story…"
 ACTION_TIP = (
     "What the story has made part of its world, or changed in it, suggested for the "
     "lore and the cards as it is archived: apply, change or turn each down"

@@ -5367,7 +5367,7 @@ _text(
     "authoring.plot",
     AUTHORING,
     "Writing a plot",
-    "The system prompt of Story → Write a plot with the model…, the new story guide's "
+    "The system prompt of Story → Plot → Write a plot with the model…, the new story guide's "
     "plot step and a premise draft's plot. The program reads its reply as a plot file: "
     "keep the format it asks for.",
     """\

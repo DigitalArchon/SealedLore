@@ -1,6 +1,6 @@
 """A plot written by the model: asking for one, and the plot once it is in.
 
-`PlotDialog` is Story → Write a plot with the model…: what the author wants
+`PlotDialog` is Story → Plot → Write a plot with the model…: what the author wants
 of it (gui/plot_wishes.py). The new story guide and New story from a premise
 ask the same in a step of their own. The plot itself is written on the
 window's worker (`StorySession.draft_plot`, gui/window_plot.py).

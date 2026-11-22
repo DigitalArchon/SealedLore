@@ -1426,7 +1426,7 @@ def rekey_plot(
 
     Every parse of a file gives its characters and lore entries fresh ids, and
     the plot's `brings:`, `reveals:`, `Name at =` conditions and places carry
-    them. Attached to a story as parsed (Story → Add a plot from a file…), no
+    them. Attached to a story as parsed (Story → Plot → Add a plot from a file…), no
     event could bring anyone in and every named-character condition tested
     nobody (the review of Oct 20 2026). Each id among the file's own cards
     (`file_people`, `file_lore`) becomes the story card's of the same name

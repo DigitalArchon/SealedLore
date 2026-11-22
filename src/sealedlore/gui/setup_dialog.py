@@ -162,11 +162,15 @@ class SetupDialog(QDialog):
         describe_style: Callable[[], tuple[str, bytes, str] | None] | None = None,
         saved_prompts: SavedPrompts | None = None,
         hidden: frozenset[str] = frozenset(),
+        placeholders_used: bool = True,
     ) -> None:
         """`cast`: the story's own list, read again whenever the Starting
         scene tab is shown, since `characters` (the Cast page, lent) may
         have changed it. `models`: for the Models tab, shown with it.
-        `saved_prompts`: the system prompts kept for chats."""
+        `saved_prompts`: the system prompts kept for chats.
+        `placeholders_used`: whether any of the story's texts write {{user}}
+        or {{char}}; without, About doesn't offer whom they name."""
+        self._placeholders_used = placeholders_used
         self._saved_prompts = saved_prompts
         super().__init__(parent)
         self.setWindowTitle("Story setup")
@@ -522,7 +526,10 @@ class SetupDialog(QDialog):
         widget = QWidget()
         form = QFormLayout(widget)
         self.title = line_edit(self.story.title)
-        self.description = QPlainTextEdit(self.story.setup.description or "")
+        # As tall as its text: a QPlainTextEdit took the page's spare height,
+        # and a one-line description pushed every setting below it down to
+        # the foot of the tab (Nov 22 2026).
+        self.description = GrowingText(self.story.setup.description or "", lines=2, most=8)
         self.description.setPlaceholderText("What this chat is for. Not sent to the model.")
         form.addRow("Title", self.title)
         form.addRow("Description", self.description)
@@ -570,7 +577,10 @@ class SetupDialog(QDialog):
         widget = QWidget()
         form = QFormLayout(widget)
         self.title = line_edit(self.story.title)
-        self.description = QPlainTextEdit(self.story.setup.description or "")
+        # As tall as its text: a QPlainTextEdit took the page's spare height,
+        # and a one-line description pushed every setting below it down to
+        # the foot of the tab (Nov 22 2026).
+        self.description = GrowingText(self.story.setup.description or "", lines=2, most=8)
         self.description.setPlaceholderText(
             "What this story is, for anyone starting it. Not sent to the model."
         )
@@ -646,9 +656,15 @@ class SetupDialog(QDialog):
         for character in self.cast:
             self.char_is.addItem(character.name, character.id)
         self.char_is.setCurrentIndex(max(self.char_is.findData(chosen.char_id), 0))
+        hint = _hint(PLACEHOLDER_HINT)
         form.addRow("{{user}} is", self.user_is)
         form.addRow("{{char}} is", self.char_is)
-        form.addRow(_hint(PLACEHOLDER_HINT))
+        form.addRow(hint)
+        # They name nobody in a story none of whose texts writes them: three
+        # rows to read past in nearly every story (Nov 22 2026). Kept, and
+        # saved as they are, only out of sight.
+        for row in (self.user_is, self.char_is, hint):
+            form.setRowVisible(row, self._placeholders_used)
 
     def _world_tab(self) -> QWidget:
         widget = QWidget()

@@ -3,7 +3,7 @@ the plot editor working on a story (it is the editor's host,
 gui/plot_editor.py). A mixin for `MainWindow`.
 
 A plot is written on the worker, like any job that changes the story
-(`StorySession.draft_plot`), from Story → Write a plot with the model…, the
+(`StorySession.draft_plot`), from Story → Plot → Write a plot with the model…, the
 new story guide's last step, or New story from a premise (`_then_plot`, run
 once the story is set up and before Start). Once in, it is kept hidden unless
 the author asks to see it (gui/plot_dialog.py).
@@ -51,7 +51,7 @@ class PlotWindow:
     # --- a plot written by the model -------------------------------------------
 
     def write_plot(self) -> None:
-        """Story → Write a plot with the model…: what the author wants of it,
+        """Story → Plot → Write a plot with the model…: what the author wants of it,
         then the plot, in place of any the story has."""
         session = self.session
         if session is None or session.story.chat:
@@ -125,7 +125,7 @@ class PlotWindow:
                 self._plot_failed(str(made["error"]), wishes, then)
             else:
                 self.statusBar().showMessage(
-                    "No plot was written: Story → Write a plot with the model… writes one.",
+                    "No plot was written: Story → Plot → Write a plot with the model… writes one.",
                     10000,
                 )
                 if then is not None:
@@ -181,7 +181,7 @@ class PlotWindow:
             then()
             return
         self.statusBar().showMessage(
-            "The plot is written. Story → Open in the plot editor… shows it whole.", 10000
+            "The plot is written. Story → Plot → Open in the plot editor… shows it whole.", 10000
         )
 
     def _plot_failed(
@@ -222,7 +222,7 @@ class PlotWindow:
         editor.activateWindow()
 
     def edit_story_plot(self, *, own: bool = False) -> None:
-        """Story → Open in the plot editor…: the open story, everything filled
+        """Story → Plot → Open in the plot editor…: the open story, everything filled
         in, saved as a new story. `own`: a story being set up, which the
         editor saves to until it begins."""
         session = self.session

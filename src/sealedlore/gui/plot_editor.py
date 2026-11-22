@@ -20,7 +20,7 @@ It is its own window and needs no story open. Saving writes the `.md`;
 "Start a story from this file" hands the saved file to the main window's
 import, which is the same path a hand-written file takes.
 
-It also opens a story (File → Open a story…, or the main window's Story →
+It also opens a story (File → Open a story…, or the main window's Story → Plot →
 Open in the plot editor…), filled in with everything a plot file can hold of
 it: its settings, world, opening, cast, places, lore, pictures and plot
 (engine/story_plot.py). Anything is editable, and Save never writes over the
@@ -964,7 +964,7 @@ class PlotEditorWindow(QMainWindow):
             self._select(select)
 
     def open_story(self, story_id: str, *, own: bool = False) -> bool:
-        """A story, from the main window (Story → Open in the plot editor…,
+        """A story, from the main window (Story → Plot → Open in the plot editor…,
         File → Open a story…, or a plot the model has just written)."""
         if self.host is None:
             return False

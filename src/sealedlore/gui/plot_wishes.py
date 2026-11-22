@@ -1,7 +1,7 @@
 """What the author wants of a plot the model writes (engine/plot_draft.py).
 
 One form, in the new story guide's last step, in New story from a premise,
-and in Story → Write a plot with the model…: no plot (where that is a
+and in Story → Plot → Write a plot with the model…: no plot (where that is a
 choice), one made up from the story alone, or one from what the author
 describes. Described, the author's own words and a few choices: how many
 events, how often, how big, how disruptive, of what kinds, how many new
