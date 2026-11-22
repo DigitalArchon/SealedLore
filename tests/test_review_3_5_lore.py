@@ -529,3 +529,25 @@ def test_a_continue_that_brings_nothing_leaves_the_record(tmp_path, story, cast)
     with pytest.raises(RuntimeError):
         list(session.continue_passage())
     assert author.meta.tavern_fired == before
+
+
+def test_a_private_scenes_turns_keep_their_firing_too(tmp_path, story, cast):
+    """A scene's turns fired the lorebook and recorded nothing: a sticky
+    entry was gone on the scene's next turn, and one cooling down fired
+    again. The record is on the scene's own message, which no other model
+    reads."""
+    session = _tavern_session(tmp_path, story, cast)
+    list(session.send(turn("I walk up the lane.")))
+    session.enter_private(
+        keep="memory", provider=MockChatProvider(["A quiet reply."] * 6), model="local/model"
+    )
+    list(session.send(turn("A wolf howls by the barn.")))
+    author = session.full_path()[-2]
+    assert author.meta.private_span and author.meta.tavern_length == 3
+    assert sorted(author.meta.tavern_fired) == sorted(e.id for e in session.bundle.lore[:2])
+    list(session.send(turn("I shut my eyes.")))
+    assert fired(session) == ["Wolves"]  # sticky
+    list(session.send(turn("The barn again.")))
+    assert fired(session) == ["Wolves"]  # and Cooling is cooling down
+    # Nothing of the scene's is in what the story's own turns replay.
+    assert all(node.meta.tavern_fired in (None, []) for node in session.path())

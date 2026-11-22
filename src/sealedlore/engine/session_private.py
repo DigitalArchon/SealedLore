@@ -961,10 +961,17 @@ class PrivateRuntime:
         if span is None or self.private_provider is None:
             raise ValueError("the private scene has no model to send to")
         user_node.meta.private_span = span.id
+        new_turn = history is None
         if history is None:
             history = [node for node in self.private_history(span) if node.id != user_node.id]
         yield from self._condense_if_needed(turn, history, span)
         prompt = self.private_assemble(turn, history, span)
+        if new_turn and self.fires_like_tavern and self.last_retrieval is not None:
+            # Lore fired as SillyTavern fires it keeps its sticky and cooldown
+            # in a scene as in the story: what fired, on the scene's own
+            # message (no other model's history has it). Another take of a
+            # scene's passage leaves its turn's record as it is.
+            self.record_tavern(replace(turn, turn_node_id=user_node.id), self.last_retrieval)
         yield from self._generate(
             prompt,
             turn,
