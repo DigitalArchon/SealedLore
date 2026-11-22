@@ -148,7 +148,7 @@ from sealedlore.gui.window_looks import LooksWindow
 from sealedlore.gui.window_lorebooks import LorebooksWindow
 from sealedlore.gui.window_phone import PhoneWindow
 from sealedlore.gui.window_plot import PlotWindow
-from sealedlore.gui.window_private import PrivateWindow
+from sealedlore.gui.window_private import REEMBED_PAUSED, PrivateWindow
 from sealedlore.gui.window_retakes import RetakesWindow
 from sealedlore.gui.window_story_suggestions import (
     ACTION_TIP as SUGGESTIONS_TIP,
@@ -5740,14 +5740,18 @@ class MainWindow(
                 "No embeddings endpoint configured — retrieval is using keywords", 6000
             )
             return
+        if self.session.in_private:
+            # Nothing but the scene's own model is called while it is open
+            # (the session refuses too); the button is paused with the rest.
+            self.statusBar().showMessage(self._say(REEMBED_PAUSED), 8000)
+            return
         self._start(
             self._reembed_job, streaming=False, busy_text="Embedding the lorebook…", job="Embedding"
         )
 
     def _reembed_job(self):
         assert self.session is not None
-        self.session.bundle.embeddings.clear()
-        vectors = self.session.ensure_lore_vectors()
+        vectors = self.session.reembed_lore()
         yield SessionNotice(f"Embedded {len(vectors)} lore entries")
 
     def _on_held_changed(self, character_id: str) -> None:

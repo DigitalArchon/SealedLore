@@ -227,3 +227,31 @@ def test_the_portraits_dialog_names_the_model_that_writes_a_private_chats_prompt
         wait_for(app, lambda: not dialog.writing())
         dialog.done(0)
         dialog.deleteLater()
+
+
+# --- V4: nothing is embedded while a private scene is open -----------------------------------
+
+
+def test_re_embed_lorebook_waits_for_the_private_scene(app, window: MainWindow):
+    from sealedlore.providers.mock import MockEmbeddings
+
+    embeddings = MockEmbeddings()
+    window.session.embeddings = embeddings
+    window.lore_panel.set_embeddings_available(True)
+    button = window.lore_panel.reembed_button
+    usual = button.toolTip()
+    assert button.isEnabled()
+    window.composer.private_toggle.click()
+    assert window.session.in_private
+    assert not button.isEnabled()
+    assert "private scene" in button.toolTip()
+    # However it is asked for: no job starts, and the endpoint isn't called.
+    window.reembed_lore()
+    assert not window._busy and embeddings.calls == []
+    # A refresh of the pages mid-scene doesn't bring it back.
+    window.lore_panel.set_embeddings_available(True)
+    assert not button.isEnabled()
+    window.session.discard_private()
+    window._sync_private_ui()
+    window._update_controls()
+    assert button.isEnabled() and button.toolTip() == usual

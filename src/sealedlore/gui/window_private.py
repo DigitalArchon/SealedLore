@@ -53,6 +53,12 @@ from sealedlore.providers.tee import (
 from sealedlore.storage.repository import save_config
 from sealedlore.threads import BackgroundThread
 
+# Why the Lore page's Re-embed lorebook is off in a private scene, and what
+# asking for it there says.
+REEMBED_PAUSED = (
+    "Paused during a private scene: embedding the lorebook again waits until the scene "
+    "ends, as nothing but the scene's own model is called until then."
+)
 # On the model button while a TEE/ model runs unchecked (Settings → Private).
 UNCHECKED_TEE = "⚠ not checked (Check TEE models is off)"
 # What a partial attestation's shortfalls mean (providers/tee.py), in the
@@ -337,6 +343,8 @@ class PrivateWindow:
         # shape every later prompt to the story's model.
         for widget in (self.scene_panel, self.plot_panel, self.clock_button, self.composer.held):
             widget.setEnabled(widget.isEnabled() and not private)
+        # Nor is the embeddings endpoint called: Re-embed lorebook waits.
+        self.lore_panel.set_reembed_paused(self._say(REEMBED_PAUSED) if private else "")
 
     def _refuse_outside_scene(self, node_id: str) -> bool:
         """During a scene only its own messages may be deleted or taken back:

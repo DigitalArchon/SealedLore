@@ -390,3 +390,40 @@ def test_an_ordinary_chats_portrait_prompts_keep_the_writer_settings_names(tmp_p
     people, lore = session.picture_cards()
     session.write_card_prompts(people, lore)
     assert {p["model"] for p in main.payloads} == {"zai-org/glm-5.3"}
+
+
+# --- V4: nothing is embedded while a private scene is open -----------------------------------
+
+
+def test_the_lorebook_is_not_embedded_again_while_a_private_scene_is_open(tmp_path: Path):
+    """While a scene is open nothing but its own model is called. "Re-embed
+    lorebook" called the embeddings endpoint all the same (no scene text
+    went: the lore's own)."""
+    from tests.test_private import enter
+
+    session, main, held = build(tmp_path)
+    play(session, turn(held, "I walk in."))
+    session.ensure_lore_vectors()
+    kept = list(session.bundle.embeddings)
+    assert kept, "the story's lore has its vectors"
+    private = enter(session, "memory")
+    play(session, turn(held, f"I whisper {MARKER} to her."))
+    calls, to_main = len(session.embeddings.calls), len(main.payloads)
+
+    with pytest.raises(ValueError, match="waits until the private scene ends"):
+        session.reembed_lore()
+    assert session.bundle.embeddings == kept, "nor are the vectors it has thrown away"
+    # Whoever asks: with vectors missing, a scene still embeds nothing.
+    session.bundle.embeddings.clear()
+    assert session.ensure_lore_vectors() == {}
+    assert len(session.embeddings.calls) == calls and len(main.payloads) == to_main
+
+    # The scene over, the story's own turns embed as before, and so does the button.
+    private.responses = ["They agreed to meet at dawn."]
+    session.discard_private()
+    play(session, turn(held, "I walk on."))
+    assert len(session.embeddings.calls) > calls
+    assert MARKER not in json.dumps(session.embeddings.calls)
+    before = len(session.embeddings.calls)
+    vectors = session.reembed_lore()
+    assert vectors and len(session.embeddings.calls) > before

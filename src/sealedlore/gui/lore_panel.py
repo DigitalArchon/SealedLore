@@ -58,6 +58,11 @@ REPORT_ROWS = 6
 
 FIRING_SEALEDLORE = NAMES["sealedlore"]
 FIRING_TAVERN = NAMES["sillytavern"]
+REEMBED_TIP = (
+    "Rebuild every vector. Vectors are keyed by the entry's text and the model, so an "
+    "edited entry or a changed model re-embeds by itself; this is for an endpoint that "
+    "changed what it serves under the same model id"
+)
 FIRING_TIP = (
     "SealedLore's rules: a small lorebook is sent whole, a large one chosen per turn as "
     "Settings → Lore says.\n\nSillyTavern's rules: each turn's entries fire exactly by "
@@ -362,11 +367,11 @@ class LorePanel(QWidget):
         self.injected.setSelectionMode(QAbstractItemView.NoSelection)
 
         self.reembed_button = QPushButton("Re-embed lorebook")
-        self.reembed_button.setToolTip(
-            "Rebuild every vector. Vectors are keyed by the entry's text and the model, so an "
-            "edited entry or a changed model re-embeds by itself; this is for an endpoint that "
-            "changed what it serves under the same model id"
-        )
+        self.reembed_button.setToolTip(REEMBED_TIP)
+        # There is an embeddings endpoint, and why the button is off all the
+        # same ("": it isn't): a private scene is open (`set_reembed_paused`).
+        self._embeddings_available = True
+        self._reembed_paused = ""
         self.reembed_button.clicked.connect(self.reembed_requested)
         # Beside the caption, not a row of its own the page's width.
         heading = QHBoxLayout()
@@ -579,7 +584,20 @@ class LorePanel(QWidget):
             self.status.setText(f"{fell_back}{count} · keyword matching")
 
     def set_embeddings_available(self, available: bool) -> None:
-        self.reembed_button.setEnabled(available)
+        self._embeddings_available = available
+        self._sync_reembed()
+
+    def set_reembed_paused(self, why: str) -> None:
+        """Re-embed lorebook off, its tooltip saying `why`, while a private
+        scene is open ("" once it has ended): the embeddings endpoint isn't
+        called then. Kept apart from whether there is an endpoint, so a
+        refresh of the page mid-scene doesn't bring the button back."""
+        self._reembed_paused = why
+        self._sync_reembed()
+
+    def _sync_reembed(self) -> None:
+        self.reembed_button.setEnabled(self._embeddings_available and not self._reembed_paused)
+        self.reembed_button.setToolTip(self._reembed_paused or REEMBED_TIP)
 
     # --- editing ----------------------------------------------------------
 

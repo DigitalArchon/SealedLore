@@ -1600,7 +1600,9 @@ class StorySession(
         re-embeds one entry, and switching models re-embeds everything exactly
         once (§7). `stopped` ends it between requests (`embed_in_batches`):
         the entries done by then are kept and saved, and `EmbeddingStopped`
-        is raised.
+        is raised. While a private scene is open nothing is embedded,
+        whoever asks: only the scene's own model is called then, and what
+        has a vector already is all that is returned.
         """
         settings = self.config.embeddings()
         model = settings.model if settings else ""
@@ -1631,7 +1633,7 @@ class StorySession(
             if (digest, model) not in cache:
                 pending.append(entry)
 
-        if pending and self.embeddings is not None:
+        if pending and self.embeddings is not None and not self.in_private:
             texts = [texts_of[entry.id] for entry in pending]
             try:
                 done = dict(enumerate(self.embed_in_batches(texts, stopped=stopped)))
@@ -1665,6 +1667,15 @@ class StorySession(
             if row is not None:
                 vectors[entry_id] = tuple(row.vector)
         return vectors
+
+    def reembed_lore(self) -> dict[str, tuple[float, ...]]:
+        """Every vector made again (the Lore page's Re-embed lorebook), for
+        an endpoint that changed what it serves under the same model id.
+        Refused while a private scene is open, before anything is thrown
+        away: nothing but the scene's own model is called until it ends."""
+        self._refuse_in_private("Embedding the lorebook again")
+        self.bundle.embeddings.clear()
+        return self.ensure_lore_vectors()
 
     def _prune_embeddings(self, live_hashes: set[str]) -> None:
         """Drop vectors for text no entry holds any more, so the file can shrink.
