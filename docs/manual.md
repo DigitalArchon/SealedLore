@@ -2672,7 +2672,9 @@ timeline. Esc or **Back to the story** returns.
 On your own turns the ⋯ menu also offers **Take back this turn**, which
 returns the text and its settings to the composer and removes the turn and
 everything after it — for when you want to reword what you wrote, or change a
-setting, and send it again. Double-clicking a chapter in **Story so far** jumps to it.
+setting, and send it again. Taken back, the first turn of a branch leaves the
+branch's name for the turn you send in its place (the branch bar says so).
+Double-clicking a chapter in **Story so far** jumps to it.
 
 **Story → Export → Story backup…** writes everything (every branch, summaries,
 questions, reviews, pictures and the API log) to one file; **File → Import…**
@@ -2762,7 +2764,8 @@ of, as a turn is, and never one they don't.
 
 Every message's ⋯ menu has **Delete from here…**, which removes it and
 everything after it, after confirming. Deleting a reply leaves your turn in place, so Regenerate can take
-another run at it.
+another run at it. Deleting the first message of a branch deletes the branch,
+and the story goes to the end of the line it split from.
 
 ## Lore retrieval
 

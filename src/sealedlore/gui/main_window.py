@@ -3768,9 +3768,12 @@ class MainWindow(
         character up again runs `hold()`, which cuts the scene to them, and
         done before the delete that cut scene was all the first turn's take
         back left of the starting scene (the review, Oct 20 2026).
+
+        `take_back`: the story stays where the turn stood, and a branch's
+        first turn leaves its name for the turn sent in its place.
         """
         assert self.session is not None
-        self.session.delete_from(node.id)
+        self.session.delete_from(node.id, take_back=True)
         self.composer.restore_turn(node)
 
     # --- archival and summaries (§5.2, §5.3) --------------------------------

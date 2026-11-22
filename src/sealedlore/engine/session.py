@@ -54,6 +54,7 @@ from sealedlore.engine.branches import (
     MapLane,
     branch_starts,
     branches,
+    line_left,
     map_columns,
     next_branch_name,
     unique_branch_name,
@@ -2167,15 +2168,17 @@ class StorySession(
     def delete_branch(self, start_id: str) -> Deletion:
         """Delete a branch: its own messages, and any branch made from them.
 
-        The first line can't be deleted. Deleting the branch being read goes
-        to the end of the one it split from first.
+        The first line can't be deleted. When the branch being read is the
+        one deleted, or was made from it, the story goes first to the end of
+        the branch the deleted one split from.
         """
         self._refuse_in_private("Deleting a branch")
         found = {b.start_id: b for b in self.branch_list()}
         branch = found.get(start_id)
         if branch is None or branch.is_main:
             raise ValueError("the first line of the story can't be deleted")
-        if branch.is_current:
+        if self.story.active_leaf_id in subtree_ids(self.nodes, start_id):
+            # The branch being read, or one made from it (it goes too).
             self.switch_branch(branch.parent_start_id)
         return self.delete_from(start_id)
 
@@ -3532,17 +3535,27 @@ class StorySession(
         asides = tuple(a for a in self.bundle.asides if a.anchor_node_id in doomed)
         return Deletion(node_ids=tuple(ids), on_path=on_path, summaries=summaries, asides=asides)
 
-    def delete_from(self, node_id: str) -> Deletion:
+    def delete_from(self, node_id: str, *, take_back: bool = False) -> Deletion:
         """Delete a message and everything after it, on every branch below it.
 
         The story steps back to the message's parent. Deleting a reply leaves
         its author turn as the leaf, so Regenerate can take another run at it.
+        A parent that still carries a line on (the message was a branch's
+        first) is no place to stop: the story goes to the end of that line,
+        as `delete_branch` does (`line_left`).
+
+        `take_back`: the turn goes back to the author to be sent again where
+        it stood, so the story stays at its parent, and a branch's first
+        turn leaves its name for the turn sent again (`pending_branch`).
+
         The API log keeps every request regardless; `nodes.json.bak` holds the
         tree as it was one save ago.
         """
         deletion = self.deletion_for(node_id)
         doomed = set(deletion.node_ids)
         node = index_nodes(self.nodes)[node_id]
+        # The branch it began, as the list reads it: gone once it is deleted.
+        began = self.branch_start_names().get(node_id) if take_back else None
         span = self.open_span
         if span is not None and node.meta.private_span != span.id:
             # As the window refuses it: deleting a message before the scene
@@ -3570,6 +3583,19 @@ class StorySession(
             # from the models (and a memory scene's from the disk, by
             # `bundle_to_save`).
             self.story.active_leaf_id = node.parent_id
+            if take_back and node.parent_id is not None:
+                if began:
+                    self.pending_branch = (node.parent_id, began)
+            elif self.open_span is None:
+                # At a fork the line that remains was hidden: the page ended
+                # on the message it split from (with no message at all when
+                # that was the story's start), the next turn read as a new
+                # "Branch from message N", and Regenerate on a turn that only
+                # looked unanswered buried the line for good (the review, Nov
+                # 22 2026). An open private scene stays where it is.
+                self.story.active_leaf_id = line_left(
+                    self.nodes, node.parent_id, self._off_branch_ids()
+                )
         self.story.updated_at = utc_now_iso()
         self.last_result = None
         if node.parent_id is None and node.meta.scene is not None and not self.path():

@@ -203,6 +203,32 @@ def branches(
     return found
 
 
+def line_left(
+    nodes: Sequence[Node], parent_id: str | None, excluded: Collection[str] = ()
+) -> str | None:
+    """Where the story stands once a message under `parent_id` has been
+    deleted (None: one of the story's first messages): the end of the line
+    its parent still carries on, else the parent itself.
+
+    A line as the branch list reads one. A take that ended is none: a reply
+    deleted leaves its author's turn to be retaken, whatever other takes it
+    has. Nor is another branch's first message: the parent's own line then
+    ends at the parent. With no parent there is nothing to stand on, so the
+    story goes to the end of the first line that remains; None only when no
+    message is left.
+    """
+    tree = _Tree(nodes, excluded)
+    if parent_id is None:
+        return tree.end(tree.main_root, ()).id if tree.main_root is not None else None
+    parent = tree.index.get(parent_id)
+    if parent is None:
+        return parent_id
+    carried = [
+        child for child in tree._lines(parent, tree.kids(parent)) if not child.meta.branch_name
+    ]
+    return tree.end(carried[0], ()).id if carried else parent_id
+
+
 def next_branch_name(existing: Sequence[Branch]) -> str:
     """ "Branch 2", "Branch 3"…: the first free one (the first line is 1)."""
     taken = {branch.name for branch in existing}
