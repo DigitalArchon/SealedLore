@@ -79,17 +79,26 @@ def test_deleting_a_branch_that_starts_at_the_first_message_goes_to_the_line_lef
     assert shown(session)[-2:] == ["four", "Reply to four"]
 
 
-def test_a_first_message_taken_back_never_leaves_an_empty_page_over_a_story(
+def test_a_first_message_taken_back_is_sent_again_as_the_first_message(
     session: StorySession,
 ):
-    """Taken back, the first message of a branch from the very start has no
-    message to stand on: the story is never nowhere while it has messages
-    (an empty page offers Start the story…)."""
+    """Taken back, the first message of a branch from the very start goes
+    back to be sent again where it stood: as a first message, on its branch.
+    Sent to the end of the line that remains, it was added after Main's last
+    passage and the branch it began was gone (the review of the fixes). The
+    window says what the empty page is (`TAKEN_BACK_FIRST`)."""
     play(session, "one", "two", "three")
     rewrite(session, session.path()[0].id, "A different first message", name="Other start")
     session.delete_from(session.full_path()[0].id, take_back=True)
-    assert session.story.active_leaf_id is not None
-    assert shown(session) == MAIN
+    assert session.story.active_leaf_id is None
+    assert session.pending_branch == (None, "Other start")
+    play(session, "A different first message, again")
+    assert shown(session) == [
+        "A different first message, again",
+        "Reply to A different first message, again",
+    ]
+    assert ("Other start", 1, True) in names(session)
+    assert [name for name, _, _ in names(session)] == ["Main", "Other start"]
 
 
 def test_deleting_a_branch_another_was_made_from_takes_the_story_off_both(

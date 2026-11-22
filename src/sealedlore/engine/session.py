@@ -3625,7 +3625,13 @@ class StorySession(
             # from the models (and a memory scene's from the disk, by
             # `bundle_to_save`).
             self.story.active_leaf_id = node.parent_id
-            if take_back and node.parent_id is not None:
+            if take_back:
+                # Also where the turn was the story's very first: the story
+                # stands on no message until it is sent again, as the first
+                # message it was (the window says so over the empty page).
+                # Sent to the end of the line that remains, the turn sent
+                # again was added after Main's last passage, and the branch
+                # it began was gone.
                 if began:
                     self.pending_branch = (node.parent_id, began)
             elif self.open_span is None:

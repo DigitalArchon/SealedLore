@@ -234,6 +234,13 @@ from sealedlore.tree import path_to
 # The panel beside the story: its title with no story open, and what each
 # of its pages shows, after the page's name (`_sync_dock_title`).
 NO_STORY_TITLE = "Open a story to see its pages here"
+# Over the page of a story that stands on no message though it has some: the
+# first message of a branch from the story's very start, taken back.
+TAKEN_BACK_FIRST = (
+    "The first message of this branch is back in the box below, with its settings. Send it "
+    "to begin the branch again; the story's other messages are on its other branches, in "
+    "the branch list above."
+)
 # The Inspector's pages are never narrower than this at 100% text: wider
 # than any of them once laid out (gui/tab_rows.py `set_floor`).
 INSPECTOR_PAGES_FLOOR = 420
@@ -2633,7 +2640,13 @@ class MainWindow(
         about = (setup.description or "").strip()
         lead = f"{about}\n\n" if about else ""
         empty_actions: list[tuple[str, Callable[[], None]]] = []
-        if self.session.story.chat:
+        if not nodes and self.session.nodes:
+            # A branch's first message, the story's very first, taken back:
+            # the story has messages, on its other branches, and stands on
+            # none of them until the message is sent again. Never the words
+            # and buttons of a story not begun.
+            empty_text = TAKEN_BACK_FIRST
+        elif self.session.story.chat:
             empty_text = "Write your first message below. Story → Setup… changes the system prompt."
         elif setup.opening_text.strip():
             empty_text = (
