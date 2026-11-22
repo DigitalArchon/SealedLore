@@ -5,15 +5,21 @@ every key is made up."""
 
 from __future__ import annotations
 
+import json
 import math
 
 import httpx
 import pytest
 
+from sealedlore.engine.recall import RecallItem
+from sealedlore.engine.session import StorySession
 from sealedlore.engine.speed_test import _reasoning_tokens as speed_reasoning_tokens
+from sealedlore.engine.tokens import TokenEstimator, fallback_counter
 from sealedlore.engine.usage import usage_report
 from sealedlore.messages import ContentPart, PromptMessage
-from sealedlore.models.config import ProviderConfig
+from sealedlore.models.config import EmbeddingProviderConfig, ProviderConfig
+from sealedlore.models.lore import LoreEntry
+from sealedlore.providers import local_embeddings
 from sealedlore.providers.anthropic import AnthropicProvider
 from sealedlore.providers.base import (
     COST_MOST,
@@ -24,7 +30,12 @@ from sealedlore.providers.base import (
     parse_usage,
 )
 from sealedlore.providers.context_probe import detect_context
+from sealedlore.providers.embeddings import OpenAICompatibleEmbeddings
+from sealedlore.providers.local_embeddings import LocalEmbeddings
+from sealedlore.providers.mock import MockChatProvider
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
+from sealedlore.storage.repository import StoryBundle, save_story_bundle
+from tests.test_session import make_config, turn
 
 KEY = "sk-test-PROBE"
 
@@ -269,3 +280,150 @@ def test_detect_still_reads_what_the_servers_really_say():
         return httpx.Response(404)
 
     assert _probe(llama_cpp).tokens == 4096
+
+
+# --- N1: an embeddings answer that isn't vectors of numbers is the endpoint's
+# --- failure, and the turn goes through on keywords ---------------------------------
+
+BAD_VECTORS = [
+    pytest.param(b"[0.1, null, 0.3]", id="null"),
+    pytest.param(b'[0.1, "x", 0.3]', id="string"),
+    pytest.param(b"[[0.1, 0.2, 0.3]]", id="nested"),
+    pytest.param(b"[0.1, NaN, 0.3]", id="NaN"),
+    pytest.param(b"[0.1, Infinity, 0.3]", id="Infinity"),
+    pytest.param(b"[0.1, -1e999, 0.3]", id="-1e999"),
+    pytest.param(b"[0.1, true, 0.3]", id="true"),
+    pytest.param(b"[0.1, " + b"9" * 400 + b", 0.3]", id="400 digits"),
+    pytest.param(b'{"0": 0.1}', id="object"),
+]
+
+
+def _embeddings(handler) -> OpenAICompatibleEmbeddings:
+    settings = EmbeddingProviderConfig(base_url="http://127.0.0.1:8080/v1", model="bge-m3")
+    return OpenAICompatibleEmbeddings(
+        settings, client=httpx.Client(transport=httpx.MockTransport(handler))
+    )
+
+
+def _rows(vector: bytes, usage: bytes = b"{}"):
+    """An embeddings server answering every text with `vector`, written as
+    it stands (JSON lets a server write NaN and 1e999; httpx's json= doesn't)."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        count = len(json.loads(request.content)["input"])
+        rows = b",".join(b'{"index":%d,"embedding":%s}' % (i, vector) for i in range(count))
+        body = b'{"data":[' + rows + b'],"usage":' + usage + b"}"
+        return httpx.Response(200, content=body, headers={"content-type": "application/json"})
+
+    return handler
+
+
+@pytest.mark.parametrize("vector", BAD_VECTORS)
+def test_a_vector_that_isnt_finite_numbers_is_the_endpoints_failure(vector):
+    with pytest.raises(ProviderError, match="embedding"):
+        _embeddings(_rows(vector)).embed(["text"])
+
+
+def test_vectors_of_numbers_are_read_as_before():
+    result = _embeddings(_rows(b"[0.5, -2, 3e-2]")).embed(["one", "two"])
+    assert result.vectors == ((0.5, -2.0, 0.03), (0.5, -2.0, 0.03))
+    assert all(type(value) is float for value in result.vectors[0])
+
+
+@pytest.mark.parametrize(
+    "usage",
+    [
+        b'{"prompt_tokens":1e999}',
+        b'{"prompt_tokens":NaN,"cost":NaN}',
+        b'{"total_tokens":-1e999,"cost":true}',
+        b'{"prompt_tokens":true,"cost":-3}',
+        b'{"prompt_tokens":[1],"cost":"0.1"}',
+    ],
+)
+def test_an_embeddings_usage_nothing_can_count_costs_no_vectors(usage):
+    result = _embeddings(_rows(b"[0.1, 0.2]", usage)).embed(["text"])
+    assert result.vectors == ((0.1, 0.2),)
+    assert result.usage.prompt_tokens == 0 and result.usage.cost == 0.0
+
+
+def test_an_embeddings_usage_that_can_be_counted_still_is():
+    result = _embeddings(_rows(b"[0.1]", b'{"total_tokens":12,"cost":0.001}')).embed(["a"])
+    assert result.usage.prompt_tokens == 12 and result.usage.cost == 0.001
+
+
+def _session_with_lore(tmp_path, story, cast, handler) -> StorySession:
+    story.defaults.main_model = "anthropic/claude-sonnet-4.5"
+    story.defaults.context_token_budget = 8_000
+    lore = [
+        LoreEntry(
+            id=f"e{i}",
+            title=f"Entry {i}",
+            content=f"Entry {i}. " + "The keep is old. " * 120,
+            keywords=[f"kw{i}"],
+        )
+        for i in range(12)
+    ]
+    bundle = StoryBundle(story=story, cast=cast, lore=lore)
+    save_story_bundle(bundle, root=tmp_path)
+    config = make_config()
+    config.embedding_provider = EmbeddingProviderConfig(
+        base_url="http://127.0.0.1:8080/v1", model="bge-m3"
+    )
+    return StorySession(
+        bundle,
+        config,
+        MockChatProvider(["The door gives with a groan."]),
+        root=tmp_path,
+        estimator=TokenEstimator(counter=fallback_counter),
+        embeddings=_embeddings(handler),
+        learn_corrections=False,
+    )
+
+
+@pytest.mark.parametrize("vector", [b"[0.1, null, 0.3]", b"[0.1, NaN, 0.3]"])
+def test_a_turn_goes_through_on_keywords_when_the_vectors_cant_be_read(
+    tmp_path, story, cast, vector
+):
+    """llama.cpp and Ollama write a NaN as null: every turn of a story whose
+    lore is selected was lost to a TypeError, where an HTTP 500 from the same
+    server fell back to keywords."""
+    session = _session_with_lore(tmp_path, story, cast, _rows(vector))
+    assert session.lore_layout().mode == "select"
+    list(session.send(turn()))
+    assert [node.kind for node in session.nodes] == ["user", "assistant"]
+    assert "embedding" in (session.last_retrieval.fallback_reason or "")
+    assert session.bundle.embeddings == [], "nothing that isn't a vector is kept"
+
+
+def test_recall_ranks_on_keywords_when_the_vectors_cant_be_read(tmp_path, story, cast):
+    session = _session_with_lore(tmp_path, story, cast, _rows(b"[0.1, null, 0.3]"))
+    items = [RecallItem(id="c1", kind="chapter", label="Chapter 1", text="The keep.", position=0)]
+    similarity, reason = session._recall_similarity("the keep", items)
+    assert similarity == {} and reason.startswith("keywords only:") and "embedding" in reason
+
+
+class _NoModel:
+    """A built-in model's stand-ins: one token a text, and hidden states of
+    nothing at all, whose length is zero."""
+
+    class _Encoded:
+        ids = [0, 2]
+
+    def encode_batch(self, texts):
+        return [self._Encoded() for _ in texts]
+
+    def run(self, _outputs, feeds):
+        import numpy
+
+        batch, width = feeds["input_ids"].shape
+        return [numpy.zeros((batch, width, 4), dtype=numpy.float32)]
+
+
+def test_the_built_in_model_gives_no_vector_that_isnt_numbers(tmp_path, monkeypatch):
+    """A vector of zeros divided by its own length is NaN in every place:
+    kept, it would be saved with the story and score NaN against every turn."""
+    stand_in = _NoModel()
+    monkeypatch.setattr(local_embeddings, "installed", lambda _root=None: True)
+    monkeypatch.setattr(local_embeddings, "_model", lambda _folder: (stand_in, stand_in))
+    with pytest.raises(ProviderError, match="built-in embeddings model"):
+        LocalEmbeddings(tmp_path).embed(["text"])

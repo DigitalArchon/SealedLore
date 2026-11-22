@@ -12,6 +12,7 @@ serves both.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -21,7 +22,7 @@ import httpx
 from sealedlore.call_log import CALLS, EMBEDDINGS, plain_protection
 from sealedlore.models.config import EmbeddingProviderConfig
 from sealedlore.models.node import Usage
-from sealedlore.providers.base import ProviderError, checked_key
+from sealedlore.providers.base import ProviderError, checked_key, stated_cost, stated_count
 from sealedlore.providers.http import make_client, reply_json
 from sealedlore.providers.privacy import EMBEDDINGS_WAY_OUT, plain_refusal
 
@@ -76,7 +77,7 @@ def parse_embedding_response(body: dict[str, Any], *, expected: int) -> list[tup
             raise ProviderError("embeddings response contained a row with no embedding")
         index = row.get("index")
         position = index if isinstance(index, int) else position
-        ordered.append((position, tuple(float(value) for value in vector)))
+        ordered.append((position, _numbers(vector)))
 
     ordered.sort(key=lambda pair: pair[0])
     vectors = [vector for _, vector in ordered]
@@ -87,6 +88,31 @@ def parse_embedding_response(body: dict[str, Any], *, expected: int) -> list[tup
     if len(widths) > 1:
         raise ProviderError(f"embeddings came back with mixed dimensions: {sorted(widths)}")
     return vectors
+
+
+def _numbers(vector: list[Any]) -> tuple[float, ...]:
+    """One row's vector as floats, every one a finite number, or the
+    endpoint's failure. llama.cpp and Ollama write a NaN as `null`, and JSON
+    lets any server write NaN or 1e999: `float()` of the first raised a
+    TypeError that no caller takes for an endpoint failing (retrieval falls
+    back to keywords only on ProviderError), so every turn was lost; the
+    others would have been kept with the story and scored NaN against every
+    turn after."""
+    numbers: list[float] = []
+    for value in vector:
+        number: float | None = None
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            try:
+                number = float(value)
+            except OverflowError:  # a whole number past what a float holds
+                number = None
+        if number is None or not math.isfinite(number):
+            raise ProviderError(
+                "embeddings response contained an embedding that isn't all finite numbers "
+                f"(it holds {str(value)[:40]!r})"
+            )
+        numbers.append(number)
+    return tuple(numbers)
 
 
 class OpenAICompatibleEmbeddings:
@@ -173,14 +199,13 @@ class OpenAICompatibleEmbeddings:
             CALLS.finish(call, "failed", detail=str(exc).splitlines()[0] if str(exc) else "")
             raise
         usage = body.get("usage")
-        tokens = usage.get("prompt_tokens") if isinstance(usage, dict) else None
-        cost = usage.get("cost") if isinstance(usage, dict) else None
+        usage = usage if isinstance(usage, dict) else {}
         CALLS.finish(
             call,
             "done",
             detail=f"{len(batch)} text{'s' if len(batch) != 1 else ''}",
-            tokens_in=tokens if isinstance(tokens, int) else None,
-            cost=cost if isinstance(cost, (int, float)) else None,
+            tokens_in=stated_count(usage.get("prompt_tokens")),
+            cost=stated_cost(usage.get("cost")),
         )
         return body
 
@@ -210,8 +235,8 @@ class OpenAICompatibleEmbeddings:
 def _add_usage(total: Usage, raw: Any) -> Usage:
     if not isinstance(raw, dict):
         return total
-    prompt = raw.get("prompt_tokens") or raw.get("total_tokens") or 0
-    cost = raw.get("cost")
-    tokens = int(prompt) if isinstance(prompt, (int, float)) else 0
-    spend = float(cost) if isinstance(cost, (int, float)) else 0.0
+    # Only a count that is one, and a charge that is one (`stated_count`):
+    # the vectors are good whatever the endpoint wrote beside them.
+    tokens = stated_count(raw.get("prompt_tokens")) or stated_count(raw.get("total_tokens")) or 0
+    spend = stated_cost(raw.get("cost")) or 0.0
     return Usage(prompt_tokens=total.prompt_tokens + tokens, cost=total.cost + spend)

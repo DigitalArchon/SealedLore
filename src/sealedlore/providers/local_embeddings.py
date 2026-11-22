@@ -343,7 +343,15 @@ class LocalEmbeddings:
                 mask[row, : len(tokens)] = 1
             hidden = session.run(None, {"input_ids": ids, "attention_mask": mask})[0]
             first = hidden[:, 0, :]
-            first = first / numpy.linalg.norm(first, axis=1, keepdims=True)
+            with numpy.errstate(divide="ignore", invalid="ignore"):
+                first = first / numpy.linalg.norm(first, axis=1, keepdims=True)
+            if not numpy.isfinite(first).all():
+                # A vector of no length, or one the model wrote NaN into:
+                # kept, it would be saved with the story and score NaN
+                # against every turn. Said as an endpoint's is (embeddings.py).
+                raise ProviderError(
+                    "the built-in embeddings model gave a vector that isn't all finite numbers"
+                )
             for row, index in enumerate(chunk):
                 vectors[index] = tuple(float(v) for v in first[row])
         tokens = sum(len(e.ids) for e in encoded)
