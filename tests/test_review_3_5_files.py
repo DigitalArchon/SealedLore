@@ -5,7 +5,9 @@ invented names."""
 
 from __future__ import annotations
 
+import base64
 import hashlib
+import io
 import json
 import random
 import re
@@ -26,18 +28,27 @@ from sealedlore.engine.usage import usage_report
 from sealedlore.models.character import Character
 from sealedlore.models.config import Config
 from sealedlore.models.image import GeneratedImage, ImageRef
+from sealedlore.models.node import Node, Usage
 from sealedlore.models.plot import EventDef, Plot
 from sealedlore.models.story import BUDGET_MOST, Story, StoryDefaults
 from sealedlore.models.tavern import CardAsset, TavernFields
-from sealedlore.storage import archive, collection, collection_backup, tavern_cards, tavern_lore
+from sealedlore.storage import (
+    archive,
+    collection,
+    collection_backup,
+    lorebooks,
+    png_text,
+    tavern_cards,
+    tavern_lore,
+)
 from sealedlore.storage import scenario as scenario_files
-from sealedlore.storage.atomic import outside_json
+from sealedlore.storage.atomic import json_for_others, outside_json
 from sealedlore.storage.collection_backup import BackupError, open_backup, restore
 from sealedlore.storage.image_meta import PNG_SIGNATURE, MetadataError, strip_metadata
 from sealedlore.storage.paths import COLLECTION_ID
-from sealedlore.storage.picture_store import DiskPictures
+from sealedlore.storage.picture_store import DiskPictures, MemoryPictures
 from sealedlore.storage.prompt_sets import PromptSetError, read_prompt_set
-from sealedlore.storage.repository import StoryBundle
+from sealedlore.storage.repository import StoryBundle, load_story_bundle, save_story_bundle
 from sealedlore.storage.video_meta import strip_video_metadata
 
 # --- F1: a plot file's lines are read in the time their length takes ---------------
@@ -621,3 +632,70 @@ def test_a_backup_whose_memories_arent_a_list_of_them_is_refused_in_words(tmp_pa
     path.write_text(json.dumps(data), encoding="utf-8")
     with pytest.raises(archive.ArchiveError, match="invalid content"):
         archive.read_archive(path)
+
+
+# --- F11: no number that is no number goes out in a card or a lorebook --------------
+
+
+def _strict(text: str | bytes):
+    """Read as JavaScript's JSON.parse reads: the bare words Infinity and NaN
+    are no JSON."""
+
+    def refused(word: str):
+        raise ValueError(f"not JSON: {word}")
+
+    return json.loads(text, parse_constant=refused)
+
+
+def test_a_card_and_a_lorebook_go_out_as_json_any_program_reads(tmp_path: Path):
+    """`1e999` in a card is read as an infinity, and was written back as the
+    bare word Infinity: SillyTavern, and any strict reader, refused the file."""
+    source = tmp_path / "elena.json"
+    source.write_text(
+        '{"spec": "chara_card_v2", "spec_version": "2.0", "data": {"name": "Elena Ruiz", '
+        '"description": "A doctor.", "first_mes": "Hello.", '
+        '"extensions": {"talkativeness": 1e999, "depth": [NaN, -Infinity, 2.5]}, '
+        '"character_book": {"entries": [{"keys": ["farm"], "content": "The farmhouse.", '
+        '"enabled": true, "insertion_order": 1e999, "extensions": {"probability": 1e999}}]}}}',
+        encoding="utf-8",
+    )
+    card = tavern_cards.read_card(source)
+    elena, _notes = collection.kept_from_card(card, MemoryPictures(lambda kind, body: "id"))
+    v2, v3 = tavern_cards.card_data(elena)
+    tavern_cards.write_card(tmp_path / "out.json", v2, v3, None)
+    written = _strict((tmp_path / "out.json").read_text(encoding="utf-8"))
+    assert written["data"]["extensions"]["talkativeness"] is None
+    assert written["data"]["extensions"]["depth"] == [None, None, 2.5]
+    assert written["data"]["name"] == "Elena Ruiz"
+    # In a picture, and as a CHARX.
+    png = tavern_cards.card_png(_png(10), v2, v3)
+    for text in png_text.text_chunks(png).values():
+        assert _strict(base64.b64decode(text))["data"]["name"] == "Elena Ruiz"
+    with zipfile.ZipFile(io.BytesIO(tavern_cards.card_charx(v3, []))) as charx:
+        assert _strict(charx.read("card.json"))["data"]["extensions"]["talkativeness"] is None
+    # A lorebook, SillyTavern's file and SealedLore's lore as one.
+    book = tmp_path / "book.json"
+    book.write_text(
+        '{"entries": {"0": {"uid": 0, "key": ["farm"], "content": "The farmhouse.", '
+        '"order": 1e999, "probability": NaN}}}',
+        encoding="utf-8",
+    )
+    kept = lorebooks.kept_from(tavern_lore.open_lorebook(book), "Farm", "book.json")
+    lorebooks.export(kept, tmp_path / "book-out.json")
+    assert _strict((tmp_path / "book-out.json").read_text(encoding="utf-8"))["entries"]
+    tavern_lore.write_world(tmp_path / "world.json", elena.tavern.character_book)
+    assert _strict((tmp_path / "world.json").read_text(encoding="utf-8"))["entries"]
+
+
+def test_the_apps_own_files_keep_such_a_number_and_load_again(tmp_path: Path):
+    """Its own files are read by Python, which takes the words back: written
+    as null there, a cost that is no number would be a story that can't load."""
+    node = Node(kind="assistant", speaker_id="__narrator__", content="The road is empty.")
+    node.meta.usage = Usage(prompt_tokens=5, cost=float("inf"))
+    story = Story(title="Doomsville", active_leaf_id=node.id)
+    save_story_bundle(StoryBundle(story=story, nodes=[node]), root=tmp_path)
+    loaded = load_story_bundle(story.id, root=tmp_path)
+    assert loaded.nodes[0].meta.usage.cost == float("inf")
+    assert json_for_others({"a": float("nan"), "b": [float("inf"), 1.5]}) == (
+        '{"a": null, "b": [null, 1.5]}'
+    )

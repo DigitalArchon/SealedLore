@@ -47,7 +47,13 @@ from sealedlore.models.scenario import Scenario
 from sealedlore.models.scene import SceneState
 from sealedlore.models.story import OpeningPicture, StyleDirectives
 from sealedlore.models.tavern import CardAsset, TavernFields
-from sealedlore.storage.atomic import NestedTooDeep, atomic_write_json, outside_json
+from sealedlore.storage.atomic import (
+    NestedTooDeep,
+    atomic_write_json,
+    json_for_others,
+    outside_json,
+    utf8,
+)
 from sealedlore.storage.card_files import GreetingPictures, background_of, greeting_pictures
 from sealedlore.storage.image_meta import (
     MetadataError,
@@ -1073,7 +1079,7 @@ def card_charx(
     card = {"spec": SPEC_V3, "spec_version": "3.0", "data": data}
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr("card.json", json.dumps(card, ensure_ascii=False, indent=1))
+        archive.writestr("card.json", json_for_others(card, indent=1))
         for member, raw in members:
             archive.writestr(member, raw, compress_type=zipfile.ZIP_STORED)
     return buffer.getvalue()
@@ -1502,9 +1508,7 @@ def card_png(png: bytes, v2: Mapping[str, Any], v3: Mapping[str, Any]) -> bytes:
     it, both versions, as SillyTavern writes them."""
 
     def encoded(data: Mapping[str, Any]) -> str:
-        return base64.b64encode(json.dumps(data, ensure_ascii=False).encode("utf-8")).decode(
-            "ascii"
-        )
+        return base64.b64encode(utf8(json_for_others(data))).decode("ascii")
 
     return with_text(png, {"chara": encoded(v2), "ccv3": encoded(v3)})
 
@@ -1549,4 +1553,4 @@ def write_card(path: Path, v2: Mapping[str, Any], v3: Mapping[str, Any], png: by
             raise CardError("a PNG card's picture must be a PNG")
         write_bytes_atomic(path, card_png(png, v2, v3))
     else:
-        atomic_write_json(path, json_card(v3))
+        atomic_write_json(path, json_card(v3), for_others=True)

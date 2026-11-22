@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -214,15 +215,50 @@ def _unchanged(path: Path, digest: bytes, mode: int | None) -> bool:
     return known[1] == _standing(info)
 
 
+def json_for_others(data: Any, **how: Any) -> str:
+    """`data` as JSON any program reads: a number that is no number (NaN, an
+    infinity) written as null, as JavaScript's JSON.stringify writes one.
+
+    Python writes them as the bare words NaN and Infinity, and reads them
+    back; no other JSON reader does. A card with `1e999` somewhere in it
+    (read as an infinity) was exported as a file SillyTavern refuses whole.
+    For what is written for other programs (a card, a lorebook): SealedLore's
+    own files keep the words, which it reads, so a number saved is the
+    number loaded. `how`: json.dumps's own arguments."""
+    try:
+        return json.dumps(data, ensure_ascii=False, allow_nan=False, **how)
+    except ValueError:
+        # One is in there somewhere: looked for in a copy, never recursing.
+        mended = json.loads(json.dumps(data, ensure_ascii=False))
+        stack: list[Any] = [mended]
+        while stack:
+            item = stack.pop()
+            for key, child in list(item.items() if isinstance(item, dict) else enumerate(item)):
+                if isinstance(child, float) and not math.isfinite(child):
+                    item[key] = None
+                elif isinstance(child, dict | list):
+                    stack.append(child)
+        return json.dumps(mended, ensure_ascii=False, allow_nan=False, **how)
+
+
 def atomic_write_json(
-    path: Path, data: Any, *, keep_backup: bool = False, mode: int | None = None
+    path: Path,
+    data: Any,
+    *,
+    keep_backup: bool = False,
+    mode: int | None = None,
+    for_others: bool = False,
 ) -> None:
     """Write `data` as JSON to `path`, all or nothing.
 
     `mode` sets the file's permissions (the config file, which holds the API
     key, is written 0600); otherwise the process's umask decides.
+    `for_others`: a file another program is to read (`json_for_others`).
     """
-    text = json.dumps(data, indent=2, ensure_ascii=False)
+    if for_others:
+        text = json_for_others(data, indent=2)
+    else:
+        text = json.dumps(data, indent=2, ensure_ascii=False)
     _write_atomic(path, utf8(text), keep_backup=keep_backup, mode=mode)
 
 

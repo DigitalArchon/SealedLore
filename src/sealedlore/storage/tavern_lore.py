@@ -850,7 +850,7 @@ def book_from_world(world: Mapping[str, Any], name: str = "") -> dict[str, Any]:
 
 def write_world(path: Path, book: Mapping[str, Any]) -> None:
     """A card's lorebook as SillyTavern's lorebook file, every setting kept."""
-    atomic_write_json(path, world_from_book(book))
+    atomic_write_json(path, world_from_book(book), for_others=True)
 
 
 # --- other apps' lorebooks, as SillyTavern converts them on import ----------------------------
@@ -1498,4 +1498,4 @@ def is_converted_lorebook(path: Path) -> bool:
 
 
 def write_lorebook(path: Path, entries: Sequence[LoreEntry]) -> None:
-    atomic_write_json(Path(path), book_from_lore(entries))
+    atomic_write_json(Path(path), book_from_lore(entries), for_others=True)
