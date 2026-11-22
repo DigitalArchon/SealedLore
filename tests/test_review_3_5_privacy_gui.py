@@ -203,6 +203,53 @@ def test_a_disk_scene_reopened_where_it_began_asks_nothing(app, window: MainWind
     assert window.made[-1].payloads[-1]["model"] == "local/tiny"
 
 
+def test_a_scene_carried_on_while_ending_has_its_summary_written_there(
+    app, window: MainWindow, monkeypatch
+):
+    """Ending a held scene asks the same question; a yes carries it on and the
+    summary the author asked for is then written, by the scene's own model,
+    at the new place: not before."""
+    import sealedlore.gui.window_private as window_private
+
+    story_id = disk_scene_left_open(app, window)
+    window.config.private_provider = ProviderConfig(
+        name="private", base_url=ELSEWHERE, model="some/cloud-model"
+    )
+    boxes = answers(monkeypatch, ["Keep it open", "Carry it on there"])
+    shown: list[str] = []
+
+    class Approve:
+        APPROVE, AGAIN, BACK, DISCARD = "approve", "again", "back", "discard"
+
+        def __init__(self, summary, parent=None, *, note=None, chat=False):
+            self.choice = self.APPROVE
+            self._summary = summary
+            shown.append(summary)
+
+        def exec(self):
+            return 1
+
+        def text(self):
+            return self._summary
+
+        def deleteLater(self):  # noqa: N802 - the window frees its dialogs
+            pass
+
+    monkeypatch.setattr(window_private, "PrivateSummaryDialog", Approve)
+    window.open_story(story_id)
+    assert all(client.payloads == [] for client in window.made[1:])
+    window.end_private()
+    wait_for(app, lambda: not window._busy and not window.session.in_private)
+    assert "Its summary would be written there" in boxes[1][1]
+    assert shown, "the summary was offered for approval"
+    there = window.made[-1]
+    assert there.config.base_url == ELSEWHERE and len(there.payloads) == 1
+    assert there.payloads[0]["model"] == "local/tiny" and MARKER in json.dumps(there.payloads[0])
+    # Nothing went to the client that held the scene, nor to the story's model.
+    assert all(client.payloads == [] for client in window.made[1:-1])
+    assert MARKER not in json.dumps(window._provider.payloads)
+
+
 # --- V3: a TEE or encrypted chat's portrait prompts are written by its own model -------------
 
 

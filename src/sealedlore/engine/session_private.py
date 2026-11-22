@@ -553,15 +553,20 @@ class PrivateRuntime:
     def _scene_places(self, span: PrivateSpan) -> tuple[str, str] | None:
         """Where `span` began (or was last carried on to on purpose) and where
         its model's calls would go now, when those are two places; None when
-        they are one, or when there is no client to send anything (each
-        sender says so). An origin each (scheme://host[:port]): another path
-        on one server is the same place. A scene recorded with no origin (one
-        from before the record, resumed elsewhere than the host it names) is
-        told by that host, "" for one that names none."""
+        they are one, when there is no client to send anything (each sender
+        says so), or when nothing says where its client sends (a stand-in
+        with no endpoint of its own and no Settings → Private at all: every
+        client the app makes carries its endpoint). An origin each
+        (scheme://host[:port]): another path on one server is the same
+        place. A scene recorded with no origin (one from before the record,
+        resumed elsewhere than the host it names) is told by that host, ""
+        for one that names none."""
         if span.privacy is None or self.private_provider is None:
             return None
         endpoint = self.private_endpoint()
-        now = key_origin(endpoint.base_url) if endpoint is not None else ""
+        if endpoint is None:
+            return None
+        now = key_origin(endpoint.base_url)
         began = span.privacy.origin
         if began:
             return None if began == now else (began, now)
