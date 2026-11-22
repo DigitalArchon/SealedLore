@@ -355,6 +355,12 @@ def fire_entry(
     """An entry as SillyTavern would read it: from the fields it brought
     (`raw`, its world file's shape when `numbered`, else a card's), or, for
     one written in SealedLore, from its keywords, at SillyTavern's defaults."""
+    if not always_on:
+        # Always on as SealedLore has it, unticked (the Lore page, Always-on
+        # entries…): an entry its text's @@activate made always on stops
+        # being so, as a constant one does. It stayed standing and was sent
+        # every turn, under a dialog that called it optional.
+        decorators = [name for name in decorators if name != "@@activate"]
     if raw is None:
         return FireEntry(
             id=id,
@@ -393,7 +399,8 @@ def fire_entry(
         selective=bool(raw.get("selective", True)) if numbered else bool(raw.get("selective")),
         logic=_int(_get(raw, numbered, "selectiveLogic", "selectiveLogic", AND_ANY), AND_ANY),
         # Always on as SealedLore has it: unticked, a constant entry stops
-        # being one. One made always on by @@activate alone isn't constant.
+        # being one (and @@activate is set aside, above). One made always on
+        # by @@activate alone isn't constant.
         constant=always_on and (bool(raw.get("constant")) or "@@activate" not in decorators),
         disabled=not enabled,
         order=_int(order, DEFAULT_ORDER),

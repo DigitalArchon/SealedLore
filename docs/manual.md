@@ -2889,8 +2889,9 @@ the list, and the status bar says it once when the story opens.
 size, and what it would come to:
 
 - Untick an entry to make it optional: it is then sent when its keywords come
-  up, as any other entry is. One with no keywords would never be sent, and
-  the list says so.
+  up, as any other entry is, whether SillyTavern's constant setting or an
+  `@@activate` line made it always on. One with no keywords would never be
+  sent, and the list says so.
 - **Write condensed versions…** has the authoring model write a shorter
   version of each long always-on entry still ticked, one call an entry. A
   condensed version is kept beside its entry and never changes it.

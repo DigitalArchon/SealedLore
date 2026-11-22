@@ -551,3 +551,64 @@ def test_a_private_scenes_turns_keep_their_firing_too(tmp_path, story, cast):
     assert fired(session) == ["Wolves"]  # and Cooling is cooling down
     # Nothing of the scene's is in what the story's own turns replay.
     assert all(node.meta.tavern_fired in (None, []) for node in session.path())
+
+
+# --- L7: Always on, unticked, for an @@activate entry -------------------------------
+
+HOUSE = {
+    "entries": {
+        "0": {
+            "uid": 0,
+            "comment": "House rules",
+            "content": "@@activate\nNobody leaves the farm after dark.",
+            "key": ["curfew"],
+            "constant": False,
+            "order": 100,
+        },
+        "1": {
+            "uid": 1,
+            "comment": "The well",
+            "content": "The well is dry.",
+            "key": ["well"],
+            "constant": True,
+            "order": 100,
+        },
+    }
+}
+
+
+def test_unticking_always_on_makes_an_activate_entry_optional(tmp_path, story, cast):
+    """Under SillyTavern's rules an entry always on by @@activate stayed so
+    with Always on unticked: sent with every turn, and gone from the
+    Always-on entries… dialog's list, which said it was optional."""
+    story.held_character_id = SERRIK
+    story.defaults.lore_firing = "sillytavern"
+    session = session_with(tmp_path, story, cast, lore_from_book(HOUSE).entries)
+    rules, well = session.bundle.lore
+    assert rules.always_on and well.always_on
+    assert {e.title for e in session.lore_layout().standing} == {"House rules", "The well"}
+
+    rules.always_on = well.always_on = False  # the dialog's OK, both unticked
+    assert session.always_on_entries() == []
+    assert session.lore_layout().standing == ()
+    list(session.send(turn("I sit on the porch.")))
+    assert "after dark" not in sent(session) and "well is dry" not in sent(session)
+    # Optional: sent when its keywords come up, as any other entry.
+    list(session.send(turn("Is there a curfew here?")))
+    assert "Nobody leaves the farm after dark." in sent(session)
+    assert fired(session) == ["House rules"]
+
+    rules.always_on = True  # ticked again, it is always on again
+    assert [e.title for e in session.lore_layout().standing] == ["House rules"]
+
+
+def test_an_entry_written_here_with_a_decorator_follows_the_tick_too():
+    common = dict(id="e", title="t", content="c", keywords=["curfew"], enabled=True, raw=None)
+    on = fire_entry(**common, always_on=True, decorators=["@@activate"])
+    off = fire_entry(**common, always_on=False, decorators=["@@activate"])
+    assert on.standing and not off.standing
+    assert not run([off], ["a quiet night"]).fired
+    assert run([off], ["the curfew bell"]).ids == ["e"]
+    # @@dont_activate is not Always on's to change.
+    never = fire_entry(**common, always_on=False, decorators=["@@dont_activate"])
+    assert "@@dont_activate" in never.decorators
