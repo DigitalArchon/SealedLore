@@ -10,6 +10,7 @@ import random
 import re
 import struct
 import time
+import tracemalloc
 import zipfile
 import zlib
 from pathlib import Path
@@ -30,6 +31,7 @@ from sealedlore.storage import collection, collection_backup
 from sealedlore.storage.collection_backup import BackupError, open_backup, restore
 from sealedlore.storage.paths import COLLECTION_ID
 from sealedlore.storage.picture_store import DiskPictures
+from sealedlore.storage.video_meta import strip_video_metadata
 
 # --- F1: a plot file's lines are read in the time their length takes ---------------
 
@@ -330,3 +332,45 @@ def test_a_storys_budget_and_an_events_window_are_read_as_they_can_be_used():
     assert event.window == (10, 30)
     days = schedule(Plot(events=[event]), {}, random.Random(1))
     assert 10 <= days["e"] <= 30
+
+
+# --- F5: stripping a video holds about the video, however many boxes it is ----------
+
+
+def _box(kind: bytes, payload: bytes = b"") -> bytes:
+    return struct.pack(">I4s", 8 + len(payload), kind) + payload
+
+
+FTYP = _box(b"ftyp", b"isom\x00\x00\x02\x00isom")
+
+
+def _peak_while(call) -> int:
+    tracemalloc.start()
+    try:
+        call()
+        return tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+
+
+@pytest.mark.parametrize(
+    "video",
+    [
+        FTYP + _box(b"moov", _box(b"mvhd", bytes(100)) + _box(b"abcd") * 60_000) + _box(b"mdat"),
+        FTYP + _box(b"moov", _box(b"mvhd", bytes(100))) + _box(b"abcd") * 60_000,
+        FTYP + _box(b"moov", _box(b"trak", _box(b"mdia", _box(b"minf")) * 20_000)),
+        FTYP
+        + _box(
+            b"moov", _box(b"trak", _box(b"mdia", _box(b"stsd", bytes(8) + _box(b"abcd") * 60_000)))
+        ),
+    ],
+    ids=["in the movie header", "at the top", "tracks of nothing", "sample entries"],
+)
+def test_stripping_a_video_of_tiny_boxes_holds_little_more_than_the_video(video: bytes):
+    """A 144 KB card file of 8-byte boxes took 1.1 GB: every box was listed,
+    at thirty times its size, before any was looked at."""
+    stripped: list[bytes] = []
+    peak = _peak_while(lambda: stripped.append(strip_video_metadata(video)))
+    assert len(stripped[0]) == len(video)
+    # The copy worked on and the copy returned, and little besides.
+    assert peak < 3 * len(video)

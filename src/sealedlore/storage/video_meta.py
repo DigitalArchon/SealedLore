@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import re
 import struct
+from collections.abc import Iterator
 
 from sealedlore.storage.image_meta import PICTURE_BRANDS, MetadataError, bmff_brands
 
@@ -87,25 +88,35 @@ def is_mp4(data: bytes) -> bool:
     return bool(brands) and not PICTURE_BRANDS.intersection(brands)
 
 
-def _boxes(data: bytes | bytearray, start: int, end: int):
-    """(type, box start, payload start, box end) for each box in [start, end)."""
+def _box_at(data: bytes | bytearray, offset: int, end: int) -> tuple[bytes, int, int]:
+    """(type, payload start, box end) of the box at `offset`, in a parent
+    that ends at `end`."""
+    if end - offset < 8:
+        raise MetadataError("a box runs past the end of its parent")
+    size, kind = struct.unpack(">I4s", data[offset : offset + 8])
+    header = 8
+    if size == 1:
+        if end - offset < 16:
+            raise MetadataError("a large box runs past the end of its parent")
+        size = struct.unpack(">Q", data[offset + 8 : offset + 16])[0]
+        header = 16
+    elif size == 0:
+        size = end - offset
+    if size < header or offset + size > end:
+        raise MetadataError("a box's size doesn't fit the file")
+    return kind, offset + header, offset + size
+
+
+def _boxes(data: bytes | bytearray, start: int, end: int) -> Iterator[tuple[bytes, int, int, int]]:
+    """(type, box start, payload start, box end) for each box in [start, end),
+    one at a time. Never made a list of: a box can be eight bytes, and its
+    place in a list thirty times that (a 144 KB card file of them took
+    1.1 GB to strip)."""
     offset = start
     while offset < end:
-        if end - offset < 8:
-            raise MetadataError("a box runs past the end of its parent")
-        size, kind = struct.unpack(">I4s", data[offset : offset + 8])
-        header = 8
-        if size == 1:
-            if end - offset < 16:
-                raise MetadataError("a large box runs past the end of its parent")
-            size = struct.unpack(">Q", data[offset + 8 : offset + 16])[0]
-            header = 16
-        elif size == 0:
-            size = end - offset
-        if size < header or offset + size > end:
-            raise MetadataError("a box's size doesn't fit the file")
-        yield kind, offset, offset + header, offset + size
-        offset += size
+        kind, payload, stop = _box_at(data, offset, end)
+        yield kind, offset, payload, stop
+        offset = stop
 
 
 def _blank_box(out: bytearray, start: int, payload: int, stop: int) -> None:
@@ -132,10 +143,11 @@ def _blank_names(out: bytearray, payload: int, stop: int, handler: bytes) -> Non
     if handler not in (b"vide", b""):
         return
     try:
-        entries = list(_boxes(out, payload + 8, stop))  # after version, flags and count
+        for _entry in _boxes(out, payload + 8, stop):  # after version, flags and count
+            pass
     except MetadataError:
         return
-    for kind, _box, entry, entry_stop in entries:
+    for kind, _box, entry, entry_stop in _boxes(out, payload + 8, stop):
         video = handler == b"vide" or kind in _VIDEO_ENTRIES
         if video and entry_stop - entry >= _COMPRESSOR[1]:
             for first, last in (_VENDOR, _COMPRESSOR):
@@ -146,33 +158,52 @@ def _blank_names(out: bytearray, payload: int, stop: int, handler: bytes) -> Non
             _blank_libavcodec(out, entry, entry_stop)
 
 
+def _handler(out: bytearray, start: int, end: int, handler: bytes) -> bytes:
+    """The handler type an `mdia` box in [start, end) names in its `hdlr`
+    (its last, when it has several); `handler`, the one outside it, when it
+    names none."""
+    for kind, _box, payload, stop in _boxes(out, start, end):
+        if kind == b"hdlr" and stop - payload >= 12:
+            handler = bytes(out[payload + 8 : payload + 12])
+    return handler
+
+
 def _walk(out: bytearray, start: int, end: int, parent: bytes = b"") -> None:
     """Every box inside [start, end) (a `parent` box's), containers walked
-    into. With a list of those still to walk, never by recursing: a 24 KB
-    file of 3,000 nested `trak` boxes recursed too far (RecursionError,
-    which no reader of a backup or a scenario expects). Each carries its
-    track's handler type, read from `mdia`'s `hdlr`, for its sample
-    entries: a video's are laid out as a picture's, a sound's otherwise."""
-    pending = [(start, end, parent, b"")]
-    while pending:
-        start, end, parent, handler = pending.pop()
-        children = list(_boxes(out, start, end))
-        if parent == b"mdia":
-            for kind, _box, payload, stop in children:
-                if kind == b"hdlr" and stop - payload >= 12:
-                    handler = bytes(out[payload + 8 : payload + 12])
-        for kind, box, payload, stop in children:
-            if kind in _METADATA or kind in _PADDING:
-                _blank_box(out, box, payload, stop)
-            elif kind in _TIMED:
-                _zero_times(out, payload, stop)
-            elif kind == b"hdlr":
-                name = min(payload + _HANDLER_NAME, stop)
-                out[name:stop] = bytes(stop - name)
-            elif kind == b"stsd":
-                _blank_names(out, payload, stop, handler)
-            elif kind in _CONTAINERS:
-                pending.append((payload, stop, kind, handler))
+    into, in the order they stand in the file. Neither by recursing (a 24 KB
+    file of 3,000 nested `trak` boxes recursed too far: RecursionError,
+    which no reader of a backup or a scenario expects) nor by listing a
+    box's children first (see `_boxes`): only the boxes this one is inside
+    are kept, each with where it ends. Each box has its track's handler
+    type, read from `mdia`'s `hdlr`, for its sample entries: a video's are
+    laid out as a picture's, a sound's otherwise."""
+    handler = _handler(out, start, end, b"") if parent == b"mdia" else b""
+    # The boxes this one is inside, innermost last: where each ends, and the
+    # handler in force outside it.
+    inside: list[tuple[int, bytes]] = []
+    offset = start
+    while True:
+        while offset == end:
+            if not inside:
+                return
+            end, handler = inside.pop()
+        kind, payload, stop = _box_at(out, offset, end)
+        if kind in _METADATA or kind in _PADDING:
+            _blank_box(out, offset, payload, stop)
+        elif kind in _TIMED:
+            _zero_times(out, payload, stop)
+        elif kind == b"hdlr":
+            name = min(payload + _HANDLER_NAME, stop)
+            out[name:stop] = bytes(stop - name)
+        elif kind == b"stsd":
+            _blank_names(out, payload, stop, handler)
+        elif kind in _CONTAINERS:
+            inside.append((end, handler))
+            if kind == b"mdia":
+                handler = _handler(out, payload, stop, handler)
+            offset, end = payload, stop
+            continue
+        offset = stop
 
 
 def _blank_encoder_text(out: bytearray, payload: int, stop: int) -> None:
@@ -212,10 +243,9 @@ def strip_video_metadata(data: bytes) -> bytes:
     if not is_mp4(data):
         raise MetadataError("it isn't an MP4 video")
     out = bytearray(data)
-    top = list(_boxes(out, 0, len(out)))
-    if not any(kind == b"moov" for kind, *_ in top):
+    if not any(kind == b"moov" for kind, *_ in _boxes(out, 0, len(out))):
         raise MetadataError("the video has no movie header")
-    for kind, box, payload, stop in top:
+    for kind, box, payload, stop in _boxes(out, 0, len(out)):
         if kind == b"mdat":
             _blank_encoder_text(out, payload, stop)
         elif kind in _CONTAINERS:
