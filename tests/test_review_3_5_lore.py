@@ -255,6 +255,156 @@ def test_every_pattern_reads_only_so_much():
     assert f"read only the newest {tavern_firing.SCAN_MOST:,} characters" in result.not_fired["far"]
 
 
+# --- what the review of the L1 fix found -------------------------------------------
+
+SAMPLE = Path(__file__).resolve().parents[1] / "SampleStories" / "Doomsville.md"
+
+# An open-ended repeat read its 8,000 characters (1,000 for two) whatever
+# came after it, and what comes after is tried at every place the repeat
+# could stop: 12 s for the first on 8,000 characters of a sample's own prose,
+# 19 s for the second, 40 s and over 20 s for the rest on one letter repeated.
+LONG_AFTER_A_REPEAT = [
+    ("/[^§]*" + "[^§]{16}" * 25 + "§/", "prose"),
+    ("/[^§]*" + "[^§]{16}" * 40 + "§/", "prose"),
+    ("/a*" + "a" * 900 + "b/", "a"),
+    ("/a*a*" + "a" * 800 + "b/", "a"),
+    ("/(?=a*" + "a" * 900 + "b)/", "a"),
+    ("/(?!a*" + "a" * 900 + "b)zz/", "a"),
+    ("/a*?" + "a" * 900 + "b/", "a"),
+]
+
+
+@pytest.mark.parametrize(
+    ("key", "slow_on"), LONG_AFTER_A_REPEAT, ids=[key[:14] for key, _ in LONG_AFTER_A_REPEAT]
+)
+def test_the_more_there_is_after_a_repeat_the_less_is_read(key: str, slow_on: str):
+    pattern = tavern_firing._pattern(key)
+    assert pattern is not None and pattern.compiled is not None
+    assert tavern_firing.SCAN_LEAST <= pattern.cap < 2000, key
+    text = SAMPLE.read_text(encoding="utf-8")[:8000] if slow_on == "prose" else "a" * 8000
+    began = time.perf_counter()
+    result = run([entry("slow", [key])], [text])
+    assert time.perf_counter() - began < 3.0, key
+    assert not result.fired
+    assert f"read only the newest {pattern.cap:,} characters" in result.not_fired["slow"]
+
+
+def test_three_repeats_before_a_long_stretch_are_never_run():
+    """What could read fewer than a hundred characters says nothing of a
+    story: it is refused, in the words the Lore page already has."""
+    for key in ("/a*x?a*x?a*" + "a" * 900 + "b/", "/a*a*a*" + "(?:a|aa)" * 12 + "b/"):
+        began = time.perf_counter()
+        result = run([entry("hang", [key])], ["a" * 2000])
+        assert time.perf_counter() - began < 1.0, key
+        assert "is never run: it has too many open-ended repeats" in result.not_fired["hang"]
+    assert tavern_firing._pattern(r"/a.*b.*c.*d/").cap == tavern_firing.SCAN_CAPS[3]
+
+
+# The slowest shapes among 9,000 patterns made from every piece the screen
+# knows (Nov 22 2026), each with the text slowest for it, repeated. At their
+# real caps the slowest of them takes 0.9 s; here every pattern is given a
+# tenth of the budget, so that the whole list is a second or two.
+HARD = [
+    ("/[^§]*" + "[^§]{16}" * 25 + "§/", "字"),
+    ("/a*" + "a" * 150 + "b/", "a"),
+    ("/a*a*" + "a" * 60 + "b/", "a"),
+    ("/(?=a*" + "a" * 150 + "b)/", "a"),
+    ("/(?!a*" + "a" * 150 + "b)zz/", "a"),
+    ("/a*?" + "a" * 150 + "b/", "a"),
+    (r"/[\s\S]*?[\s\S]*?[bc]/", "字"),
+    (r"/(\w*?)(\w*?)[bc]/", "字"),
+    (r"/.*?[^§]{1,}?[§x]/", "aaaaaaa字"),
+    (r"/[^\W\d]+?§/is", "字"),
+    (r"/字*[\s\S]{2,11}?[bc]§/m", "字"),
+    (r"/([^§])*[^§]*?\b§/m", " "),
+    (r"/a*" + r"\B" * 300 + "b/", "a"),
+    ("/" + "[a-zà-ÿ]{16}" * 60 + "§/i", "A"),
+    ("/.?" + "a{16}" * 50 + "§/", "a"),
+    ("/(?:(?:[^§]{16}){16}){8}§/", "a"),
+    ("/" + "(?:.{16}|.{15})" * 6 + ".{16}" * 12 + "§/s", "a"),
+    (r"/(?:[^§]{1,12}){0,2}b/s", "字"),
+    (r"/(?:a{1,10}){1,3}§/", "a"),
+    (r"/\w{1,16}\w{1,16}\w{1,16}§/", "a"),
+    ("/" + "(a)?" * 8 + "(a)" * 40 + "b/", "a"),
+    ("/" + "(a)" * 150 + "(?:[a-z]{1,10}){0,3}bb/im", "a"),
+    ("/" + "(a)" * 300 + "(?:aa)*b/", "a"),
+    ("/" + "(a)" * 300 + "(?:(a)(a))*b/", "a"),
+    ("/(?:(a)(a))*" + "a" * 100 + "b/", "a"),
+    ("/[ab]*?" + "ab" * 100 + "x/", "ab"),
+    ("/(?:..)*" + "ab" * 7 + "x/", "ab"),
+    (r"/(a{1,16})\1b/", "a"),
+    (r"/[\w\s]{8,108}" + "a" * 100 + "§/", "a"),
+    (r"/(?:[A-Z]\w{1,11}\s){2,3}Road/", "Abcdefghijkl "),
+    (r"/\b(?:the|a) (?:\w{1,10} ){0,2}farmhouse\b/i", "a "),
+    (r"/(?:[\s\S]{8})+§/i", "字"),
+]
+
+
+def test_a_search_takes_no_longer_than_it_is_reckoned_to(monkeypatch):
+    """Whatever the pattern, one search at its cap is under the budget its
+    cap was reckoned for: here a tenth of a second each, on text made to be
+    slow for it."""
+    monkeypatch.setattr(tavern_firing, "SEARCH_BUDGET", tavern_firing.SEARCH_BUDGET // 10)
+    tavern_firing._pattern.cache_clear()
+    try:
+        slowest = 0.0
+        for key, unit in HARD:
+            pattern = tavern_firing._pattern(key)
+            assert pattern is not None and pattern.compiled is not None, key
+            text = (unit * (pattern.cap // len(unit) + 1))[: pattern.cap]
+            began = time.perf_counter()
+            assert pattern.compiled.search(text) is None, key
+            took = time.perf_counter() - began
+            assert took < 0.6, (key, pattern.cap, took)
+            slowest = max(slowest, took)
+        # The budget is spent, too: the caps aren't a hundredth of what they could be.
+        assert slowest > 0.005
+    finally:
+        tavern_firing._pattern.cache_clear()
+
+
+# Counts inside counts were taken for open-ended repeats once they came to
+# more than sixteen, so these read about a hundred characters (118, 231, 100,
+# 108 and 100) and no longer fired on a message of two hundred.
+COUNTS_INSIDE_COUNTS = [
+    (
+        r"/\b(?:the|a) (?:\w{1,10} ){0,2}farmhouse\b/i",
+        "smoke rises from the old stone farmhouse, thin and grey.",
+    ),
+    (r"/\b(?:[A-Z][a-z]{2,10} ){2}Hellsville/", "They took the Old North Hellsville road."),
+    (r"/(?:\w{2,8}-){3}\w{2,8}/", "A rag-and-bone-man came by with his cart."),
+    (r"/\b\d{1,2}(?:st|nd|rd|th) of (?:\w{3,9} ){1,2}/", "It was the 3rd of the winter months."),
+    (r"/(?:[A-Z]\w{1,11}\s){2,3}Road/", "They kept to Old Mill Road until dark."),
+]
+
+
+@pytest.mark.parametrize(
+    ("key", "found"), COUNTS_INSIDE_COUNTS, ids=["farmhouse", "town", "hyphens", "date", "road"]
+)
+def test_a_count_inside_a_count_is_not_an_open_ended_repeat(key: str, found: str):
+    pattern = tavern_firing._pattern(key)
+    assert pattern is not None and pattern.cap >= 10_000, key
+    # The reviewer's case: a message of 190 characters, the words at its end.
+    filler = prose(4000).lower()
+    for text in (prose(134).lower() + " " + found, filler + " " + found):
+        result = run([entry("d", [key])], [text])
+        assert result.ids == ["d"], key
+        assert not result.not_fired
+    assert not run([entry("d", [key])], [filler]).fired
+
+
+def test_counts_inside_counts_that_come_to_thousands_still_read_only_so_much():
+    """The first fault's own case: sixteen to the fourth, 65,536 characters
+    from every place. It reads what a search can get through, and no more."""
+    pattern = tavern_firing._pattern(r"/(?:(?:(?:[^§]{16}){16}){16}){16}§/")
+    assert pattern is not None and 5000 <= pattern.cap <= 50_000
+    for text in ("a" * 80_000, prose(80_000)):
+        began = time.perf_counter()
+        result = run([entry("slow", [r"/(?:(?:(?:[^§]{16}){16}){16}){16}§/"])], [text])
+        assert time.perf_counter() - began < 3.0
+        assert f"read only the newest {pattern.cap:,} characters" in result.not_fired["slow"]
+
+
 # --- L2: {{user}} in a story already begun ---------------------------------------
 
 

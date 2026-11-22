@@ -2873,16 +2873,19 @@ take minutes on the wrong text, so each is read before it is run. A pattern
 that repeats something which itself repeats or has alternatives (`/(\w+\s?)+/`,
 `/(dragon|wyrm)+/`), with more than three open-ended repeats, or written in
 JavaScript's own syntax that Python has no word for (`\p{L}`), is never run.
-One with an open-ended repeat that has something after it (`/dragon.*fire/`)
-reads only the newest part of what is scanned: 8,000 characters with one such
-repeat, 1,000 with two, 150 with three. A repeat inside a look-ahead counts
-as one with something after it, and so do counts inside counts that multiply
-to more than sixteen (`/(?:\w{8} ){8}/`). No pattern reads more than the
-newest 500,000 characters, which is more than a story scans: a repeat that
-ends a pattern (`/drag\w*/`) and a plain one (`/wol(f|ves)/`) read that
-much. One with many alternatives before long counted repeats reads less, by
-how many ways it can be taken. The Lore tab says so beside any entry this
-kept from firing.
+Every other pattern reads only the newest part of what is scanned: as much
+as one search could get through in about a second on text made to be slow
+for it. For a plain pattern (`/wol(f|ves)/`) and one whose repeat ends it
+(`/drag\w*/`) that is the newest 500,000 characters, more than a story
+scans. One with an open-ended repeat that has something after it
+(`/dragon.*fire/`) reads at most 8,000 characters, 750 with two such
+repeats, 150 with three, and a repeat inside a look-ahead counts as one with
+something after it. The more a pattern can try at each place, the less it
+reads: many alternatives, a long stretch after an open-ended repeat, or
+counts inside counts that come to thousands (`/(?:\w{1,10} ){0,2}farmhouse/`
+still reads more than a story scans; `/(?:(?:\w{16}){16}){16}!/` reads
+19,000 characters). One that could read fewer than a hundred characters is
+never run. The Lore tab says so beside any entry this kept from firing.
 
 Where the entries go is SealedLore's, so caching keeps working: a constant
 entry nothing can stop (no chance, timing, group, trigger or filter) is sent

@@ -67,7 +67,7 @@ import random
 import re
 import time
 from collections.abc import Callable, Collection, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from typing import Any
 
@@ -92,13 +92,12 @@ _PATTERN = re.compile(r"^/([\s\S]+?)/([gimsuy]*)$")
 # it matches (Nov 2026: /(\w+\s?)+$/ took 4.5 s on eight words and eight
 # times that for each word more, the window frozen, and again every time the
 # story was opened). So each pattern is read before it is run (`_screened`):
-# one that can take exponential time is never run, and one that can take
-# polynomial time reads only so much of what is scanned (the newest of it).
-# Measured on text made to be slow: one open-ended repeat with something
-# after it is quadratic (16,000 characters, up to 1 s), two cubic (1,000
-# characters, 0.6 s), three 3 s on 300. A screen, not a proof: the time all
-# of a turn's patterns take is measured too (PATTERN_SECONDS), and past it no
-# more are run that turn.
+# one that can take exponential time is never run, and every other reads
+# only as much of what is scanned (the newest of it) as one search can get
+# through in about a second on text made to be slow for it (`_search_cost`,
+# SEARCH_BUDGET). A screen, not a proof: the time all of a turn's patterns
+# take is measured too (PATTERN_SECONDS), and past it no more are run that
+# turn.
 PATTERN_MAX_CHARS = 1000
 # A repeat of more than this many times is open-ended.
 OPEN_REPEAT = 16
@@ -106,21 +105,37 @@ OPEN_REPEAT = 16
 # alternatives): more is exponential on the wrong text.
 VARIED_REPEAT = 4
 # The most characters a pattern reads, by its open-ended repeats that have
-# something after them (a repeat that ends the pattern never backtracks).
-SCAN_CAPS = {1: 8000, 2: 1000, 3: 150}
+# something after them (a repeat that ends the pattern never backtracks):
+# each makes a search one power slower in the text's length. What follows
+# the repeats is tried at every place they could stop, so the more there is
+# of it the less is read (SEARCH_BUDGET): these are for a word or so.
+# Measured at them on text made to be slow, at the slowest: one repeat
+# 0.7 s, two 0.8 s, three 0.5 s (two read 1,000 until Nov 22 2026: 2.2 s
+# when both were lazy and a class followed).
+SCAN_CAPS = {1: 8000, 2: 750, 3: 150}
 # The most ways a pattern's optional parts and alternatives can be taken.
 WAYS_MOST = 4096
-# A pattern with no such repeat still tries, at each place in the text, every
-# way it can be taken, each reading as far as its counted repeats reach
-# (`_work`), so it reads only as much text as keeps that under this many
-# steps (Nov 2026: twelve two-way choices before 2,400 counted characters
-# took 12 s on 4,900 characters; at this, the slowest shape found takes
-# 0.7 s). /wol(f|ves)/ is nine steps a place: far past SCAN_MOST.
-BOUNDED_WORK = 50_000_000
+# What one search may cost at the most, as `_search_cost` reckons it for the
+# text slowest for the pattern: billionths of a second on the computer the
+# costs under it were measured on, so about a second. A pattern reads as
+# many characters as keep it under this, at most SCAN_CAPS' or SCAN_MOST.
+# Nov 22 2026: of 8,800 patterns made at random from every piece the screen
+# knows, the 6,200 it lets run were each run at their cap on a dozen texts
+# made to be slow for them and on the samples' prose. The slowest search
+# took 0.8 s (made text) and 0.8 s (prose), and none more than nine tenths
+# of its reckoning; half took under a hundredth of a second. Before this,
+# an open-ended repeat read its 8,000 characters whatever came after it
+# (/[^§]*/ before 400 counted characters: 12 s on 8,000 characters of a
+# sample's own prose), and counts inside counts were taken for open-ended
+# repeats (/(?:\w{1,10} ){0,2}farmhouse/ read 118 characters).
+SEARCH_BUDGET = 1_000_000_000
 # The most characters any pattern reads, whatever the screen makes of it:
 # more than a story scans (its newest messages and the lore that fired), and
 # a few thousandths of a second for a pattern that reads straight through.
 SCAN_MOST = 500_000
+# A pattern that could read fewer than this is never run: it would say
+# nothing of a story, and the reckoning is at its roughest on short text.
+SCAN_LEAST = 100
 PATTERN_SECONDS = 2.0
 OUT_OF_TIME = "this turn's patterns had taken too long by then"
 
@@ -466,6 +481,8 @@ class _Refused(Exception):
 
 _REPEATS = ("MAX_REPEAT", "MIN_REPEAT", "POSSESSIVE_REPEAT")
 _ASSERTS = ("ASSERT", "ASSERT_NOT")
+# What reads one character.
+_ONE_CHAR = ("LITERAL", "NOT_LITERAL", "ANY", "IN")
 # JavaScript's named group, (?<name>…), is Python's (?P<name>…).
 _JS_NAMED_GROUP = re.compile(r"(?<!\\)\(\?<(?![=!])")
 
@@ -486,11 +503,12 @@ def _varies(items: Any) -> bool:
     return False
 
 
-def _degree(items: Any, follow: bool, times: int = 1) -> int:
+def _degree(items: Any, follow: bool) -> int:
     """How many open-ended repeats a failed match can go back into: each
     makes a search one power slower in the text's length. `follow`: something
-    comes after `items` that can still fail. `times`: how often the repeats
-    around `items` run them."""
+    comes after `items` that can still fail. A count inside a count is no
+    open-ended repeat, however many they come to: `_search_cost` multiplies
+    them."""
     total = 0
     items = list(items)
     for at, (op, av) in enumerate(items):
@@ -501,32 +519,29 @@ def _degree(items: Any, follow: bool, times: int = 1) -> int:
             if _varies(body):
                 if high > VARIED_REPEAT:
                     raise _Refused("it repeats something that itself repeats or has alternatives")
-                total += high * _degree(body, True, times * high)
+                total += high * _degree(body, True)
             else:
-                total += _degree(body, after or high > 1, times * high)
+                total += _degree(body, after or high > 1)
                 # One that must repeat many times can fail part-way through
-                # them, whatever comes after it. Counts inside counts
-                # multiply, ((x{16}){16}){16} being x{4096}: counted where
-                # they first come to more than a repeat may be.
-                many = high > OPEN_REPEAT or times <= OPEN_REPEAT < times * high
-                if many and (after or low > OPEN_REPEAT):
+                # them, whatever comes after it.
+                if high > OPEN_REPEAT and (after or low > OPEN_REPEAT):
                     total += 1
         elif name == "BRANCH":
-            total += max((_degree(alt, after, times) for alt in av[1]), default=0)
+            total += max((_degree(alt, after) for alt in av[1]), default=0)
         elif name == "SUBPATTERN":
-            total += _degree(av[3], after, times)
+            total += _degree(av[3], after)
         elif name == "ATOMIC_GROUP":
-            total += _degree(av, after, times)
+            total += _degree(av, after)
         elif name == "ASSERT":
             # A look-ahead that holds isn't the end of the match unless it
             # ends the pattern: what follows it can still fail, at every
             # place in the text.
-            total += _degree(av[1], after, times)
+            total += _degree(av[1], after)
         elif name == "ASSERT_NOT":
             # What a negative one reads through is the match failing.
-            total += _degree(av[1], True, times)
+            total += _degree(av[1], True)
         elif name == "GROUPREF_EXISTS":
-            total += max(_degree(alt, after, times) for alt in av[1:] if alt is not None)
+            total += max(_degree(alt, after) for alt in av[1:] if alt is not None)
         elif name == "GROUPREF":
             total += 1
     return total
@@ -561,35 +576,319 @@ def _ways(items: Any) -> int:
     return total
 
 
-def _work(items: Any) -> int:
-    """The most steps a failed try at one place in the text takes through a
-    pattern's counted repeats, every way it can be taken: each part's own
-    (a character read is a step, and so is each turn of a repeat; a group
-    that keeps what it matched or a look-ahead is two more), times the ways
-    there are to have come to it. An open-ended repeat counts as OPEN_REPEAT:
-    what it costs past that is `_degree`'s."""
-    total, ways = 0, 1
-    for op, av in items:
-        name = op.name
-        own = 1
-        if name in _REPEATS:
-            count = min(av[1], OPEN_REPEAT)
-            own = count * _ways(av[2]) ** max(0, count - 1) * (_work(av[2]) + 1)
-        elif name == "BRANCH":
-            own = sum(_work(alt) for alt in av[1])
-        elif name == "SUBPATTERN":
-            own = _work(av[3]) + (0 if av[0] is None else 2)
-        elif name == "ATOMIC_GROUP":
-            own = _work(av)
-        elif name in _ASSERTS:
-            own = _work(av[1]) + 2
-        elif name == "GROUPREF_EXISTS":
-            own = sum(_work(alt) for alt in av[1:] if alt is not None)
-        elif name == "AT":
-            own = 0
-        total += ways * own
-        ways *= _ways([(op, av)])
+# --- what a search can cost ------------------------------------------------------
+#
+# `re` tries a pattern from every place in the text, and at each goes back
+# into every repeat and alternative before it gives the place up. What that
+# can cost is reckoned from the pattern alone, in billionths of a second:
+# each part's own cost, times the ways there are to have come to it
+# (`_cost`), a try from every place (`_search_cost`). The costs are the
+# slowest measured for each kind of step (Nov 22 2026, Python 3.12, texts
+# made to be slow: one letter repeated, a letter no class takes quickly, a
+# near-match over and over), so the reckoning is over what a search takes:
+# by a tenth at the least, of all that were run to see.
+#
+# A cost is a sum of terms in L, the characters left to read: term k counts
+# k places chosen in order along them, L(L-1)…/k!. One open-ended repeat can
+# stop at L places and two, one after the other, at L²/2 pairs of places,
+# not L²: multiplied as sums of such terms, they come out so.
+_Terms = tuple[float, ...]
+_NONE: _Terms = (0.0,)
+_ONCE: _Terms = (1.0,)
+# More terms than any pattern worth running comes to.
+_TERMS_MOST = 40
+
+# A letter against the text, and without case; any character (`.`) is a
+# letter's cost with or without it.
+_LETTER, _LETTER_NOCASE = 2.6, 4.5
+# A class: its ranges and letters, its first \w, \s or \d, each further one
+# (every one of them is asked about a character none takes), and without
+# case; and what a class costs more as a step of its own than inside the
+# loop that counts a repeat of it.
+_CLASS, _CLASS_CATEGORY, _CLASS_FURTHER, _CLASS_NOCASE, _CLASS_ALONE = 2.5, 6.0, 3.5, 8.0, 3.0
+# A letter or any character inside that loop.
+_READ, _READ_NOCASE = 0.5, 2.0
+# Each place a search tries from.
+_START = 8.0
+# A repeat of one character: to begin it, and each place it gives back (a
+# lazy one: each it takes) before what follows is tried again.
+_REPEAT, _STEP, _STEP_LAZY = 9.0, 6.0, 9.0
+# One turn of a repeat of anything longer.
+_TURN = 45.0
+# An alternative, a group that keeps what it matched, a look-ahead or
+# look-behind, a boundary or an anchor, a back-reference before its letters.
+_ALTERNATIVE, _GROUP, _LOOK, _AT, _REFERENCE = 10.0, 5.5, 8.0, 10.0, 6.0
+# Each group the pattern keeps, for each turn, alternative and look-ahead:
+# `re` saves what the groups hold before every one (300 groups before
+# /(?:aa)*b/: eight times slower a turn). Inside such a repeat it puts them
+# back at each place a repeat of one character gives back, too: so much,
+# and so much a group.
+_KEPT_GROUP = 1.2
+_PUT_BACK, _PUT_BACK_GROUP = 5.0, 0.25
+
+
+class _OverTerms(Exception):
+    """A cost of more terms than `_TERMS_MOST`: past any budget."""
+
+
+@dataclass(frozen=True)
+class _Reckoning:
+    """What the costs of one pattern are reckoned for: a text of at most
+    `length` characters, with or without case, the most each group can hold
+    (`re`'s own count), what the groups cost to save and to put back, and
+    whether this is inside a repeat of more than one character."""
+
+    length: int
+    nocase: bool
+    widths: Sequence[Any]
+    saving: float
+    putting_back: float
+    repeated: bool = False
+
+
+def _plus(a: _Terms, b: _Terms) -> _Terms:
+    if len(a) < len(b):
+        a, b = b, a
+    return tuple(x + (b[at] if at < len(b) else 0.0) for at, x in enumerate(a))
+
+
+def _times(a: _Terms, b: _Terms) -> _Terms:
+    if len(a) == 1:
+        return tuple(a[0] * y for y in b)
+    if len(b) == 1:
+        return tuple(x * b[0] for x in a)
+    if len(a) + len(b) > _TERMS_MOST:
+        raise _OverTerms
+    out = [0.0] * (len(a) + len(b) - 1)
+    for i, x in enumerate(a):
+        if x:
+            for j, y in enumerate(b):
+                out[i + j] += x * y
+    return tuple(out)
+
+
+def _at_length(terms: _Terms, length: int) -> float:
+    """`terms` for a text of `length` characters."""
+    total, places = 0.0, 1.0
+    for k, x in enumerate(terms):
+        total += x * places
+        places = places * (length + k + 1) / (k + 1)
     return total
+
+
+def _char_cost(op: Any, av: Any, nocase: bool, counted: bool) -> float:
+    """One character against a letter or a class: `counted` inside the loop
+    that counts a repeat of it, else as a step of its own."""
+    if op.name == "IN":
+        categories = sum(1 for kind, _ in av if kind.name == "CATEGORY")
+        plain = any(kind.name in ("LITERAL", "RANGE") for kind, _ in av)
+        cost = _CLASS + (_CLASS_CATEGORY + _CLASS_FURTHER * (categories - 1) if categories else 0)
+        cost += _CLASS_NOCASE if nocase and plain else 0
+        return cost if counted else cost + _CLASS_ALONE
+    nocase = nocase and op.name != "ANY"
+    if counted:
+        return _READ_NOCASE if nocase else _READ
+    return _LETTER_NOCASE if nocase else _LETTER
+
+
+def _of_one_char(av: Any) -> bool:
+    """Whether a repeat is of one character: `re` counts those in a loop of
+    its own, and gives them back a place at a time."""
+    body = list(av[2])
+    return len(body) == 1 and body[0][0].name in _ONE_CHAR
+
+
+def _first_letter(items: Any, nocase: bool) -> str | None:
+    """The letter `items` can only begin with, if there is one."""
+    items = list(items)
+    if not items or items[0][0].name != "LITERAL":
+        return None
+    letter = chr(items[0][1])
+    if not nocase:
+        return letter
+    return letter.lower() if letter.isascii() else None
+
+
+def _letters_from(items: Sequence[Any], at: int, nocase: bool) -> str:
+    """The letters that stand one after another from `items[at]`."""
+    run: list[str] = []
+    for op, av in items[at:]:
+        if op.name != "LITERAL" or (nocase and not chr(av).isascii()):
+            break
+        run.append(chr(av).lower() if nocase else chr(av))
+    return "".join(run)
+
+
+def _letters_compared(run: str) -> tuple[float, int]:
+    """The most letters of `run` compared at a place, over places one after
+    another, and how many places apart it can hold whole: `n` of them can
+    hold only as often as its first `n` repeat themselves ("aaab" three deep
+    at every place, "fire" once in four), so one, and for each beginning of
+    it one in its period."""
+    back = [0] * len(run)
+    total = 1.0
+    for at in range(len(run)):
+        if at:
+            k = back[at - 1]
+            while k and run[at] != run[k]:
+                k = back[k - 1]
+            back[at] = k + 1 if run[at] == run[k] else 0
+        total += 1.0 / (at + 1 - back[at])
+    return total, len(run) - back[-1]
+
+
+def _repeat_cost(av: Any, after: bool, lazy: bool, about: _Reckoning) -> tuple[_Terms, _Terms]:
+    low, high, body = av
+    turn = _TURN + about.saving
+    if _varies(body):
+        # A few turns at most (VARIED_REPEAT, `_degree`), each begun every
+        # way the one before could end.
+        inside, inside_ways = _cost(body, True, replace(about, repeated=True))
+        inside = _plus(inside, (turn,))
+        cost, ways, begun = (turn,), _NONE, _ONCE
+        for done in range(high + 1):
+            if done >= low:
+                ways = _plus(ways, begun)
+            if done < high:
+                cost = _plus(cost, _times(begun, inside))
+                begun = _times(begun, inside_ways)
+        return cost, ways
+    one_char = _of_one_char(av)
+    if one_char:
+        op, inner = body[0]
+        each: _Terms = (_char_cost(op, inner, about.nocase, counted=True),)
+    else:
+        inside, _ = _cost(body, after or high > 1, replace(about, repeated=True))
+        each = _plus(inside, (turn,))
+    width = body.getwidth()[0]
+    # With nothing after it that can fail, it fails within `low` turns or
+    # holds; and what reads nothing isn't repeated for nothing.
+    most = high if after else min(high, low + 1)
+    if width == 0:
+        most = min(most, low + 1)
+    if width == 0 or most * width <= about.length:
+        turns: _Terms = (float(most),)
+        ends: _Terms = (float(most - low + 1),)
+    elif width >= about.length:
+        turns = ends = (2.0,)
+    else:
+        # It reaches past the text: as many turns as there is text for.
+        turns = ends = (1.0, 1.0 / width)
+    if not after or low == high:
+        ends = _ONCE
+    put_back = about.putting_back if one_char and about.repeated else 0.0
+    cost = _plus((_REPEAT + put_back,), _times(turns, each))
+    if after and one_char:
+        cost = _plus(cost, _times(ends, ((_STEP_LAZY if lazy else _STEP) + put_back,)))
+    return cost, ends
+
+
+def _item_cost(op: Any, av: Any, after: bool, about: _Reckoning) -> tuple[_Terms, _Terms]:
+    name = op.name
+    if name in _REPEATS:
+        return _repeat_cost(av, after, name == "MIN_REPEAT", about)
+    if name == "BRANCH":
+        # Alternatives that begin with different letters can't both hold at
+        # one place: the ways are those of the letter with the most.
+        cost, anywhere = _NONE, _NONE
+        by_letter: dict[str, _Terms] = {}
+        for alt in av[1]:
+            inside, inside_ways = _cost(alt, after, about)
+            cost = _plus(cost, _plus(inside, (_ALTERNATIVE + about.saving,)))
+            letter = _first_letter(alt, about.nocase)
+            if letter is None:
+                anywhere = _plus(anywhere, inside_ways)
+            else:
+                by_letter[letter] = _plus(by_letter.get(letter, _NONE), inside_ways)
+        most = max(by_letter.values(), key=lambda t: _at_length(t, about.length), default=_NONE)
+        return cost, _plus(anywhere, most)
+    if name == "SUBPATTERN":
+        group, add, remove, inside_items = av
+        nocase = (about.nocase or bool(add & re.IGNORECASE)) and not remove & re.IGNORECASE
+        cost, ways = _cost(inside_items, after, replace(about, nocase=nocase))
+        return (cost if group is None else _plus(cost, (_GROUP,))), ways
+    if name == "ATOMIC_GROUP":
+        return _cost(av, after, about)
+    if name in _ASSERTS:
+        # Whichever way it holds, it isn't gone back into.
+        cost, _ = _cost(av[1], after or name == "ASSERT_NOT", about)
+        return _plus(cost, (_LOOK + about.saving,)), _ONCE
+    if name == "GROUPREF_EXISTS":
+        cost, ways = (_LOOK,), _NONE
+        for alt in av[1:]:
+            if alt is not None:
+                inside, inside_ways = _cost(alt, after, about)
+                cost, ways = _plus(cost, inside), _plus(ways, inside_ways)
+        return cost, ways
+    if name == "GROUPREF":
+        letter = _LETTER_NOCASE if about.nocase else _LETTER
+        try:
+            most = about.widths[av][1]
+        except (IndexError, TypeError):
+            most = about.length + 1
+        if most <= about.length:
+            return (_REFERENCE + letter * most,), _ONCE
+        return (_REFERENCE, letter), _ONCE
+    if name == "AT":
+        return (_AT,), _ONCE
+    if name in _ONE_CHAR:
+        return (_char_cost(op, av, about.nocase, counted=False),), _ONCE
+    return (_LETTER,), _ONCE
+
+
+def _cost(items: Any, follow: bool, about: _Reckoning) -> tuple[_Terms, _Terms]:
+    """What trying `items` at one place can cost before it fails, every way
+    they can be taken, and how many ways they can hold: what follows them
+    is tried again for each. `follow` as `_degree` has it."""
+    cost, ways = _NONE, _ONCE
+    items = list(items)
+    at = 0
+    while at < len(items):
+        op, av = items[at]
+        after = follow or at < len(items) - 1
+        own, own_ways = _item_cost(op, av, after, about)
+        cost = _plus(cost, _times(ways, own))
+        at += 1
+        if op.name in _REPEATS and _of_one_char(av):
+            # Letters straight after a repeat of one character are tried at
+            # one place after another, and can't all hold at each: what
+            # follows them is tried only as often as they can.
+            run = _letters_from(items, at, about.nocase)
+            if len(run) > 1:
+                letter = _LETTER_NOCASE if about.nocase else _LETTER
+                deep, apart = _letters_compared(run)
+                compared = _times(own_ways, (deep * letter,))
+                cost = _plus(cost, _times(ways, _plus(compared, (len(run) * letter,))))
+                own_ways = _plus(_times(own_ways, (1.0 / apart,)), _ONCE)
+                at += len(run)
+        ways = _times(ways, own_ways)
+    return cost, ways
+
+
+def _search_cost(tree: Any, length: int) -> float:
+    """The most one search of `length` characters can cost: a failed try
+    from every place in them."""
+    state = tree.state
+    groups = max(0, state.groups - 1)
+    about = _Reckoning(
+        length=length,
+        nocase=bool(state.flags & re.IGNORECASE),
+        widths=getattr(state, "groupwidths", ()),
+        saving=_KEPT_GROUP * groups,
+        putting_back=_PUT_BACK + _PUT_BACK_GROUP * groups if groups else 0.0,
+    )
+    try:
+        cost, _ = _cost(tree, False, about)
+    except _OverTerms:
+        return math.inf
+    # A try from each place: one more place chosen, for every term.
+    return _at_length((0.0, *_plus(cost, (_START,))), length)
+
+
+def _tidy(cap: int) -> int:
+    """`cap` to two figures, down: 1,678 is 1,600."""
+    unit = 10 ** max(0, len(str(cap)) - 2)
+    return cap - cap % unit
 
 
 def _screened(source: str, flags: int) -> int:
@@ -598,15 +897,30 @@ def _screened(source: str, flags: int) -> int:
     try:
         from re import _parser  # the parser `re.compile` itself uses
     except ImportError:  # pragma: no cover - a Python without it
-        return SCAN_CAPS[2]
+        return SCAN_LEAST
     tree = _parser.parse(source, flags)
     ways = _ways(tree)
     degree = _degree(tree, False)
-    if degree == 0:
-        return max(100, min(SCAN_MOST, BOUNDED_WORK // max(1, _work(tree))))
-    if degree not in SCAN_CAPS:
+    if degree and degree not in SCAN_CAPS:
         raise _Refused("it has too many open-ended repeats")
-    return max(100, int(SCAN_CAPS[degree] / ways ** (1 / (degree + 1))))
+    most = SCAN_CAPS.get(degree, SCAN_MOST)
+    if _search_cost(tree, most) <= SEARCH_BUDGET:
+        return most
+    if _search_cost(tree, SCAN_LEAST) > SEARCH_BUDGET:
+        if degree > 1 or ways == 1:
+            raise _Refused("it has too many open-ended repeats")
+        raise _Refused("its optional parts and alternatives can be taken too many ways")
+    # The cost only grows with the length, but for a count that turns from
+    # "as far as the text goes" into its own number: any length under the
+    # budget is safe, and this finds the longest or near it.
+    low, high = SCAN_LEAST, most
+    while high - low > 1:
+        middle = (low + high) // 2
+        if _search_cost(tree, middle) <= SEARCH_BUDGET:
+            low = middle
+        else:
+            high = middle
+    return max(SCAN_LEAST, _tidy(low))
 
 
 @lru_cache(maxsize=4096)
