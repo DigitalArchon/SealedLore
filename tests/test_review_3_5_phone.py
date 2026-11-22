@@ -8,6 +8,7 @@ test_phone_server.py and test_phone_window.py."""
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -26,10 +27,13 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from sealedlore.gui import phone_server  # noqa: E402
+from sealedlore.gui import phone_server, window_phone  # noqa: E402
+from sealedlore.models.config import PhoneDevice, ProviderConfig  # noqa: E402
 from sealedlore.models.node import NARRATOR_SPEAKER_ID  # noqa: E402
 from sealedlore.phone.api import Api  # noqa: E402
-from sealedlore.phone.pairing import Pairing  # noqa: E402
+from sealedlore.phone.page import page_files  # noqa: E402
+from sealedlore.phone.pairing import Pairing, token_hash  # noqa: E402
+from sealedlore.providers.mock import MockChatProvider  # noqa: E402
 from tests import test_phone_window as desk  # noqa: E402
 from tests.test_phone_api import ONION, TOKEN, FakeBackend  # noqa: E402
 from tests.test_phone_server import CONNECTED, Client, wait_for  # noqa: E402
@@ -76,6 +80,8 @@ def desktop(app, tmp_path, sockets, story, cast):
     yield open_window
     for window in opened:
         wait_for(lambda w=window: not w._busy)
+        if window.session is not None and window.session.in_private:
+            window.session.discard_private()  # or closing asks about it
         window.close()
 
 
@@ -236,3 +242,146 @@ def test_continue_from_a_phone_is_only_for_the_passage_that_is_latest_now(app, d
     assert status == 409, answer
     assert not window._busy
     assert [n.content for n in window.session.path()][-1] == "Passage two."
+
+
+# --- P3: what is private is said to be, as it comes ----------------------------------------
+
+
+def begin_scene(window, monkeypatch, replies: list[str]) -> str:
+    """A private scene begun with the composer's own button; its tag."""
+    private = MockChatProvider(replies)
+    settings = ProviderConfig(
+        name="Local", base_url="http://127.0.0.1:11434/v1", api_key="", model="local/model"
+    )
+    monkeypatch.setattr(window, "_private_settings", lambda: settings)
+    window.private_provider_factory = lambda _settings: private
+    window.config.private_intro_seen = True
+    window.begin_private()
+    assert window.session.in_private
+    return "memory" if window.session.open_span.keep == "memory" else "scene"
+
+
+def test_a_private_scene_begun_on_the_desktop_is_told_to_the_phones_at_once(
+    app, desktop, monkeypatch
+):
+    """Nothing told the phones a scene had begun: its first turn came to a
+    page that still took the story for public, and was shown without
+    "Before this is shown"."""
+    window, phone = desktop(["A public passage."])
+    window.show()
+    stream = phone.stream()
+    stream.wait_for("hello")
+    start = len(stream.events())
+    tag = begin_scene(window, monkeypatch, [f"A private reply about {desk.MARKER}."])
+    for _ in range(50):
+        app.processEvents()
+    told = [data["private"] for name, data in stream.events()[start:] if name == "state"]
+    assert told and told[-1] == tag, "the phone wasn't told the scene began"
+
+    start = len(stream.events())
+    window.composer.input.setPlainText(f"I whisper {desk.MARKER} to her.")
+    window.send_turn()
+    desk.wait_for(app, lambda: "turn" in stream.names()[start:])
+    turn = next(data for name, data in stream.events()[start:] if name == "turn")
+    assert turn["private"] == tag, "the scene's turn came untagged"
+    desk.wait_for(app, lambda: not window._busy)
+
+    start = len(stream.events())
+    window.session.discard_private()
+    window._sync_private_ui()  # as every way out of a scene ends
+    for _ in range(50):
+        app.processEvents()
+    told = [data["private"] for name, data in stream.events()[start:] if name == "state"]
+    assert told and told[-1] is None, "the phone wasn't told the scene ended"
+
+
+def test_a_public_turn_says_it_is_public(app, desktop):
+    window, phone = desktop(["The door gives."])
+    stream = phone.stream()
+    stream.wait_for("hello")
+    phone.ask("POST", "/api/turn", narration("I push the door."))
+    stream.wait_for("job_finished")
+    turn = next(data for name, data in stream.events() if name == "turn")
+    assert turn == {
+        "label": "Narrator",
+        "text": "I push the door.",
+        "kind": "narration",
+        "by": "phone",
+        "private": None,
+    }
+
+
+def two_phones(window, phone):
+    """A second phone paired, and a stream for each: the first phone's, the other's."""
+    window.config.phone.devices.append(
+        PhoneDevice(id="p2", name="Other", token_sha256=token_hash("the-other-token"))
+    )
+    mine, theirs = phone.stream(), phone.stream(token="the-other-token")
+    mine.wait_for("hello")
+    theirs.wait_for("hello")
+    return mine, theirs
+
+
+def test_a_queued_turn_goes_back_to_the_phone_that_queued_it_and_no_other(app, desktop):
+    """`queued_returned` carries the turn's text, and went to every phone
+    with a stream open: a turn written on one phone was put in the box on
+    another."""
+    slow_read = "{" + " " * 600 + "}"  # the background read the turn is queued behind
+    window, phone = desktop(["The door gives.", slow_read], reads=True, delay=0.02)
+    mine, theirs = two_phones(window, phone)
+    window.composer.input.setPlainText("I push the door.")
+    window.send_turn()
+    desk.wait_for(app, lambda: window._background)
+    status, answer = phone.ask("POST", "/api/turn", narration("I step inside."))
+    assert (status, answer) == (202, {"queued": True})
+    window.stop_generation()
+    desk.wait_for(app, lambda: not window._busy)
+    mine.wait_for("queued_returned")
+    returned = next(data for name, data in mine.events() if name == "queued_returned")
+    assert returned == {"text": "I step inside.", "private": None}
+    for _ in range(50):
+        app.processEvents()
+    assert "queued_returned" not in theirs.names()
+    assert b"I step inside." not in theirs.raw()
+
+
+def test_a_turn_that_comes_back_in_a_private_scene_says_so(app, desktop, monkeypatch):
+    """Untagged, the page couldn't tell a private scene's turn coming back
+    from any other."""
+    window, phone = desktop([])
+    mine, theirs = two_phones(window, phone)
+    tag = begin_scene(window, monkeypatch, [])
+    whisper = f"I whisper {desk.MARKER}."
+    # As the window hands back a phone's turn that never went (`_drop_queued`,
+    # `_return_unanswered`): to the origin it was sent with.
+    window.queued_turn_returned.emit(window_phone.phone_origin("p1"), whisper)
+    mine.wait_for("queued_returned")
+    returned = next(data for name, data in mine.events() if name == "queued_returned")
+    assert returned == {"text": whisper, "private": tag}
+    for _ in range(50):
+        app.processEvents()
+    assert desk.MARKER.encode() not in theirs.raw()
+
+
+def page_function(script: str, name: str) -> str:
+    start = script.index(f"function {name}(")
+    return script[start : script.index("\n  }\n", start)]
+
+
+def test_the_page_gates_a_turn_and_a_returned_turn_by_their_own_tags():
+    """The page tagged a turn as it came with the state it last had, and put
+    a returned turn's text in the box whatever it was. It reads each event's
+    own tag, and holds a private turn back until its kind is acknowledged."""
+    script = page_files("test")["/app.js"][0].decode("utf-8")
+    events = page_function(script, "onEvent")
+    turn = events[events.index('case "turn"') : events.index('case "job_started"')]
+    assert re.search(r"private:\s*data\.private", turn), "the turn's own tag isn't read"
+    assert "offerPrivate()" in turn
+    returned = events[events.index('case "queued_returned"') : events.index('case "revoked"')]
+    assert "data.private" in returned and ".value = " not in returned
+    shown = page_function(script, "showReturned")
+    assert shown.index("hidden(") < shown.index(".value = ")
+    kinds = script[script.index("function privateKinds") : script.index("function offerPrivate")]
+    assert "S.returned" in kinds
+    # Acknowledged, what was held back is put where it belongs.
+    assert "showReturned()" in page_function(script, "askToShow")

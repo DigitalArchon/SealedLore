@@ -3394,7 +3394,8 @@ class MainWindow(
     def _submit_turn(self, text: str, turn: TurnRequest, *, origin: str = "desktop") -> None:
         """A turn, now or once the background reads finish. The caller has
         checked it may be sent; `origin` says whose it is ("desktop", or
-        "phone" for one sent from a phone, which leaves the composer alone)."""
+        a phone's, naming the phone: `window_phone.phone_origin`; such a turn
+        leaves the composer alone)."""
         label = speaker_label_for(turn.speaker_id, self.session.cast)
 
         def send() -> None:

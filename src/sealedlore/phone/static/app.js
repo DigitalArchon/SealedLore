@@ -29,6 +29,7 @@
     asking: null, // this page's word for the suggestions it asked for, until they come
     suggestions: null, // { options, private }: Suggest…'s offers, until one is taken or they are put away
     suggestEl: null, // their list, kept across the composer's rebuilds
+    returned: null, // { text, private }: a turn of this phone's that didn't go, until it is back in the box
     reconnects: 0,
     ended: false, // revoked or forgotten: nothing more to do
     acknowledged: new Set(), // private kinds the author chose to see, this page session
@@ -267,6 +268,7 @@
         S.messages = [];
         S.composer = null;
         S.suggestions = null;
+        S.returned = null;
       }
       render();
     } catch (e) {
@@ -660,6 +662,7 @@
       }
     }
     if (S.suggestions && S.suggestions.private) kinds.add(S.suggestions.private);
+    if (S.returned && S.returned.private) kinds.add(S.returned.private);
     if (S.state && S.state.private) kinds.add(S.state.private);
     return kinds;
   }
@@ -689,6 +692,7 @@
           closeOverlay();
           renderMessages();
           renderSuggestions();
+          showReturned();
         }, "primary"),
         button("Not now", () => {
           S.declined.add(kind);
@@ -973,6 +977,19 @@
     // A note being typed stays clear of the composer as it grows, or as the
     // phone's keyboard makes the page shorter.
     if (S.noting && document.activeElement === S.noting.field) revealNote();
+  }
+
+  // A turn of this phone's that didn't go, put back in the box to send
+  // again. One written in a private scene is that scene's text: held back,
+  // as its messages are, until its kind is acknowledged.
+  function showReturned() {
+    const returned = S.returned;
+    const text = $("turn");
+    if (!returned || !text || hidden(returned.private)) return false;
+    if (!text.value.trim()) text.value = returned.text;
+    S.returned = null;
+    syncSendButton();
+    return true;
   }
 
   function syncSendButton() {
@@ -1314,9 +1331,12 @@
           kind: data.kind === "question" ? "director" : data.kind,
           label: data.label + (data.by === "phone" ? " · from a phone" : ""),
           text: data.text,
-          private: S.state ? S.state.private : null,
+          // The turn's own tag: the state this page last had may be from
+          // before the private scene the turn was written in.
+          private: data.private || null,
         });
         renderMessages();
+        offerPrivate();
         break;
       case "job_started":
         if (data.continues) startContinuing(data.continues);
@@ -1365,13 +1385,12 @@
       case "failed":
         toast("It failed: " + data.error, true);
         break;
-      case "queued_returned": {
-        const text = $("turn");
-        if (text && !text.value.trim()) text.value = data.text;
-        toast("Your queued turn didn't go: it's back in the box to send again.");
-        syncSendButton();
+      case "queued_returned":
+        S.returned = { text: data.text, private: data.private || null };
+        if (showReturned()) toast("Your queued turn didn't go: it's back in the box to send again.");
+        else toast("Your queued turn didn't go: it comes back to the box once private text is shown.");
+        offerPrivate();
         break;
-      }
       case "revoked":
       case "forgotten":
         notAllowed();

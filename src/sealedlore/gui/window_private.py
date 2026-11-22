@@ -246,6 +246,8 @@ class PrivateWindow:
         self._refresh_model_button()
         self._sync_capture()
         was_open, self._scene_shown = self._scene_shown, span is not None
+        if was_open != self._scene_shown:
+            self._phone_scene_changed()
         if span is None:
             if was_open:
                 # The scene's messages' drawings go with it: a memory-only

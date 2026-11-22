@@ -281,6 +281,7 @@ def test_the_desktop_s_turn_reaches_the_phone_too(app, tmp_path, sockets, story,
         "text": "I push the door.",
         "kind": "narration",
         "by": "desktop",
+        "private": None,
     }
     window.close()
 

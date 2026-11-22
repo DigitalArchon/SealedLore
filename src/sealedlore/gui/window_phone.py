@@ -90,6 +90,18 @@ KEY_MISSING = (
 )
 
 
+def phone_origin(device: str) -> str:
+    """A turn's `origin` in the window's seams when a phone sent it: which
+    phone, so that one that comes back goes to that phone alone."""
+    return f"phone:{device}"
+
+
+def sent_by(origin: str) -> str:
+    """The phone an origin names; blank for the desktop's, or with none named."""
+    kind, _, device = origin.partition(":")
+    return device if kind == "phone" else ""
+
+
 class PhoneWindow:
     """Mixed into MainWindow."""
 
@@ -468,13 +480,38 @@ class PhoneWindow:
         if self._phone is not None:
             self._phone.suggested(device, ask, options or [], private)
 
-    def _phone_turn_sent(self, label: str, text: str, kind: str, origin: str) -> None:
+    def _phone_scene_changed(self) -> None:
+        """A private scene began or ended on the desktop: the phones are told
+        now. Nothing else said so until the next job, and a scene's first
+        turn came to a page that still took the story for public."""
         if self._phone is not None:
-            self._phone.publish("turn", {"label": label, "text": text, "kind": kind, "by": origin})
+            self._phone.publish_state()
+
+    def _phone_turn_sent(self, label: str, text: str, kind: str, origin: str) -> None:
+        """A turn as it is sent, with its own private tag: the page holds it
+        back by that, whatever state it last had."""
+        if self._phone is not None:
+            by = "desktop" if origin == "desktop" else "phone"
+            self._phone.publish(
+                "turn",
+                {
+                    "label": label,
+                    "text": text,
+                    "kind": kind,
+                    "by": by,
+                    "private": self._phone_private_tag(),
+                },
+            )
 
     def _phone_turn_returned(self, origin: str, text: str) -> None:
-        if self._phone is not None and origin == "phone":
-            self._phone.publish("queued_returned", {"text": text})
+        """A phone's turn that never went, back to the phone that sent it and
+        to no other (it is that phone's text, a private scene's when it was
+        written in one), tagged as a turn is."""
+        device = sent_by(origin)
+        if self._phone is not None and device:
+            self._phone.api.hub.publish_to(
+                device, "queued_returned", {"text": text, "private": self._phone_private_tag()}
+            )
 
     # --- what a phone may not do now -------------------------------------------------
 
@@ -914,8 +951,9 @@ class _Backend:
         window = self.window
         window._phone_refusal(sending=True)
         will_queue = window._busy
+        origin = phone_origin(device)
         if not window.in_chat and turn.speaker == QUESTION:
-            window._submit_ask(turn.text, origin="phone")
+            window._submit_ask(turn.text, origin=origin)
             return {"queued": will_queue}
         if window.in_chat:
             request = window._chat_turn(turn.text)
@@ -932,7 +970,7 @@ class _Backend:
                 difficulty=turn.difficulty or "standard",
                 ooc=None,
             )
-        window._submit_turn(turn.text, request, origin="phone")
+        window._submit_turn(turn.text, request, origin=origin)
         return {"queued": will_queue}
 
     def stop(self) -> None:
