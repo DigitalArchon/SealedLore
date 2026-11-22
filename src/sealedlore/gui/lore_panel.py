@@ -307,10 +307,11 @@ class LorePanel(QWidget):
         form_host = QWidget()
         form = QFormLayout(form_host)
         form.setContentsMargins(0, 0, 0, 0)
-        # Heads the entry, above its picture: under the picture it read as one
-        # of the picture's.
+        # Heads the entry: under its picture it read as one of the picture's.
         form.addRow(self.came_from)
-        form.addRow(self.picture)
+        # The words first, the pictures under them (the author, Nov 22 2026:
+        # "text first"); a landscape picture on top put the entry's title and
+        # content below the fold.
         form.addRow("Title", self.title)
         form.addRow("Content", self.content)
         form.addRow("Keywords", self.keywords)
@@ -328,6 +329,7 @@ class LorePanel(QWidget):
         self._condensed_row.setLayout(condensed_row)
         form.addRow(self._condensed_row)
         self._form = form
+        form.addRow(self.picture)
         # Full width, under its label, as on the Cast page.
         form.addRow(QLabel("Other pictures"))
         form.addRow(self.pictures)

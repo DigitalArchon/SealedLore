@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.model_profiles import Profile, all_profiles, filled
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
+from sealedlore.engine.reactions import independent_cast
 from sealedlore.engine.routing import config_role_model
 from sealedlore.gui.character_roles import ROUND_ORDER_LABEL, round_order_combo
 from sealedlore.gui.composer import (
@@ -305,9 +306,23 @@ class SetupDialog(QDialog):
         panel.show()
         return widget
 
+    def _sync_round_order(self) -> None:
+        """About's They answer, only while a character is played by their own
+        model (the author, Nov 22 2026: it says nothing to a story with none).
+        Read from the live cast, which the Characters tab changes; kept and
+        saved as it is while out of sight."""
+        form = getattr(self, "_about_form", None)
+        if form is None:  # a chat's Setup has no such row
+            return
+        shown = bool(independent_cast(self._live_cast))
+        for row in (self.round_order, self._round_hint):
+            form.setRowVisible(row, shown)
+
     def _on_tab_changed(self, index: int) -> None:
-        """Back on the Starting scene with a cast that changed meanwhile: the
+        """Back on About with a character given their own model meanwhile: its
+        They answer. Back on the Starting scene with a cast that changed: the
         roster and the suggestion list it, choices kept."""
+        self._sync_round_order()
         if self.tabs.widget(index) is not self.scene_tab:
             return
         live = [c for c in self._live_cast if c.id not in self._hidden]
@@ -616,15 +631,15 @@ class SetupDialog(QDialog):
         )
         self._placeholder_rows(form)
         self.round_order = round_order_combo(self.story.defaults.round_order)
-        form.addRow(ROUND_ORDER_LABEL, self.round_order)
-        form.addRow(
-            _hint(
-                "For characters played by their own model (a trial; Played by on their "
-                "card): when they answer. After your turn plays better, since they answer "
-                "what you did; at the same time as you is faster, but their answers run a "
-                "step behind your turn."
-            )
+        self._round_hint = _hint(
+            "For characters played by their own model (a trial; Played by on their card): "
+            "when they answer. After your turn plays better, since they answer what you did; "
+            "at the same time as you is faster, but their answers run a step behind your turn."
         )
+        form.addRow(ROUND_ORDER_LABEL, self.round_order)
+        form.addRow(self._round_hint)
+        self._about_form = form
+        self._sync_round_order()
         self.picture_style = PictureStyleField(
             self.story.picture_style,
             self.story.image_style,

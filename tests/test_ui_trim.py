@@ -153,3 +153,60 @@ def test_the_stories_list_says_what_kind_each_is_in_words(tmp_path: Path) -> Non
     assert StoryListing(**fields, chat=True).kind == "Simple chat"
     assert StoryListing(**fields, plot=True).kind == "Story with a plot"
     assert StoryListing(**fields).kind == "Story"
+
+
+# --- the author's three rulings on what was left (Nov 22 2026) ------------------------
+
+
+def test_the_private_button_says_what_it_begins_and_where_it_is_kept(app):
+    """ "Private" beside "In memory" said what neither was: a story's begins a
+    private scene, a chat's holds a private part, kept in memory or on disk."""
+    from sealedlore.gui.composer import Composer
+
+    composer = Composer()
+    assert composer.private_toggle.text() == "Private scene"
+    keep = composer.private_keep
+    assert [keep.itemText(i) for i in range(keep.count())] == ["Kept in memory", "Kept on disk"]
+    composer.set_private_state(True, "memory")
+    assert composer.private_toggle.text() == "End private scene"
+    composer.set_private_state(False)
+    composer.set_chat_mode(True)
+    assert composer.private_toggle.text() == "Private part"
+    composer.set_private_state(True, "disk")
+    assert composer.private_toggle.text() == "End private part"
+    composer.deleteLater()
+
+
+def test_a_lore_entry_s_words_come_before_its_pictures(app, tmp_path: Path, story, cast):
+    window = _window(tmp_path, story, cast, [])
+    panel = window.lore_panel
+    form = panel._form
+    row_of = {
+        name: form.getWidgetPosition(getattr(panel, name))[0]
+        for name in (
+            "came_from",
+            "title",
+            "content",
+            "keywords",
+            "picture",
+            "pictures",
+        )
+    }
+    assert row_of["came_from"] < row_of["title"] < row_of["content"] < row_of["keywords"]
+    assert row_of["keywords"] < row_of["picture"] < row_of["pictures"]
+    window.close()
+
+
+def test_setup_asks_when_they_answer_only_once_someone_plays_on_their_own_model(app, story, cast):
+    from sealedlore.gui.setup_dialog import SetupDialog
+
+    dialog = SetupDialog(story, cast)
+    dialog.show()
+    assert not dialog.round_order.isVisibleTo(dialog)
+    # Given a model of their own on the Characters tab while Setup is open: back
+    # on About, the choice is there.
+    cast[0].own_model = "Local::maela-lora"
+    dialog.tabs.setCurrentIndex(1)
+    dialog.tabs.setCurrentIndex(0)
+    assert dialog.round_order.isVisibleTo(dialog)
+    dialog.deleteLater()

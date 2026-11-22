@@ -160,6 +160,14 @@ SUGGEST_TIPS = {
 SUGGEST_NOBODY_TIP = "Suggestions are for the character you play: choose one under Playing."
 SUGGEST_BUSY_TIP = "Suggestions can be asked for once the current job is done."
 
+# The button's words (Nov 22 2026, the author: "Private" beside "In memory"
+# didn't say what either was): a story plays a private scene, a chat holds a
+# private part, as every other message of each says.
+PRIVATE_LABELS = {
+    False: ("Private scene", "End private scene"),
+    True: ("Private part", "End private part"),
+}
+KEEP_LABELS = {"memory": "Kept in memory", "disk": "Kept on disk"}
 PRIVATE_TIP = (
     "Private scene: play the next part on your private model. Nothing from it reaches "
     "the story's model or any other; when you end it, the private model writes a summary "
@@ -336,7 +344,7 @@ class Composer(QWidget):
         # A private scene: played on the private model, handed back as a
         # summary. Where it is kept is chosen beside it, before it begins, and
         # locked (showing the choice) while it runs.
-        self.private_toggle = QPushButton("Private")
+        self.private_toggle = QPushButton(PRIVATE_LABELS[False][0])
         self.private_toggle.setObjectName("privateToggle")
         self.private_toggle.setCheckable(True)
         self.private_toggle.setToolTip(PRIVATE_TIP)
@@ -348,18 +356,19 @@ class Composer(QWidget):
         self._parked: QWidget | None = None
         self._focus_was_ours = False
         self.private_keep = QComboBox()
-        self.private_keep.addItem("In memory", "memory")
-        self.private_keep.addItem("On disk", "disk")
+        self.private_keep.addItem(KEEP_LABELS["memory"], "memory")
+        self.private_keep.addItem(KEEP_LABELS["disk"], "disk")
+        # Said of a scene and a chat's private part alike.
         self.private_keep.setItemData(
             0,
-            "The scene's messages are never written to disk; when the app closes they are "
-            "gone, and only the approved summary stays.",
+            "Its messages are never written to disk; when the app closes they are gone, and "
+            "only the approved summary stays.",
             Qt.ToolTipRole,
         )
         self.private_keep.setItemData(
-            1, "The scene's messages are saved with the story, marked private.", Qt.ToolTipRole
+            1, "Its messages are saved with the rest, marked private.", Qt.ToolTipRole
         )
-        self._compact(self.private_keep, 9)
+        self._compact(self.private_keep, 14)
         # Capped at its longest entry like the others: uncapped, it took every
         # spare pixel of the row and squeezed Length and Outcome short.
         self._fit_popup(self.private_keep)
@@ -861,12 +870,14 @@ class Composer(QWidget):
     def fix_private_keep(self, keep: str | None) -> None:
         """Where a private part is kept, when there is no choice to make: a
         chat kept in memory only keeps its private parts in memory too, so the
-        In memory / On disk selector goes. None gives the choice back."""
+        Kept in memory / Kept on disk selector goes. None gives the choice back."""
         self._keep_fixed = keep
         self.private_keep.setVisible(self._private_offered and keep is None)
 
     def _sync_private_tips(self) -> None:
+        """The button's words and tip, for a story or a chat, begun or not."""
         active = self.private_toggle.isChecked()
+        self.private_toggle.setText(PRIVATE_LABELS[self._chat][active])
         if self._chat:
             tip = CHAT_END_PRIVATE_TIP if active else CHAT_PRIVATE_TIP
         else:
@@ -1136,7 +1147,6 @@ class Composer(QWidget):
             if index >= 0:
                 self.private_keep.setCurrentIndex(index)
         self.private_keep.setEnabled(not active)
-        self.private_toggle.setText("End private" if active else "Private")
         self._sync_private_tips()
         self._sync_more()
         # A tinted input says, while you type, where this turn is going.

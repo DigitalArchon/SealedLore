@@ -745,8 +745,8 @@ archiving, rebuilding summaries.
   character, Narration, Direction, or a Question to the model); *Length* is
   how long the passages are. **More ▸** opens the rest: *Model voices* (who
   the storyteller may voice this turn), *Outcome* (and the dice),
-  **Suggest…** (ideas for your next turn when you are stuck), **Private**
-  (a private scene) and **OOC** (an out-of-character note). It stays open or
+  **Suggest…** (ideas for your next turn when you are stuck), **Private
+  scene** and **OOC** (an out-of-character note). It stays open or
   closed as you leave it, opens by itself while a private scene, a roll or an
   OOC note is in use, and names an outcome or voices you chose beside it
   while closed. What you have typed and not sent stays with its story or
@@ -2155,7 +2155,8 @@ storyteller decides how it turns out.
 That is the default, and it plays better, but each turn waits a few seconds
 for their answers before the storyteller starts. A story can have them answer
 at the same time as you instead, with **They answer** under Story → Setup… →
-About (the Start dialog offers it too). Each of them then answers the passage
+About, shown once a character is played by their own model (the Start dialog
+offers it too). Each of them then answers the passage
 while you write your turn, without seeing it, so nobody waits; but their
 answers run a step behind your turn, and the storyteller sometimes works in
 one your turn has already answered or moved past (a question you just
@@ -3356,7 +3357,7 @@ Privacy column and the note under the list (one of Chutes' ordinary models
 says there that Chutes reads it), and Test attestation's details, each ending
 with the sentence above.
 
-The **Private** button beside the composer plays a span of the story on a
+The **Private scene** button beside the composer plays a span of the story on a
 separate model that nothing else ever hears about: a local server (Ollama, LM
 Studio, llama.cpp), or a NanoGPT `TEE/` model. For a TEE model the app
 attests the enclave when the scene begins, before anything is sent, and again
@@ -3514,9 +3515,10 @@ ends, the scene's messages stay on the page where they were played, for you
 to read back; they are kept from every model but the private one, and the
 story's model goes on from the summary. Delete the summary (⋯ → Delete from
 here…) and the story stands on the scene's last message, the story's model
-knowing nothing of the scene at all. **In memory** keeps the scene's
-messages off the disk altogether (they show until the story or the app is
-closed, which loses them); **On disk** saves them with the story. A scene that outgrows the private model's context is
+knowing nothing of the scene at all. **Kept in memory**, beside the button,
+keeps the scene's messages off the disk altogether (they show until the story
+or the app is closed, which loses them); **Kept on disk** saves them with the
+story. A scene that outgrows the private model's context is
 condensed by the private model itself, never by the story's. Set the model under Settings → Private, where
 **Detect** asks a local server how much context the model is running with. The
 endpoint there starts as NanoGPT's, and with its key left blank it uses the
@@ -3734,12 +3736,12 @@ story is (Settings → Context), with a plain summariser.
   of every request (a style reminder, a standing rule). It is never saved
   into the conversation.
 - **A part of a chat can be held in private**, as a scene of a story can
-  (see "Private scenes"). The **Private** button beside the message box sends
+  (see "Private scenes"). The **Private part** button beside the message box sends
   what you write next to your private model (Settings → Private) and to
   nothing else; the chat's own model sees none of it. Beside it you choose
-  whether that part is kept **In memory** (gone when the app closes) or **On
-  disk**; a chat kept in memory only keeps its private parts in memory too,
-  so it doesn't ask. **End private** has the private model write a summary for you to
+  whether that part is **Kept in memory** (gone when the app closes) or **Kept
+  on disk**; a chat kept in memory only keeps its private parts in memory too,
+  so it doesn't ask. **End private part** has the private model write a summary for you to
   approve, change, or do without; what you approve joins the chat, marked as
   a summary of a private part, and is all the chat's model ever reads of it.
   While a part is open, Settings and switching to another chat or story are

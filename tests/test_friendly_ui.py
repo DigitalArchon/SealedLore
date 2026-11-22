@@ -121,7 +121,8 @@ def test_more_opens_by_itself_for_what_a_turn_depends_on(app, window):
     # Nor can a private scene's End.
     composer.set_private_state(True, "memory")
     settle(app)
-    assert composer.private_toggle.isVisible() and composer.private_toggle.text() == "End private"
+    assert composer.private_toggle.isVisible()
+    assert composer.private_toggle.text() == "End private scene"
     composer.set_private_state(False)
     settle(app)
     assert not composer.private_toggle.isVisible()

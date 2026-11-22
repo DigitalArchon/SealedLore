@@ -126,9 +126,8 @@ PAUSED_IN_PRIVATE = (
     "• switching to another story or branch, the settings review and Restart\n"
     "• the scene card, the plot, the clock and who you are playing\n"
     "• pictures for the cards, the story's and Your characters'\n\n"
-    "To use them again, end the scene with the End private button beside the message "
-    "box. The private model then writes a summary for you to approve, or you can end "
-    "the scene without one."
+    "To use them again, press End private scene beside the message box. The private "
+    "model then writes a summary for you to approve, or you can end the scene without one."
 )
 # A chat has no scene card, plot or character to pause.
 PAUSED_IN_PRIVATE_CHAT = (
@@ -137,9 +136,8 @@ PAUSED_IN_PRIVATE_CHAT = (
     "• Settings\n"
     "• switching to another chat, story or branch\n"
     "• changing this chat's model\n\n"
-    "To use them again, end the private part with the End private button beside the "
-    "message box. The private model then writes a summary for you to approve, or you can "
-    "end it without one."
+    "To use them again, press End private part beside the message box. The private "
+    "model then writes a summary for you to approve, or you can end it without one."
 )
 if sys.platform == "win32":
     _CAPTURE = (
@@ -326,7 +324,7 @@ class PrivateWindow:
         for widget in (self.stories, self.branch_bar):
             widget.setToolTip(
                 self._say(
-                    "Paused during a private scene: end it with End private beside the "
+                    "Paused during a private scene: end it with End private scene beside the "
                     "message box to switch."
                 )
                 if private

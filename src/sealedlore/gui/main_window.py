@@ -1328,7 +1328,7 @@ class MainWindow(
         if self.session.in_private:
             self.statusBar().showMessage(
                 "Who you are playing is paused while the private scene is open: end it with "
-                "End private beside the message box to play as someone else.",
+                "End private scene beside the message box to play as someone else.",
                 8000,
             )
             return
