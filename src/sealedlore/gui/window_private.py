@@ -15,6 +15,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QCheckBox, QInputDialog, QMessageBox
 
 from sealedlore.engine.session_plot import SessionNotice
+from sealedlore.engine.session_private import NO_PLACE, UNRECORDED_PLACE
 from sealedlore.gui.markdown_text import forget as forget_drawn_text
 from sealedlore.gui.private_dialogs import FitDialog, PrivateSummaryDialog, chat_words
 from sealedlore.gui.winprivacy import exclude_from_capture
@@ -696,7 +697,9 @@ class PrivateWindow:
         """A chat or a scene recorded as more private than where its model
         would go now (`StorySession.privacy_held`): nothing goes, and the way
         out is said. A scene offers what a retired model's does: another model
-        as private (Settings → Private's, when it is), or to end it."""
+        as private (Settings → Private's, when it is), or to end it. A scene
+        as private where it would go now, but on another server than the one
+        it began on, is asked about instead (`_ask_scene_moved`)."""
         self._tee_state = "⚠ held back"
         self._refresh_model_button()
         if for_chat:
@@ -704,6 +707,10 @@ class PrivateWindow:
             return
         session = self.session
         span = session.open_span
+        places = session.scene_moved()
+        if places is not None:
+            self._ask_scene_moved(places, ending=ending)
+            return
         written = bool(session.span_nodes(span))
         summarise = ending and written
         settings = self._private_settings()
@@ -743,6 +750,78 @@ class PrivateWindow:
             self._choose_scene_model(span.model, choices, summarise=summarise)
         elif clicked is leave:
             self._end_without_model()
+
+    def _ask_scene_moved(self, places: tuple[str, str], *, ending: bool = False) -> None:
+        """The open scene's messages would go to another server than the one
+        it began on (`StorySession.scene_moved`: Settings → Private was
+        changed while the story was closed in the scene): nothing goes there
+        until the author says so, here. A scene begun on a server on this
+        computer used to go, whole, wherever Settings → Private pointed when
+        the story was next opened. Yes is recorded on the scene, so it is
+        asked once; the other ways out send nothing: end the scene with no
+        summary (its summary would be written there), or keep it open and
+        set Settings → Private back. `ending`: the author was ending it."""
+        session = self.session
+        span = session.open_span
+        began, now = places
+        written = bool(session.span_nodes(span))
+        summarise = ending and written
+        settings = self._private_settings()
+        there = now or NO_PLACE
+        box = QMessageBox(
+            QMessageBox.Warning,
+            self._say("Not sent: the private scene's server changed"),
+            self._say(
+                f"This private scene began on {began or UNRECORDED_PLACE}. Settings → Private "
+                f"now points at {there}, so nothing has been sent there.\n\n"
+                f"Carry the scene on at {there}? "
+                + (
+                    "Its summary would be written there, from everything written in the scene."
+                    if summarise
+                    else "Everything written in it so far goes there with your next message."
+                    if written
+                    else "What you write in it from now on goes there."
+                )
+                + "\n\nTo go on with it where it began instead, keep it open, close the "
+                "story, set Settings → Private back, and open the story again."
+            ),
+            QMessageBox.NoButton,
+            self,
+        )
+        # The places are addresses from Settings and the story's file: never HTML.
+        box.setTextFormat(Qt.PlainText)
+        carry = (
+            box.addButton("Carry it on there", QMessageBox.AcceptRole)
+            if now and settings is not None
+            else None
+        )
+        leave = box.addButton(
+            "End without a summary…" if written else self._say("End the scene"),
+            QMessageBox.DestructiveRole,
+        )
+        # Enter on a box that sends the scene somewhere new must not do it.
+        box.setDefaultButton(box.addButton("Keep it open", QMessageBox.RejectRole))
+        box.exec()
+        clicked = box.clickedButton()
+        box.deleteLater()
+        if self._busy or self.session is not session or session.open_span is not span:
+            return
+        if clicked is leave:
+            self._end_without_model()
+            return
+        if carry is None or clicked is not carry:
+            return
+        # The scene's own model, as when it is resumed: every request names it.
+        settings = settings.model_copy(update={"model": span.model})
+        session.carry_scene_on(self._make_private_provider(settings))
+        self._tee_state = ""
+        self._sync_private_ui()
+        self.statusBar().showMessage(
+            self._say(f"The private scene goes on at {there}, on {span.model}."), 10000
+        )
+        self._attest_or_say_not(settings)
+        if summarise and not session.tee_block:
+            self.end_private()  # the author was ending the scene
 
     def _on_model_retired(self, model: str, for_chat: bool, offered: list[str]) -> None:
         """nano-gpt has retired the private/ model: nothing can be sent to it
@@ -1133,6 +1212,8 @@ class PrivateWindow:
             return
         # Whatever the box holds for it was typed in the scene, or may have been.
         self._draft_at_scene = None
+        # The story left's state isn't this scene's.
+        self._tee_state = ""
         if session.private_notice:
             self.statusBar().showMessage(session.private_notice, 15000)
             session.private_notice = None

@@ -2350,7 +2350,10 @@ class MainWindow(
         session = self.session
 
         def check_model() -> None:
-            self._tee_state = ""
+            # A scene resumed above keeps what resuming found (being checked,
+            # held back): cleared here, a held scene's model button said nothing.
+            if session.open_span is None:
+                self._tee_state = ""
             self._attest_chat()
 
         # Each part by itself: a story's files may hold what one of them

@@ -309,17 +309,26 @@ def test_a_scene_begun_on_tinfoil_resumed_on_a_plain_endpoint_sends_nothing(tmp_
 
 
 def test_a_scene_begun_on_an_ordinary_private_model_resumes_as_before(tmp_path: Path):
+    """On the server it began on, whatever model Settings → Private names
+    now. On another server it is held until the author says to carry it on
+    there (the review of Nov 22 2026: it used to resume there, its whole
+    history sent with the next message; tests/test_review_3_5_privacy.py)."""
     began = ProviderConfig(name="private", base_url=NANO, api_key="k", model="private/glm-5-3")
     session = scene(tmp_path, began)
     session.save()
-    plain = ProviderConfig(name="private", base_url=ELSEWHERE, api_key="k", model="x")
-    again, client = resumed(tmp_path, session, plain)
+    same = ProviderConfig(name="private", base_url=NANO, api_key="k", model="x")
+    again, client = resumed(tmp_path, session, same)
     assert again.private_provider is client and again.privacy_held() is None
     local = ProviderConfig(name="private", base_url="http://localhost:11434/v1", model="local/m")
     session2 = scene(tmp_path / "two", local)
     session2.save()
-    again2, client2 = resumed(tmp_path / "two", session2, plain)
+    same2 = ProviderConfig(name="private", base_url="http://localhost:11434/v1", model="x")
+    again2, client2 = resumed(tmp_path / "two", session2, same2)
     assert again2.private_provider is client2 and again2.privacy_held() is None
+    plain = ProviderConfig(name="private", base_url=ELSEWHERE, api_key="k", model="x")
+    again3, client3 = resumed(tmp_path / "two", session2, plain)
+    assert isinstance(again3.private_provider, NotBuiltProvider) and client3.requests == []
+    assert again3.scene_moved() == ("http://localhost:11434", "https://api.example.com")
 
 
 # --- the window -------------------------------------------------------------------------------

@@ -831,8 +831,9 @@ def test_a_resumed_scene_is_checked_on_its_own_model(app, window, monkeypatch):
     and check that model, not the one Settings → Private names now."""
     window.composer.private_toggle.click()
     window.session.open_span.model = "private/glm-5-3-flash"
+    # On the server the scene began on: on another, it is asked about first.
     window.config.private_provider = ProviderConfig(
-        name="private", base_url="https://nano-gpt.com/api/v1", api_key="k", model="private/kimi-k3"
+        name="private", base_url="http://localhost:11434/v1", api_key="k", model="private/kimi-k3"
     )
     made: list[str] = []
     window.private_provider_factory = lambda settings: (

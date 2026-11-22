@@ -3541,7 +3541,14 @@ here…) and the story stands on the scene's last message, the story's model
 knowing nothing of the scene at all. **Kept in memory**, beside the button,
 keeps the scene's messages off the disk altogether (they show until the story
 or the app is closed, which loses them); **Kept on disk** saves them with the
-story. A scene that outgrows the private model's context is
+story. A scene kept on disk stays on the server it began on: if the story is
+opened again after Settings → Private was pointed at another server, nothing
+of the scene is sent there until you say so. The question names both servers
+and is asked once (**Keep it open** is the default); you can also end the
+scene without a summary, which sends nothing, or close the story, set
+Settings → Private back, and open it again. Another model named in Settings →
+Private on the same server changes nothing: the scene goes on with its own.
+A scene that outgrows the private model's context is
 condensed by the private model itself, never by the story's. Set the model under Settings → Private, where
 **Detect** asks a local server how much context the model is running with. The
 endpoint there starts as NanoGPT's, and with its key left blank it uses the
@@ -3791,7 +3798,8 @@ story is (Settings → Context), with a plain summariser.
   until the endpoint is set back or the chat is closed, and Settings asks
   before saving such a change. A private scene kept on disk is held the same
   way when it is opened again with Settings → Private pointing elsewhere: it
-  sends nothing until it moves to a model as private, or ends.
+  sends nothing until it moves to a model as private, or ends; where it would
+  be as private on the new server, until you say to carry it on there.
 - **Where a chat is kept** is asked when it starts, on any model: **On
   disk**, like any story, or **In memory only**. Nothing of an in-memory
   chat is written on this computer, not even its log, and it teaches the

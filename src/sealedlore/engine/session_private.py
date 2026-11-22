@@ -54,7 +54,7 @@ from sealedlore.engine.prompt import (
 )
 from sealedlore.engine.scene_state import log_on_path
 from sealedlore.ids import utc_now_iso
-from sealedlore.models.config import ProviderConfig, split_model
+from sealedlore.models.config import ProviderConfig, key_origin, split_model
 from sealedlore.models.node import NARRATOR_SPEAKER_ID, Node, NodeMeta, Usage
 from sealedlore.models.private import PrivateKeep, PrivateSpan, TeeUpstream
 from sealedlore.models.route import ROUTE_ROLES
@@ -106,6 +106,16 @@ _REATTESTING = threading.Lock()
 # marked (a passage, an aside, the scene's summary: `_checked_where_marked`),
 # so the watch every other reply goes through (`_watch_tee`) leaves it.
 _MARKED_HERE = threading.local()
+
+
+# In the words that say a scene's server changed: a scene saved before its
+# place was kept, and a scene with nowhere to go now.
+UNRECORDED_PLACE = "a server SealedLore kept no record of"
+NO_PLACE = "an endpoint that isn't set up"
+
+
+def _host_of(origin: str) -> str:
+    return (urlparse(origin).hostname or "").lower()
 
 
 @contextmanager
@@ -421,14 +431,22 @@ class PrivateRuntime:
         service (`privacy_held`), gets a client that sends nothing, saying
         why, until it moves to a model as private or ends: a Tinfoil or
         Chutes model's id carries no prefix, so the scene would otherwise go
-        on wherever Settings → Private points now. A scene from before the
-        record is taken as it is now."""
+        on wherever Settings → Private points now. So does one whose server
+        is another than the one it began on, however private either is,
+        until the author says to carry it on there (`carry_scene_on`): a
+        scene begun on a server on this computer went, whole, to whatever
+        Settings → Private named when the story was next opened. A scene
+        from before the record is taken as private as it is now, and at the
+        place it is now only when that is the host it names (`span.host`):
+        any other is asked about, once."""
         self.private_provider = provider
         span = self.open_span
         if span is None:
             return
         if span.privacy is None:
-            span.privacy = record_of(self.privacy(span.model), self._span_origin())
+            now = self._span_origin()
+            same_host = bool(span.host) and span.host.lower() == _host_of(key_origin(now))
+            span.privacy = record_of(self.privacy(span.model), now if same_host else "")
         reason = self.privacy_held()
         if reason:
             endpoint = self.private_endpoint() or ProviderConfig(name="Private", base_url="")
@@ -496,35 +514,111 @@ class PrivateRuntime:
         """Why nothing of the chat, or of the open scene, may be sent where its
         model's calls would go now, or None: recorded end-to-end encrypted by
         one service (or TEE), its endpoint edited or removed since so that it
-        is less private there, or another service's. Every call it would
-        make refuses in these words (`tee_block`, `_tee_guard`, and the
-        routing client's lock, `_privacy_lock`)."""
+        is less private there, or another service's; or, a scene of any
+        kind, on another server than the one it began on (`scene_moved`).
+        Every call it would make refuses in these words (`tee_block`,
+        `_tee_guard`, and the routing client's lock, `_privacy_lock`)."""
         span = self.open_span
         if span is not None:
             if span.privacy is None:
                 return None
-            kept = held(span.privacy)
-            endpoint = self.private_endpoint()
-            name = SERVICE_NAMES.get(kept.service, kept.service)
-            return held_back(
-                kept,
-                self.privacy(span.model),
-                span.model,
-                origin=span.privacy.origin,
-                now=endpoint.base_url if endpoint is not None else "",
-                what="This private scene",
-                way_out=(
-                    "Carry it on with another model as private, or end the scene; to go on "
-                    f"with it on {name}, close the story, set Settings → Private back to "
-                    f"{name}'s address, and open the story again."
-                ),
-            )
+            return self._scene_less_private(span) or self._scene_moved_words(span)
         if not self.story.chat or self.story.chat_privacy is None:
             return None
         kept = held(self.story.chat_privacy)
         if not kept.private:
             return None
         return self._chat_held_back(kept, self.privacy(self.model))
+
+    def _scene_less_private(self, span: PrivateSpan) -> str | None:
+        """Why the scene's model is less private where it would go now than
+        the scene was recorded, or another service's, or None."""
+        kept = held(span.privacy)
+        endpoint = self.private_endpoint()
+        name = SERVICE_NAMES.get(kept.service, kept.service)
+        return held_back(
+            kept,
+            self.privacy(span.model),
+            span.model,
+            origin=span.privacy.origin if span.privacy is not None else "",
+            now=endpoint.base_url if endpoint is not None else "",
+            what="This private scene",
+            way_out=(
+                "Carry it on with another model as private, or end the scene; to go on "
+                f"with it on {name}, close the story, set Settings → Private back to "
+                f"{name}'s address, and open the story again."
+            ),
+        )
+
+    def _scene_places(self, span: PrivateSpan) -> tuple[str, str] | None:
+        """Where `span` began (or was last carried on to on purpose) and where
+        its model's calls would go now, when those are two places; None when
+        they are one, or when there is no client to send anything (each
+        sender says so). An origin each (scheme://host[:port]): another path
+        on one server is the same place. A scene recorded with no origin (one
+        from before the record, resumed elsewhere than the host it names) is
+        told by that host, "" for one that names none."""
+        if span.privacy is None or self.private_provider is None:
+            return None
+        endpoint = self.private_endpoint()
+        now = key_origin(endpoint.base_url) if endpoint is not None else ""
+        began = span.privacy.origin
+        if began:
+            return None if began == now else (began, now)
+        return None if span.host.lower() == _host_of(now) else (span.host.lower(), now)
+
+    def scene_moved(self) -> tuple[str, str] | None:
+        """Where the open scene began and where its messages would go now,
+        when that is another server and nothing else holds the scene back
+        (it is as private there): the one hold the author's own word lifts
+        (`carry_scene_on`). None otherwise."""
+        span = self.open_span
+        if span is None or span.privacy is None or self._scene_less_private(span):
+            return None
+        return self._scene_places(span)
+
+    def _scene_moved_words(self, span: PrivateSpan) -> str | None:
+        places = self._scene_places(span)
+        if places is None:
+            return None
+        began, now = places
+        back = f"set Settings → Private back to {began}" if began else "set Settings → Private back"
+        return (
+            f"This private scene began on {began or UNRECORDED_PLACE}, and its model "
+            f"{span.model} would now go to {now or NO_PLACE}, so nothing was sent. It is "
+            "carried on there only once you say so (the window asks); otherwise end the "
+            f"scene, or close the story, {back}, and open the story again."
+        )
+
+    def carry_scene_on(self, provider: ChatProvider) -> None:
+        """The author's yes to the open scene going on where its messages
+        would go now (`scene_moved`), on `provider`, a client for that place:
+        recorded on the scene, so it is asked once. Only ever to another
+        place: a scene that would be less private there stays held
+        (`privacy_held`), whatever was answered."""
+        span = self.open_span
+        if span is None:
+            raise ValueError("no private scene is open")
+        old = self.private_provider
+        self.private_provider = provider
+        reason = None if span.privacy is None else self._scene_less_private(span)
+        if reason:
+            self.private_provider = old
+            raise ValueError(reason)
+        close = getattr(old, "close", None)
+        if callable(close) and old is not provider:
+            try:
+                close()
+            except Exception:  # noqa: BLE001 - a socket already gone
+                pass
+        endpoint = self.private_endpoint()
+        now = key_origin(endpoint.base_url) if endpoint is not None else ""
+        if span.privacy is None:
+            span.privacy = record_of(self.privacy(span.model), now)
+        else:
+            span.privacy = span.privacy.model_copy(update={"origin": now})
+        span.host = _host_of(now)
+        self.save()
 
     def _chat_held_back(self, kept: Privacy, found: Privacy) -> str | None:
         endpoint = self.config.endpoint_for(self.model)
