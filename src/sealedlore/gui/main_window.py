@@ -6207,7 +6207,7 @@ class MainWindow(
                 # a running thread. Close once thread.finished says it is
                 # done instead.
                 if self._worker is not None:
-                    self._worker.stop()
+                    self._worker.stop(for_good=True)
                 self._close_when_idle = True
                 self.statusBar().showMessage("Stopping — closes when the current response ends")
                 event.ignore()

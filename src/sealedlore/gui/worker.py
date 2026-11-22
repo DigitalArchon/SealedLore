@@ -53,6 +53,9 @@ class GenerationWorker(QObject):
         self._provider = provider
         self._events: Iterator[WorkerEvent] | None = None
         self._stopping = False
+        # The window is closing: this Stop ends the job, whatever a wait the
+        # session would otherwise skip and go on from.
+        self._for_good = False
         # Stop landed before the job began: nothing was sent, nothing was
         # written, and the window puts the turn back where it was typed.
         self.never_ran = False
@@ -74,10 +77,13 @@ class GenerationWorker(QObject):
                 elif isinstance(event, ReasoningDelta):
                     self.reasoning_delta.emit(event.text)
                 elif isinstance(event, SessionNotice):
-                    if event.stop_taken:
+                    if event.stop_taken and not self._for_good:
                         # The Stop skipped a wait and the session goes on from
                         # it (the characters' answers to the author's turn):
-                        # used up there, it isn't this job's to end on.
+                        # used up there, it isn't this job's to end on. Not
+                        # so the Stop of a window that is closing: taken for a
+                        # skip, the passage and its reads were then asked for
+                        # and paid, and the window stayed until they were in.
                         self._stopping = False
                     if event.waiting_since is not None:
                         self.waiting.emit(event.text, event.waiting_since)
@@ -102,13 +108,16 @@ class GenerationWorker(QObject):
         return self._stopping
 
     @Slot()
-    def stop(self) -> None:
+    def stop(self, for_good: bool = False) -> None:
         """End the stream now. The partial text is kept (§8.1).
 
         Called on the GUI thread; the cancel only shuts the socket down, and
         the worker's own thread sees the stream end and cleans up.
+        `for_good` is the closing window's: no wait takes it for a skip.
         """
         self._stopping = True
+        if for_good:
+            self._for_good = True
         if self._provider is not None:
             self._provider.cancel()
 

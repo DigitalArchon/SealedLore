@@ -239,6 +239,33 @@ def test_stop_during_their_round_skips_it_and_the_passage_is_written(
     window.close()
 
 
+def test_closing_the_window_while_they_are_waited_for_ends_the_job(
+    app, tmp_path: Path, story, cast, monkeypatch
+) -> None:
+    """The closing window's Stop was taken for "skip the wait" like any
+    other: the passage and its reads were then asked for and paid, and the
+    window stayed until they were in (the review of the fixes)."""
+    story.defaults.round_order = "after"
+    window = own_window(
+        tmp_path, story, cast, ["MAELA-ANSWER " * 40, "The door gives. " * 30, "{}", "{}"]
+    )
+    window.config.scene_reads = "every_turn"
+    monkeypatch.setattr(window, "_warn_plain", lambda *words: None)
+    said: list[str] = []
+    window.statusBar().messageChanged.connect(said.append)
+    provider = window._provider
+    provider.delay = 0.05
+    window.show()
+    _send(window, "I put my shoulder to the door.")
+    wait_for(app, lambda: any("Waiting for the characters" in text for text in said))
+    before = len(provider.requests)
+    window.close()
+    provider.delay = 0.0
+    wait_for(app, lambda: not window._busy)
+    assert provider.requests[before:] == []  # no passage, no reads
+    wait_for(app, lambda: not window.isVisible())  # and it closes, the job ended
+
+
 # --- W5: Show and Hide wait for the passage being written ---------------------------
 
 
