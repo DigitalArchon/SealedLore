@@ -38,8 +38,10 @@ from sealedlore.providers.base import (
     StreamCompleted,
     parse_usage,
 )
+from sealedlore.providers.card_links import LinkError, fetch_link, read_link
 from sealedlore.providers.context_probe import detect_context
 from sealedlore.providers.embeddings import OpenAICompatibleEmbeddings
+from sealedlore.providers.http import make_client
 from sealedlore.providers.images import list_image_models, list_own_models
 from sealedlore.providers.local_embeddings import LocalEmbeddings
 from sealedlore.providers.local_images import (
@@ -757,3 +759,113 @@ def test_a_node_the_server_hasnt_got_is_still_said():
     client = _comfy({"other": ["STRING", {}]})
     with pytest.raises(ProviderError, match="no DiffusersLoader node with an input repo_id"):
         comfy_options(client.get, "http://127.0.0.1:8188", "DiffusersLoader", "repo_id")
+
+
+# --- N5: no other machine's redirect is followed into this computer ----------------
+
+
+def _redirecting(hops: list[str], redirects: dict[str, str], status: int = 302) -> httpx.Client:
+    """A client as the app makes them, whose servers redirect as `redirects`
+    says (by address) and answer anything else with a card's worth of JSON."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        hops.append(f"{request.method} {request.url}")
+        if str(request.url) in redirects:
+            return httpx.Response(status, headers={"location": redirects[str(request.url)]})
+        return httpx.Response(200, json={"models": [{"name": "loopback-only-data"}]})
+
+    return make_client(
+        "http://192.168.1.50", transport=httpx.MockTransport(handler), follow_redirects=True
+    )
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        "http://127.0.0.1:11434/api/tags",
+        "http://localhost:11434/api/tags",
+        "http://[::1]:11434/api/tags",
+        "http://127.8.9.10/",
+        "https://127.0.0.1:8443/admin",
+        "https://0.0.0.0:8443/admin",
+        "https://[::]:8443/admin",
+    ],
+)
+@pytest.mark.parametrize(
+    "source", ["http://192.168.1.50/card.json", "http://printer.local/x", "https://10.0.0.7/x"]
+)
+def test_a_machine_on_the_network_cant_redirect_into_this_computer(source, target):
+    """A LAN host is another machine: what listens on this computer alone
+    (Ollama, ComfyUI, a development server) trusts whoever can reach it."""
+    hops: list[str] = []
+    with pytest.raises(ProviderError, match="this computer"):
+        _redirecting(hops, {source: target}).get(source)
+    assert hops == [f"GET {source}"], "the redirect was followed"
+
+
+def test_a_request_with_a_body_isnt_sent_on_into_this_computer_either():
+    hops: list[str] = []
+    source = "http://192.168.1.50/sdapi/v1/txt2img"
+    client = _redirecting(hops, {source: "http://127.0.0.1:7860/sdapi/v1/txt2img"}, 307)
+    with pytest.raises(ProviderError, match="this computer"):
+        client.post(source, json={"prompt": "a keep"})
+    assert len(hops) == 1
+
+
+@pytest.mark.parametrize(
+    ("source", "target"),
+    [
+        # This computer to itself, by any of its names and to any port.
+        ("http://127.0.0.1:8188/prompt", "http://127.0.0.1:8188/api/prompt"),
+        ("http://localhost:8188/a", "http://127.0.0.1:9000/b"),
+        ("http://[::1]:8188/a", "http://localhost:8188/b"),
+        # One machine on the network to itself or another: as it was.
+        ("http://192.168.1.50/card.json", "http://192.168.1.50/files/card.json"),
+        ("http://192.168.1.50/card.json", "http://192.168.1.60:8080/card.json"),
+        ("http://nas.local/card.json", "https://nas.local/card.json"),
+        # This computer may send on to the network, and anywhere over https.
+        ("http://127.0.0.1:8188/a", "http://192.168.1.50:8188/a"),
+        ("http://192.168.1.50/a", "https://cards.example/a"),
+        ("https://cards.example/a", "https://files.cards.example/a"),
+    ],
+)
+def test_redirects_that_were_followed_and_still_are(source, target):
+    hops: list[str] = []
+    reply = _redirecting(hops, {source: target}).get(source)
+    assert reply.status_code == 200 and hops == [f"GET {source}", f"GET {target}"]
+
+
+def test_the_internet_still_cant_redirect_into_the_network_or_off_https():
+    for target, words in (
+        ("http://192.168.1.1/admin", "this computer or your local network"),
+        ("http://127.0.0.1:11434/api/tags", "this computer"),
+        ("http://cards.example/a", "insecure"),
+    ):
+        hops: list[str] = []
+        source = "https://cards.example/card"
+        with pytest.raises(ProviderError, match=words):
+            _redirecting(hops, {source: target}).get(source)
+        assert len(hops) == 1
+
+
+def test_a_card_link_on_the_network_is_fetched_but_not_into_this_computer():
+    """The author's ruling: plain http to the whole local network is allowed
+    for a card's link, as for every endpoint; what was wrong was the message
+    saying this computer only. And the redirect is refused all the same."""
+    for address in ("http://192.168.1.50/card.json", "http://printer.local/card.png"):
+        assert read_link(address).kind == "file"
+    with pytest.raises(LinkError) as refused:
+        read_link("http://example.com/card.png")
+    assert "this computer or your local network" in str(refused.value)
+
+    hops: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        hops.append(str(request.url))
+        if request.url.host == "192.168.1.50":
+            return httpx.Response(302, headers={"location": "http://127.0.0.1:11434/api/tags"})
+        return httpx.Response(200, json={"models": [{"name": "loopback-only-data"}]})
+
+    with pytest.raises(LinkError):
+        fetch_link("http://192.168.1.50/card.json", transport=httpx.MockTransport(handler))
+    assert hops == ["http://192.168.1.50/card.json"]

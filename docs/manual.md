@@ -4166,6 +4166,10 @@ model and cost alone, like the rest.
   picture host for a Chub link, RisuRealm for a RisuRealm one, the link's own
   host otherwise), which sees your address as a browser would. Only the
   request for that link goes, with no key or anything from your stories.
+  A link is https, or plain http to this computer or your local network; a
+  redirect is followed only over https or within that network, never from
+  the internet into your network, nor from any other machine into this
+  computer.
 - **On first run from a source or pip install**, `tiktoken` downloads its
   token vocabulary from OpenAI's public file store; the AppImage bundles it.
   No data about you is sent.

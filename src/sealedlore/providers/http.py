@@ -36,7 +36,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from sealedlore.models.config import is_local_host
+from sealedlore.models.config import is_local_host, is_loopback_host
 from sealedlore.providers.base import ProviderError
 from sealedlore.storage.atomic import outside_json
 
@@ -141,10 +141,27 @@ def is_secure(url: str) -> bool:
     return parsed.scheme == "http" and is_local_host(parsed.hostname or "")
 
 
+def this_computer(url: str) -> bool:
+    """`url` is this computer itself (`is_loopback_host`), or the address a
+    server listens on (0.0.0.0, ::), which a system connects to itself."""
+    host = urlparse(url).hostname or ""
+    if is_loopback_host(host):
+        return True
+    try:
+        return ipaddress.ip_address(host).is_unspecified
+    except ValueError:
+        return False
+
+
 def refuse_insecure_redirect(response: httpx.Response) -> None:
     """A response hook: a redirect to anywhere the app wouldn't send to directly,
-    or from a server out on the internet into this computer or the local
-    network (a card's link must not reach the router's admin page)."""
+    from a server out on the internet into this computer or the local
+    network (a card's link must not reach the router's admin page), or from
+    any other machine, one on the local network included, into this computer:
+    what listens on this computer alone (Ollama, ComfyUI, a development
+    server) trusts whoever can reach it, and a machine on a café's network
+    isn't that. This computer may redirect to itself, and a machine on the
+    network to itself or another there."""
     if not response.is_redirect:
         return
     location = response.headers.get("location")
@@ -167,6 +184,11 @@ def refuse_insecure_redirect(response: httpx.Response) -> None:
         raise ProviderError(
             f"{response.request.url.host} redirected to {target[:120]!r}, a server on this "
             "computer or your local network; refused"
+        )
+    if this_computer(target) and not this_computer(source):
+        raise ProviderError(
+            f"{response.request.url.host} redirected to {target[:120]!r}, a server on this "
+            "computer; refused"
         )
 
 

@@ -17,8 +17,9 @@ of 1.19.0), for the sites whose way of handing a card out was checked here:
 JanitorAI gives no download of its own: SillyTavern goes through JannyAI's
 copy, which answers programs with a bot check, so such a link is refused here
 with the way round it (the card's file). Nothing of the author's is sent: a
-plain GET each time, https only (http on this machine, as everywhere), and
-nothing followed off https (`make_client`). What comes is kept in memory up
+plain GET each time, https only (http on this computer or the local network,
+as everywhere: `require_https`), and nothing followed off https, nor from
+another machine into this one (`make_client`). What comes is kept in memory up
 to `SPOOL_BYTES` and past that in an unnamed temporary file, to
 `MAX_ARCHIVE_BYTES` (a CHARX, read in place) or `MAX_BYTES` (anything read
 whole). A card's file over `ASK_BYTES` is fetched only once the author has
@@ -161,7 +162,8 @@ def read_link(text: str) -> Link:
         require_https(url)
     except ValueError:
         raise LinkError(
-            "Only https links are fetched (plain http only from this computer)."
+            "Only https links are fetched (plain http only from this computer or your "
+            "local network)."
         ) from None
     parts = [unquote(part) for part in parsed.path.split("/") if part]
     if _host_is(host, JANITOR_HOSTS):
