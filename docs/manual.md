@@ -3015,7 +3015,10 @@ story when it is done, and the old one stays in Media when it was drawn here.
 A story picture's menu (here, or its ⋯ in the story) has **Change this
 picture…** too: the changed copy goes after the same passage. **Save all…** copies everything
 there into a folder you choose, the cards' pictures named by card; each
-picture's ⋯ menu saves one.
+picture's ⋯ menu saves one. A file is saved under the extension of what it
+is, whatever the story calls it; one that is neither a picture nor a video
+(a story backup from someone else can put any file among a story's pictures)
+is not saved or opened, and you are told.
 
 ![The Media page of The Silverwood: the cast's portraits, the lore's pictures and the background behind the story](screenshots/media-page.webp)
 

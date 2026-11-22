@@ -18,16 +18,23 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import Qt  # noqa: E402
+from PySide6.QtGui import QDesktopServices  # noqa: E402
 from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
 from sealedlore.engine.plot_md import parse_plot_markdown  # noqa: E402
-from sealedlore.gui import markdown_text, window_collection  # noqa: E402
+from sealedlore.gui import file_dialogs, markdown_text, window_collection  # noqa: E402
+from sealedlore.gui.image_dialog import named_for  # noqa: E402
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.gui.transcript import TextBody  # noqa: E402
+from sealedlore.models.image import GeneratedImage, ImageRef  # noqa: E402
+from sealedlore.models.video import GeneratedVideo  # noqa: E402
 from sealedlore.storage import collection  # noqa: E402
 from sealedlore.storage.archive import archive_data  # noqa: E402
+from sealedlore.storage.picture_store import DiskPictures  # noqa: E402
+from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa: E402
 from sealedlore.storage.scenario import bundle_from_scenario  # noqa: E402
 from tests.conftest import make_exchange  # noqa: E402
+from tests.test_images import PNG  # noqa: E402
 
 
 @pytest.fixture
@@ -50,7 +57,12 @@ def boxes(monkeypatch) -> list[str]:
         said.append(f"{box.windowTitle()}: {box.text()} {box.informativeText()}")
         return QMessageBox.Ok
 
+    def warning(parent, title, text, *rest) -> int:
+        said.append(f"{title}: {text}")
+        return QMessageBox.Ok
+
     monkeypatch.setattr(QMessageBox, "exec", exec_)
+    monkeypatch.setattr(QMessageBox, "warning", warning)
     return said
 
 
@@ -284,3 +296,92 @@ def test_links_and_bare_pictures_are_found_as_the_patterns_before_found_them():
             assert markdown_text._pictures_named(line) == old_line, repr(line)
             named += old_line != line
     assert links > 500 and named > 500
+
+
+# --- F6: nothing is saved out under an extension its bytes don't call for -----------
+
+DESKTOP = b"[Desktop Entry]\nType=Application\nName=cast-serrik-1\nExec=sh -c 'echo run'\n"
+PROGRAM = b"MZ" + bytes(60) + b"This program cannot be run in DOS mode."
+TINY_MP4 = (Path(__file__).parent / "data" / "tiny.mp4").read_bytes()
+
+
+@pytest.fixture
+def story_window(app, tmp_path: Path, story, cast):
+    """A story as a stranger's backup left it: "pictures" and a "video" that
+    are a program and a launcher, under the names the backup gave them,
+    beside a real picture and a real video."""
+    bundle = StoryBundle(story=story, cast=cast, nodes=make_exchange(2))
+    bundle.story.active_leaf_id = "a1"
+    cast[0].reference_images += [
+        ImageRef(id="r1", file="images/refs/r1.desktop"),
+        ImageRef(id="r2", file="images/refs/r2.gif"),
+    ]
+    bundle.story.reference_images.append(ImageRef(id="r3", file="images/refs/r3.png.exe"))
+    save_story_bundle(bundle, root=tmp_path)
+    store = DiskPictures(story.id, tmp_path)
+    store.write("images/refs/r1.desktop", DESKTOP)
+    store.write("images/refs/r2.gif", PNG)
+    store.write("images/refs/r3.png.exe", PROGRAM)
+    store.write("images/holiday.png.exe", PROGRAM)
+    store.write("images/real.jpg", PNG)
+    store.write("images/videos/clip.desktop", DESKTOP)
+    store.write("images/videos/real.mp4", TINY_MP4)
+    drawn = dict(prompt="p", model="m", size="1k")
+    store.add_images(
+        [
+            GeneratedImage(id="g1", file="images/holiday.png.exe", **drawn),
+            GeneratedImage(id="g2", file="images/real.jpg", **drawn),
+        ]
+    )
+    made = dict(prompt="p", model="m", status="done", api="nanogpt", base_url="https://x.invalid")
+    store.put_video(GeneratedVideo(id="v1", file="images/videos/clip.desktop", **made))
+    store.put_video(GeneratedVideo(id="v2", file="images/videos/real.mp4", **made))
+    window = MainWindow(root=tmp_path, use_mock=True)
+    window.open_story(story.id)
+    yield window
+    window.close()
+
+
+def test_save_all_writes_only_pictures_and_videos_each_under_its_own_kind(
+    app, story_window, tmp_path_factory, monkeypatch
+):
+    target = tmp_path_factory.mktemp("saved")
+    monkeypatch.setattr(file_dialogs, "existing_directory", lambda *a, **k: str(target))
+    said = boxes(monkeypatch)
+    story_window.save_all_pictures()
+    saved = {path.name: path.read_bytes() for path in target.iterdir()}
+    assert not [name for name in saved if name.endswith((".exe", ".desktop"))]
+    assert PROGRAM not in saved.values() and DESKTOP not in saved.values()
+    assert sorted(saved) == ["001-real.png", "002-real.mp4", "cast-serrik-vaun-2.png"]
+    assert len(said) == 1 and "4" in said[0] and "left out" in said[0]
+
+
+def test_one_picture_or_video_is_saved_or_opened_only_as_what_it_is(
+    app, story_window, tmp_path_factory, monkeypatch
+):
+    window = story_window
+    folder = tmp_path_factory.mktemp("one")
+    offered: list[str] = []
+
+    def save_file_name(parent, title, name, *rest):
+        offered.append(Path(name).name)
+        return str(folder / Path(name).name), ""
+
+    monkeypatch.setattr(file_dialogs, "save_file_name", save_file_name)
+    opened: list[str] = []
+    monkeypatch.setattr(QDesktopServices, "openUrl", lambda url: opened.append(url.toLocalFile()))
+    said = boxes(monkeypatch)
+    window._image_action("save", "g1")
+    window._video_action("save", "v1")
+    window._video_action("open", "v1")
+    assert not offered and not opened and not list(folder.iterdir())
+    assert len(said) == 3
+    window._image_action("save", "g2")
+    window._video_action("save", "v2")
+    window._video_action("open", "v2")
+    assert offered == ["real.png", "real.mp4"] and len(said) == 3
+    assert [Path(name).name for name in opened] == ["real.mp4"]
+    assert named_for("b.gif", PNG) == "b.png" and named_for("a.jpeg", b"\xff\xd8\xff") == "a.jpeg"
+    assert named_for("clip.mov", TINY_MP4) == "clip.mov"
+    assert named_for("clip", b"\x1a\x45\xdf\xa3" + bytes(40)) == "clip.webm"
+    assert named_for("x.png", b"<svg xmlns='http://www.w3.org/2000/svg'/>") is None

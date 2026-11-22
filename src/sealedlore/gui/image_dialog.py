@@ -83,8 +83,9 @@ from sealedlore.models.image import GeneratedImage, ImageRef, RefUse
 from sealedlore.models.lore import LoreEntry
 from sealedlore.providers.images import ImageModelInfo, parse_image_models
 from sealedlore.providers.local_images import where_drawn
-from sealedlore.storage.image_meta import picture_kind
+from sealedlore.storage.image_meta import raster_kind
 from sealedlore.storage.picture_store import file_name
+from sealedlore.storage.video_meta import VIDEO_SUFFIXES, video_kind
 
 DIRECTION_HINT = (
     "Optional. Blank pictures what is happening now. Or say what you want:\n"
@@ -1124,12 +1125,26 @@ def show_whole(parent: QWidget, title: str, data: bytes | None) -> None:
     dialog.exec()
 
 
-def named_for(name: str, data: bytes) -> str:
+# Extensions that say the same kind (the first is what `raster_kind` and
+# `video_kind` answer).
+_SAME_KIND = {".jpg": (".jpg", ".jpeg"), ".tiff": (".tiff", ".tif"), ".heic": (".heic", ".heif")}
+NOT_A_PICTURE = (
+    "This file isn't a picture or a video SealedLore knows the kind of, so it wasn't saved: "
+    "a file is only saved under the name of what it is."
+)
+
+
+def named_for(name: str, data: bytes) -> str | None:
     """A file name with the extension its bytes call for: a GIF from someone
-    else's scenario is kept as PNG, under the name it came with."""
-    kind = picture_kind(data)
+    else's scenario is kept as PNG, under the name it came with. None for
+    bytes that are neither a picture nor a video: a record names its file as
+    it likes (a backup is anyone's), and a program or a launcher under
+    "images/" was saved out as `holiday.png.exe` or `.desktop`, as named."""
+    kind = raster_kind(data) or video_kind(data)
+    if kind is None:
+        return None
     path = Path(name)
-    if kind is None or path.suffix.lower() in (kind, ".jpeg" if kind == ".jpg" else kind):
+    if path.suffix.lower() in (_SAME_KIND.get(kind) or VIDEO_SUFFIXES.get(kind) or (kind,)):
         return name
     return path.stem + kind
 
@@ -1138,7 +1153,13 @@ def save_picture_as(parent: QWidget, data: bytes | None, name: str) -> None:
     """Save a stored picture wherever the author chooses."""
     if data is None:
         return
-    name = named_for(name, data)
+    named = named_for(name, data)
+    if named is None:
+        from PySide6.QtWidgets import QMessageBox
+
+        QMessageBox.warning(parent, "Not saved", NOT_A_PICTURE)
+        return
+    name = named
     suffix = Path(name).suffix
     target, _ = file_dialogs.save_file_name(
         parent, "Save picture", str(Path.home() / name), f"Pictures (*{suffix})"

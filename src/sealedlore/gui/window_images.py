@@ -886,15 +886,22 @@ class ImagesWindow:
             return
         folder = Path(chosen)
         store = self.session.pictures
-        written, missing = 0, 0
+        # `left_out`: files that are neither a picture nor a video, whatever
+        # the record that names them says (`named_for`): never written out.
+        written, missing, left_out = 0, 0, 0
         try:
             made = sorted([*images, *videos], key=lambda record: record.created_at)
-            for number, image in enumerate(made, start=1):
+            number = 0
+            for image in made:
                 data = store.read(image.file)
                 if data is None:
                     missing += 1
                     continue
                 name = named_for(file_name(image.file), data)
+                if name is None:
+                    left_out += 1
+                    continue
+                number += 1
                 target = folder / f"{number:03d}-{name}"
                 extra = 2
                 while target.exists():
@@ -908,6 +915,9 @@ class ImagesWindow:
                     missing += 1
                     continue
                 name = named_for(name, data)
+                if name is None:
+                    left_out += 1
+                    continue
                 target = folder / name
                 extra = 2
                 while target.exists():
@@ -922,6 +932,14 @@ class ImagesWindow:
         self.statusBar().showMessage(
             f"Saved {written} picture{'s' if written != 1 else ''} to {folder}{note}", 8000
         )
+        if left_out:
+            self._warn_plain(
+                "Some files were left out",
+                f"{left_out} of this story's files {'is' if left_out == 1 else 'are'} neither a "
+                "picture nor a video SealedLore knows the kind of, whatever the story calls "
+                f"{'it' if left_out == 1 else 'them'}, and {'was' if left_out == 1 else 'were'} "
+                "left out: a file is only saved under the name of what it is.",
+            )
 
     def _use_picture(self, data: bytes | None, kind: str | None = None) -> None:
         """Use as a character's picture… / Use as a place's picture… on any

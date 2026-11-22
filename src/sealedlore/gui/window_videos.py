@@ -32,6 +32,14 @@ from sealedlore.providers.videos import VideoClient
 from sealedlore.storage.images import VIDEOS_DIR, story_path
 from sealedlore.storage.picture_store import DiskPictures, PictureStore, file_name
 from sealedlore.storage.repository import save_config
+from sealedlore.storage.video_meta import VIDEO_SUFFIXES, video_kind
+
+# The names a video goes by, of either kind.
+_VIDEO_NAMES = frozenset(suffix for suffixes in VIDEO_SUFFIXES.values() for suffix in suffixes)
+NOT_A_VIDEO = (
+    "This story calls the file a video, but it isn't one SealedLore knows the kind of, so "
+    "nothing was done with it: a file is only saved or opened as what it is."
+)
 
 
 class VideosWindow:
@@ -401,8 +409,15 @@ class VideosWindow:
             self._refresh_image_views()
         elif action == "open":
             path = self._video_path(video)
-            if path is not None:
-                QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+            if path is None:
+                return
+            if path.suffix.lower() not in _VIDEO_NAMES:
+                # The system opens a file by its name, and a record names its
+                # file as it likes (a backup is anyone's): a "video" called
+                # clip.exe or clip.desktop would be run, not played.
+                self._warn_plain("Not opened", NOT_A_VIDEO)
+                return
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
         elif action == "prompt":
             box = QMessageBox(self)
             box.setWindowTitle("Prompt")
@@ -421,8 +436,15 @@ class VideosWindow:
             data = store.read(video.file) if video.file else None
             if data is None:
                 return
+            kind = video_kind(data)
+            if kind is None:
+                self._warn_plain("Not saved", NOT_A_VIDEO)
+                return
+            name = file_name(video.file)
+            if Path(name).suffix.lower() not in VIDEO_SUFFIXES[kind]:
+                name = Path(name).stem + kind
             target, _ = file_dialogs.save_file_name(
-                self, "Save video", str(Path.home() / file_name(video.file)), "Videos (*.mp4)"
+                self, "Save video", str(Path.home() / name), f"Videos (*{Path(name).suffix})"
             )
             if target:
                 try:

@@ -134,6 +134,25 @@ def is_mp4(data: bytes) -> bool:
     return bool(brands) and not PICTURE_BRANDS.intersection(brands)
 
 
+# The extensions a video of each kind goes by; the first is the one given
+# to a file that has none of them.
+VIDEO_SUFFIXES: dict[str, tuple[str, ...]] = {
+    ".mp4": (".mp4", ".m4v", ".mov"),
+    ".webm": (".webm", ".mkv"),
+}
+_MATROSKA = b"\x1a\x45\xdf\xa3"  # EBML: a WebM's first bytes, and a Matroska's
+
+
+def video_kind(data: bytes) -> str | None:
+    """The file's extension by its content, for a video: ".mp4" for an MP4 or
+    a QuickTime movie, ".webm" for a WebM or Matroska; None for anything
+    else. What a video is saved out as (`VIDEO_SUFFIXES`), whatever the
+    record that names it calls it."""
+    if is_mp4(data):
+        return ".mp4"
+    return ".webm" if data[:4] == _MATROSKA else None
+
+
 def _box_at(data: bytes | bytearray, offset: int, end: int) -> tuple[bytes, int, int]:
     """(type, payload start, box end) of the box at `offset`, in a parent
     that ends at `end`."""
