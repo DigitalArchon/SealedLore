@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 
 from sealedlore.engine.chronicle import time_of_day_minutes
 from sealedlore.engine.picture_styles import write_style
+from sealedlore.engine.placeholders import Names
 from sealedlore.engine.plot_file import UNNAMED, render_plot_markdown
 from sealedlore.engine.plot_md import _ALL_FIELDS, _key, _norm, parse_plot_markdown
 from sealedlore.ids import new_id
@@ -779,6 +780,27 @@ def _take_out(bundle: StoryBundle, card: Character, *, scenes: Iterable[SceneSta
         scene.present_others = [
             name for name in scene.present_others if _norm(name) != _norm(card.name)
         ]
+    _name_their_lore(bundle, card)
+
+
+def _name_their_lore(bundle: StoryBundle, card: Character) -> None:
+    """The lore that came with a card stays when its character goes, and its
+    {{char}} means them: with no card to take the name from it would name the
+    story's own character ("Marcus ran the clinic", of Elena's clinic), so the
+    name is written in, as it is where an entry's words become someone's card
+    (`Names.char_only`). Each entry changed where it is: the Lore page holds
+    these objects."""
+    names = Names(char=card.name, owners=((card.id, card.name),))
+    for entry in bundle.lore:
+        if entry.of_character != card.id:
+            continue
+        named = names.entry(entry, keep_user=True)
+        if named is not entry:
+            for field in ("title", "content", "keywords", "condensed", "condensed_from", "tavern"):
+                setattr(entry, field, getattr(named, field))
+            # A condensed version out of date is left as it was by `entry`
+            # (it is never sent): named too, for whoever reads it there.
+            entry.condensed = names.char_only(entry.condensed, card.name)
 
 
 def _apply_character(

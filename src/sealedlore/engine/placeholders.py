@@ -131,11 +131,11 @@ class Names:
     def characters(self, characters: Iterable[Character]) -> list[Character]:
         return [self.character(character) for character in characters]
 
-    def entry(self, entry: LoreEntry) -> LoreEntry:
+    def entry(self, entry: LoreEntry, *, keep_user: bool = False) -> LoreEntry:
         """An entry with its names in, keywords and SillyTavern keys too, so
         what matches it and what is sent are alike: `entry` itself when it has
         none to fill. Its condensed version, current for the entry as written,
-        stays current."""
+        stays current. `keep_user`: only {{char}} is written out (`char_only`)."""
         raw_keys = []
         if entry.tavern is not None:
             for name in _KEY_FIELDS:
@@ -149,6 +149,11 @@ class Names:
             return entry
         own = self.owner_of(entry)
         fill = self.filler(own)
+        if keep_user:
+
+            def fill(text: str) -> str:
+                return self.char_only(text, own) or ""
+
         content = fill(entry.content)
         shorter = entry.condensed_now()
         update = {

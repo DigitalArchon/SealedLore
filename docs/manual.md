@@ -1738,7 +1738,8 @@ characters, and the story's character linked to it, as From Your
 characters… would; during a private scene that waits until the scene ends.
 Once in, the lore a card brought is the story's own: removing the character
 later leaves it, and the question asking whether to remove them says how
-many entries came from their lorebook.
+many entries came from their lorebook. Where those entries write `{{char}}`,
+their name is written in as they go, so the lore goes on meaning them.
 Remove what the story no longer needs on the Lore page.
 
 **Where lore came from.** Whichever way a lorebook comes in (a story made

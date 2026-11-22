@@ -23,7 +23,7 @@ from sealedlore.engine.tavern_firing import (
     fire_entry,
 )
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
-from sealedlore.models.lore import LoreEntry
+from sealedlore.models.lore import LoreEntry, lore_fingerprint
 from sealedlore.models.plot import Direction
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.storage.repository import StoryBundle
@@ -399,3 +399,62 @@ def test_a_plots_begin_direction_has_the_names_in(tmp_path):
     assert f"{player.name} has never been let in; {hidden.name} holds the gate." in cards
     # The story's own cards keep them as written.
     assert hidden.full_description.startswith("{{char}} has traded with {{user}}")
+
+
+# --- L4: a character leaves, their lorebook stays ----------------------------------
+
+
+def test_lore_that_came_with_a_card_still_means_them_once_they_are_gone(tmp_path, story, cast):
+    """The lore stays when its character is removed (the author's ruling),
+    and its {{char}} then named the story's own character: "Serrik Vaun ran
+    the clinic", of Maela's clinic."""
+    story.held_character_id = SERRIK
+    story.setup.placeholders.user_id = IDRIS
+    story.setup.placeholders.char_id = SERRIK
+    lore = [
+        LoreEntry(
+            title="{{char}}'s clinic",
+            always_on=True,
+            content="{{char}} ran the clinic before the fall, and <USER> never paid her.",
+            keywords=["{{char}}'s clinic"],
+            condensed="{{char}} ran the clinic.",
+            of_character=MAELA,
+            came_from="Maela Orr's lorebook",
+        ),
+        LoreEntry(title="The keep", always_on=True, content="{{char}} holds the keep."),
+    ]
+    session = session_with(tmp_path, story, cast, lore)
+    list(session.send(turn("I open the door.")))
+    assert "Maela Orr ran the clinic before the fall, and Captain Idris never paid" in sent(session)
+
+    session.remove_character(MAELA)
+    theirs, storys = session.bundle.lore
+    # Their name is written in where {{char}} stood; {{user}} is as written.
+    assert theirs.title == "Maela Orr's clinic"
+    assert theirs.content == "Maela Orr ran the clinic before the fall, and <USER> never paid her."
+    assert theirs.keywords == ["Maela Orr's clinic"]
+    assert theirs.condensed == "Maela Orr ran the clinic."
+    # An entry of the story's own is the story's still.
+    assert storys.content == "{{char}} holds the keep."
+    list(session.send(turn("I wait.")))
+    text = sent(session)
+    assert "Maela Orr ran the clinic before the fall, and Captain Idris never paid" in text
+    assert "Serrik Vaun ran the clinic" not in text
+    assert "Serrik Vaun holds the keep." in text
+
+
+def test_a_condensed_version_stays_current_when_its_owner_leaves(tmp_path, story, cast):
+    content = "{{char}} ran the clinic before the fall."
+    entry = LoreEntry(
+        title="The clinic",
+        always_on=True,
+        content=content,
+        condensed="{{char}}: the clinic.",
+        condensed_from=lore_fingerprint(content),
+        of_character=MAELA,
+    )
+    session = session_with(tmp_path, story, cast, [entry])
+    session.remove_character(MAELA)
+    kept = session.bundle.lore[0]
+    assert kept is entry  # the page's own object, changed where it is
+    assert kept.condensed_now() == "Maela Orr: the clinic."
