@@ -12,10 +12,19 @@ class PlaceholdersRuntime:
         """Whom {{user}} and {{char}} name now (`names_for`)."""
         return names_for(self.story, (*self.cast, *self.supporting))
 
-    def settle_placeholder_user(self) -> None:
-        """When a story begins with nobody named as its {{user}}: whom the
-        author plays then, for good (they may switch later: {{user}} stays)."""
+    def settle_placeholder_user(self, playing: str | None = None) -> None:
+        """When a story has begun with nobody named as its {{user}}: whom the
+        author plays then, for good (they may switch later: {{user}} stays).
+        Also for a story already under way with none (begun by an older
+        version, or with nobody played): when it is opened, when a turn is
+        sent (`playing`: whom that turn is played as) and around a change of
+        who is played, so it is whom {{user}} has meant until now, not
+        whoever is played next ("Marcus owes Marcus", and the cached system
+        block rewritten at every switch)."""
         chosen = self.story.setup.placeholders
-        held = self.story.held_character_id
-        if chosen.user_id is None and held is not None and not self.story.chat:
+        held = self.story.held_character_id or playing
+        if chosen.user_id is not None or held is None or self.story.chat:
+            return
+        # A held id no card answers to names nobody: left for one that does.
+        if any(character.id == held for character in (*self.cast, *self.supporting)):
             chosen.user_id = held

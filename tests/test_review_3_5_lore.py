@@ -7,10 +7,13 @@ from __future__ import annotations
 
 import random
 import time
+from pathlib import Path
 
 import pytest
 
 from sealedlore.engine import tavern_firing
+from sealedlore.engine.prompt import TurnRequest
+from sealedlore.engine.session import StorySession
 from sealedlore.engine.tavern_firing import (
     FireEntry,
     TavernSettings,
@@ -18,7 +21,14 @@ from sealedlore.engine.tavern_firing import (
     fire,
     fire_entry,
 )
+from sealedlore.engine.tokens import TokenEstimator, fallback_counter
+from sealedlore.models.lore import LoreEntry
+from sealedlore.providers.mock import MockChatProvider
+from sealedlore.storage.repository import StoryBundle
 from sealedlore.storage.tavern_lore import lore_from_book
+from tests.test_session import make_config
+
+SERRIK, MAELA, IDRIS = "char-serrik", "char-maela", "char-idris"
 
 WORDS = lambda text: len(text.split())  # noqa: E731 - a token a word
 
@@ -40,6 +50,52 @@ def run(entries, messages, *, settings=None, context=1000, **kw):
         length=len(messages),
         rng=random.Random(1),
         **kw,
+    )
+
+
+def session_with(tmp_path: Path, story, cast, lore=(), supporting=()) -> StorySession:
+    config = make_config()
+    config.scene_reads = "manual"
+    bundle = StoryBundle(story=story, cast=list(cast), lore=list(lore))
+    bundle.supporting.characters.extend(supporting)
+    return StorySession(
+        bundle,
+        config,
+        MockChatProvider(["A passage."] * 12),
+        root=tmp_path,
+        estimator=TokenEstimator(counter=fallback_counter),
+        learn_corrections=False,
+    )
+
+
+def reopened(session: StorySession, tmp_path: Path) -> StorySession:
+    """The story as the window opens it again: a new session on what it holds."""
+    return StorySession(
+        session.bundle,
+        session.config,
+        MockChatProvider(["A passage."] * 12),
+        root=tmp_path,
+        estimator=TokenEstimator(counter=fallback_counter),
+        learn_corrections=False,
+    )
+
+
+def turn(text: str, held: str | None = SERRIK) -> TurnRequest:
+    return TurnRequest(speaker_id=held, user_text=text, controlled_character_id=held)
+
+
+def sent(session: StorySession, index: int = -1) -> str:
+    request = session.provider.requests[index]
+    return "\n".join(part.text for message in request.messages for part in message.parts)
+
+
+def system_of(session: StorySession, index: int = -1) -> str:
+    request = session.provider.requests[index]
+    return "\n".join(
+        part.text
+        for message in request.messages
+        if message.role == "system"
+        for part in message.parts
     )
 
 
@@ -194,3 +250,98 @@ def test_every_pattern_reads_only_so_much():
     result = run([entry("far", [r"/\bHollow\b/"])], [text])
     assert time.perf_counter() - began < 1.0
     assert f"read only the newest {tavern_firing.SCAN_MOST:,} characters" in result.not_fired["far"]
+
+
+# --- L2: {{user}} in a story already begun ---------------------------------------
+
+
+def _debt() -> list[LoreEntry]:
+    return [
+        LoreEntry(
+            title="The debt",
+            always_on=True,
+            content="{{char}} owes {{user}} forty rounds.",
+            of_character=MAELA,
+        )
+    ]
+
+
+def test_user_is_settled_when_a_story_already_begun_is_opened(tmp_path, story, cast):
+    """Begun before {{user}} was settled at the start: it followed whoever
+    was played ("Maela Orr owes Maela Orr"), and the cached system block
+    changed with every switch."""
+    story.held_character_id = SERRIK
+    session = session_with(tmp_path, story, cast, _debt())
+    list(session.send(turn("I open the door.")))
+    before = system_of(session)
+    assert "Maela Orr owes Serrik Vaun forty rounds." in before
+    story.setup.placeholders.user_id = None  # as an older version left it
+
+    session = reopened(session, tmp_path)
+    assert session.story.setup.placeholders.user_id == SERRIK
+    session.hold(MAELA)
+    list(session.send(turn("I count the rounds.", held=MAELA)))
+    assert "Maela Orr owes Serrik Vaun forty rounds." in sent(session)
+    # Whom {{user}} already meant: the cached block is as it was.
+    assert system_of(session) == before
+
+
+def test_user_is_whom_they_played_until_the_switch_that_settles_it(tmp_path, story, cast):
+    """Unsettled with someone played: the switch itself must not hand
+    {{user}} to the one switched to."""
+    story.held_character_id = SERRIK
+    session = session_with(tmp_path, story, cast, _debt())
+    list(session.send(turn("I open the door.")))
+    session.story.setup.placeholders.user_id = None
+    session.hold(MAELA)
+    assert session.story.setup.placeholders.user_id == SERRIK
+
+
+def test_user_is_settled_by_the_first_hold_after_a_start_with_nobody(tmp_path, story, cast):
+    story.setup.opening_text = "Rain on the keep's one whole roof."
+    story.setup.opening_mode = "as_written"
+    session = session_with(tmp_path, story, cast, _debt())
+    list(session.begin(None))
+    assert session.nodes and session.story.setup.placeholders.user_id is None
+    session.hold(SERRIK)
+    assert session.story.setup.placeholders.user_id == SERRIK
+    session.hold(MAELA)
+    list(session.send(turn("I count the rounds.", held=MAELA)))
+    assert session.story.setup.placeholders.user_id == SERRIK
+    assert "Maela Orr owes Serrik Vaun forty rounds." in sent(session)
+
+
+def test_user_is_settled_by_the_first_turn_of_a_story_never_begun_from_an_opening(
+    tmp_path, story, cast
+):
+    """No opening: the author writes first, and `begin` never runs."""
+    story.held_character_id = SERRIK
+    session = session_with(tmp_path, story, cast, _debt())
+    assert session.story.setup.placeholders.user_id is None  # not begun: still Setup's to say
+    list(session.send(turn("I open the door.")))
+    assert session.story.setup.placeholders.user_id == SERRIK
+
+
+def test_settling_user_changes_nothing_else(tmp_path, story, cast):
+    """A story with no placeholder gains the id and nothing more; one the
+    author named a {{user}} for keeps theirs; a chat and a held id no card
+    answers to settle nothing."""
+    story.held_character_id = SERRIK
+    session = session_with(tmp_path, story, cast)
+    list(session.send(turn("I open the door.")))
+    first = sent(session)
+    story.setup.placeholders.user_id = None
+    kept = story.model_dump(mode="json")
+    session = reopened(session, tmp_path)
+    now = session.story.model_dump(mode="json")
+    assert now["setup"]["placeholders"].pop("user_id") == SERRIK
+    kept["setup"]["placeholders"].pop("user_id")
+    assert now == kept
+    list(session.regenerate())
+    assert sent(session) == first
+
+    story.setup.placeholders.user_id = MAELA
+    assert reopened(session, tmp_path).story.setup.placeholders.user_id == MAELA
+    story.setup.placeholders.user_id = None
+    story.held_character_id = "char-gone"
+    assert reopened(session, tmp_path).story.setup.placeholders.user_id is None

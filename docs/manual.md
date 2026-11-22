@@ -1836,7 +1836,9 @@ written.
 
 - **`{{user}}`** is the story's player, set on **Story → Setup… → About →
   {{user}} is**: the character you play in a story made from a card or a
-  lorebook, else whoever you play when the story begins. It stays them when
+  lorebook, else whoever you play when the story begins (begun with nobody,
+  the first character you take up; a story from an older version, whoever
+  you were playing when it was next opened). It stays them when
   you switch to play someone else: a card's "`{{char}}` owes `{{user}}`" goes
   on meaning the one they owe, not whoever you are playing now.
 - **`{{char}}`** is the text's own character. A character's own card means

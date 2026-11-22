@@ -703,6 +703,9 @@ class StorySession(
         # just now, or before Nov 14 2026.
         self.settle_chat_privacy()
         self._sync_scene()
+        if self.nodes:
+            # Under way with nobody named as its {{user}}: whom they play.
+            self.settle_placeholder_user()
 
     @classmethod
     def load(
@@ -1769,6 +1772,8 @@ class StorySession(
     def send(self, turn: TurnRequest) -> Iterator[StreamEvent | SessionNotice | PassageDone]:
         """Append the author's turn, then stream the response into a new node."""
         self._tee_guard()
+        # {{user}} from now on, in a story the author begins by writing.
+        self.settle_placeholder_user(turn.controlled_character_id)
         turn = self._rolled(turn)
         history = self.path()
         user_node = Node(
@@ -3759,7 +3764,14 @@ class StorySession(
         """
         self._refuse_in_private("Changing who you hold")
         story = self.story
+        if self.nodes:
+            # A story under way with no {{user}} named: whom they played
+            # until now, before the change.
+            self.settle_placeholder_user()
         story.held_character_id = character_id or None
+        if self.nodes:
+            # Begun with nobody played: whom they take up first.
+            self.settle_placeholder_user()
         character = self._character(character_id)
         if character is None or character.id in story.scene.present_character_ids:
             self.save()
