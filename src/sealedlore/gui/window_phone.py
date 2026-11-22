@@ -533,12 +533,14 @@ class PhoneWindow:
         if block:
             raise Refused(409, f"The private model can't be used now: {block}")
 
-    def _phone_edit_refusal(self, keeping: Collection[str] = ()) -> None:
+    def _phone_edit_refusal(self, keeping: Collection[str] = (), *, leaving: bool = False) -> None:
         """Raises Refused when doing it would ask about a message's edit left
-        open and changed on the desktop (`_edit_allows_leave`, `keeping` as
-        it has it): a phone's request must not open a dialog there, and every
-        phone after it was refused as "waiting" until someone answered."""
-        if self._edits_lost(keeping):
+        open and changed on the desktop (`_edit_allows_leave`, `keeping` and
+        `leaving` as it has them: leaving the story, it asks about a
+        chapter's edit on Story so far not yet saved too): a phone's request
+        must not open a dialog there, and every phone after it was refused as
+        "waiting" until someone answered."""
+        if self._edits_lost(keeping) or (leaving and self.summaries_panel.unsaved_edit()):
             raise Refused(409, EDIT_OPEN)
 
     def _phone_private_tag(self) -> str | None:
@@ -941,8 +943,9 @@ class _Backend:
         session = window.session
         if session is not None and (session.memory_only or window._phone_private_tag() == "memory"):
             raise Refused(409, LEAVING_ASKS)
-        # Opening another asks about an edit left open (`_edit_allows_leave`).
-        window._phone_edit_refusal()
+        # Opening another asks about an edit left open, a chapter's on Story
+        # so far too (`_edit_allows_leave(leaving=True)`).
+        window._phone_edit_refusal(leaving=True)
         # Opened once this answer is on its way: the phone hears of it by
         # its events, as it would of the desktop opening one.
         QTimer.singleShot(0, window, lambda: window.open_story(story_id))

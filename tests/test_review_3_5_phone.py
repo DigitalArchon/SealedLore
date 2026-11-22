@@ -28,14 +28,18 @@ pytest.importorskip("PySide6")
 from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
 from sealedlore.gui import phone_server, window_phone  # noqa: E402
+from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.models.config import PhoneDevice, ProviderConfig  # noqa: E402
 from sealedlore.models.node import NARRATOR_SPEAKER_ID  # noqa: E402
+from sealedlore.models.summary import Summary  # noqa: E402
 from sealedlore.phone.api import Api  # noqa: E402
 from sealedlore.phone.page import page_files  # noqa: E402
 from sealedlore.phone.pairing import Pairing, token_hash  # noqa: E402
 from sealedlore.providers.base import ProviderError  # noqa: E402
 from sealedlore.providers.mock import MockChatProvider  # noqa: E402
+from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa: E402
 from tests import test_phone_window as desk  # noqa: E402
+from tests.conftest import make_exchange  # noqa: E402
 from tests.test_phone_api import ONION, TOKEN, FakeBackend  # noqa: E402
 from tests.test_phone_server import CONNECTED, Client, wait_for  # noqa: E402
 
@@ -457,3 +461,61 @@ def test_the_desktops_own_turn_that_fails_still_says_so_in_its_dialog(app, deskt
     assert [title for title, _ in boxes] == ["Generation failed"]
     assert OVERLOADED in boxes[0][1]
     assert notes_shown(window) == []
+
+
+# --- P5: a chapter's edit left unsaved --------------------------------------------------------
+
+
+def test_a_phone_opening_another_story_never_asks_about_a_chapters_edit(
+    app, tmp_path, sockets, story, cast, monkeypatch
+):
+    """Leaving a story asks about a chapter's edit on Story so far left
+    unsaved, and a phone's "open this story" was refused only for a message's
+    edit: it opened "Discard your edit?" on the desktop."""
+    nodes = make_exchange(6)
+    story.active_leaf_id = nodes[-1].id
+    chapter = Summary(content="Chapter one as written.", covered_node_ids=["u0", "a0"], model="m")
+    save_story_bundle(
+        StoryBundle(story=story, cast=cast, nodes=nodes, summaries=[chapter]), root=tmp_path
+    )
+    other = story.model_copy(
+        update={"id": "story-2", "title": "Another shared story", "active_leaf_id": None}
+    )
+    save_story_bundle(StoryBundle(story=other, cast=cast), root=tmp_path)
+    window = MainWindow(root=tmp_path, use_mock=True)
+    window.config.scene_reads = "manual"
+    window.config.auto_archive = False
+    window.show()
+    window.open_story(story.id)
+    window.config.phone.devices = [
+        PhoneDevice(id="p1", name="Pixel", token_sha256=token_hash(desk.TOKEN))
+    ]
+    window.config.phone.shared_stories = [story.id, "story-2"]
+    window.start_phone_server(sockets / "h.sock", desk.ONION)
+    phone = desk.Phone(app, sockets / "h.sock")
+    asked: list[str] = []
+
+    def question(_parent, title, _text, *_args, **_kwargs):
+        asked.append(title)
+        return QMessageBox.Cancel
+
+    monkeypatch.setattr(QMessageBox, "question", question)
+    try:
+        panel = window.summaries_panel
+        panel.editor.setPlainText("My own rewrite of chapter one, not saved.")
+        assert panel.unsaved_edit()
+
+        answer = phone.ask("POST", "/api/stories/story-2/open", {})
+        for _ in range(30):
+            app.processEvents()
+        assert asked == [], "the phone's request opened a question on the desktop"
+        assert answer == (409, {"error": window_phone.EDIT_OPEN})
+        assert window.session.story.id == story.id and panel.unsaved_edit()
+
+        # Saved or dropped on the desktop, the phone opens it.
+        panel.drop_edit()
+        assert phone.ask("POST", "/api/stories/story-2/open", {})[0] == 200
+        desk.wait_for(app, lambda: window.session.story.id == "story-2")
+    finally:
+        window.summaries_panel.drop_edit()
+        window.close()
