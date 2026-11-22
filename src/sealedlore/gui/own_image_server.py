@@ -256,6 +256,12 @@ def _compact(body: dict[str, Any]) -> str:
     return json.dumps(body, ensure_ascii=False)
 
 
+def typed_words(api: str, typed: Exception) -> str:
+    """What Check the server says of a workflow whose model is free text
+    (`local_images.ModelAsTyped`): it answered, and has no list to offer."""
+    return f"✓ {SERVICE_NAMES.get(api, api)} answered. {typed}"
+
+
 def found_words(api: str, models: list[Any]) -> str:
     """What Check the server says it found."""
     service = SERVICE_NAMES.get(api, api)

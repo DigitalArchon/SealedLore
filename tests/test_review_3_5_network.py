@@ -42,7 +42,15 @@ from sealedlore.providers.context_probe import detect_context
 from sealedlore.providers.embeddings import OpenAICompatibleEmbeddings
 from sealedlore.providers.images import list_image_models, list_own_models
 from sealedlore.providers.local_embeddings import LocalEmbeddings
-from sealedlore.providers.local_images import local_settings
+from sealedlore.providers.local_images import (
+    LocalDrawing,
+    LocalSettings,
+    ModelAsTyped,
+    comfy_options,
+    list_models,
+    local_settings,
+)
+from sealedlore.providers.media_http import MediaHttp
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
 from sealedlore.providers.streaming import read_lines
@@ -658,3 +666,94 @@ def test_a_listing_nothing_is_held_back_from_is_asked_as_before():
     )
     assert [model.id for model in found] == ["dreamshaper_8.safetensors"]
     assert [request.url.path for request in seen] == ["/sdapi/v1/sd-models"]
+
+
+# --- N4: a workflow whose {{model}} is a free-text input takes the model as typed --
+
+TYPED_WORKFLOW = json.dumps(
+    {
+        "1": {"class_type": "DiffusersLoader", "inputs": {"repo_id": "{{model}}"}},
+        "2": {"class_type": "SaveImage", "inputs": {"images": ["1", 0], "text": "{{prompt}}"}},
+    }
+)
+
+
+def _comfy(spec: object, node: str = "DiffusersLoader") -> httpx.Client:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == f"/object_info/{node}":
+            return httpx.Response(200, json={node: {"input": {"required": spec}}})
+        return httpx.Response(404)
+
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def _drawing(client: httpx.Client, workflow: str = TYPED_WORKFLOW) -> LocalDrawing:
+    address = "http://127.0.0.1:8188"
+    http = MediaHttp(address, "", timeout_seconds=5, client=client)
+    return LocalDrawing("comfyui", http, address, "", LocalSettings(workflow=workflow))
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        ["STRING", {"default": ""}],
+        ["STRING", {"multiline": False}],
+        ["STRING"],
+        ["INT", {"default": 0}],
+    ],
+)
+def test_a_free_text_model_input_has_no_list_and_takes_the_name_as_typed(entry):
+    """`["STRING", {…}]` was read as its choices: the models offered were S, T,
+    R, I, N and G, and the model the workflow was written for was refused as
+    one "ComfyUI has no model called"."""
+    client = _comfy({"repo_id": entry})
+    assert comfy_options(client.get, "http://127.0.0.1:8188", "DiffusersLoader", "repo_id") is None
+    with pytest.raises(ModelAsTyped) as said:
+        list_models(
+            "comfyui",
+            "http://127.0.0.1:8188",
+            "",
+            LocalSettings(workflow=TYPED_WORKFLOW),
+            get=client.get,
+        )
+    assert "DiffusersLoader" in str(said.value) and "as typed" in str(said.value)
+    _drawing(client).check_model("black-forest-labs/FLUX.1-dev", with_picture=False)
+    # The listing a picker is filled from has nothing to offer, quietly.
+    found = list_image_models(
+        "http://127.0.0.1:8188",
+        api="comfyui",
+        local=LocalSettings(workflow=TYPED_WORKFLOW),
+        client=client,
+    )
+    assert found == []
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        [["dreamshaper_8.safetensors", "sdxl.safetensors"], {}],
+        [["dreamshaper_8.safetensors", "sdxl.safetensors"]],
+        ["COMBO", {"options": ["dreamshaper_8.safetensors", "sdxl.safetensors"]}],
+    ],
+)
+def test_a_model_input_with_choices_is_still_held_to_them(entry):
+    client = _comfy({"repo_id": entry})
+    names = comfy_options(client.get, "http://127.0.0.1:8188", "DiffusersLoader", "repo_id")
+    assert names == ["dreamshaper_8.safetensors", "sdxl.safetensors"]
+    found = list_models(
+        "comfyui",
+        "http://127.0.0.1:8188",
+        "",
+        LocalSettings(workflow=TYPED_WORKFLOW),
+        get=client.get,
+    )
+    assert [model.id for model in found] == names
+    _drawing(client).check_model("sdxl.safetensors", with_picture=False)
+    with pytest.raises(ProviderError, match="has no model called 'FLUX.1-dev'"):
+        _drawing(client).check_model("FLUX.1-dev", with_picture=False)
+
+
+def test_a_node_the_server_hasnt_got_is_still_said():
+    client = _comfy({"other": ["STRING", {}]})
+    with pytest.raises(ProviderError, match="no DiffusersLoader node with an input repo_id"):
+        comfy_options(client.get, "http://127.0.0.1:8188", "DiffusersLoader", "repo_id")

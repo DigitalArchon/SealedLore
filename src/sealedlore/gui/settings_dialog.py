@@ -62,7 +62,7 @@ from sealedlore.gui.model_picker import (
     pick_model,
     pick_model_and_route,
 )
-from sealedlore.gui.own_image_server import OwnImageServer, found_words
+from sealedlore.gui.own_image_server import OwnImageServer, found_words, typed_words
 from sealedlore.gui.phone_dialog import PHONE_KEEPS
 from sealedlore.gui.plain_text import plain_tip
 from sealedlore.gui.profile_row import ProfileRow
@@ -126,7 +126,7 @@ from sealedlore.providers.chutes_provider import chutes_context
 from sealedlore.providers.context_probe import detect_context
 from sealedlore.providers.endpoints import EndpointsProvider, listing_key
 from sealedlore.providers.images import list_own_models, parse_image_models
-from sealedlore.providers.local_images import LocalSettings, where_drawn
+from sealedlore.providers.local_images import LocalSettings, ModelAsTyped, where_drawn
 from sealedlore.providers.local_servers import find_local_servers
 from sealedlore.providers.local_servers import found_words as local_server_words
 from sealedlore.providers.privacy import (
@@ -2482,6 +2482,11 @@ class SettingsDialog(QDialog):
             found = list_own_models(
                 url, api=api, api_key=key, local=settings, timeout_seconds=OWN_CHECK_SECONDS
             )
+        except ModelAsTyped as typed:
+            # Nothing wrong: it answered, and has no list for this workflow's
+            # model. The fields keep what was typed.
+            self.own_server.show_check(typed_words(api, typed))
+            return
         except (ProviderError, ValueError) as exc:
             self.own_server.show_check(f"⚠ {exc}")
             return

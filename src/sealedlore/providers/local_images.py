@@ -154,6 +154,21 @@ class WorkflowProblem(ValueError):
     """A workflow file that ComfyUI couldn't run: said before anything is sent."""
 
 
+class ModelAsTyped(ProviderError):
+    """A workflow takes its model ({{model}}) in an input ComfyUI has no list
+    of choices for (free text: a Diffusers loader's repo id, say), so there
+    are no models to offer and none to hold a name to: the one in the model
+    field is sent as typed. Raised where the models would be listed, in words
+    for whoever asked (Settings → Images' Check says them as what it found)."""
+
+    def __init__(self, node: str, field: str) -> None:
+        super().__init__(
+            f"Your workflow takes its model as text ({node}'s {field} has no list of "
+            "choices), so there are no models to list: the name in the model field is "
+            "sent to it as typed."
+        )
+
+
 # --- sizes --------------------------------------------------------------------
 
 
@@ -454,13 +469,19 @@ def list_models(
     if slot is None:
         return [_info(WORKFLOW_MODEL, "Your workflow (the model it names)", takes, local)]
     names = comfy_options(get, root, *slot)
+    if names is None:
+        raise ModelAsTyped(*slot)
     return [_info(name, name, takes, local) for name in names]
 
 
 def comfy_options(
     get: Callable[[str], httpx.Response], root: str, node: str, field: str
-) -> list[str]:
-    """The choices ComfyUI offers for a node's input (its checkpoints, say)."""
+) -> list[str] | None:
+    """The choices ComfyUI offers for a node's input (its checkpoints, say),
+    or None for an input with no list of them: ComfyUI writes a choice as
+    `[[…names…], {…}]` or `["COMBO", {"options": […]}]`, and free text as
+    `["STRING", {…}]`, whose type name was read as six choices: S, T, R, I,
+    N and G."""
     body = _json(get(f"{root}/object_info/{node}"), "ComfyUI", hint=_COMFY_HINT)
     try:
         spec = body[node]["input"]
@@ -471,8 +492,10 @@ def comfy_options(
         raise ProviderError(f"ComfyUI has no {node} node with an input {field}")
     choices = entry[0]
     if choices == "COMBO" and len(entry) > 1 and isinstance(entry[1], dict):
-        choices = entry[1].get("options")  # the newer way ComfyUI writes a choice
-    return [str(c) for c in choices or () if isinstance(c, (str, int, float))]
+        choices = entry[1].get("options") or []  # the newer way ComfyUI writes a choice
+    if not isinstance(choices, list):
+        return None
+    return [str(c) for c in choices if isinstance(c, (str, int, float))]
 
 
 _A1111_HINT = "is it running, started with --api?"
@@ -589,6 +612,8 @@ class LocalDrawing:
                     "own. Give both workflows a {{model}}, or neither (Settings → Images)."
                 )
             names = comfy_options(self._get, self.root, *slot)
+            if names is None:
+                return  # free text: no list to hold the name to, sent as typed
         else:
             names = [
                 info.id

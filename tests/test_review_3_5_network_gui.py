@@ -27,6 +27,7 @@ from sealedlore.providers import images as images_module  # noqa: E402
 from sealedlore.providers import videos as videos_module  # noqa: E402
 from sealedlore.providers.base import ProviderError  # noqa: E402
 from sealedlore.providers.context_probe import ContextSize  # noqa: E402
+from sealedlore.providers.local_images import ModelAsTyped  # noqa: E402
 
 NANO = "https://nano-gpt.com/api/v1"
 
@@ -164,3 +165,25 @@ def test_the_video_catalog_sends_no_held_back_password(app, tmp_path, monkeypatc
     catalog = video_jobs.VideoCatalog(cfg, tmp_path)
     catalog.ensure(force=True)
     assert sent == [] and refused and not catalog.loading
+
+
+# --- N4: Check the server says when a workflow takes its model as typed -----------
+
+
+def test_check_the_server_says_a_typed_model_is_sent_as_typed(app, monkeypatch):
+    def listing(url, **kwargs):
+        raise ModelAsTyped("DiffusersLoader", "repo_id")
+
+    monkeypatch.setattr(settings_module, "list_own_models", listing)
+    dialog = SettingsDialog(config(), None)
+    dialog.image_api.setCurrentIndex(dialog.image_api.findData("comfyui"))
+    dialog.image_model.setText("black-forest-labs/FLUX.1-dev")
+    dialog.portrait_model.setText("black-forest-labs/FLUX.1-schnell")
+    dialog.own_server.check_button.click()
+    words = dialog.own_server.check_note.text()
+    assert words.startswith("✓ ComfyUI answered.") and "as typed" in words
+    assert "DiffusersLoader" in words and "⚠" not in words
+    assert dialog.image_model.text() == "black-forest-labs/FLUX.1-dev"
+    assert dialog.portrait_model.text() == "black-forest-labs/FLUX.1-schnell"
+    assert dialog.own_server.check_button.isEnabled()
+    dialog.deleteLater()

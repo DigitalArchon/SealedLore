@@ -3073,7 +3073,11 @@ SealedLore's values go: `{{prompt}}`, `{{negative_prompt}}`, `{{width}}`,
 that node takes), `{{steps}}`, `{{cfg}}`, `{{sampler_name}}`, `{{scheduler}}`,
 `{{strength}}`, `{{batch}}`, and `{{image}}`, `{{image2}}`… for pictures sent
 with the prompt. The line under the box says what it found. A workflow with
-no `{{model}}` draws with the model it names, offered as "Your workflow". The
+no `{{model}}` draws with the model it names, offered as "Your workflow".
+Where `{{model}}` sits in an input ComfyUI has no list of choices for (free
+text, such as a Diffusers loader's repository id), there are no models to
+offer: type the model's name in the model field, and it is sent as typed
+(**Check the server** says so). The
 built-in workflows only preview their pictures, so nothing collects in
 ComfyUI's output folder; a picture sent with the prompt is uploaded to its
 input folder, as anything uploaded to ComfyUI is. **Stop** also stops the
