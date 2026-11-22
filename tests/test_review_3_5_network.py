@@ -5,8 +5,12 @@ every key is made up."""
 
 from __future__ import annotations
 
+import gzip
+import hashlib
 import json
 import math
+import time
+import tracemalloc
 
 import httpx
 import pytest
@@ -19,7 +23,7 @@ from sealedlore.engine.usage import usage_report
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.config import EmbeddingProviderConfig, ProviderConfig
 from sealedlore.models.lore import LoreEntry
-from sealedlore.providers import local_embeddings
+from sealedlore.providers import local_embeddings, streaming
 from sealedlore.providers.anthropic import AnthropicProvider
 from sealedlore.providers.base import (
     COST_MOST,
@@ -34,6 +38,7 @@ from sealedlore.providers.embeddings import OpenAICompatibleEmbeddings
 from sealedlore.providers.local_embeddings import LocalEmbeddings
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
+from sealedlore.providers.streaming import read_lines
 from sealedlore.storage.repository import StoryBundle, save_story_bundle
 from tests.test_session import make_config, turn
 
@@ -427,3 +432,125 @@ def test_the_built_in_model_gives_no_vector_that_isnt_numbers(tmp_path, monkeypa
     monkeypatch.setattr(local_embeddings, "_model", lambda _folder: (stand_in, stand_in))
     with pytest.raises(ProviderError, match="built-in embeddings model"):
         LocalEmbeddings(tmp_path).embed(["text"])
+
+
+# --- N2: a stream's lines are found without building what a compressed
+# --- stream of line ends inflates to ----------------------------------------------
+
+
+def _streamed(pieces, headers: dict | None = None) -> httpx.Response:
+    client = httpx.Client(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, content=iter(pieces), headers=headers or {})
+        )
+    )
+    return client.send(client.build_request("GET", "https://x.test/"), stream=True)
+
+
+def _in_pieces(data: bytes, size: int) -> list[bytes]:
+    return [data[i : i + size] for i in range(0, len(data), size)]
+
+
+@pytest.mark.parametrize("end", [b"\n", b"\r\n", b"\r"])
+def test_a_compressed_flood_of_line_ends_costs_little_to_read(end):
+    """24 MB of line ends is 24 KB of gzip, and every kilobyte received was
+    a megabyte of text split into a list of a million empty lines, each then
+    handed on: 0.7 GB and 22 s for 96 KB, the reviewer measured."""
+    flood = end * (24 * 1024 * 1024 // len(end))
+    packed = gzip.compress(flood + b"data: last\n")
+    assert len(packed) < 64 * 1024
+    response = _streamed(_in_pieces(packed, 1024), {"content-encoding": "gzip"})
+    digest = hashlib.sha256()
+    tracemalloc.start()
+    started = time.monotonic()
+    try:
+        lines = list(read_lines(response, digest))
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert lines == ["", "data: last"], "a run of empty lines is one"
+    assert digest.hexdigest() == hashlib.sha256(flood + b"data: last\n").hexdigest()
+    assert peak < 6 * 1024 * 1024, f"{peak / 1e6:.0f} MB held to read a megabyte at a time"
+    assert time.monotonic() - started < 2.0
+
+
+def test_a_flood_of_line_ends_in_one_piece_is_read_a_slice_at_a_time():
+    """Whatever size a piece arrives in, no more of it is made text, or a
+    list of lines, than a slice at a time."""
+    flood = b"\n" * (8 * 1024 * 1024)
+    tracemalloc.start()
+    try:
+        lines = list(read_lines(_streamed([flood, b"\r", b"\ndata: x"])))
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert lines == ["", "data: x"]
+    assert peak < 2 * 1024 * 1024, f"{peak / 1e6:.0f} MB beyond the piece itself"
+
+
+@pytest.mark.parametrize("size", [1, 2, 3, 5, 64, 100_000])
+def test_lines_come_as_iter_lines_gives_them_but_for_runs_of_empty_ones(size, monkeypatch):
+    """Each line as before, split at CRLF, CR or LF wherever the pieces and
+    the slices fall; a run of empty lines comes as one (to a reader of
+    events a blank line ends an event, and more of them are nothing)."""
+    monkeypatch.setattr(streaming, "READ_SLICE", 7)
+    text = (
+        "\n\ndata: one\r\ndata: two\rdata: thrée\n\ndata: four\r\n\r\n\r\n\n\r"
+        ": comment\n\r\ndata: five\r\r\rdata: six\n\n\n\nlast"
+    )
+    whole = list(_streamed([text.encode()]).iter_lines())
+    expected = [line for index, line in enumerate(whole) if line or index == 0 or whole[index - 1]]
+    assert expected != whole and expected[0] == "" and expected[-1] == "last"
+    digest = hashlib.sha256()
+    assert list(read_lines(_streamed(_in_pieces(text.encode(), size)), digest)) == expected
+    assert digest.hexdigest() == hashlib.sha256(text.encode()).hexdigest()
+
+
+def test_a_stream_of_single_blank_lines_is_read_exactly_as_before():
+    """What every real stream is: events a blank line apart."""
+    text = 'data: {"a": 1}\n\ndata: {"b": 2}\r\n\r\ndata: [DONE]\n\n'
+    for size in (1, 4, 9, 1000):
+        response = _streamed(_in_pieces(text.encode(), size))
+        assert list(read_lines(response)) == list(_streamed([text.encode()]).iter_lines())
+
+
+def test_a_line_end_split_between_pieces_is_one_line_end():
+    assert list(read_lines(_streamed([b"data: a\r", b"\ndata: b\r", b"\r", b"\ndata: c\r"]))) == [
+        "data: a",
+        "data: b",
+        "",
+        "data: c",
+    ]
+
+
+def test_a_line_with_no_end_is_still_refused_in_slices(monkeypatch):
+    monkeypatch.setattr(streaming, "MAX_LINE_CHARS", 300_000)
+    with pytest.raises(ProviderError, match="a line of more than"):
+        list(read_lines(_streamed([b"data: " + b"x" * 400_000])))
+    (line,) = read_lines(_streamed([b"data: " + b"x" * 200_000 + b"\n"]))
+    assert len(line) == 200_006
+
+
+def test_a_whole_reply_through_a_compressed_flood_is_still_the_reply():
+    stream = (
+        b'data: {"choices":[{"delta":{"content":"The passage."},"finish_reason":"stop"}]}\n'
+        + b"\n" * (4 * 1024 * 1024)
+        + b"data: [DONE]\n\n"
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=iter(_in_pieces(gzip.compress(stream), 512)),
+            headers={"content-type": "text/event-stream", "content-encoding": "gzip"},
+        )
+
+    config = ProviderConfig(name="t", base_url="https://chat.example/v1", api_key=KEY, model="m")
+    provider = OpenAICompatibleProvider(
+        config, client=httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    started = time.monotonic()
+    text, completed = provider.complete(_request())
+    assert text == "The passage." and completed.finish_reason == "stop"
+    assert completed.body_hash == "sha256:" + hashlib.sha256(stream).hexdigest()
+    assert time.monotonic() - started < 2.0

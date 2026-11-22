@@ -48,46 +48,77 @@ RETRY_MAX_SECONDS = 20.0
 # a few kilobytes, a picture sent inline a few megabytes: a longer one is no
 # reply, and reading on would hold memory for as long as the endpoint sent.
 MAX_LINE_CHARS = 32 * 1024 * 1024
-_NEWLINE = re.compile(r"\r\n|\r|\n")
+# A piece of a stream is made text, and looked through for its lines, this
+# many bytes at a time. A piece comes as large as what was received unpacks
+# to (gzip, about a thousandfold: providers/http.py), and made text whole and
+# split at every line end, a megabyte of compressed line ends was a list of
+# a thousand million empty lines.
+READ_SLICE = 64 * 1024
+_LINE_ENDS = re.compile(r"[\r\n]+")
 
 
 def read_lines(response: httpx.Response, body: Any = None) -> Iterator[str]:
     """The stream's lines as `iter_lines` gives them (split at CRLF, CR or
-    LF), each byte also fed to `body` (a hash) as it arrives, decoded of any
-    transfer encoding. Each piece is split once, so a long line costs its
-    length and no more, and a line past MAX_LINE_CHARS is a ProviderError."""
+    LF), but that a run of empty lines comes as one: to a reader of events a
+    blank line ends an event and more of them are nothing, and a stream of
+    nothing but line ends (96 KB of gzip is 96 MB of them) is then read at
+    the cost of looking through it, with no line built for any. Each byte is
+    also fed to `body` (a hash) as it arrives, decoded of any transfer
+    encoding. A piece is read `READ_SLICE` at a time and each slice looked
+    through once, so a long line costs its length and no more, and a line
+    past MAX_LINE_CHARS is a ProviderError."""
     decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
     line: list[str] = []  # the line not yet ended, in the pieces it came in
     length = 0
-    held_cr = False  # a CR at a piece's end may be the first half of a CRLF
+    held_cr = False  # a CR at a slice's end may be the first half of a CRLF
+    blank = False  # the line last given was an empty one
 
     def ended(text: str, final: bool) -> Iterator[str]:
-        nonlocal length, held_cr
+        nonlocal length, held_cr, blank
         if held_cr:
             text = "\r" + text
         held_cr = not final and text.endswith("\r")
         if held_cr:
             text = text[:-1]
-        parts = _NEWLINE.split(text)
-        for index, part in enumerate(parts):
-            length += len(part)
-            if length > MAX_LINE_CHARS:
-                raise ProviderError(
-                    f"the endpoint sent a line of more than {MAX_LINE_CHARS // (1024 * 1024)} MB "
-                    "with no end; not read"
-                )
-            line.append(part)
-            if index < len(parts) - 1:
-                yield "".join(line)
+        at = 0
+        for run in _LINE_ENDS.finditer(text):
+            stop, after = run.span()
+            if stop > at:
+                kept(text[at:stop])
+            # How many lines the run ends: a CRLF is one line end, not two.
+            ends = after - stop
+            if ends > 1:
+                ends -= text.count("\r\n", stop, after)
+            if length:
+                yield line[0] if len(line) == 1 else "".join(line)
                 line.clear()
                 length = 0
+                blank = False
+                ends -= 1
+            if ends and not blank:
+                yield ""
+                blank = True
+            at = after
+        if at < len(text):
+            kept(text[at:])
+
+    def kept(part: str) -> None:
+        nonlocal length
+        length += len(part)
+        if length > MAX_LINE_CHARS:
+            raise ProviderError(
+                f"the endpoint sent a line of more than {MAX_LINE_CHARS // (1024 * 1024)} MB "
+                "with no end; not read"
+            )
+        line.append(part)
 
     for chunk in response.iter_bytes():
         if body is not None:
             body.update(chunk)
-        yield from ended(decoder.decode(chunk), final=False)
+        for start in range(0, len(chunk), READ_SLICE):
+            yield from ended(decoder.decode(chunk[start : start + READ_SLICE]), final=False)
     yield from ended(decoder.decode(b"", final=True), final=True)
-    if line and length:
+    if length:
         yield "".join(line)
 
 
