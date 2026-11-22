@@ -463,11 +463,17 @@ def list_image_models(
     sealed_api: str = "auto",
     wanted: str = "",
     local: LocalSettings | None = None,
+    key_withheld: str = "",
 ) -> list[ImageModelInfo]:
     """The endpoint's picture models. Empty if it has none or won't say.
     `wanted`: a model whose prices are fetched too where they are per model
     (OpenRouter). `local`: a server of the author's own's workflows (the
-    models a ComfyUI workflow takes are the ones offered)."""
+    models a ComfyUI workflow takes are the ones offered). `key_withheld`:
+    why the endpoint's key, or the password in its address, isn't sent
+    (`ResolvedMedia.key_withheld`): nothing is asked then, as nothing is
+    drawn. The address still holds the password, and httpx sends it."""
+    if key_withheld:
+        raise ProviderError(key_withheld)
     # Never from an end-to-end encrypted endpoint (providers/privacy.py),
     # by its host or what an endpoint at its address speaks (`sealed_api`,
     # `Config.sealed_api_at`): a plain listing would go to it in the clear,
@@ -524,10 +530,14 @@ def list_own_models(
     client: httpx.Client | None = None,
     local: LocalSettings | None = None,
     timeout_seconds: float = 30.0,
+    key_withheld: str = "",
 ) -> list[ImageModelInfo]:
     """A server of the author's own's checkpoints, as picture models. Raises
     ProviderError in words when it can't say (Settings → Images' Check),
-    where `list_image_models` gives an empty list."""
+    where `list_image_models` gives an empty list. `key_withheld`: as
+    `list_image_models`; nothing is sent."""
+    if key_withheld:
+        raise ProviderError(key_withheld)
     owned = client is None
     http = client or make_client(base_url, timeout=httpx.Timeout(timeout_seconds))
     headers = auth_headers(api, api_key, base_url)

@@ -139,6 +139,7 @@ class VideoCatalog(QObject):
                     api=media.api,
                     api_key=media.api_key,
                     sealed_api=media.sealed_api,
+                    key_withheld=media.key_withheld,
                 )
             )
 

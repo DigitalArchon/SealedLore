@@ -435,8 +435,13 @@ def list_video_models(
     client: httpx.Client | None = None,
     timeout_seconds: float = 30.0,
     sealed_api: str = "auto",
+    key_withheld: str = "",
 ) -> list[VideoModelInfo]:
-    """The endpoint's video models. Empty if it has none or won't say."""
+    """The endpoint's video models. Empty if it has none or won't say.
+    `key_withheld`: why the endpoint's key, or the password in its address,
+    isn't sent (`ResolvedMedia.key_withheld`): nothing is asked then."""
+    if key_withheld:
+        raise ProviderError(key_withheld)
     # Never from an end-to-end encrypted endpoint (providers/privacy.py),
     # by its host or what an endpoint at its address speaks (`sealed_api`,
     # `Config.sealed_api_at`): a plain listing would go to it in the clear,

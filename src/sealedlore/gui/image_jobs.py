@@ -118,6 +118,9 @@ class ImageCatalog(QObject):
                     wanted=wanted,
                     sealed_api=media.sealed_api,
                     local=local_settings(media),
+                    # Held back, nothing is asked: the address may carry a
+                    # password, which would go with the listing's request.
+                    key_withheld=media.key_withheld,
                 )
             )
 

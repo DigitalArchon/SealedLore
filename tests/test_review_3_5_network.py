@@ -21,7 +21,12 @@ from sealedlore.engine.speed_test import _reasoning_tokens as speed_reasoning_to
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
 from sealedlore.engine.usage import usage_report
 from sealedlore.messages import ContentPart, PromptMessage
-from sealedlore.models.config import EmbeddingProviderConfig, ProviderConfig
+from sealedlore.models.config import (
+    Config,
+    EmbeddingProviderConfig,
+    MediaEndpoint,
+    ProviderConfig,
+)
 from sealedlore.models.lore import LoreEntry
 from sealedlore.providers import local_embeddings, streaming
 from sealedlore.providers.anthropic import AnthropicProvider
@@ -35,10 +40,13 @@ from sealedlore.providers.base import (
 )
 from sealedlore.providers.context_probe import detect_context
 from sealedlore.providers.embeddings import OpenAICompatibleEmbeddings
+from sealedlore.providers.images import list_image_models, list_own_models
 from sealedlore.providers.local_embeddings import LocalEmbeddings
+from sealedlore.providers.local_images import local_settings
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
 from sealedlore.providers.streaming import read_lines
+from sealedlore.providers.videos import list_video_models
 from sealedlore.storage.repository import StoryBundle, save_story_bundle
 from tests.test_session import make_config, turn
 
@@ -554,3 +562,99 @@ def test_a_whole_reply_through_a_compressed_flood_is_still_the_reply():
     assert text == "The passage." and completed.finish_reason == "stop"
     assert completed.body_hash == "sha256:" + hashlib.sha256(stream).hexdigest()
     assert time.monotonic() - started < 2.0
+
+
+# --- N3: a listing sends nothing while the endpoint's key, or the password in
+# --- its address, is held back ----------------------------------------------------
+
+HELD_ADDRESSES = [
+    ("a1111", "http://admin:PROBE-PASSWORD@192.168.1.50:7860"),
+    ("comfyui", "http://admin:PROBE-PASSWORD@192.168.1.50:8188"),
+    ("openai", "http://admin:PROBE-PASSWORD@192.168.1.50:8000/v1"),
+]
+
+
+def _recording(seen: list[httpx.Request]) -> httpx.Client:
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.url.path.endswith("/sd-models"):
+            return httpx.Response(200, json=[{"title": "dreamshaper_8.safetensors"}])
+        return httpx.Response(200, json={"data": []})
+
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def _config_with(**media) -> Config:
+    chat = ProviderConfig(name="nano", base_url="https://nano-gpt.com/api/v1", model="m")
+    return Config(providers=[chat], active_provider_name="nano", **media)
+
+
+@pytest.mark.parametrize(("api", "address"), HELD_ADDRESSES)
+def test_the_picture_listing_sends_nothing_while_a_password_is_held_back(api, address):
+    """A password written into a picture server's address, plain http to
+    another machine and not yet confirmed: drawing refused, and the listing
+    (asked whenever a picker opens) sent it all the same."""
+    media = _config_with(image_endpoint=MediaEndpoint(base_url=address, api=api)).images()
+    assert "isn't sent until you confirm" in media.key_withheld
+    seen: list[httpx.Request] = []
+    with pytest.raises(ProviderError, match="isn't sent until you confirm"):
+        list_image_models(
+            media.base_url,
+            api=media.api,
+            api_key=media.api_key,
+            sealed_api=media.sealed_api,
+            local=local_settings(media),
+            key_withheld=media.key_withheld,
+            client=_recording(seen),
+        )
+    assert seen == []
+    if media.local:
+        with pytest.raises(ProviderError, match="isn't sent until you confirm"):
+            list_own_models(
+                media.base_url,
+                api=media.api,
+                api_key=media.api_key,
+                key_withheld=media.key_withheld,
+                client=_recording(seen),
+            )
+        assert seen == []
+
+
+def test_the_video_listing_sends_nothing_while_a_password_is_held_back():
+    endpoint = MediaEndpoint(
+        base_url="http://admin:PROBE-PASSWORD@192.168.1.50:8000/v1", api_key="video-key"
+    )
+    media = _config_with(video_endpoint=endpoint).videos()
+    assert media.key_withheld
+    seen: list[httpx.Request] = []
+    with pytest.raises(ProviderError, match="isn't sent until you confirm"):
+        list_video_models(
+            media.base_url,
+            api=media.api,
+            api_key=media.api_key,
+            sealed_api=media.sealed_api,
+            key_withheld=media.key_withheld,
+            client=_recording(seen),
+        )
+    assert seen == []
+
+
+def test_a_listing_nothing_is_held_back_from_is_asked_as_before():
+    endpoint = MediaEndpoint(
+        base_url="http://admin:PROBE-PASSWORD@192.168.1.50:7860",
+        api="a1111",
+        key_in_clear_for="http://192.168.1.50:7860",
+    )
+    media = _config_with(image_endpoint=endpoint).images()
+    assert not media.key_withheld, "confirmed once in Settings"
+    seen: list[httpx.Request] = []
+    found = list_image_models(
+        media.base_url,
+        api=media.api,
+        api_key=media.api_key,
+        local=local_settings(media),
+        key_withheld=media.key_withheld,
+        client=_recording(seen),
+    )
+    assert [model.id for model in found] == ["dreamshaper_8.safetensors"]
+    assert [request.url.path for request in seen] == ["/sdapi/v1/sd-models"]
