@@ -280,6 +280,13 @@ class ReactionRuntime:
                 )
             )
         passage.meta.reactions = answers
+        if after_turn_of is not None and not stopped:
+            # The round has run to its end, and is marked so before anything
+            # is said of it: a Stop landing on one of the notices below ends
+            # the job there, and a turn that stays in the story (a phone's)
+            # was left with its answers and no mark, so the next take asked,
+            # and paid, everyone again.
+            passage.meta.round_after = True
         self.save()
         if stopped:
             raise StreamCancelled()

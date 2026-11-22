@@ -247,6 +247,29 @@ def test_a_turn_left_in_the_story_by_a_round_that_broke_is_asked_on_the_retry(
     assert "MAELA-ANSWERS-NOW" in session.last_prompt.section(SECTION_ROUND).text
 
 
+def test_a_job_ended_on_the_notice_that_they_answered_leaves_the_round_marked(
+    tmp_path: Path,
+) -> None:
+    """Whoever runs the job ends a stopped one at the next thing said. A Stop
+    in the instant after every answer was in ended it on "… answered your
+    turn", before the turn was marked: a turn that stays in the story (a
+    phone's) kept its answers with no mark, and the next take asked, and
+    paid, everyone again (the review of the fixes)."""
+    session = _after(tmp_path, ["MAELA-ANSWERS-NOW", "The door gives.", "MAELA-ASKED-TWICE"])
+    job = session.send(turn("I put my shoulder to the door."))
+    for event in job:
+        if isinstance(event, SessionNotice) and "answered your turn" in event.text:
+            break
+    job.close()  # as the worker closes a job it has stopped
+    leaf = session.full_path()[-1]
+    assert leaf.kind == "user" and leaf.meta.round_after
+    assert [answer.text for answer in leaf.meta.reactions] == ["MAELA-ANSWERS-NOW"]
+    before = len(session.provider.requests)
+    list(session.regenerate())
+    assert [r.model for r in session.provider.requests[before:]] == ["story-model"]
+    assert "MAELA-ANSWERS-NOW" in session.last_prompt.section(SECTION_ROUND).text
+
+
 def test_a_turn_answered_at_the_same_time_keeps_those_answers_on_another_take(
     tmp_path: Path,
 ) -> None:
