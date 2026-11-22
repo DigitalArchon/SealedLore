@@ -4186,6 +4186,7 @@ class StorySession(
         """
         suggestion = self._suggestion(suggestion_id)
         card = card_from_suggestion(suggestion)
+        self.forget_review_undo()  # it would take the card, the suggestion used up
         (self.cast if to_cast else self.supporting).append(card)
         self.character_suggestions.remove(suggestion)
         self.save()
@@ -4235,6 +4236,7 @@ class StorySession(
                 card.name = name
         else:
             card = Character(name=name, origin="author")
+        self.forget_review_undo()
         (self.cast if to_cast else self.supporting).append(card)
         if to_cast:
             for scene in self._all_scenes():
@@ -4247,6 +4249,7 @@ class StorySession(
         the cast or among the supporting characters, with any lore it brings.
         On the cast, anyone the rosters already name by it is the card's from
         now on, as when a supporting character joins the cast."""
+        self.forget_review_undo()
         (self.cast if to_cast else self.supporting).append(card)
         if to_cast:
             for scene in self._all_scenes():
@@ -4342,6 +4345,7 @@ class StorySession(
     def promote(self, character_id: str) -> Character:
         """Supporting → cast: on the roster, holdable, in the cached system block."""
         character = next(c for c in self.supporting if c.id == character_id)
+        self.forget_review_undo()
         self.supporting.remove(character)
         self.cast.append(character)
         for scene in self._all_scenes():
@@ -4354,6 +4358,7 @@ class StorySession(
         if character_id == self.story.held_character_id:
             raise ValueError("the author is holding this character")
         character = next(c for c in self.cast if c.id == character_id)
+        self.forget_review_undo()
         self.cast.remove(character)
         # Off the roster as cast, but still in the room if they were: by name.
         for scene in self._all_scenes():
@@ -4385,6 +4390,7 @@ class StorySession(
                 "it is until the scene ends."
             )
         snapshots = [node.meta.scene for node in self.nodes if node.meta.scene is not None]
+        self.forget_review_undo()  # it would bring them back
         take_out_character(self.bundle, card, scenes=snapshots)
         # A chat's people, set aside or shown in a look of theirs, by id.
         self.story.chat_away = [i for i in self.story.chat_away if i != card.id]
@@ -4474,6 +4480,8 @@ class StorySession(
             raise
         if cut_off:
             result.warnings.append("the model ran out of room: ask again for the rest")
+        if result.cast or result.supporting:
+            self.forget_review_undo()
         self.cast.extend(result.cast)
         self.supporting.extend(result.supporting)
         self.save()
@@ -4988,7 +4996,14 @@ class StorySession(
         return results
 
     def forget_review_undo(self) -> None:
-        """The settings have moved on by hand; the snapshot no longer describes them."""
+        """The settings have moved on by hand; the snapshot no longer describes them.
+
+        Undo puts the cast, the supporting cards and the lore back whole, so
+        whatever adds, removes or moves one of them forgets it, here in the
+        session where no caller can leave it out: a suggested character
+        accepted after a review was deleted by its Undo, the suggestion
+        already used up (the review, Nov 22 2026).
+        """
         self.review_undo = None
 
     def undo_review(self) -> bool:

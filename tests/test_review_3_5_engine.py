@@ -23,9 +23,11 @@ from sealedlore.engine.session import SessionNotice, StorySession
 from sealedlore.engine.story_suggestions import _card_named
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
 from sealedlore.engine.validators import locate_quote, mentions, named_only
+from sealedlore.models.authoring import SettingsChange
 from sealedlore.models.character import Character
 from sealedlore.models.node import Node, NodeMeta
 from sealedlore.models.private import PrivateSpan
+from sealedlore.models.supporting import CharacterSuggestion
 from sealedlore.providers.base import StreamCancelled, TextDelta
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.storage.repository import StoryBundle, read_api_log, save_story_bundle
@@ -621,3 +623,78 @@ def test_a_stop_on_the_adoption_notice_leaves_every_paid_call_in_the_log(
     suggested = [s.title for s in session.story.story_suggestions]
     assert bool(session.summaries) is not edited
     assert suggested == ([] if edited else ["The Undercroft"])
+
+
+# --- E7: an applied review's Undo never deletes a card made since ----------------
+
+HOLLIS = "Hollis Brandt"
+
+
+def _accept(session: StorySession) -> None:
+    session.accept_suggestion(session.character_suggestions[0].id)
+
+
+def _accept_into_cast(session: StorySession) -> None:
+    session.accept_suggestion(session.character_suggestions[0].id, to_cast=True)
+
+
+def _add_card(session: StorySession) -> None:
+    session.add_card(Character(name=HOLLIS, summary="The gate sergeant."), to_cast=False)
+
+
+def _card_for(session: StorySession) -> None:
+    session.card_for(HOLLIS)
+
+
+def _fill(session: StorySession) -> None:
+    session.provider = MockChatProvider(
+        [json.dumps({"supporting": [{"name": HOLLIS, "summary": "The gate sergeant."}]})]
+    )
+    session.fill_lore_cast("The Calder Keep chronicles")
+
+
+@pytest.mark.parametrize("add", [_accept, _accept_into_cast, _add_card, _card_for, _fill])
+def test_undoing_a_review_never_takes_a_card_made_since_it(session: StorySession, add):
+    """Undo puts the cast back whole, as it was before the review. A
+    character suggested and accepted after it (the Cast board's Add) went
+    with that: off the board for good, the suggestion already used up."""
+    play(session, "one")
+    session.bundle.supporting.suggestions.append(
+        CharacterSuggestion(name=HOLLIS, description="The gate sergeant.")
+    )
+    change = SettingsChange(kind="world", value="Calder Keep stands empty. It is winter.")
+    assert session.apply_review([change])[change.id] is None
+    assert session.review_undo is not None
+
+    add(session)
+
+    everyone = [*session.cast, *session.supporting]
+    assert HOLLIS in [card.name for card in everyone]
+    assert session.review_undo is None, "the snapshot no longer describes the cast"
+    assert session.undo_review() is False
+    assert HOLLIS in [card.name for card in (*session.cast, *session.supporting)]
+    assert session.story.world_bible == "Calder Keep stands empty. It is winter."
+
+
+@pytest.mark.parametrize("move", ["promote", "demote", "remove_character"])
+def test_undoing_a_review_never_undoes_a_card_moved_or_removed_since(
+    session: StorySession, move: str
+):
+    """Nor one moved or removed since: Undo is of the review, not of what
+    the author did to the cast after it."""
+    play(session, "one")
+    hollis = Character(name=HOLLIS, summary="The gate sergeant.")
+    (session.cast if move == "demote" else session.supporting).append(hollis)
+    change = SettingsChange(kind="world", value="Calder Keep stands empty. It is winter.")
+    session.apply_review([change])
+
+    getattr(session, move)(hollis.id)
+
+    assert session.review_undo is None
+    assert session.undo_review() is False
+    cast, supporting = [c.name for c in session.cast], [c.name for c in session.supporting]
+    assert (HOLLIS in cast, HOLLIS in supporting) == {
+        "promote": (True, False),
+        "demote": (False, True),
+        "remove_character": (False, False),
+    }[move]

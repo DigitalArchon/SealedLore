@@ -357,6 +357,9 @@ class PlotRuntime:
         self._refuse_in_private("Changing the plot")
         changes = plot_changes(document, self.bundle, begun=bool(self.nodes))
         notes = list(changes.notes)
+        # The plot's cards and lore join the story's, and its hidden ones are
+        # rewritten: an earlier review's Undo would put all three lists back.
+        self.forget_review_undo()
         people = {c.id: c for c in (*self.cast, *self.supporting)}
         for change in changes.characters:
             card = people[change.card_id]
@@ -417,6 +420,7 @@ class PlotRuntime:
         self._refuse_in_chat("A plot")
         self._refuse_in_private("Changing the story")
         notes = apply_document(document, self.bundle, before=before, read=read)
+        self.forget_review_undo()  # the cards and lore are the document's now
         self.sync_unstarted_scene()
         self.save()
         return notes
