@@ -275,10 +275,13 @@ _PNG_KEPT = {
     b"cLLI",
     b"cLLi",
     b"pHYs",
-    b"acTL",
-    b"fcTL",
-    b"fdAT",
 }
+# An animation's: its control chunk, kept where it makes the picture one
+# (before the picture's own data, as a decoder requires), and its frames,
+# kept only then. With no `acTL` no decoder reads `fcTL` or `fdAT`, and they
+# held whatever was put in them.
+_PNG_ANIMATION = b"acTL"
+_PNG_FRAMES = {b"fcTL", b"fdAT"}
 
 
 def _png_chunk(kind: bytes, body: bytes) -> bytes:
@@ -290,6 +293,7 @@ def _strip_png(data: bytes) -> bytes:
     out = bytearray(PNG_SIGNATURE)
     pos, end = len(PNG_SIGNATURE), len(data)
     first = True
+    animated = drawn = False
     while pos + 8 <= end:
         length = int.from_bytes(data[pos : pos + 4], "big")
         kind = data[pos + 4 : pos + 8]
@@ -299,7 +303,10 @@ def _strip_png(data: bytes) -> bytes:
         if first and kind != b"IHDR":
             raise MetadataError("its PNG header is missing")
         first = False
-        if kind in _PNG_KEPT:
+        drawn = drawn or kind == b"IDAT"
+        if kind == _PNG_ANIMATION and not drawn:
+            animated = True
+        if kind in _PNG_KEPT or (animated and (kind == _PNG_ANIMATION or kind in _PNG_FRAMES)):
             out += data[pos:stop]
         elif kind == b"eXIf":
             orientation = _orientation(data[pos + 8 : pos + 8 + length])

@@ -5,6 +5,7 @@ invented names."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 import random
 import re
@@ -29,6 +30,7 @@ from sealedlore.models.story import BUDGET_MOST, StoryDefaults
 from sealedlore.models.tavern import CardAsset, TavernFields
 from sealedlore.storage import collection, collection_backup
 from sealedlore.storage.collection_backup import BackupError, open_backup, restore
+from sealedlore.storage.image_meta import PNG_SIGNATURE, MetadataError, strip_metadata
 from sealedlore.storage.paths import COLLECTION_ID
 from sealedlore.storage.picture_store import DiskPictures
 from sealedlore.storage.video_meta import strip_video_metadata
@@ -344,6 +346,9 @@ def _box(kind: bytes, payload: bytes = b"") -> bytes:
 FTYP = _box(b"ftyp", b"isom\x00\x00\x02\x00isom")
 
 
+_ENTRIES = _box(b"stsd", bytes(8) + _box(b"abcd") * 60_000)
+
+
 def _peak_while(call) -> int:
     tracemalloc.start()
     try:
@@ -359,10 +364,7 @@ def _peak_while(call) -> int:
         FTYP + _box(b"moov", _box(b"mvhd", bytes(100)) + _box(b"abcd") * 60_000) + _box(b"mdat"),
         FTYP + _box(b"moov", _box(b"mvhd", bytes(100))) + _box(b"abcd") * 60_000,
         FTYP + _box(b"moov", _box(b"trak", _box(b"mdia", _box(b"minf")) * 20_000)),
-        FTYP
-        + _box(
-            b"moov", _box(b"trak", _box(b"mdia", _box(b"stsd", bytes(8) + _box(b"abcd") * 60_000)))
-        ),
+        FTYP + _box(b"moov", _box(b"trak", _box(b"mdia", _box(b"minf", _box(b"stbl", _ENTRIES))))),
     ],
     ids=["in the movie header", "at the top", "tracks of nothing", "sample entries"],
 )
@@ -374,3 +376,90 @@ def test_stripping_a_video_of_tiny_boxes_holds_little_more_than_the_video(video:
     assert len(stripped[0]) == len(video)
     # The copy worked on and the copy returned, and little besides.
     assert peak < 3 * len(video)
+
+
+# --- F9: the strippers keep only what they know, below the top as well --------------
+
+SECRET = b"GPS 47.3769N 8.5417E owner=John Smith serial=SN-0042"
+
+
+def test_a_videos_boxes_nobody_listed_are_blanked_wherever_they_are():
+    """Unknown boxes were blanked at the top of the file only: one inside
+    the movie header, a track or its sample table kept whatever it held."""
+    stsd = _box(b"stsd", bytes(8) + _box(b"mp4a", bytes(28)))
+    stco = _box(b"stco", bytes(4) + struct.pack(">II", 1, 4242))
+    stbl = _box(b"stbl", stsd + _box(b"XtrA", SECRET) + stco)
+    hdlr = _box(b"hdlr", bytes(8) + b"soun" + bytes(12) + b"h\x00")
+    mdia = _box(
+        b"mdia", _box(b"mdhd", bytes(24)) + hdlr + _box(b"minf", stbl + _box(b"nope", SECRET))
+    )
+    trak = _box(b"trak", _box(b"tkhd", bytes(84)) + mdia + _box(b"loci", SECRET))
+    nested = _box(b"trak", _box(b"trak", _box(b"stbl", _box(b"stco", SECRET))))
+    moov = _box(b"moov", _box(b"mvhd", bytes(100)) + trak + nested + _box(b"gps ", SECRET))
+    moof = _box(
+        b"moof",
+        _box(b"mfhd", bytes(8)) + _box(b"traf", _box(b"tfhd", bytes(8)) + _box(b"zzzz", SECRET)),
+    )
+    mfra = _box(b"mfra", _box(b"tfra", bytes(16)) + _box(b"hide", SECRET) + _box(b"mfro", bytes(8)))
+    video = (
+        FTYP + moov + moof + _box(b"mdat", bytes(64)) + mfra + _box(b"trak", _box(b"udta", SECRET))
+    )
+    stripped = strip_video_metadata(video)
+    assert len(stripped) == len(video) and SECRET not in stripped
+    for kind in (b"XtrA", b"nope", b"loci", b"gps ", b"zzzz", b"hide"):
+        assert kind not in stripped
+    # What a player reads is where it was: the sample table's offsets, the
+    # fragment's and the index's own boxes.
+    for kept in (stco, stsd, b"tkhd", b"mdhd", b"soun", b"mfhd", b"tfhd", b"tfra", b"mfro"):
+        assert kept in stripped
+    assert stripped.index(stco) == video.index(stco)
+    assert strip_video_metadata(stripped) == stripped
+
+
+def test_a_real_video_is_stripped_as_it_was():
+    """tests/data/tiny.mp4 (ffmpeg's, a second of a test pattern) holds
+    nothing the lists don't know: stripped, it is byte for byte what it was
+    before they were made strict (decoded by ffmpeg to the same frames and
+    sound as the file itself, by hand)."""
+    video = (Path(__file__).parent / "data" / "tiny.mp4").read_bytes()
+    stripped = strip_video_metadata(video)
+    assert (
+        hashlib.sha256(stripped).hexdigest()
+        == "1827a146fc26e07a08bc0e24611dfd1f48415d64b5fc76a8ff95cec4e893e9f7"
+    )
+
+
+def test_a_video_whose_movie_header_is_compressed_cant_be_stripped():
+    """QuickTime's `cmov`: the header, zlib-compressed, with whatever it
+    names inside. Blanked as unknown, the video would be nothing; kept, its
+    metadata. Refused, as any file that can't be cleaned is."""
+    video = FTYP + _box(b"moov", _box(b"cmov", _box(b"dcom", b"zlib") + _box(b"cmvd", bytes(40))))
+    with pytest.raises(MetadataError, match="compressed"):
+        strip_video_metadata(video + _box(b"mdat", bytes(8)))
+
+
+def _png_chunk(kind: bytes, body: bytes) -> bytes:
+    return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body))
+
+
+def test_a_png_that_isnt_animated_keeps_no_animation_frames():
+    """`fdAT` and `fcTL` are an animation's frames; with no `acTL` before the
+    picture no decoder reads them, and they held whatever was put there."""
+    header = _png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 0, 0, 0, 0))
+    picture = _png_chunk(b"IDAT", zlib.compress(b"\x00\x00"))
+    hidden = _png_chunk(b"fcTL", SECRET[:26]) + _png_chunk(b"fdAT", bytes(4) + SECRET)
+    end = _png_chunk(b"IEND", b"")
+    still = PNG_SIGNATURE + header + hidden + picture + hidden + end
+    assert strip_metadata(still) == PNG_SIGNATURE + header + picture + end
+    # Named an animation only after the picture, it is none either.
+    late = PNG_SIGNATURE + header + picture + _png_chunk(b"acTL", bytes(8)) + hidden + end
+    assert strip_metadata(late) == PNG_SIGNATURE + header + picture + end
+    # A real animation keeps its frames.
+    control = _png_chunk(b"acTL", struct.pack(">II", 2, 0))
+    frame = _png_chunk(b"fcTL", bytes(26)) + _png_chunk(
+        b"fdAT", bytes(4) + zlib.compress(b"\x00\x01")
+    )
+    moving = (
+        PNG_SIGNATURE + header + control + _png_chunk(b"fcTL", bytes(26)) + picture + frame + end
+    )
+    assert strip_metadata(moving) == moving

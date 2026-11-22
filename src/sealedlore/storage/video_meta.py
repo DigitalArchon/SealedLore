@@ -13,13 +13,16 @@ ffmpeg's own AAC encoder writes into the first frame of sound (the same
 player has no use for.
 
 Nothing is removed from the file, only blanked where it stands: a metadata
-box, padding, or a top-level box that isn't one a player needs becomes a
-`free` box of the same size with its contents zeroed, the times, names and
-vendor become zero, and the encoder's text becomes spaces. So every offset
+box, padding, or any box that isn't one a player needs where it stands (at
+the top of the file, or inside the movie header, a track, its sample table,
+a fragment) becomes a `free` box of the same size with its contents zeroed,
+the times, names and vendor become zero, and the encoder's text becomes
+spaces. So every offset
 in the file (the sample tables point into `mdat`) stays right, and a player
 reads it as before. Blanking a blanked file changes nothing.
 
-A file that isn't an MP4 this can walk is `MetadataError`.
+A file that isn't an MP4 this can walk is `MetadataError`, and so is one
+whose movie header is compressed (QuickTime's `cmov`).
 """
 
 from __future__ import annotations
@@ -30,28 +33,71 @@ from collections.abc import Iterator
 
 from sealedlore.storage.image_meta import PICTURE_BRANDS, MetadataError, bmff_brands
 
-# Boxes whose children are boxes, walked into.
-_CONTAINERS = {
-    b"moov",
-    b"trak",
-    b"mdia",
-    b"minf",
-    b"stbl",
-    b"edts",
-    b"dinf",
-    b"mvex",
-    b"moof",
-    b"traf",
+# The boxes whose children are boxes, walked into, and for each the children
+# a player has a use for (ISO/IEC 14496-12's, and QuickTime's `gmhd`, `tapt`,
+# `load` and `stps`). Any other child is blanked where it stands, as an
+# unknown box at the top of the file is: listing only what to blank kept
+# whatever a box nobody had listed held, wherever it sat below the top (a
+# marker in the movie header, a track, a sample table). Metadata (`udta`,
+# `meta`, `uuid`, XMP, ID3) and padding (`free`, `skip`, `wide`) are in no
+# list, so they go with the rest.
+_CHILDREN: dict[bytes, frozenset[bytes]] = {
+    b"moov": frozenset({b"mvhd", b"trak", b"mvex", b"iods"}),
+    b"trak": frozenset({b"tkhd", b"mdia", b"edts", b"tref", b"tapt", b"load"}),
+    b"edts": frozenset({b"elst"}),
+    b"mdia": frozenset({b"mdhd", b"hdlr", b"minf", b"elng"}),
+    b"minf": frozenset(
+        {b"vmhd", b"smhd", b"hmhd", b"nmhd", b"sthd", b"gmhd", b"dinf", b"stbl", b"hdlr"}
+    ),
+    b"dinf": frozenset({b"dref"}),
+    b"stbl": frozenset(
+        {
+            b"stsd",
+            b"stts",
+            b"ctts",
+            b"cslg",
+            b"stsc",
+            b"stsz",
+            b"stz2",
+            b"stco",
+            b"co64",
+            b"stss",
+            b"stsh",
+            b"stps",
+            b"padb",
+            b"stdp",
+            b"sdtp",
+            b"sbgp",
+            b"sgpd",
+            b"subs",
+            b"saiz",
+            b"saio",
+        }  # fmt: skip
+    ),
+    b"mvex": frozenset({b"mehd", b"trex", b"leva", b"trep"}),
+    b"moof": frozenset({b"mfhd", b"traf"}),
+    b"traf": frozenset(
+        {
+            b"tfhd",
+            b"tfdt",
+            b"trun",
+            b"sbgp",
+            b"sgpd",
+            b"subs",
+            b"saiz",
+            b"saio",
+            b"senc",
+        }  # fmt: skip
+    ),
+    b"mfra": frozenset({b"tfra", b"mfro"}),
 }
-# Boxes that are metadata and nothing else: blanked wherever they are.
-_METADATA = {b"udta", b"meta", b"uuid", b"XMP_", b"ID32"}
-# Room left over, holding whatever its writer left in it (ffmpeg's encoder
-# settings, a marker): blanked wherever it is.
-_PADDING = {b"free", b"skip", b"wide"}
 # The top-level boxes a player needs, a fragmented MP4's among them. Any
 # other at the top is blanked as metadata is: listing only what to blank
 # let a marker through in every box nobody had listed.
 _STRUCTURAL = {b"ftyp", b"moov", b"mdat", b"moof", b"mfra", b"sidx", b"ssix", b"styp"}
+# QuickTime's compressed movie header: the header itself, zlib-compressed,
+# in place of its boxes. Nothing in it can be blanked where it stands.
+_COMPRESSED = b"cmov"
 # Headers with a creation and a modification time.
 _TIMED = {b"mvhd", b"tkhd", b"mdhd"}
 # A handler's (`hdlr`) name begins after its type and reserved fields;
@@ -176,19 +222,23 @@ def _walk(out: bytearray, start: int, end: int, parent: bytes = b"") -> None:
     box's children first (see `_boxes`): only the boxes this one is inside
     are kept, each with where it ends. Each box has its track's handler
     type, read from `mdia`'s `hdlr`, for its sample entries: a video's are
-    laid out as a picture's, a sound's otherwise."""
+    laid out as a picture's, a sound's otherwise. A box its parent has no
+    use for (`_CHILDREN`) is blanked whole, whatever is inside it."""
     handler = _handler(out, start, end, b"") if parent == b"mdia" else b""
+    known = _CHILDREN[parent]
     # The boxes this one is inside, innermost last: where each ends, and the
-    # handler in force outside it.
-    inside: list[tuple[int, bytes]] = []
+    # handler and the children known outside it.
+    inside: list[tuple[int, bytes, frozenset[bytes]]] = []
     offset = start
     while True:
         while offset == end:
             if not inside:
                 return
-            end, handler = inside.pop()
+            end, handler, known = inside.pop()
         kind, payload, stop = _box_at(out, offset, end)
-        if kind in _METADATA or kind in _PADDING:
+        if kind == _COMPRESSED:
+            raise MetadataError("its movie header is compressed, so nothing in it can be blanked")
+        if kind not in known:
             _blank_box(out, offset, payload, stop)
         elif kind in _TIMED:
             _zero_times(out, payload, stop)
@@ -197,11 +247,11 @@ def _walk(out: bytearray, start: int, end: int, parent: bytes = b"") -> None:
             out[name:stop] = bytes(stop - name)
         elif kind == b"stsd":
             _blank_names(out, payload, stop, handler)
-        elif kind in _CONTAINERS:
-            inside.append((end, handler))
+        elif kind in _CHILDREN:
+            inside.append((end, handler, known))
             if kind == b"mdia":
                 handler = _handler(out, payload, stop, handler)
-            offset, end = payload, stop
+            offset, end, known = payload, stop, _CHILDREN[kind]
             continue
         offset = stop
 
@@ -248,7 +298,7 @@ def strip_video_metadata(data: bytes) -> bytes:
     for kind, box, payload, stop in _boxes(out, 0, len(out)):
         if kind == b"mdat":
             _blank_encoder_text(out, payload, stop)
-        elif kind in _CONTAINERS:
+        elif kind in _STRUCTURAL and kind in _CHILDREN:
             _walk(out, payload, stop, kind)
         elif kind not in _STRUCTURAL:
             # Metadata, padding, and anything else no player needs.
