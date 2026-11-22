@@ -214,7 +214,9 @@ class AlwaysOnWindow:
         )
         if answer != QMessageBox.Yes:
             return
-        session.provider = self._current_provider()
+        # On Your characters' own client, as Find the people… is: it took the
+        # story's here, so this Stop cut the passage the story was writing,
+        # the story's Stop cut this, and the session kept the story's client.
         written: dict[str, str] = {}
         failed: list[str] = []
         result: dict[str, Any] = {}

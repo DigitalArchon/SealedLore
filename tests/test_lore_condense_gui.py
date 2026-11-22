@@ -175,7 +175,8 @@ def test_a_kept_lorebook_is_condensed_from_lorebooks_and_its_stories_start_whole
     window.show_lorebooks(True)
     window.lorebooks_page.action_requested.emit(lorebooks_page.IMPORT, "")
     (stored,) = window._lorebooks()
-    monkeypatch.setattr(window, "_current_provider", lambda: MockChatProvider(["A valley."]))
+    # Your characters' own client writes them, never the story's.
+    window._collection_session().provider = MockChatProvider(["A valley."])
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
     window.lorebooks_page.action_requested.emit(lorebooks_page.CONDENSE, stored.id)
     (saved,) = load_lorebooks(tmp_path / "data").books
