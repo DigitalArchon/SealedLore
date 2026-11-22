@@ -113,11 +113,31 @@ _ALL_FIELDS = _OPENING_FIELDS | _CHARACTER_FIELDS | _PLACE_FIELDS | _EVENT_FIELD
 
 _ROLES = {"player", "storyteller", "supporting", "author"}
 
-_HEADING = re.compile(r"^(#{1,3})\s+(.+?)\s*#*\s*$")
-_FIELD = re.compile(r"^\s*[-*]\s+([A-Za-z][A-Za-z _-]*?)\s*:\s*(.*)$")
+_HEADING_START = re.compile(r"(#{1,3})\s+")
+# A field's name is words with spaces between them, written so that a run of
+# spaces is read once: as `[A-Za-z _-]*?\s*:` the pattern tried every split
+# of the run, and a line of 30,000 spaces with no colon took a second.
+_FIELD = re.compile(r"^\s*[-*]\s+([A-Za-z][A-Za-z_-]*(?: +[A-Za-z_-]+)*)\s*:\s*(.*)$")
 _FACT_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 _MEANING_SEPARATOR = re.compile(r"\s+(?:—|–|--|-)\s+|—|–")
 _WATCH = re.compile(r"\s*\[watch(?:ed)?\]\s*", re.IGNORECASE)
+
+
+def _heading(line: str) -> tuple[int, str] | None:
+    """A heading's level and title: one to three `#`, a space, the title, and
+    any closing `#`s left off. Read by hand, as `^(#{1,3})\\s+(.+?)\\s*#*\\s*$`
+    read it: that pattern tried every way to share two runs of spaces between
+    its parts, and a heading of 6 KB took half a minute."""
+    start = _HEADING_START.match(line)
+    if start is None or "\n" in line:
+        return None
+    rest = line[start.end() :]
+    if not rest:
+        # Nothing but spaces after the `#`s: two or more made an empty title.
+        return (len(start.group(1)), "") if start.end() - start.end(1) > 1 else None
+    title = rest.rstrip().rstrip("#").rstrip()
+    # A title of `#`s alone keeps its first.
+    return len(start.group(1)), title or "#"
 
 
 # Words after which a place is where the scene is measured from, not where
@@ -400,11 +420,17 @@ _AT = re.compile(r"at\s*(!=|=|\bis not\b|\bisn't\b|\bis\b)\s*(.+)", re.IGNORECAS
 # A fact that happens to be called `visited` ("visited = yes") is a fact.
 _BARE_AT = re.compile(r"(not\s+)?at\s+(?![=!]|is\b)(.+)", re.IGNORECASE)
 _VISITED = re.compile(r"(not\s+|never\s+)?(?:has\s+)?visited\s+(?![=!]|is\b)(.+)", re.IGNORECASE)
+# The two below are looked for from the left and their names checked by hand
+# (`_happened`, `_comparison`). Each was one pattern with a lazy name before
+# `\s+`, which read a run of spaces again from every place in it: a
+# `requires:` line of 30,000 spaces took 37 seconds.
 _HAPPENED = re.compile(
-    r"(.+?)\s+(has not happened|hasn['’]t happened|not happened|has happened|happened)",
+    r"\s(has not happened|hasn['’]t happened|not happened|has happened|happened)\Z",
     re.IGNORECASE,
 )
-_COMPARISON = re.compile(r"([A-Za-z][\w ]*?)\s*(!=|=|\bis not\b|\bisn't\b|\bis\b)\s*(.+)")
+_OPERATOR_AT = re.compile(r"!=|=|\bis not\b|\bisn't\b|\bis\b")
+_OPERATOR = re.compile(r"(!=|=|\bis not\b|\bisn't\b|\bis\b)\s*(.+)")
+_COMPARED = re.compile(r"[A-Za-z][\w ]*")
 _NEGATED_FLAG = re.compile(r"not\s+([A-Za-z][\w]*)", re.IGNORECASE)
 _FLAG = re.compile(r"[A-Za-z][\w]*")
 
@@ -416,6 +442,33 @@ def split_clauses(text: str) -> list[str]:
         for clause in re.split(r",|\band\b|;", text, flags=re.IGNORECASE)
         if clause.strip()
     ]
+
+
+def _happened(clause: str) -> tuple[str, str] | None:
+    """The event and the words after it in `<event> has happened`: the longest
+    such ending, with a name of at least a character before it."""
+    found = _HAPPENED.search(clause, 1)
+    if found is None:
+        return None
+    name = clause[: found.start()]
+    if "\n" in clause[: max(len(name.rstrip()), 1)]:
+        return None
+    return name, found.group(1)
+
+
+def _comparison(clause: str) -> tuple[str, str, str] | None:
+    """The name, the operator and the value in `<fact> = <value>`: the first
+    operator with a value after it, and before it a name of letters, digits
+    and spaces."""
+    at = 1
+    while (found := _OPERATOR_AT.search(clause, at)) is not None:
+        start = found.start()
+        if not _COMPARED.fullmatch(clause[:start].rstrip()):
+            return None
+        if (rest := _OPERATOR.fullmatch(clause, start)) is not None:
+            return clause[:start], rest.group(1), rest.group(2)
+        at = start + 1
+    return None
 
 
 def read_clause(clause: str, names: list[str]) -> Clause | None:
@@ -436,13 +489,13 @@ def read_clause(clause: str, names: list[str]) -> Clause | None:
         return Clause("visited", bool(visited.group(1)), visited.group(2).strip(), who=who)
     if who:
         return None
-    if happened := _HAPPENED.fullmatch(clause):
+    if happened := _happened(clause):
         # "hasn't happened" has no "not" in it.
-        negated = bool(re.search(r"not|n['’]t", happened.group(2), re.IGNORECASE))
-        return Clause("happened", negated, happened.group(1).strip())
-    if match := _COMPARISON.fullmatch(clause):
-        negated = match.group(2).strip() not in ("=", "is")
-        return Clause("fact", negated, _key(match.group(1)), _norm(match.group(3)))
+        negated = bool(re.search(r"not|n['’]t", happened[1], re.IGNORECASE))
+        return Clause("happened", negated, happened[0].strip())
+    if match := _comparison(clause):
+        negated = match[1].strip() not in ("=", "is")
+        return Clause("fact", negated, _key(match[0]), _norm(match[2]))
     if negated_flag := _NEGATED_FLAG.fullmatch(clause):
         return Clause("fact", False, _key(negated_flag.group(1)), NO)
     if _FLAG.fullmatch(clause):
@@ -537,9 +590,9 @@ class _Parser:
             number, line = index + 1, lines[index]
             if line.lstrip().startswith("```"):
                 in_fence = not in_fence
-            match = None if in_fence else _HEADING.match(line)
+            match = None if in_fence else _heading(line)
             if match:
-                block = _Block(len(match.group(1)), match.group(2).strip(), number)
+                block = _Block(match[0], match[1], number)
                 while stack and stack[-1].level >= block.level:
                     stack.pop()
                 if stack:
