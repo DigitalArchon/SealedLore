@@ -6,6 +6,7 @@ mock answers; nothing here reaches a network."""
 from __future__ import annotations
 
 import json
+from functools import partial
 
 import pytest
 
@@ -17,6 +18,7 @@ from sealedlore.engine.chronicle import clock_minutes
 from sealedlore.engine.chronicle_read import parse_read
 from sealedlore.engine.director import parse_gap
 from sealedlore.engine.lore_pick import parse_pick
+from sealedlore.engine.prompt import AssemblyOptions, TurnRequest, assemble_prompt
 from sealedlore.engine.scene_state import same_person
 from sealedlore.engine.scene_update import Resolved, _named_in_speech, parse_delta, resolve_name
 from sealedlore.engine.session import SessionNotice, StorySession
@@ -698,3 +700,58 @@ def test_undoing_a_review_never_undoes_a_card_moved_or_removed_since(
         "demote": (False, True),
         "remove_character": (False, False),
     }[move]
+
+
+# --- E8: the history's cache point is placed for the tail message itself ---------
+
+
+def unanswered(words: str) -> list[Node]:
+    """Three exchanges, then an author turn nobody answered (its reply
+    failed; a phone's turn stays where it was sent)."""
+    nodes = make_exchange(3)
+    left = Node(
+        id="left",
+        kind="user",
+        speaker_id="char-serrik",
+        content=words,
+        meta=NodeMeta(controlled_character_id="char-serrik"),
+    )
+    link_child(nodes[-1], left)
+    return [*nodes, left]
+
+
+def test_an_unanswered_turn_in_an_earlier_turns_words_keeps_the_history_cache_point(
+    story, cast, estimator
+):
+    """The message the tail rides was looked up by what it says, and the
+    first message saying it won: an unanswered "I wait." after an earlier "I
+    wait." put the tail's place at that earlier turn, and the breakpoint
+    that keeps the history cached was not placed at all."""
+    assemble = partial(
+        assemble_prompt,
+        story=story,
+        cast=cast,
+        estimator=estimator,
+        turn=TurnRequest(
+            speaker_id="char-serrik",
+            user_text="And then I knock.",
+            controlled_character_id="char-serrik",
+        ),
+        options=AssemblyOptions(min_cacheable_tokens=1, cache_exchanges_outside_prefix=1),
+    )
+    other = unanswered("I wait a while longer.")
+    other[0].content = "I wait."
+    same = unanswered("I wait.")
+    same[0].content = "I wait."
+
+    expected = assemble(history_nodes=other)
+    prompt = assemble(history_nodes=same)
+
+    where = [(point.label, point.message_index, point.part_index) for point in expected.breakpoints]
+    assert "history" in [label for label, _, _ in where]
+    assert [
+        (point.label, point.message_index, point.part_index) for point in prompt.breakpoints
+    ] == where
+    # The same messages but for the words of that one turn.
+    assert len(prompt.messages) == len(expected.messages)
+    assert prompt.messages[-1].text.startswith(prompt.messages[1].text)

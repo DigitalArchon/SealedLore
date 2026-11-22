@@ -822,7 +822,11 @@ def _assemble(
     else:
         tail_message = _DraftMessage(role="user")
         history_messages.append(tail_message)
-    tail_message_index = history_messages.index(tail_message)
+    # The last message, by its place: looked up by what it says, an author
+    # turn left unanswered in the words of an earlier one ("I wait.") was
+    # found at the earlier one, and the history's breakpoint, counted back
+    # from there, was not placed at all.
+    tail_message_index = len(history_messages) - 1
 
     for name, text in tail_parts:
         tail_message.texts.append(text)
