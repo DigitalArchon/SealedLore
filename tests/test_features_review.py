@@ -128,3 +128,40 @@ def test_the_others_answers_still_go_with_the_turn(tmp_path) -> None:
     request = storyteller_requests(session)[-1]
     text = sent(request)
     assert "IDRIS-DRAWS" in text and "MAELA-WAITS" not in text
+
+
+# --- an older answer asked for again, with what she remembered then ----------------
+
+
+def test_an_older_answer_is_asked_for_with_only_the_memories_the_round_then_had(
+    tmp_path, monkeypatch
+) -> None:
+    """Memories written at later rounds cover stretches the round at that
+    passage still sent word for word: asked again, the request is the round's
+    there, field for field, not one that remembers what it then saw."""
+    from sealedlore.engine import reactions as reactions_module
+    from tests.test_answer_regenerate import asked, two_answer
+    from tests.test_reactions import MAELA_MODEL, play, turn
+
+    monkeypatch.setattr(reactions_module, "HISTORY_TOKENS", 60)
+    monkeypatch.setattr(reactions_module, "RECOLLECT_MESSAGES", 2)
+    replies = [f"PASSAGE-{i} " + "word " * 20 for i in range(6)]
+    answers = [f"ANSWER-{i}" for i in range(6)] + ["ANSWER-AGAIN"]
+    session, provider = two_answer(tmp_path, answers, replies=replies)
+    passages = []
+    for i in range(6):
+        provider.responses = [replies[i], f"I REMEMBER {i}."]  # the passage, then a memory
+        play(session, turn(f"Turn {i}."))
+        passages.append(session.path()[-1])
+    assert len(session.bundle.memories) >= 3  # later rounds wrote more of them
+    rounds = asked(provider, MAELA_MODEL)
+    for target in (2, 3):
+        before = len(provider.requests)
+        list(session.regenerate_reaction(passages[target].id, "char-maela"))
+        [again] = provider.requests[before:]  # hers alone: nothing to remember first
+        assert again == rounds[target]
+    # The latest is asked as the round asked it, every memory with it.
+    before = len(provider.requests)
+    list(session.regenerate_reaction(passages[-1].id, "char-maela"))
+    [again] = provider.requests[before:]
+    assert again == rounds[-1]

@@ -33,6 +33,7 @@ from sealedlore.engine.model_tuning import tuned_texts
 from sealedlore.engine.reactions import (
     due_to_recollect,
     fingerprint,
+    memories_then,
     memory_chain,
     reacting_characters,
     reaction_messages,
@@ -215,13 +216,14 @@ class ReactionRuntime:
         return self._own_logged(character, request, payload, passage)
 
     def _own_request(
-        self, character, cast, history, count, after_turn_of
+        self, character, cast, history, count, after_turn_of, *, recollections=None
     ) -> tuple[ChatRequest, dict[str, Any]]:
         """One character's request and its payload, built as the round sends
         it: the round's and asking one of them again (`regenerate_reaction`)
         are built here alike, so an answer asked for again is asked for as
-        the round asked. Raises ProviderError or ValueError when it can't be
-        built."""
+        the round asked. `recollections`: what they remember, every memory
+        the round would match by default. Raises ProviderError or ValueError
+        when it can't be built."""
         model = (character.own_model or "").strip()  # "Endpoint::model", kept whole
         names = self.placeholder_names()
         request = ChatRequest(
@@ -236,7 +238,7 @@ class ReactionRuntime:
                 texts=tuned_texts(self.texts, model, "character"),
                 count=count,
                 budget=reactions.HISTORY_TOKENS,
-                recollections=self.bundle.memories,
+                recollections=self.bundle.memories if recollections is None else recollections,
                 after_turn_of=after_turn_of,
                 public_record=self.public_record(history),
             ),
@@ -629,8 +631,23 @@ class ReactionRuntime:
             return self.estimator.estimate(text)
 
         yield from self._recollect_due([character], history, cast, count)
+        # What they remembered there, as the round then had it: never a
+        # memory a later round wrote of what this one still sent whole.
+        seen = seen_entries(
+            history, character, cast, start=self.story.setup.starting_scene, texts=self.texts
+        )
+        then = memories_then(
+            self.bundle.memories,
+            character.id,
+            seen,
+            count=count,
+            budget=reactions.HISTORY_TOKENS,
+            size=reactions.RECOLLECT_MESSAGES,
+        )
         try:
-            request, payload = self._own_request(character, cast, history, count, after_turn_of)
+            request, payload = self._own_request(
+                character, cast, history, count, after_turn_of, recollections=then
+            )
         except (ProviderError, ValueError) as exc:
             raise ProviderError(f"{_not_asked(character, exc)} {ANSWER_KEPT}") from exc
         call = self._own_logged(character, request, payload, node)

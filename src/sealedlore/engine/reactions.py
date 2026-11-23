@@ -264,6 +264,33 @@ def memory_chain(
     return chain, position
 
 
+def memories_then(
+    recollections: Sequence[Recollection],
+    character_id: str,
+    seen: Sequence[Entry],
+    *,
+    count: Callable[[str], int] = _rough_tokens,
+    budget: int = HISTORY_TOKENS,
+    size: int = RECOLLECT_MESSAGES,
+) -> list[Recollection]:
+    """The character's recollections the round answering at the end of
+    `seen` had: their chain (`memory_chain`) only as far as each stretch was
+    due to be remembered there (`due_to_recollect`). One written at a later
+    round covers a stretch this round still sent whole, so an older answer
+    asked for again is asked as the round asked it, not by someone who
+    remembers what they then saw."""
+    chain, _covered = memory_chain(recollections, character_id, seen)
+    kept: list[Recollection] = []
+    position = 0
+    for memory in chain:
+        rest = seen[position:]
+        if len(rest) <= size or sum(count(text) for _id, text in rest) <= budget:
+            break
+        kept.append(memory)
+        position += len(memory.covered_node_ids)
+    return kept
+
+
 def due_to_recollect(
     seen: Sequence[Entry],
     covered: int,
