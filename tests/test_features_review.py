@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 
 from sealedlore.engine.model_tuning import sends_lore_from_full
+from sealedlore.engine.session_lore_vectors import LORE_BEING_MADE
 
 # --- which models are Claude ------------------------------------------------------
 
@@ -247,3 +248,245 @@ def test_asked_again_after_an_edit_the_record_reads_the_passage_again(tmp_path) 
         isinstance(e, SessionNotice) and e.text.startswith("Keeping the public record")
         for e in events
     )
+
+
+# --- the vectors lore from the full entry is ranked by --------------------------------
+
+LIMIT_WORDS = 600  # stands in for bge-m3's 8k context on NanoGPT (HTTP 400 past it)
+
+
+class ContextLimited:
+    """Mock embeddings that refuse, as NanoGPT does, a request holding a text
+    past its context (HTTP 400), on a background job's thread as on the
+    turn's. `documents` is every text asked for as lore, in order."""
+
+    def __init__(self) -> None:
+        import threading
+
+        from sealedlore.providers.mock import MockEmbeddings
+
+        self._mock = MockEmbeddings()
+        self.model = self._mock.model
+        self.dimensions = self._mock.dimensions
+        self.documents: list[str] = []
+        self.requests = 0
+        self.lock = threading.Lock()
+
+    def detached(self):
+        return self
+
+    def embed(self, texts, *, as_query: bool = False):
+        from sealedlore.providers.base import ProviderError
+
+        with self.lock:
+            if not as_query:
+                self.documents += list(texts)
+                self.requests += 1
+        if any(len(text.split()) > LIMIT_WORDS for text in texts):
+            raise ProviderError(
+                "https://nano-gpt.com/api/v1/embeddings returned HTTP 400", status_code=400
+            )
+        return self._mock.embed(texts, as_query=as_query)
+
+
+def big_book_session(tmp_path, story, cast, *, extra=()):
+    """Three always-on entries six times over, the Guild (the least
+    important) sent condensed, under SillyTavern's rules, where nothing but
+    the job embeds the lore; its whole text is past the endpoint's context."""
+    from sealedlore.models.config import EmbeddingProviderConfig
+    from sealedlore.models.lore import lore_fingerprint
+    from sealedlore.storage.tavern_lore import lore_from_book
+    from tests.test_lore_whole_back import GUILD, HARBOUR, KEEP, session_with
+
+    book = {
+        "entries": {
+            str(i): {
+                "uid": i,
+                "comment": title,
+                "key": [],
+                "constant": True,
+                "order": order,
+                "content": "\n\n".join(paragraphs * 6),
+            }
+            for i, (title, paragraphs, order) in enumerate(
+                (("The Harbour", HARBOUR, 300), ("The Guild", GUILD, 10), ("The Keep", KEEP, 200))
+            )
+        }
+    }
+    entries = lore_from_book(book).entries
+    for item in entries:
+        item.condensed = f"{item.title}, in short."
+        item.condensed_from = lore_fingerprint(item.content)
+    story.defaults.lore_firing = "sillytavern"
+    session = session_with(tmp_path, story, cast, [*entries, *extra])
+    session.story.defaults.context_token_budget = 6_000
+    session.config.embedding_provider = EmbeddingProviderConfig(model="mock-embed")
+    backend = ContextLimited()
+    session.embeddings = backend
+    guild = next(e for e in session.bundle.lore if e.title == "The Guild")
+    assert session.lore_layout().condensed == (guild.id,)
+    assert len(guild.content.split()) > LIMIT_WORDS
+    return session, backend, guild
+
+
+def after_passages(session, count: int, said: list[str] | None = None) -> list[str]:
+    """`count` passages, the job each sets going let finish, and the last one
+    taken in (as the window's poll would); the Lore page's note on each turn.
+    `said`: what taking them in said, each time."""
+    from tests.test_lore_whole_back import HESK_TURN, turn
+
+    notes = []
+    for _ in range(count):
+        for event in session.send(turn(HESK_TURN)):
+            text = getattr(event, "text", None)
+            if said is not None and isinstance(text, str) and "vectors" in text:
+                said.append(text)
+        notes.append(session.last_retrieval.in_full_note)
+        job = session._vectors_job
+        if job is not None:
+            assert job.done.wait(10)
+    if said is not None:
+        said += session.adopt_lore_vectors()
+    else:
+        session.adopt_lore_vectors()
+    return notes
+
+
+def test_the_whole_text_of_an_entry_sent_condensed_is_never_embedded(tmp_path, story, cast) -> None:
+    """Nothing ranks it (its parts are ranked instead), so a whole text past
+    the endpoint's context no longer stops every part's vector being made."""
+    session, backend, guild = big_book_session(tmp_path, story, cast)
+    notes = after_passages(session, 2)
+    assert guild.content not in backend.documents
+    parts = {item.id for item in session.part_items()}
+    assert parts and parts <= set(session.ensure_lore_vectors(embed=False))
+    assert notes[-1] == "" and session.last_retrieval.in_full[0].score is not None
+    # Nor is it among what the embed-now dialog counts.
+    assert guild.id not in {item.id for item in session.lore_without_vectors()}
+
+
+def test_a_text_the_endpoint_refuses_is_skipped_and_never_sent_again(tmp_path, story, cast) -> None:
+    """One entry the turn's ranking reads is past the endpoint's context: the
+    job leaves it out and makes the rest, the turns rank the rest by meaning,
+    the Lore page says which couldn't be made, and it isn't sent again after
+    every passage, only once its text changes."""
+    from sealedlore.models.lore import LoreEntry
+
+    long = LoreEntry(title="The Tide Tables", content="tide " * 700, keywords=["tide"])
+    session, backend, _guild = big_book_session(tmp_path, story, cast, extra=[long])
+    said: list[str] = []
+    after_passages(session, 1, said)
+    tried = sum("tide tide" in text for text in backend.documents)
+    assert tried and len(said) == 1 and "“The Tide Tables”" in said[0]
+    notes = after_passages(session, 3, said)
+    assert sum("tide tide" in text for text in backend.documents) == tried  # never again
+    assert len(said) == 1  # said once
+    parts = {item.id for item in session.part_items()}
+    have = set(session.ensure_lore_vectors(embed=False))
+    assert parts <= have and long.id not in have
+    report = session.last_retrieval
+    assert report.in_full and report.in_full[0].score is not None
+    assert "“The Tide Tables”" in notes[-1] and "HTTP 400" in notes[-1]
+    assert "by words alone" in notes[-1]
+    # Its text changed: tried again.
+    long_entry = next(e for e in session.bundle.lore if e.id == long.id)
+    long_entry.content = "The tides turn twice a day at the harbour mouth."
+    notes = after_passages(session, 2)
+    assert long.id in set(session.ensure_lore_vectors(embed=False))
+    assert notes == [LORE_BEING_MADE, ""]
+
+
+def test_a_refusal_in_a_request_of_several_leaves_out_only_the_one_refused(
+    tmp_path, story, cast
+) -> None:
+    from sealedlore.models.lore import LoreEntry
+
+    long = LoreEntry(title="The Tide Tables", content="tide " * 700, keywords=["tide"])
+    short = LoreEntry(title="Wolves", content="They hunt in threes.", keywords=["wolf"])
+    session, backend, _guild = big_book_session(tmp_path, story, cast, extra=[short, long])
+    after_passages(session, 1)
+    have = set(session.ensure_lore_vectors(embed=False))
+    assert short.id in have and long.id not in have
+
+
+def test_a_turn_leaves_to_the_job_out_what_it_is_making(tmp_path, story, cast) -> None:
+    """Under SealedLore's rules a turn embeds the lore it chooses from; with a
+    job out making those vectors (a story just opened), it embedded them as
+    well, and both were paid for. Now it leaves them to the job, ranks by
+    words meanwhile and says so, and never waits."""
+    from sealedlore.engine.session_lore_vectors import LORE_VECTORS_COMING
+    from tests.test_lore_vectors_ahead import finished, gated, lore
+    from tests.test_lore_whole_back import HESK_TURN, session_with, turn, wolves
+
+    session = session_with(tmp_path, story, cast, [*lore(), wolves()])
+    backend = gated(session)
+    assert session.start_lore_vectors()  # the window, a moment after the story opened
+    list(session.send(turn(HESK_TURN)))
+    assert backend.documents_here() == []  # the turn embedded none of the lore
+    report = session.last_retrieval
+    assert not report.used_embeddings and report.fallback_reason == LORE_VECTORS_COMING
+    backend.gate.set()
+    finished(session)
+    made = {text for texts in backend.held for text in texts}
+    list(session.send(turn(HESK_TURN)))  # takes the job's vectors in first
+    assert backend.documents_here() == []
+    rows = [(row.content_hash, row.model) for row in session.bundle.embeddings]
+    assert len(rows) == len(set(rows)) == len(made)
+    assert session.last_retrieval.used_embeddings
+
+
+def test_a_turn_takes_in_what_the_job_has_made_so_far(tmp_path, story, cast) -> None:
+    """A job out that has made the entries' vectors already: the turn ranks
+    by them, without waiting for the rest or making them itself."""
+    import threading
+
+    from tests.test_lore_vectors_ahead import GatedEmbeddings, gated, lore
+    from tests.test_lore_whole_back import HESK_TURN, session_with, turn, wolves
+
+    class SecondHeld(GatedEmbeddings):
+        """Lets a job's first request through, holds the second."""
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.first = threading.Event()
+
+        def embed(self, texts, *, as_query: bool = False):
+            from sealedlore.providers.embeddings import EmbeddingResult
+
+            if threading.get_ident() != self._home and not self.first.is_set():
+                self.held.append(tuple(texts))
+                self.first.set()
+                vectors = tuple(self._vector(text) for text in texts)
+                return EmbeddingResult(vectors, self.model, self.dimensions)
+            return super().embed(texts, as_query=as_query)
+
+    session = session_with(tmp_path, story, cast, [*lore(), wolves()])
+    backend = SecondHeld()
+    gated(session)
+    session.embeddings = backend
+    # Two requests: the entries' texts, then the parts'.
+    monkey_batches = session.embedding_batches
+
+    def two(texts):
+        entries = [t for t in texts if t.startswith(("Wolves", "The Keep", "The Harbour"))]
+        rest = [t for t in texts if t not in entries]
+        return [batch for batch in (entries, rest) if batch] or monkey_batches(texts)
+
+    session.embedding_batches = two
+    assert session.start_lore_vectors()
+    assert backend.first.wait(10)
+    job = session._vectors_job
+    for _ in range(200):
+        with job.lock:
+            if job.vectors:
+                break
+        threading.Event().wait(0.01)
+    list(session.send(turn(HESK_TURN)))
+    assert backend.documents_here() == []
+    report = session.last_retrieval
+    assert report.used_embeddings and report.fallback_reason is None
+    backend.gate.set()
+    assert job.done.wait(10)
+    session.adopt_lore_vectors()
+    rows = [(row.content_hash, row.model) for row in session.bundle.embeddings]
+    assert len(rows) == len(set(rows))

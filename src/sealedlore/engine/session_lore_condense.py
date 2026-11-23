@@ -193,17 +193,32 @@ class LoreCondenseRuntime:
         if not self.lore_from_full_on():
             return []
         named = self._layout_named()
+        return self._parts_of(self._fit_layout(named), named)
+
+    def _parts_of(self, layout: LoreLayout, named: LoreLayout) -> list[LoreEntry]:
         return [
             lore_whole_back.ranked_item(piece)
-            for entry in self._condensed_whole(self._fit_layout(named), named)
+            for entry in self._condensed_whole(layout, named)
             for piece in lore_whole_back.pieces(entry)
         ]
 
     def _part_texts(self) -> dict[str, str]:
-        """What is embedded of each part (`part_items`), by part id: their
+        """What is embedded of each part, by part id (`_in_full_texts`)."""
+        return self._in_full_texts()[1]
+
+    def _in_full_texts(self) -> tuple[set[str], dict[str, str]]:
+        """While parts go with the turn: the ids of the entries sent
+        condensed, whose whole texts nothing ranks (their parts are ranked
+        instead), and what is embedded of each part, by part id. Their
         vectors are kept beside the entries' (`ensure_lore_vectors`), made
-        ahead of the turns (engine/session_lore_vectors.py)."""
-        return {item.id: embedding_text(item) for item in self.part_items()}
+        ahead of the turns (engine/session_lore_vectors.py). Neither while
+        parts don't go."""
+        if not self.lore_from_full_on():
+            return set(), {}
+        named = self._layout_named()
+        layout = self._fit_layout(named)
+        parts = self._parts_of(layout, named)
+        return set(layout.condensed), {item.id: embedding_text(item) for item in parts}
 
     def in_full_ranking(
         self,
@@ -220,11 +235,7 @@ class LoreCondenseRuntime:
         named = named or self._layout_named()
         condensed = self._condensed_whole(layout, named)
         sent_whole = [entry for entry in named.standing if entry.id not in layout.condensed]
-        parts = [
-            lore_whole_back.ranked_item(piece)
-            for entry in condensed
-            for piece in lore_whole_back.pieces(entry)
-        ]
+        parts = self._parts_of(layout, named)
         pool = [*layout.selectable, *sent_whole, *parts]
         text = turn_query(turn.user_text, history)
         similarity, why, note = self._in_full_similarity(
@@ -232,6 +243,7 @@ class LoreCondenseRuntime:
             text,
             allow_network=allow_network,
             parts={item.id: embedding_text(item) for item in parts},
+            condensed=layout.condensed,
         )
         ranked = turn_ranking(
             pool, text, similarity, threshold=self.config.lore_similarity_threshold
@@ -245,6 +257,7 @@ class LoreCondenseRuntime:
         *,
         allow_network: bool,
         parts: dict[str, str],
+        condensed: Sequence[str] = (),
     ) -> tuple[dict[str, float] | None, str | None, str]:
         """Each of `pool`'s similarity to `text`, or None with why, and the
         Lore page's note when it is ranked by words for want of vectors: the
@@ -256,34 +269,41 @@ class LoreCondenseRuntime:
         the turn's own vector is made, else (the prompt's preview, on the
         window's own thread) only one already made. In a private scene none:
         nothing but the scene's own model is called, and its lore is chosen
-        by words alone."""
+        by words alone. An item whose text the endpoint refused has none to
+        wait for: it is ranked by words alone, the rest by meaning as well,
+        and the note says which (`refused_note`)."""
         if self.embeddings is None:
             return None, None, ""
         if self.in_private:
             return None, "private scene: words only", ""
         if not text.strip() or not pool:
             return None, None, ""
-        vectors = self.ensure_lore_vectors(embed=False, parts=parts)
-        missing = [item.id for item in pool if item.id not in vectors]
+        vectors = self.ensure_lore_vectors(embed=False, parts=parts, condensed=condensed)
+        refused: dict[str, str] = {}
+        if self._vectors_refused:
+            by_id = self.refused_lore_ids(self._lore_vector_plan(parts, condensed))
+            refused = {item.id: by_id[item.id] for item in pool if item.id in by_id}
+        missing = [item.id for item in pool if item.id not in vectors and item.id not in refused]
         if missing:
             note = self.lore_vectors_note(parts=any(item_id in parts for item_id in missing))
             return None, note, note
+        said = self.refused_note(refused, {item.id: item.title for item in pool}) if refused else ""
         try:
             target = (
                 self.query_vector(text) if allow_network else self._remembered_query_vector(text)
             )
         except ProviderError as exc:
-            return None, str(exc), ""
+            return None, str(exc), said
         if target is None:
-            return None, ("preview: not embedded" if not allow_network else "no vector"), ""
-        scored = [(entry.id, vectors[entry.id]) for entry in pool]
+            return None, ("preview: not embedded" if not allow_network else "no vector"), said
+        scored = [(entry.id, vectors[entry.id]) for entry in pool if entry.id in vectors]
         try:
             found = cosine_scores(target, [vector for _, vector in scored])
         except ValueError as exc:
             # Vectors of another width (a model changed): words alone this turn.
-            return None, str(exc), ""
+            return None, str(exc), said
         similarity = {entry_id: score for (entry_id, _), score in zip(scored, found, strict=True)}
-        return similarity, None, ""
+        return similarity, None, said
 
     def _remembered_query_vector(self, text: str) -> tuple[float, ...] | None:
         """The turn's vector if a selection has already embedded it, else None."""

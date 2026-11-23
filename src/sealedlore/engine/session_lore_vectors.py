@@ -16,7 +16,10 @@ model. Now they are made ahead:
   they go to, something sent condensed; never in a chat, and never in a
   private scene, where nothing else is called (entering one stops a job out);
 - what: every vector the turn's ranking reads and lacks, the entries' with
-  the parts' (under SillyTavern's rules nothing else embeds the entries);
+  the parts' (under SillyTavern's rules nothing else embeds the entries):
+  the entries chosen per turn, the always-on ones sent whole, and the parts
+  of those sent condensed, never their whole texts, which nothing ranks
+  (`_lore_vector_plan`);
 - how: the texts are read by the story's one writer (the worker after a
   passage, the window when nothing runs), the requests go out one at a time
   on a thread with the embeddings backend's `detached()` copy, and the
@@ -25,9 +28,16 @@ model. Now they are made ahead:
   backend without `detached` (the tests' mock) embeds then and there.
 
 A turn that comes before they are in ranks by words alone and the Lore page
-says so (`lore_vectors_note`): it never waits for them. A failure is a notice,
-never a turn; Stop and closing the story end the thread once the request out
-has come back. Embedding isn't in the API log, so nothing is logged."""
+says so (`lore_vectors_note`): it never waits for them, and never makes them
+itself while a job is out (`take_lore_vectors_made`). A failure is a notice,
+never a turn. A text the endpoint refuses (HTTP 400, 413 or 422: past its
+context) is left out and the rest made; it isn't sent again until its text or
+the embeddings model changes (in memory, for the session), and the Lore page
+says which couldn't be made, those ranking by words alone. Closing the story
+ends the thread once the request out has come back; Stop on a turn leaves it
+running, and the window sets one going once a stopped job ends, when the
+passage it stopped never got to. Embedding isn't in the API log, so nothing
+is logged."""
 
 from __future__ import annotations
 
@@ -46,6 +56,12 @@ from sealedlore.threads import BackgroundThread
 # for want of vectors (`lore_vectors_note`).
 PARTS_BEING_MADE = "ranked by words: the parts' vectors are being made"
 LORE_BEING_MADE = "ranked by words: the lore's vectors are being made"
+# Why a turn chose its lore by keywords alone while a job out is making the
+# entries' vectors (`RetrievalReport.fallback_reason`).
+LORE_VECTORS_COMING = "the lore's vectors are being made"
+# The endpoint's answers that refuse the texts asked for, not every request
+# (past its context, a body too large): those texts aren't asked for again.
+REFUSED_STATUSES = frozenset({400, 413, 422})
 
 
 @dataclass
@@ -70,17 +86,61 @@ class _VectorJob:
     model: str
     # The texts to embed, by content hash, in the requests they go in.
     batches: list[list[tuple[str, str]]]
-    # What came back, by content hash.
+    # What came back, by content hash: written by the job's thread under
+    # `lock`, read by the story's writer under it (`take_lore_vectors_made`).
     vectors: dict[str, tuple[float, ...]] = field(default_factory=dict)
+    # The texts the endpoint refused, by content hash: why, in its words.
+    refused: dict[str, str] = field(default_factory=dict)
     error: str | None = None
     stop: threading.Event = field(default_factory=threading.Event)
     done: threading.Event = field(default_factory=threading.Event)
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+    @property
+    def hashes(self) -> set[str]:
+        """Every text it was set going with, by content hash."""
+        return {digest for batch in self.batches for digest, _text in batch}
 
 
 class LoreVectorsRuntime:
     _vectors_job: _VectorJob | None = None
     # Why the last job couldn't make them, until one does.
     _vectors_failed: str | None = None
+    # The texts the endpoint refused, by (content hash, model): why. Not
+    # asked for again until the text or the model changes; this session only.
+    _vectors_refused: dict[tuple[str, str], str] | None = None
+
+    def _refused_vectors(self) -> dict[tuple[str, str], str]:
+        if self._vectors_refused is None:
+            self._vectors_refused = {}
+        return self._vectors_refused
+
+    def refused_lore_ids(self, plan: VectorPlan) -> dict[str, str]:
+        """The items of `plan` whose text the endpoint refused, for its
+        model: why, by id."""
+        refused = self._vectors_refused
+        if not refused:
+            return {}
+        return {
+            item_id: refused[(digest, plan.model)]
+            for item_id, digest in plan.hashes.items()
+            if (digest, plan.model) in refused
+        }
+
+    def refused_note(self, refused: dict[str, str], titles: dict[str, str]) -> str:
+        """The Lore page's word for the items whose vectors the endpoint
+        refused (`refused`, id → why), named by `titles` (id → its entry's
+        title): those are ranked by words alone."""
+        names: dict[str, int] = {}
+        for item_id in refused:
+            title = titles.get(item_id, "")
+            names[title] = names.get(title, 0) + 1
+        listed = ", ".join(
+            f"“{title}”" + (f" ({count} parts)" if count > 1 else "")
+            for title, count in names.items()
+        )
+        why = next(iter(refused.values()))
+        return f"the vectors of {listed} couldn't be made ({why}): those rank by words alone"
 
     def lore_vectors_wanted(self) -> bool:
         """Whether vectors are wanted for lore from the full entry: an
@@ -113,9 +173,10 @@ class LoreVectorsRuntime:
         if self._vectors_job is not None or not self.lore_vectors_wanted():
             return False
         plan = self._lore_vector_plan()
+        refused = self.refused_lore_ids(plan)
         texts: dict[str, str] = {}
         for item_id, text in plan.texts_of.items():
-            if not plan.has(item_id):
+            if not plan.has(item_id) and item_id not in refused:
                 texts.setdefault(plan.hashes[item_id], text)
         if not texts:
             return False
@@ -154,38 +215,93 @@ class LoreVectorsRuntime:
             return []
         self._vectors_job = None
         plan = self._lore_vector_plan()
-        if plan.model == job.model:
-            holders: dict[str, list[str]] = {}
-            for item_id, digest in plan.hashes.items():
-                holders.setdefault(digest, []).append(item_id)
-            added = False
-            for digest, vector in job.vectors.items():
-                if digest not in holders or (digest, plan.model) in plan.cache:
-                    continue
-                row = EmbeddingCacheEntry(
-                    content_hash=digest,
-                    model=plan.model,
-                    dimensions=len(vector),
-                    vector=list(vector),
+        if self._keep_job_vectors(job, plan):
+            self.save()
+        notices = []
+        refused = {
+            (digest, job.model): why
+            for digest, why in job.refused.items()
+            if (digest, job.model) not in self._refused_vectors()
+        }
+        if refused:
+            self._refused_vectors().update(refused)
+            ids = {
+                item_id: why
+                for item_id, digest in plan.hashes.items()
+                if (why := refused.get((digest, job.model))) is not None
+            }
+            if ids and plan.model == job.model:
+                titles = self._lore_titles(set(ids))
+                notices.append(
+                    "Some of the lore's vectors couldn't be made: "
+                    + self.refused_note(ids, titles)
+                    + ". They are asked for again once their text or the embeddings model "
+                    "changes."
                 )
-                self.bundle.embeddings.append(row)
-                plan.cache[(digest, plan.model)] = row
-                for item_id in holders[digest]:
-                    if item_id in plan.entries:
-                        plan.entries[item_id].embedding_hash = digest
-                added = True
-            if added:
-                self.save()
         if job.error is not None:
             self._vectors_failed = job.error
             return [
+                *notices,
                 f"The lore's vectors couldn't be made ({job.error}): lore from the full "
                 "entries is ranked by words until they are. They are tried again after the "
-                "next passage."
+                "next passage.",
             ]
         if not job.stop.is_set():
             self._vectors_failed = None
-        return []
+        return notices
+
+    def _keep_job_vectors(self, job: _VectorJob, plan: VectorPlan) -> bool:
+        """What `job` has made so far kept with the story, each while some
+        entry or part still has its text and none is kept already; whether
+        any was."""
+        if plan.model != job.model:
+            return False
+        with job.lock:
+            made = dict(job.vectors)
+        holders: dict[str, list[str]] = {}
+        for item_id, digest in plan.hashes.items():
+            holders.setdefault(digest, []).append(item_id)
+        added = False
+        for digest, vector in made.items():
+            if digest not in holders or (digest, plan.model) in plan.cache:
+                continue
+            row = EmbeddingCacheEntry(
+                content_hash=digest,
+                model=plan.model,
+                dimensions=len(vector),
+                vector=list(vector),
+            )
+            self.bundle.embeddings.append(row)
+            plan.cache[(digest, plan.model)] = row
+            for item_id in holders[digest]:
+                if item_id in plan.entries:
+                    plan.entries[item_id].embedding_hash = digest
+            added = True
+        return added
+
+    def take_lore_vectors_made(self) -> tuple[set[str], set[str]]:
+        """For a turn's own ranking (or the lore pick), while a job is out:
+        what it has made so far kept, the job left running. (The content
+        hashes it was set going with and hasn't made, which the turn leaves
+        to it; the ids of the entries and parts it is still making.) Nothing,
+        with no job out. The turn never makes what the job is making, and
+        never waits for it: what failed is said when the job is taken in."""
+        job = self._vectors_job
+        if job is None:
+            return set(), set()
+        plan = self._lore_vector_plan()
+        if self._keep_job_vectors(job, plan):
+            self.save()
+        with job.lock:
+            left = job.hashes - set(job.vectors)
+            coming = set() if job.done.is_set() else left - set(job.refused)
+        making = {item_id for item_id, digest in plan.hashes.items() if digest in coming}
+        return left, making
+
+    def _lore_titles(self, ids: set[str]) -> dict[str, str]:
+        """Each id's entry title (a part's, its entry's)."""
+        by_id = {entry.id: entry.title for entry in self.bundle.lore}
+        return {item_id: by_id.get(item_id.split("#", 1)[0], "") for item_id in ids}
 
     def stop_lore_vectors(self) -> None:
         """End a job out once its request has come back: what it made by
@@ -208,19 +324,52 @@ class LoreVectorsRuntime:
             self._vectors_job = None
 
 
+def _words(exc: Exception) -> str:
+    return str(exc).splitlines()[0] if str(exc) else type(exc).__name__
+
+
+def _refusal(exc: Exception) -> bool:
+    """Whether the endpoint refused the texts asked for (one past its
+    context), rather than every request: unreachable, overloaded, a key."""
+    return isinstance(exc, ProviderError) and exc.status_code in REFUSED_STATUSES
+
+
 def _embed(job: _VectorJob, backend: Any) -> None:
-    """The job's requests, one at a time, until done or stopped."""
+    """The job's requests, one at a time, until done or stopped. A request
+    the endpoint refuses is asked for a text at a time, so only the text it
+    refuses is left out (`job.refused`) and the rest made; one whose texts
+    weren't the cause (unreachable, overloaded, a key) ends the job, as every
+    request after it would fail alike."""
     try:
         for batch in job.batches:
             if job.stop.is_set():
                 return
-            texts: Sequence[str] = [text for _, text in batch]
-            result = backend.embed(texts)
-            if len(result.vectors) != len(batch):
-                raise ProviderError(f"asked for {len(batch)} embeddings, got {len(result.vectors)}")
-            for (digest, _), vector in zip(batch, result.vectors, strict=True):
-                job.vectors[digest] = tuple(vector)
-    except Exception as exc:  # noqa: BLE001 - a notice when taken in, never a turn
-        job.error = str(exc).splitlines()[0] if str(exc) else type(exc).__name__
+            if not _embed_batch(job, backend, batch):
+                return
     finally:
         job.done.set()
+
+
+def _embed_batch(job: _VectorJob, backend: Any, batch: list[tuple[str, str]]) -> bool:
+    """One request's vectors into the job; False once the job must end."""
+    try:
+        texts: Sequence[str] = [text for _, text in batch]
+        result = backend.embed(texts)
+        if len(result.vectors) != len(batch):
+            raise ProviderError(f"asked for {len(batch)} embeddings, got {len(result.vectors)}")
+    except Exception as exc:  # noqa: BLE001 - a notice when taken in, never a turn
+        if not _refusal(exc):
+            job.error = _words(exc)
+            return False
+        if len(batch) == 1:
+            with job.lock:
+                job.refused[batch[0][0]] = _words(exc)
+            return True
+        for one in batch:
+            if job.stop.is_set() or not _embed_batch(job, backend, [one]):
+                return False
+        return True
+    with job.lock:
+        for (digest, _), vector in zip(batch, result.vectors, strict=True):
+            job.vectors[digest] = tuple(vector)
+    return True

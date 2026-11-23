@@ -2970,7 +2970,12 @@ embeddings (Settings → Lore) the parts are ranked by meaning as well as words;
 their vectors are made ahead, in the background, after a story opens, after
 its always-on entries change and after each passage, so no turn waits for
 them. A turn that comes before they are made ranks the parts by words alone,
-and the report says "ranked by words: the parts' vectors are being made".
+and the report says "ranked by words: the parts' vectors are being made"; the
+lore the turn chooses is chosen by keywords alone while its own vectors are
+being made. A text the embeddings endpoint refuses (one longer than it takes)
+is ranked by words alone and the report names it; it is asked for again once
+its text or the embeddings model changes. The full text of an entry sent
+condensed isn't embedded: its parts are ranked instead.
 Nothing is made for a private scene or a chat.
 
 An entry's own page shows its condensed version under **Condensed**, to read

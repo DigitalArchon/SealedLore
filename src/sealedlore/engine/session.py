@@ -13,7 +13,7 @@ import threading
 import time
 import traceback
 import weakref
-from collections.abc import Callable, Generator, Iterator, Mapping, Sequence
+from collections.abc import Callable, Collection, Generator, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -209,7 +209,11 @@ from sealedlore.engine.session_followup import FollowUpRuntime, FollowUpUndo
 from sealedlore.engine.session_images import ImageRuntime
 from sealedlore.engine.session_looks import LooksRuntime
 from sealedlore.engine.session_lore_condense import LoreCondenseRuntime
-from sealedlore.engine.session_lore_vectors import LoreVectorsRuntime, VectorPlan
+from sealedlore.engine.session_lore_vectors import (
+    LORE_VECTORS_COMING,
+    LoreVectorsRuntime,
+    VectorPlan,
+)
 from sealedlore.engine.session_merge import MergeRuntime, _close
 from sealedlore.engine.session_placeholders import PlaceholdersRuntime
 from sealedlore.engine.session_plot import NoticeSeverity, PlotRuntime, SessionNotice
@@ -1411,9 +1415,11 @@ class StorySession(
         vectors: dict[str, tuple[float, ...]] = {}
         if self.embeddings is not None:
             try:
-                vectors = self.ensure_lore_vectors()
+                vectors, coming = self._vectors_for_turn(layout.selectable)
             except ProviderError:
-                vectors = {}
+                vectors, coming = {}, False
+            if coming:
+                vectors = {}  # by words while a job out makes them
         model = self.story.defaults.lore_model or self.config.lore_model or self.scene_model
         pick = _LorePick(
             node=node,
@@ -1549,7 +1555,11 @@ class StorySession(
         if not text.strip() or not entries:
             return None, None
         try:
-            vectors = self.ensure_lore_vectors()
+            vectors, coming = self._vectors_for_turn(entries)
+            if coming:
+                # Ranked by words, as the parts are, rather than against
+                # entries scored by meaning beside some scored by words alone.
+                return None, LORE_VECTORS_COMING
             target = self.query_vector(text)
         except ProviderError as exc:
             return None, str(exc)
@@ -1566,6 +1576,18 @@ class StorySession(
             return None, str(exc)
         found = zip(scored, similarities, strict=True)
         return {entry_id: score for (entry_id, _), score in found}, None
+
+    def _vectors_for_turn(
+        self, entries: Sequence[LoreEntry]
+    ) -> tuple[dict[str, tuple[float, ...]], bool]:
+        """The lore's vectors for a turn's own ranking, made here as ever, but
+        while a job out is making some (engine/session_lore_vectors.py), what
+        it has made so far taken in and the rest left to it: the turn and the
+        job embedded the same entries. With whether any of `entries` is still
+        being made: the turn never waits for it."""
+        leave, making = self.take_lore_vectors_made()
+        vectors = self.ensure_lore_vectors(leave=leave)
+        return vectors, any(entry.id in making and entry.id not in vectors for entry in entries)
 
     def _turn_ranking(
         self,
@@ -1618,11 +1640,19 @@ class StorySession(
             named_first=reach == 0,
         )
 
-    def _lore_vector_plan(self, parts: Mapping[str, str] | None = None) -> VectorPlan:
+    def _lore_vector_plan(
+        self,
+        parts: Mapping[str, str] | None = None,
+        condensed: Collection[str] | None = None,
+    ) -> VectorPlan:
         """What the lore's vectors are made of now: each entry a model may
         see, and each part of the entries sent condensed while parts go with
         the turn (`parts`, id → what is embedded; else the session's own,
-        `_part_texts`), with the vectors kept for the model in use."""
+        `_in_full_texts`), with the vectors kept for the model in use. Not the
+        whole texts of the entries sent condensed (`condensed`, their ids;
+        else the session's own) while their parts go: nothing ranks those
+        (`in_full_ranking` ranks the parts), and one past the endpoint's
+        context was refused after every passage."""
         settings = self.config.embeddings()
         model = settings.model if settings else ""
         wanted = settings.dimensions if settings else 0
@@ -1638,14 +1668,17 @@ class StorySession(
         # Embedded as it is matched and sent: with {{user}} and {{char}}
         # written out (engine/placeholders.py).
         names = self.placeholder_names()
+        if parts is None:
+            whole_unranked, part_texts = self._in_full_texts()
+        else:
+            whole_unranked, part_texts = set(condensed or ()), dict(parts)
         texts_of: dict[str, str] = {}
         entries: dict[str, LoreEntry] = {}
         for entry in self.bundle.lore:
-            if not entry.enabled or entry.id in held:
+            if not entry.enabled or entry.id in held or entry.id in whole_unranked:
                 continue
             entries[entry.id] = entry
             texts_of[entry.id] = embedding_text(names.entry(entry))
-        part_texts = dict(self._part_texts() if parts is None else parts)
         texts_of.update(part_texts)
         hashes = {item_id: content_hash(text) for item_id, text in texts_of.items()}
         return VectorPlan(model, cache, texts_of, entries, set(part_texts), hashes)
@@ -1668,7 +1701,9 @@ class StorySession(
         stopped: Callable[[], bool] | None = None,
         embed: bool = True,
         parts: Mapping[str, str] | None = None,
+        condensed: Collection[str] | None = None,
         embed_parts: bool = False,
+        leave: Collection[str] = (),
     ) -> dict[str, tuple[float, ...]]:
         """Embed any entry whose text or model has changed; return id → vector.
 
@@ -1683,18 +1718,26 @@ class StorySession(
 
         While parts of the always-on entries sent condensed go with the turn
         (engine/lore_whole_back.py), each part (`parts`, id → what is
-        embedded; else the session's own, `_part_texts`) has its vector kept
-        as an entry's is and returned by its id with the entries'. Parts are
-        embedded here only with `embed_parts`: the lore embedded now, on
+        embedded; else the session's own, `_in_full_texts`) has its vector
+        kept as an entry's is and returned by its id with the entries'. Parts
+        are embedded here only with `embed_parts`: the lore embedded now, on
         purpose (`embed_lore_now`, Re-embed lorebook). A turn never makes
         them (engine/session_lore_vectors.py does, ahead).
+
+        `leave`: content hashes a job out is making (`take_lore_vectors_made`),
+        not made here. Nor, but on purpose, is a text the endpoint refused for
+        this model (`refused_lore_ids`): it would only be refused again.
         """
-        plan = self._lore_vector_plan(parts)
+        plan = self._lore_vector_plan(parts, condensed)
         cache, model = plan.cache, plan.model
+        refused = {} if embed_parts else self.refused_lore_ids(plan)
         pending = [
             item_id
             for item_id in plan.texts_of
-            if not plan.has(item_id) and (embed_parts or item_id not in plan.part_ids)
+            if not plan.has(item_id)
+            and (embed_parts or item_id not in plan.part_ids)
+            and plan.hashes[item_id] not in leave
+            and item_id not in refused
         ]
 
         if pending and embed and self.embeddings is not None and not self.in_private:

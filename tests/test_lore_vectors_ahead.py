@@ -101,7 +101,12 @@ def test_lore_without_vectors_counts_the_parts(tmp_path, story, cast) -> None:
     missing = {item.id for item in session.lore_without_vectors()}
     assert len(parts_of(session)) == len(HARBOUR) + len(GUILD)
     assert parts_of(session) <= missing
-    assert {entry.id for entry in session.bundle.lore} <= missing
+    # The entries, but for the whole texts of those sent condensed, which
+    # nothing ranks: their parts are ranked instead.
+    condensed = set(session.lore_layout().condensed)
+    assert condensed == {entry.id for entry in session.bundle.lore if entry.title != "The Keep"}
+    assert {entry.id for entry in session.bundle.lore} - condensed <= missing
+    assert not condensed & missing
     # The entries alone once they are made, by a turn's own selection as ever.
     session.ensure_lore_vectors()
     assert {item.id for item in session.lore_without_vectors()} == parts_of(session)
@@ -391,8 +396,10 @@ def test_the_embed_now_dialog_embeds_the_parts_with_the_entries(
     parts = len(session.part_items())
     assert parts
     window.embed_lore_now(least=1)
+    # Not the Guild: it goes condensed, and its parts are embedded in place
+    # of its whole text.
     assert said == [
-        f"Embedding 3 lore entries and {parts} parts of the always-on entries sent "
+        f"Embedding 2 lore entries and {parts} parts of the always-on entries sent "
         "condensed, so each turn can find what it needs…"
     ]
     assert session.lore_without_vectors() == []
