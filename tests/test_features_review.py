@@ -48,3 +48,83 @@ def test_claude_is_known_by_every_spelling_it_is_served_under(model: str) -> Non
 @pytest.mark.parametrize("model", NOT_CLAUDE)
 def test_a_model_only_named_for_claude_is_not_claude(model: str) -> None:
     assert sends_lore_from_full(model)
+
+
+# --- the character the author plays now ----------------------------------------------
+
+
+def as_maela(text: str = "I look at the lock."):
+    from sealedlore.engine.prompt import TurnRequest
+
+    return TurnRequest(
+        speaker_id="char-maela", user_text=text, controlled_character_id="char-maela"
+    )
+
+
+def storyteller_requests(session):
+    return [r for r in session.provider.requests if r.model == session.story.defaults.main_model]
+
+
+def test_the_answer_of_the_character_the_author_now_plays_isnt_asked_for_again(
+    tmp_path,
+) -> None:
+    from tests.test_reactions import make_session, play, turn
+
+    session = make_session(tmp_path, ["The door gives.", "MAELA-FIRST"])
+    play(session, turn())
+    passage = session.path()[-1]
+    assert session.reaction_refusal(passage.id, "char-maela") is None
+    session.hold("char-maela")  # the author takes Maela up
+    refusal = session.reaction_refusal(passage.id, "char-maela")
+    assert refusal is not None and "yours to play now" in refusal
+    before = len(session.provider.requests)
+    with pytest.raises(ValueError, match="yours to play now"):
+        list(session.regenerate_reaction(passage.id, "char-maela"))
+    assert len(session.provider.requests) == before
+
+
+def test_a_blind_answer_by_whom_the_author_has_taken_up_isnt_sent_as_theirs(tmp_path) -> None:
+    """Together: Maela answered the passage blind; the author then plays her,
+    and their turn is what she does. Her model's answer stays under the
+    passage, and isn't sent to the storyteller as what she means to do."""
+    from tests.test_reactions import make_session, play, sent, turn
+
+    session = make_session(tmp_path, ["The door gives.", "MAELA-PICKS-THE-LOCK", "They go on."])
+    play(session, turn())
+    passage = session.path()[-1]
+    assert [a.text for a in passage.meta.reactions] == ["MAELA-PICKS-THE-LOCK"]
+    session.hold("char-maela")
+    play(session, as_maela())
+    request = storyteller_requests(session)[-1]
+    assert "I look at the lock." in sent(request)
+    assert "MAELA-PICKS-THE-LOCK" not in sent(request)
+    assert passage.meta.reactions[0].text == "MAELA-PICKS-THE-LOCK"  # kept, unsent
+
+
+def test_after_the_turn_the_one_who_took_it_never_answers_it(tmp_path) -> None:
+    from tests.test_reactions import MAELA_MODEL, a_story, make_session, play
+
+    story = a_story()
+    story.defaults.round_order = "after"
+    session = make_session(tmp_path, ["The door gives."], story=story)
+    session.hold("char-maela")
+    play(session, as_maela())
+    turn_node = session.path()[-2]
+    assert turn_node.meta.round_after and turn_node.meta.reactions == []
+    assert [r.model for r in session.provider.requests if r.model == MAELA_MODEL] == []
+
+
+def test_the_others_answers_still_go_with_the_turn(tmp_path) -> None:
+    """Only the answer of the character the turn is played as is left out."""
+    from tests.test_answer_regenerate import two_answer
+    from tests.test_reactions import play, sent, turn
+
+    session, provider = two_answer(
+        tmp_path, ["MAELA-WAITS"], ["IDRIS-DRAWS"], replies=["The door gives.", "On."]
+    )
+    play(session, turn())
+    session.hold("char-maela")
+    play(session, as_maela())
+    request = storyteller_requests(session)[-1]
+    text = sent(request)
+    assert "IDRIS-DRAWS" in text and "MAELA-WAITS" not in text

@@ -566,7 +566,8 @@ class ReactionRuntime:
         """Why one character's answer to a message can't be asked for again,
         in words for the author, or None when it can (`regenerate_reaction`).
         Never in a chat or a private scene, where no round runs, nor for a
-        Direction, a Narration or the opening, which nobody answers."""
+        Direction, a Narration or the opening, which nobody answers, nor for
+        the character the author plays now."""
         if self.story.chat:
             return "A chat has no characters played by their own model."
         try:
@@ -592,6 +593,11 @@ class ReactionRuntime:
                 f"{character.name} isn't played by a model of their own any more "
                 "(Played by, on their card)."
             )
+        if character.id == self.story.held_character_id:
+            # Their turns are what they do now, and their answer is never sent
+            # with them (engine/prompt.py): an answer asked for would be paid
+            # for and go nowhere.
+            return f"{character.name} is yours to play now, so their model isn't asked for them."
         return None
 
     def regenerate_reaction(self, node_id: str, character_id: str) -> Iterator[SessionNotice]:

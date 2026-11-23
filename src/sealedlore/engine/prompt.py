@@ -418,6 +418,11 @@ def assemble_prompt(
         if history_nodes and history_nodes[-1].kind == "assistant"
         else ()
     )
+    # Never the answer of the character this turn is played as: the turn is
+    # what they do. Answering at the same time as the author, someone the
+    # author has since taken up answered the passage blind, and that answer
+    # went to the storyteller as what they mean to do, beside the author's.
+    answers = [answer for answer in answers if answer.character_id != turn.controlled_character_id]
     round_names = [answer.name for answer in answers if answer.text.strip()]
     # The dialogue sentence on the directives and REMEMBER, unless the model is
     # one it was measured hurting (engine/model_tuning.py): the answers still go.

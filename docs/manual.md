@@ -2279,6 +2279,11 @@ after your turn, and the turn that followed was answered that way, its
 passage was written from those answers: an edit to the older answer is saved,
 a regenerated one kept, and nothing is written again.
 
+Take up one of them to play yourself and their answers stay under their
+passages, but your turns are what they do now: the answer they gave the
+latest passage isn't sent with your turn, and their model isn't asked for
+their answer again while you play them.
+
 ### When the cast's cards don't fit
 
 Every cast card is sent to the storyteller on every turn, so the cast has a
