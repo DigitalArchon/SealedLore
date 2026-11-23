@@ -12,9 +12,10 @@ Condensed versions are written on the authoring model, one entry a call,
 only of entries every model may see (never one the plot hides or one held
 back until mentioned), never in a chat or a private scene.
 
-An entry sent condensed goes in full with a turn that is about it as well
-(engine/lore_whole_back.py, `_with_in_full`): ranked against the turn with
-the rest of the lore, by similarity where there are embeddings (the
+The parts of an entry sent condensed that a turn is about go with the turn
+from its whole text as well (engine/lore_whole_back.py, `_with_in_full`):
+ranked against the turn with the rest of the lore, by similarity where there
+are embeddings (each part's vector made and cached as an entry's is; the
 preview's from vectors already made, never embedding), by keyword scoring
 alone without them and in a private scene."""
 
@@ -39,6 +40,7 @@ from sealedlore.engine.retrieval import (
     LoreLayout,
     RetrievalReport,
     cosine_scores,
+    embedding_text,
     turn_query,
     turn_ranking,
 )
@@ -52,14 +54,15 @@ from sealedlore.providers.base import ChatRequest, ProviderError
 @dataclass(frozen=True)
 class InFullRanking:
     """The turn's ranking of the lore (`in_full_ranking`): best first, the
-    similarities and why there are none, the text ranked by, and the
-    standing entries' whole texts by id."""
+    parts of the entries sent condensed by `lore_whole_back.piece_id`; the
+    similarities and why there are none, the text ranked by, and the whole
+    texts of the entries sent condensed (names filled), in the order sent."""
 
     ranked: list[tuple[str, float | None]]
     similarity: dict[str, float] | None
     why: str | None
     text: str
-    whole: dict[str, LoreEntry]
+    condensed: list[LoreEntry]
 
 
 class LoreCondenseRuntime:
@@ -112,7 +115,7 @@ class LoreCondenseRuntime:
             use_condensed=self.story.defaults.condense_lore,
         )
 
-    # --- given in full with the turn ----------------------------------------------
+    # --- parts given with the turn from the whole text ----------------------
 
     def _with_in_full(
         self,
@@ -124,9 +127,10 @@ class LoreCondenseRuntime:
         named: LoreLayout | None = None,
         allow_network: bool,
     ) -> RetrievalReport:
-        """`report` with the always-on entries sent condensed that the turn
-        is about added, in full (engine/lore_whole_back.py). `layout` as
-        sent, `named` before any entry was condensed."""
+        """`report` with the parts of the always-on entries sent condensed
+        that the turn is about added, from their whole texts
+        (engine/lore_whole_back.py). `layout` as sent, `named` before any
+        entry was condensed."""
         top = lore_whole_back.WHOLE_BACK_TOP
         if top <= 0 or not layout.condensed or self.story.chat:
             return report
@@ -134,14 +138,13 @@ class LoreCondenseRuntime:
             turn, history, layout, named=named, allow_network=allow_network
         )
         texts = self.texts
-        sent, _left = lore_whole_back.whole_back(
-            [ranking.whole[i] for i in layout.condensed if i in ranking.whole],
+        sent = lore_whole_back.parts_back(
+            ranking.condensed,
             ranking.ranked,
             top=top,
-            room=self._lore_room(),
-            query=ranking.text,
+            room=min(self._lore_room(), lore_whole_back.ROOM_MOST),
             count_tokens=self._count_lore_tokens,
-            label=lambda title: texts.fill("turn.lore.in_full", title=title),
+            label=lambda title: texts.fill("turn.lore.from_full", title=title),
         )
         if not sent:
             return report
@@ -150,6 +153,33 @@ class LoreCondenseRuntime:
             injected=(*report.injected, *sent),
             tokens=report.tokens + sum(injection.tokens for injection in sent),
         )
+
+    def _condensed_whole(
+        self, layout: LoreLayout, named: LoreLayout | None = None
+    ) -> list[LoreEntry]:
+        """The whole texts, names filled, of the entries `layout` sends
+        condensed, in its order."""
+        named = named or self._layout_named()
+        whole = {entry.id: entry for entry in named.standing}
+        return [whole[entry_id] for entry_id in layout.condensed if entry_id in whole]
+
+    def _part_texts(self) -> dict[str, str]:
+        """What is embedded of each part of the entries sent condensed, by
+        part id, while parts go with the turn (`ensure_lore_vectors` makes
+        and keeps their vectors beside the entries'); none while they don't,
+        and in a chat."""
+        if lore_whole_back.WHOLE_BACK_TOP <= 0 or self.story.chat:
+            return {}
+        named = self._layout_named()
+        return self._parts_embedded(self._condensed_whole(self._fit_layout(named), named))
+
+    @staticmethod
+    def _parts_embedded(condensed: Sequence[LoreEntry]) -> dict[str, str]:
+        return {
+            piece.id: embedding_text(lore_whole_back.ranked_item(piece))
+            for entry in condensed
+            for piece in lore_whole_back.pieces(entry)
+        }
 
     def in_full_ranking(
         self,
@@ -160,23 +190,40 @@ class LoreCondenseRuntime:
         named: LoreLayout | None = None,
         allow_network: bool,
     ) -> InFullRanking:
-        """The turn's ranking of the lore for `_with_in_full`. The pool is
-        every entry the layout has, the standing ones by their whole texts,
-        names filled."""
+        """The turn's ranking of the lore for `_with_in_full`. The pool: the
+        entries chosen per turn, the always-on entries sent whole, and each
+        part of the whole texts of those sent condensed, names filled."""
         named = named or self._layout_named()
-        whole = {entry.id: entry for entry in named.standing}
-        pool = [*layout.selectable, *named.standing]
+        condensed = self._condensed_whole(layout, named)
+        sent_whole = [entry for entry in named.standing if entry.id not in layout.condensed]
+        parts = [
+            lore_whole_back.ranked_item(piece)
+            for entry in condensed
+            for piece in lore_whole_back.pieces(entry)
+        ]
+        pool = [*layout.selectable, *sent_whole, *parts]
         text = turn_query(turn.user_text, history)
-        similarity, why = self._in_full_similarity(pool, text, allow_network=allow_network)
+        similarity, why = self._in_full_similarity(
+            pool,
+            text,
+            allow_network=allow_network,
+            parts={item.id: embedding_text(item) for item in parts},
+        )
         ranked = turn_ranking(
             pool, text, similarity, threshold=self.config.lore_similarity_threshold
         )
-        return InFullRanking(ranked, similarity, why, text, whole)
+        return InFullRanking(ranked, similarity, why, text, condensed)
 
     def _in_full_similarity(
-        self, pool: Sequence[LoreEntry], text: str, *, allow_network: bool
+        self,
+        pool: Sequence[LoreEntry],
+        text: str,
+        *,
+        allow_network: bool,
+        parts: dict[str, str],
     ) -> tuple[dict[str, float] | None, str | None]:
-        """Each of `pool`'s similarity to `text`, or None with why. Without
+        """Each of `pool`'s similarity to `text`, or None with why: the
+        entries' vectors and the `parts`' (id → what is embedded). Without
         the network (the prompt's preview, on the window's own thread) only
         vectors already made, the turn's included; in a private scene none:
         nothing but the scene's own model is called, and its lore is chosen
@@ -189,10 +236,10 @@ class LoreCondenseRuntime:
             return None, None
         try:
             if allow_network:
-                vectors = self.ensure_lore_vectors()
+                vectors = self.ensure_lore_vectors(parts=parts)
                 target = self.query_vector(text)
             else:
-                vectors = self.ensure_lore_vectors(embed=False)
+                vectors = self.ensure_lore_vectors(embed=False, parts=parts)
                 target = self._remembered_query_vector(text)
         except ProviderError as exc:
             return None, str(exc)

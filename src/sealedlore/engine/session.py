@@ -1637,7 +1637,11 @@ class StorySession(
         ]
 
     def ensure_lore_vectors(
-        self, *, stopped: Callable[[], bool] | None = None, embed: bool = True
+        self,
+        *,
+        stopped: Callable[[], bool] | None = None,
+        embed: bool = True,
+        parts: Mapping[str, str] | None = None,
     ) -> dict[str, tuple[float, ...]]:
         """Embed any entry whose text or model has changed; return id → vector.
 
@@ -1649,6 +1653,11 @@ class StorySession(
         whoever asks: only the scene's own model is called then, and what
         has a vector already is all that is returned, as it is with `embed`
         off (the prompt's preview: never the network).
+
+        While parts of the always-on entries sent condensed go with the turn
+        (engine/lore_whole_back.py), each part (`parts`, id → what is
+        embedded; else the session's own, `_part_texts`) is embedded and kept
+        as an entry is, returned by its id with the entries'.
         """
         settings = self.config.embeddings()
         model = settings.model if settings else ""
@@ -1660,7 +1669,7 @@ class StorySession(
             if not wanted or row.dimensions == wanted
         }
 
-        pending: list[LoreEntry] = []
+        pending: list[str] = []
         hashes: dict[str, str] = {}
         # A held-back entry reaches no model, the embeddings endpoint's
         # included; it is embedded on the first turn after it is named. Nor
@@ -1670,17 +1679,21 @@ class StorySession(
         # written out (engine/placeholders.py).
         names = self.placeholder_names()
         texts_of: dict[str, str] = {}
+        entries: dict[str, LoreEntry] = {}
         for entry in self.bundle.lore:
             if not entry.enabled or entry.id in held:
                 continue
+            entries[entry.id] = entry
             texts_of[entry.id] = embedding_text(names.entry(entry))
-            digest = content_hash(texts_of[entry.id])
-            hashes[entry.id] = digest
+        texts_of.update(self._part_texts() if parts is None else parts)
+        for item_id, text in texts_of.items():
+            digest = content_hash(text)
+            hashes[item_id] = digest
             if (digest, model) not in cache:
-                pending.append(entry)
+                pending.append(item_id)
 
         if pending and embed and self.embeddings is not None and not self.in_private:
-            texts = [texts_of[entry.id] for entry in pending]
+            texts = [texts_of[item_id] for item_id in pending]
             try:
                 done = dict(enumerate(self.embed_in_batches(texts, stopped=stopped)))
             except EmbeddingStopped as stop:
@@ -1688,19 +1701,20 @@ class StorySession(
             else:
                 stopping = None
             for index, vector in sorted(done.items()):
-                entry = pending[index]
+                item_id = pending[index]
                 row = EmbeddingCacheEntry(
                     # Keyed by the model *we asked for*, not the name the
                     # endpoint echoes back: a proxy that renames the model
                     # would otherwise miss the cache on every single turn.
-                    content_hash=hashes[entry.id],
+                    content_hash=hashes[item_id],
                     model=model,
                     dimensions=len(vector),
                     vector=list(vector),
                 )
                 self.bundle.embeddings.append(row)
                 cache[(row.content_hash, row.model)] = row
-                entry.embedding_hash = row.content_hash
+                if item_id in entries:
+                    entries[item_id].embedding_hash = row.content_hash
             if stopping is not None:
                 self.save()
                 raise stopping

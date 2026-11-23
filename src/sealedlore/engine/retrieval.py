@@ -66,7 +66,7 @@ REASON_LABELS: dict[Reason, str] = {
     "semantic": "semantic match",
     "keyword": "keyword match",
     "tavern": "fired as SillyTavern would",
-    "in_full": "in full this turn",
+    "in_full": "from the full entry",
 }
 
 
@@ -83,9 +83,13 @@ class Injection:
     rank: int | None = None
     # Why SillyTavern's rules fired it (engine/tavern_firing.py).
     why: str = ""
-    # The entry's own title, when `entry` is sent under another: an always-on
-    # entry given in full with the turn (engine/lore_whole_back.py).
+    # The entry's own title, when `entry` is sent under another: parts of an
+    # always-on entry's whole text given with the turn
+    # (engine/lore_whole_back.py).
     title: str = ""
+    # Those parts' places among the turn's best matches, with each one's
+    # similarity (None without one), best first.
+    matches: tuple[tuple[int, float | None], ...] = ()
 
     @property
     def fitted(self) -> bool:
@@ -107,10 +111,20 @@ class Injection:
             said = f"picked by Jev ({self.score:.2f})"
         elif self.reason == "tavern" and self.why:
             said = f"fired as SillyTavern would: {self.why}"
-        elif self.reason == "in_full" and self.rank is not None:
-            said = f"in full this turn: the turn's match no. {self.rank}"
-            if self.score is not None:
-                said += f" (similarity {self.score:.2f})"
+        elif self.reason == "in_full" and self.matches:
+            many = len(self.matches) != 1
+            ranks = [str(rank) for rank, _ in self.matches]
+            said = (
+                f"{REASON_LABELS['in_full']}: {len(ranks)} part{'s' if many else ''}, the "
+                f"turn's match{'es' if many else ''} no. "
+                + (", ".join(ranks[:-1]) + " and " + ranks[-1] if many else ranks[0])
+            )
+            scores = [f"{score:.2f}" for _, score in self.matches if score is not None]
+            if scores:
+                said += f" (similarity {', '.join(scores)})"
+            if self.whole is not None:
+                said += f"; {self.tokens} of its {self.whole} tokens"
+            return said
         else:
             said = REASON_LABELS[self.reason]
         if self.whole is not None:
@@ -165,8 +179,9 @@ class RetrievalReport:
 
     @property
     def in_full(self) -> tuple[Injection, ...]:
-        """The always-on entries sent condensed that go in full with this
-        turn as well (engine/lore_whole_back.py)."""
+        """The always-on entries sent condensed whose parts the turn is about
+        go with it from their whole texts (engine/lore_whole_back.py), one
+        injection an entry."""
         return tuple(injection for injection in self.injected if injection.reason == "in_full")
 
 
@@ -683,12 +698,11 @@ def fit_lore(
     *,
     query: str,
     count_tokens: Callable[[str], int],
-    most_share: float = ENTRY_MOST_SHARE,
 ) -> tuple[list[Injection], list[Injection]]:
     """`ordered` (best first) fitted to `room` tokens: (sent, left out).
 
     Each goes whole while it fits what is left and takes no more than
-    `most_share` of the room; else in part (`fitted_entry`), down to
+    `ENTRY_MOST_SHARE` of the room; else in part (`fitted_entry`), down to
     `FIT_LEAST_TOKENS`; only below that is it left out. A fixed 2,000 tokens,
     each entry whole or not at all, left out the entries a turn was about on
     a lorebook of long entries (a character's profile is 1,400 tokens): on a
@@ -697,7 +711,7 @@ def fit_lore(
     injected: list[Injection] = []
     dropped: list[Injection] = []
     used = 0
-    most = max(FIT_LEAST_TOKENS, int(room * most_share))
+    most = max(FIT_LEAST_TOKENS, int(room * ENTRY_MOST_SHARE))
     for injection in ordered:
         space = min(room - used, most)
         if injection.tokens <= space:

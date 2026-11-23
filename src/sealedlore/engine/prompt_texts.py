@@ -696,18 +696,20 @@ _text(
     "the roster says so.",
 )
 
-# An always-on entry the system block holds condensed, given whole with a
-# turn that is about it (engine/lore_whole_back.py): the same title twice,
-# once above with the world and once here, so this says which is which. Only
-# the title is marked: the heading above is the measured one, and this entry
-# is under it like any other the turn has.
+# Parts of an always-on entry the system block holds condensed, given from
+# its whole text with a turn that is about them (engine/lore_whole_back.py):
+# the same title twice, once above with the world and once here, so this
+# says which is which, and that what follows is from the entry as written,
+# gap marks where the rest of it was. Only the title is marked: the heading
+# above is the measured one, and these parts are under it like any other lore
+# the turn has.
 _text(
-    "turn.lore.in_full",
+    "turn.lore.from_full",
     TURN,
-    "Retrieved lore: an always-on entry given in full",
-    "Heads an always-on entry, sent condensed with the world, when the turn is about it and "
-    "its whole text goes with the turn, in the lore chosen for it.",
-    "{title} (in full)",
+    "Retrieved lore: parts of an always-on entry, from its full text",
+    "Heads the parts of an always-on entry, sent condensed with the world, that the turn is "
+    "about, when they go with the turn from the entry's full text, in the lore chosen for it.",
+    "{title} (from the full entry)",
     (("title", "the entry's title"),),
 )
 
