@@ -172,14 +172,18 @@ class _Connection(QObject):
             return 0
 
     def _out_of_time(self) -> None:
-        if self.trusted and self._unsent():
+        if self.trusted and (self._unsent() or self._waiting):
             # A paired phone still taking a picture over a slow circuit keeps
             # its connection while some of its answer is still to go. It
             # isn't held to showing progress by each deadline: the socket
             # takes more only once the other end has drained most of what it
             # holds, which on a slow circuit can take longer than one. But
             # not for ever: one that has taken nothing at all for
-            # STALLED_DEADLINES in a row isn't reading.
+            # STALLED_DEADLINES in a row isn't reading. Requests still waiting
+            # for their answers count too: the deadline can come the moment
+            # the socket has drained, before the answer to the next is written
+            # (`_written` is queued), and a phone asking for several pictures
+            # at once was dropped with some of them never sent.
             self._stalled = 0 if self._taken else self._stalled + 1
             self._taken = False
             if self._stalled < STALLED_DEADLINES:
@@ -209,6 +213,14 @@ class _Connection(QObject):
             self._answer()
             if not self._waiting and self._socket.bytesAvailable():
                 self._read()
+            elif not self._waiting and not self._unsent() and not self._parser.pending:
+                # Everything it asked for has gone: a kept-alive connection
+                # waits IDLE_MS for its next request from here. The deadline
+                # stood while answers were unsent, and nothing started it
+                # again once they had drained, so a phone that had just read
+                # its pictures was dropped at the old one.
+                self._between_requests = True
+                self._deadline.start(IDLE_MS)
         except RuntimeError:  # Qt deleted the socket with its server
             pass
 

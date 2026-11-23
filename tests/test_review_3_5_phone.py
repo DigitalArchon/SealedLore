@@ -188,6 +188,46 @@ def test_a_paired_phone_gets_every_answer_it_asked_for_as_it_reads(server, short
     assert most <= phone_server.MAX_UNSENT + len(PICTURE) + 1024, f"{most / 1e6:.1f} MB unsent"
 
 
+def test_a_paired_phone_with_requests_still_waiting_isnt_dropped_at_its_deadline(
+    server, short_deadlines
+):
+    """The deadline can come the moment the socket has drained, before the
+    answer to the next waiting request is written: with nothing unsent it was
+    taken for an idle phone and dropped, with some of its pictures never sent
+    (one run in three on the lab's slower VMs)."""
+    client = Client(server)
+    assert wait_for(lambda: len(server._connections) == 1)
+    connection = next(iter(server._connections))
+    connection.trusted = True
+    connection._waiting.append(object())  # a request whose answer waits for room
+    try:
+        assert connection._unsent() == 0
+        connection._out_of_time()
+        wait_for(lambda: False, timeout=0.05)
+        assert client.socket.state() == CONNECTED
+        assert connection in server._connections
+    finally:
+        connection._waiting.clear()
+
+
+def test_a_connection_whose_answers_have_all_gone_waits_for_its_next_request(
+    server, short_deadlines
+):
+    """The deadline stood while answers were unsent, and nothing started it
+    again once they had drained: a kept-alive phone that had just read every
+    picture it asked for was dropped at the old deadline (the lab's VMs)."""
+    client = Client(server)
+    assert wait_for(lambda: len(server._connections) == 1)
+    connection = next(iter(server._connections))
+    connection._between_requests = False
+    connection._deadline.start(50)  # what was left of the deadline as the last answer went
+    connection._written()  # the last of it has gone, nothing waits, nothing pending
+    assert connection._between_requests
+    assert connection._deadline.remainingTime() > phone_server.IDLE_MS - 100
+    wait_for(lambda: False, timeout=0.15)
+    assert client.socket.state() == CONNECTED
+
+
 # --- P2: an editor open on the desktop ---------------------------------------------------
 
 
