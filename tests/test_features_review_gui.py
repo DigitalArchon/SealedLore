@@ -1,0 +1,105 @@
+"""The review of two features before 3.5.0b1 (Nov 23 2026), in the window:
+one character's answer asked for again (gui/window_answers.py), and the
+vectors lore from the full entry is ranked by (gui/window_always_on.py). Each
+test here failed on the code as it was. Offscreen, the mock provider and mock
+embeddings: no network."""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import pytest
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+pytest.importorskip("PySide6")
+
+from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
+
+from sealedlore.engine.prompt import TurnRequest  # noqa: E402
+from sealedlore.gui.note_dialog import NoteDialog  # noqa: E402
+from sealedlore.gui.window_answers import (  # noqa: E402
+    ANSWERED_AGAIN_PRIVATE,
+    EDIT_HINT_PRIVATE,
+    EDIT_KEEP,
+    written_from,
+)
+from sealedlore.providers.mock import MockChatProvider  # noqa: E402
+from tests.test_answer_regenerate_gui import together  # noqa: E402
+from tests.test_background_queue import _send, wait_for  # noqa: E402
+
+
+@pytest.fixture
+def app() -> QApplication:
+    return QApplication.instance() or QApplication([])
+
+
+# --- an answer whose next passage is a private scene's ----------------------------------
+
+
+def after_a_private_scene(app, tmp_path: Path, story, cast):
+    """Maela answered P1 at the same time as the author; the author's next
+    turn opened a private scene, which has ended with its summary."""
+    window = together(tmp_path, story, cast, ["P1.", "MAELA-ONE", "MAELA-AGAIN"])
+    window.config.scene_reads = "manual"
+    _send(window, "T1")
+    wait_for(app, lambda: not window._busy)
+    session = window.session
+    first = session.path()[-1]
+    assert [a.text for a in first.meta.reactions] == ["MAELA-ONE"]
+    private = MockChatProvider(["PRIVATE-PASSAGE.", "They talked, and agreed."])
+    session.enter_private(keep="disk", provider=private, model="local/model")
+    list(
+        session.send(
+            TurnRequest(
+                speaker_id="char-serrik",
+                user_text="We talk.",
+                controlled_character_id="char-serrik",
+            )
+        )
+    )
+    summary = session.summarise_private()
+    list(session.close_private(summary))
+    window._reload_unless_editing()
+    return window, first
+
+
+def test_the_passage_after_an_answer_is_never_a_private_scene_s(app, tmp_path, story, cast):
+    window, first = after_a_private_scene(app, tmp_path, story, cast)
+    path = window.session.full_path()
+    index = path.index(first)
+    assert path[index + 2].meta.private_span is not None  # the scene's passage, shown
+    after, spent = written_from(path, index)
+    assert after is None and spent
+    window.close()
+
+
+def test_edit_on_it_writes_nothing_again_and_says_why(app, tmp_path, story, cast, monkeypatch):
+    window, first = after_a_private_scene(app, tmp_path, story, cast)
+    seen: list[tuple[str, str]] = []
+
+    def run(dialog: NoteDialog) -> int:
+        seen.append((dialog.go.text(), dialog.hint.text()))
+        return QDialog.Rejected
+
+    monkeypatch.setattr(NoteDialog, "exec", run)
+    window._edit_answer(first.id, "char-maela")
+    assert seen == [(EDIT_KEEP, EDIT_HINT_PRIVATE)]
+    window.close()
+
+
+def test_regenerate_on_it_offers_no_passage_and_says_why(app, tmp_path, story, cast):
+    """Nothing is offered (an unanswered question box fails the test), and
+    nothing is written: the scene's passage isn't the story model's to write."""
+    window, first = after_a_private_scene(app, tmp_path, story, cast)
+    before = len(window._provider.requests)
+    leaf = window.session.full_path()[-1]
+    window._regenerate_answer(first.id, "char-maela")
+    wait_for(app, lambda: not window._busy)
+    app.processEvents()
+    assert [a.text for a in first.meta.reactions] == ["MAELA-AGAIN"]
+    assert len(window._provider.requests) == before + 1  # hers alone
+    assert window.session.full_path()[-1] is leaf
+    assert window.statusBar().currentMessage() == ANSWERED_AGAIN_PRIVATE.format(name="Maela Orr")
+    window.close()

@@ -57,6 +57,10 @@ EDIT_HINT_SPENT = (
     "your turn now, and the turn that followed was answered that way. Saving keeps your "
     "words here; nothing is written again."
 )
+EDIT_HINT_PRIVATE = (
+    "The passage after it is a private scene's, which isn't written again from here. Saving "
+    "keeps your words here; nothing is written again."
+)
 
 
 # An answer's Regenerate (beside its Edit): their model asked again for it.
@@ -86,23 +90,40 @@ ANSWERED_AGAIN_SPENT = (
     "{name} answered again. The passage after it wasn't written from this answer, so "
     "nothing is written again."
 )
+ANSWERED_AGAIN_PRIVATE = (
+    "{name} answered again. The passage after it is a private scene's, so nothing is written again."
+)
 ANSWERED_AGAIN_KEPT = "{name}'s new answer is kept; the passage after it stays as it was."
 STOPPED_KEPT = "Stopped: {name}'s answer stays as it was."
 # The most of the new answer the question quotes: the rest is under the message.
 QUOTED_MOST = 600
 
 
-def written_from(path: Sequence[Node], index: int) -> tuple[Node | None, bool]:
-    """(the passage written from the answers on `path[index]`, whether they
-    are spent): what Edit and Regenerate on an answer offer to write again,
-    worked out once for both, so the two never disagree about when another
-    take would read the answer. The passage is the next on the path, the one
-    after the author's turn the answers went with; None for the open round
-    or a turn with no passage yet. Spent: answers to a passage go with the
-    next turn only while that turn wasn't answered after it was sent
-    (`round_after`). The story changed to "after your turn" since, another
-    take of the passage after it is written from the turn's own answers and
-    never reads these: a retake was offered all the same, and paid for."""
+# Why the answers on a message are spent (`written_from`): the turn after them
+# was answered after it was sent, or what came next is a private scene's.
+SPENT_AFTER = "after"
+SPENT_PRIVATE = "private"
+
+
+def written_from(path: Sequence[Node], index: int) -> tuple[Node | None, str]:
+    """(the passage written from the answers on `path[index]`, why they are
+    spent, "" when they aren't): what Edit and Regenerate on an answer offer
+    to write again, worked out once for both, so the two never disagree about
+    when another take would read the answer. The passage is the next on the
+    path, the one after the author's turn the answers went with; None for the
+    open round or a turn with no passage yet. Spent (`SPENT_AFTER`): answers
+    to a passage go with the next turn only while that turn wasn't answered
+    after it was sent (`round_after`). The story changed to "after your turn"
+    since, another take of the passage after it is written from the turn's
+    own answers and never reads these: a retake was offered all the same, and
+    paid for. Spent too (`SPENT_PRIVATE`) when what came next is a private
+    scene's (its messages, its summary): `path` is the page's, which shows an
+    ended scene, and its passage was offered to be written again from here."""
+    for node in path[index + 1 :]:
+        if node.meta.private_span is not None or node.meta.private_summary_of is not None:
+            return None, SPENT_PRIVATE
+        if node.kind == "assistant":
+            break
     after = next((n for n in path[index + 1 :] if n.kind == "assistant"), None)
     answered = path[path.index(after) - 1] if after is not None else None
     spent = (
@@ -111,7 +132,7 @@ def written_from(path: Sequence[Node], index: int) -> tuple[Node | None, bool]:
         and answered.kind == "user"
         and answered.meta.round_after
     )
-    return (None if spent else after), spent
+    return (None if spent else after), SPENT_AFTER if spent else ""
 
 
 class AnswersWindow:
@@ -167,6 +188,8 @@ class AnswersWindow:
             button=EDIT_REDO if after is not None else EDIT_KEEP,
             hint=EDIT_HINT_REDO
             if after is not None
+            else EDIT_HINT_PRIVATE
+            if spent == SPENT_PRIVATE
             else EDIT_HINT_SPENT
             if spent
             else EDIT_HINT_TURN
@@ -255,7 +278,9 @@ class AnswersWindow:
             return
         if after is None:
             words = (
-                ANSWERED_AGAIN_SPENT
+                ANSWERED_AGAIN_PRIVATE
+                if spent == SPENT_PRIVATE
+                else ANSWERED_AGAIN_SPENT
                 if spent
                 else ANSWERED_AGAIN_TURN
                 if path[index].kind == "user"

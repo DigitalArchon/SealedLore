@@ -2279,7 +2279,9 @@ for an older one you are offered the passage that followed it written again
 from the new answer. If you have since changed the story to have them answer
 after your turn, and the turn that followed was answered that way, its
 passage was written from those answers: an edit to the older answer is saved,
-a regenerated one kept, and nothing is written again.
+a regenerated one kept, and nothing is written again. The same when the turn
+after an answer began a private scene: the scene's passage isn't written again
+from here.
 
 Take up one of them to play yourself and their answers stay under their
 passages, but your turns are what they do now: the answer they gave the
