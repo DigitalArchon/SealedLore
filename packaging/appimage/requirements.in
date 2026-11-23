@@ -20,6 +20,10 @@ PySide6-Addons==6.11.3
 tinfoil==0.15.0
 tinfoil-ehbp==0.4.1
 pyhpke==0.6.5
+# The attestation's fetch guard (providers/sdk_guard.py) reads sigstore 4.5's and
+# tuf 7.0's internals: held there until a newer one is read.
+sigstore>=4.5,<4.6
+tuf>=7.0,<7.1
 # API keys in the system keychain (storage/keychain.py), as the author's
 # DAToolkit does: on Linux through SecretStorage and jeepney (pure Python;
 # cryptography is tinfoil's already).
