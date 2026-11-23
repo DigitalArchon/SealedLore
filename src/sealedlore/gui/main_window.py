@@ -41,7 +41,7 @@ from sealedlore.engine.authoring import describe, placeholders_view, stale_voici
 from sealedlore.engine.branches import next_branch_name, unique_branch_name
 from sealedlore.engine.chronicle import format_clock
 from sealedlore.engine.export import markdown_user_name, render_markdown
-from sealedlore.engine.model_tuning import is_tuned
+from sealedlore.engine.model_tuning import sent_differently
 from sealedlore.engine.model_tuning import summary as tuning_summary
 from sealedlore.engine.plot_md import PLOT_SUFFIX, ParsedPlotFile, parse_plot_markdown
 from sealedlore.engine.prompt import TurnRequest, as_shown
@@ -5232,9 +5232,9 @@ class MainWindow(
         # with its endpoint when that isn't the default: "opus-5-5 · Anthropic".
         endpoint, bare = split_model(model)
         short = bare.rsplit("/", 1)[-1] or "no model"
-        # A story's storyteller SealedLore words its prompt for says so, as a
-        # model field does ("· tuned prompts"); a chat's prompt is its own.
-        tuned = bool(model) and not self.in_chat and is_tuned(model, "storyteller")
+        # A story's storyteller SealedLore words its prompt for, or sends less
+        # of the lore, says so, as a model field does; a chat's prompt is its own.
+        tuned = bool(model) and not self.in_chat and sent_differently(model, "storyteller")
         mark = " · tuned" if tuned else ""
         self.model_button.setText(f"{short}{f' · {endpoint}' if endpoint else ''}{mark} ▾")
         shown = model_label(model) if model else "none set"

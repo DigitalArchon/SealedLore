@@ -13,7 +13,9 @@ only of entries every model may see (never one the plot hides or one held
 back until mentioned), never in a chat or a private scene.
 
 The parts of an entry sent condensed that a turn is about go with the turn
-from its whole text as well (engine/lore_whole_back.py, `_with_in_full`):
+from its whole text as well (engine/lore_whole_back.py, `_with_in_full`), to
+every storyteller but those engine/model_tuning.py leaves them out for
+(Claude: `lore_from_full_on`, asked of the storyteller's model in force):
 ranked against the turn with the rest of the lore, by similarity where there
 are embeddings (each part's vector made and cached as an entry's is; the
 preview's from vectors already made, never embedding), by keyword scoring
@@ -36,6 +38,7 @@ from sealedlore.engine.lore_condense import (
     unasked_placeholders,
     worth_condensing,
 )
+from sealedlore.engine.model_tuning import sends_lore_from_full
 from sealedlore.engine.retrieval import (
     LoreLayout,
     RetrievalReport,
@@ -117,6 +120,23 @@ class LoreCondenseRuntime:
 
     # --- parts given with the turn from the whole text ----------------------
 
+    def storyteller_model(self) -> str:
+        """The model writing the story's turns now: an open private scene's,
+        else the story's own (a Question goes to the same)."""
+        if self.in_private:
+            return self.private_model() or self.model
+        return self.model
+
+    def lore_from_full_on(self) -> bool:
+        """Whether parts of the always-on entries sent condensed go with the
+        turns: on (`lore_whole_back.WHOLE_BACK_TOP`), never in a chat, and
+        only for a storyteller model engine/model_tuning.py sends them to."""
+        return (
+            lore_whole_back.WHOLE_BACK_TOP > 0
+            and not self.story.chat
+            and sends_lore_from_full(self.storyteller_model())
+        )
+
     def _with_in_full(
         self,
         report: RetrievalReport,
@@ -131,8 +151,7 @@ class LoreCondenseRuntime:
         that the turn is about added, from their whole texts
         (engine/lore_whole_back.py). `layout` as sent, `named` before any
         entry was condensed."""
-        top = lore_whole_back.WHOLE_BACK_TOP
-        if top <= 0 or not layout.condensed or self.story.chat:
+        if not layout.condensed or not self.lore_from_full_on():
             return report
         ranking = self.in_full_ranking(
             turn, history, layout, named=named, allow_network=allow_network
@@ -141,7 +160,7 @@ class LoreCondenseRuntime:
         sent = lore_whole_back.parts_back(
             ranking.condensed,
             ranking.ranked,
-            top=top,
+            top=lore_whole_back.WHOLE_BACK_TOP,
             room=min(self._lore_room(), lore_whole_back.ROOM_MOST),
             count_tokens=self._count_lore_tokens,
             label=lambda title: texts.fill("turn.lore.from_full", title=title),
@@ -163,23 +182,24 @@ class LoreCondenseRuntime:
         whole = {entry.id: entry for entry in named.standing}
         return [whole[entry_id] for entry_id in layout.condensed if entry_id in whole]
 
-    def _part_texts(self) -> dict[str, str]:
-        """What is embedded of each part of the entries sent condensed, by
-        part id, while parts go with the turn (`ensure_lore_vectors` makes
-        and keeps their vectors beside the entries'); none while they don't,
-        and in a chat."""
-        if lore_whole_back.WHOLE_BACK_TOP <= 0 or self.story.chat:
-            return {}
+    def part_items(self) -> list[LoreEntry]:
+        """Each part of the entries sent condensed, as an item of the turn's
+        ranking (`lore_whole_back.ranked_item`), while parts go with the turn
+        (`lore_from_full_on`); none while they don't, and in a chat."""
+        if not self.lore_from_full_on():
+            return []
         named = self._layout_named()
-        return self._parts_embedded(self._condensed_whole(self._fit_layout(named), named))
-
-    @staticmethod
-    def _parts_embedded(condensed: Sequence[LoreEntry]) -> dict[str, str]:
-        return {
-            piece.id: embedding_text(lore_whole_back.ranked_item(piece))
-            for entry in condensed
+        return [
+            lore_whole_back.ranked_item(piece)
+            for entry in self._condensed_whole(self._fit_layout(named), named)
             for piece in lore_whole_back.pieces(entry)
-        }
+        ]
+
+    def _part_texts(self) -> dict[str, str]:
+        """What is embedded of each part (`part_items`), by part id, while
+        parts go with the turn (`ensure_lore_vectors` makes and keeps their
+        vectors beside the entries')."""
+        return {item.id: embedding_text(item) for item in self.part_items()}
 
     def in_full_ranking(
         self,

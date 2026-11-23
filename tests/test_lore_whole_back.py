@@ -101,9 +101,16 @@ def wolves() -> LoreEntry:
     return LoreEntry(title="Wolves", content="They hunt in threes.", keywords=["wolf"])
 
 
-def session_with(tmp_path, story, cast, lore, *, cap: int = 200, replies=()) -> StorySession:
+# A storyteller the parts are sent to: GLM 5.3 was measured better with them
+# (Claude models aren't sent them: engine/model_tuning.py).
+GLM = "z-ai/glm-5.3"
+
+
+def session_with(
+    tmp_path, story, cast, lore, *, cap: int = 200, replies=(), model: str = GLM
+) -> StorySession:
     story.held_character_id = "char-serrik"
-    config = make_config()
+    config = make_config(model)
     config.scene_reads = "manual"
     # Chosen from rather than sent whole, and the always-on entries over their
     # room (`Config.lore_cap`): the Keep matters most and stays whole.

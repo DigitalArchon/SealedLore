@@ -30,6 +30,9 @@ stands: the system block never changes. Their room is their own, the room for
 chosen lore (`Config.lore_cap`) up to `ROOM_MOST`, never taken from the
 chosen lore's.
 
+Sent to every storyteller but those engine/model_tuning.py leaves it out
+for (Claude).
+
 Pure: the session ranks (engine/session_lore_condense.py) and calls this.
 """
 
@@ -52,9 +55,11 @@ from sealedlore.engine.retrieval import (
 from sealedlore.models.lore import LoreEntry
 
 # How many of the turn's best matches a part of an entry sent condensed must
-# be among to go with the turn; 0 sends nothing more (the default until a
-# live test says it plays better).
-WHOLE_BACK_TOP = 0
+# be among to go with the turn; 0 sends nothing more. On for every storyteller
+# but Claude (the author, Nov 23 2026; engine/model_tuning.py): judged blind,
+# GLM 5.3 wrote clearly better with three, Claude Opus 5.5 and Sonnet 4.6 no
+# better, and Sonnet's turns cost about a third more.
+WHOLE_BACK_TOP = 3
 # The longest a part is ranked and sent as one: a character's profile written
 # as one block of attribute lines runs to many hundreds of words, about
 # everything she is.

@@ -1043,7 +1043,9 @@ own API when you have that endpoint.
 
 SealedLore sends every model the same story, but for some models it words a
 text of the prompt its own way, or leaves one out, where testing showed it made
-that model's writing better, and for some it shapes the request the way the
+that model's writing better, for Claude storytellers it leaves out the lore
+from the full entry that goes with other storytellers' turns (see "Always-on
+entries and the lore budget"), and for some it shapes the request the way the
 model's own service requires (how Claude models are asked to think on
 Anthropic's own API, cache markers for Claude, the form NanoGPT's encrypted
 models need). A model field shows **· tuned prompts** beside a model whose
@@ -2945,6 +2947,17 @@ size, and what it would come to:
   first: the lowest order under SillyTavern's rules, the lowest priority
   under SealedLore's, and among equals the lowest in the list. The rest are
   sent whole. Within the budget, every entry is sent whole.
+
+What a condensed version leaves out isn't lost. Each turn, the full text of
+every entry sent condensed is ranked against what you wrote, part by part (its
+paragraphs), with the rest of the lore, and the parts among the turn's three
+best matches go with that turn, under the entry's title marked "(from the full
+entry)", while the condensed version stays with the world. The Lore page's
+report lists them as **from the full entry**, with how many parts came and
+where they ranked. Claude storytellers aren't sent them: in blind comparisons
+Claude wrote no better with them (and on Sonnet each turn cost about a third
+more), where GLM 5.3 wrote clearly better, so every other storyteller is. With
+embeddings (Settings → Lore) the parts are ranked by meaning as well as words.
 
 An entry's own page shows its condensed version under **Condensed**, to read
 or change in your own words, with **Write a condensed version** (or **Write

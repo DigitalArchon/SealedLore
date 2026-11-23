@@ -1,6 +1,7 @@
 """What SealedLore does differently for particular models, in one place: the
-prompt texts it leaves out for a model it measured them hurting, and the ways
-it shapes a request for a model's own API. Pure.
+prompt texts it leaves out for a model it measured them hurting, the lore it
+sends a model's turns, and the ways it shapes a request for a model's own
+API. Pure.
 
 The author (Nov 18 2026): the app should show which models it is tuned for
 and how. Every model field says so beside it (gui/model_picker.py), and Help
@@ -9,10 +10,13 @@ made elsewhere (providers/anthropic_models.py, providers/private_mode.py,
 engine/reasoning.py, providers/wire.py), its entry here only describes it, and
 asks the same code which models it applies to, so the words can't drift from
 what is done. A prompt adjustment is made here: assembly leaves a text out for
-a model this module names (`left_out`).
+a model this module names (`left_out`). So is a lore adjustment: the session
+asks `sends_lore_from_full` whether the storyteller's model in force is given
+the parts of a condensed always-on entry's full text a turn is about
+(engine/lore_whole_back.py), and embeds them ahead only for one that is.
 
-Add a prompt adjustment only with a measurement behind it, as for any change
-of wording, and say it in `why`.
+Add a prompt or lore adjustment only with a measurement behind it, as for any
+change of wording, and say it in `why`.
 """
 
 from __future__ import annotations
@@ -28,11 +32,15 @@ from sealedlore.models.config import split_model
 if TYPE_CHECKING:
     from sealedlore.engine.prompt_texts import PromptTexts
 
-TuningKind = Literal["prompt", "request"]
-# Which of a model's uses a prompt adjustment is for: the storyteller (a
-# story's turns, Questions and private scenes, whose system block it shares),
-# or a character played by their own model. A request adjustment is for every
-# use ("any").
+# "prompt": a text worded the model's own way or left out; "lore": less of the
+# lore sent with a turn; "request": the request shaped for the model's API.
+TuningKind = Literal["prompt", "lore", "request"]
+# The order a list says them in: what the model reads, then how it is asked.
+KIND_ORDER: dict[str, int] = {"prompt": 0, "lore": 1, "request": 2}
+# Which of a model's uses a prompt or lore adjustment is for: the storyteller
+# (a story's turns, Questions and private scenes, whose system block it
+# shares), or a character played by their own model. A request adjustment is
+# for every use ("any").
 TuningRole = Literal["storyteller", "character", "any"]
 ROLE_WORDS: dict[str, str] = {
     "storyteller": "as the storyteller",
@@ -69,6 +77,10 @@ class ModelTuning:
     # Prompt texts given the model in its own wording, by key (a text the
     # author has edited keeps the author's: `tuned_texts`).
     texts_replaced: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
+    # A lore adjustment: the parts of a condensed always-on entry's full text
+    # a turn is about are not sent with the model's turns in that role
+    # (engine/lore_whole_back.py), nor embedded for it (`sends_lore_from_full`).
+    lore_from_full_left_out: bool = False
 
 
 def _opus_5_5(model: str) -> bool:
@@ -177,6 +189,24 @@ TUNINGS: tuple[ModelTuning, ...] = (
         ),
     ),
     ModelTuning(
+        key="claude-lore-from-full",
+        models="Claude models, on any endpoint",
+        kind="lore",
+        what=(
+            "Lore from the full entry is not sent: when an always-on lore entry goes "
+            "condensed, the parts of its full text a turn is about go with that turn to every "
+            "other storyteller, and Claude is given the condensed version alone."
+        ),
+        why=(
+            "Measured in a blind judged comparison: Claude Sonnet 4.6 and Claude Opus 5.5 "
+            "wrote no better with those parts, which cost about a third more a turn on Sonnet, "
+            "where GLM 5.3 wrote clearly better with them, so every other model is sent them."
+        ),
+        applies=_claude,
+        role="storyteller",
+        lore_from_full_left_out=True,
+    ),
+    ModelTuning(
         key="anthropic-thinking",
         models="Claude models, on Anthropic's own API",
         kind="request",
@@ -247,7 +277,7 @@ def tunings_for(
         and not (anthropic_api is False and tuning.key in ANTHROPIC_ONLY)
         and (role is None or tuning.role in ("any", role))
     ]
-    return sorted(found, key=lambda tuning: tuning.kind != "prompt")
+    return sorted(found, key=lambda tuning: KIND_ORDER[tuning.kind])
 
 
 def left_out(model: str | None, role: str = "storyteller") -> frozenset[str]:
@@ -255,6 +285,20 @@ def left_out(model: str | None, role: str = "storyteller") -> frozenset[str]:
     if not model:
         return frozenset()
     return frozenset().union(*(tuning.texts_left_out for tuning in tunings_for(model, role=role)))
+
+
+def sends_lore_from_full(model: str | None, role: str = "storyteller") -> bool:
+    """Whether `model` in `role` is sent the parts of a condensed always-on
+    entry's full text a turn is about (engine/lore_whole_back.py): every
+    model but those a lore adjustment names (Claude, as the storyteller)."""
+    if not model or not model.strip():
+        return True
+    # Asked of the lore adjustments alone, as `tunings_for` would choose them:
+    # this is asked on every turn and preview.
+    return not any(
+        tuning.lore_from_full_left_out and tuning.role in ("any", role) and tuning.applies(model)
+        for tuning in TUNINGS
+    )
 
 
 def replaced(model: str | None, role: str) -> dict[str, str]:
@@ -320,6 +364,12 @@ def is_tuned(model: str, role: str | None = None) -> bool:
     """Whether SealedLore adjusts its prompt for `model` in `role` (not
     only shapes its requests): what "· tuned prompts" means in a list."""
     return any(tuning.kind == "prompt" for tuning in tunings_for(model, role=role))
+
+
+def sent_differently(model: str, role: str | None = None) -> bool:
+    """Whether what `model` is sent in `role` differs from what other models
+    are: its prompt worded for it (`is_tuned`), or less of the lore."""
+    return any(tuning.kind in ("prompt", "lore") for tuning in tunings_for(model, role=role))
 
 
 _SAFE = re.compile(r"\s+")

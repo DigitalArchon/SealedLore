@@ -37,16 +37,17 @@ RECOMMENDED_INTRO = (
 )
 INTRO = (
     "SealedLore sends every model the same story, but for some models it words a text its "
-    "own way or leaves one out, or shapes the request the way the model's own service "
-    "requires. These are all of them. A model field shows “· tuned” beside a model they "
-    "apply to there, “· tuned prompts” when its prompt is worded for it.\n\n"
+    "own way or leaves one out, sends less of the lore with a turn, or shapes the request "
+    "the way the model's own service requires. These are all of them. A model field shows "
+    "“· tuned” beside a model they apply to there, “· tuned prompts” when its prompt is "
+    "worded for it.\n\n"
     "A prompt is worded for a model only where blind judges preferred what it wrote that way. "
     "The storyteller's prompt was tried in other wordings for Claude Opus 5.5, Claude Sonnet "
     "4.6, GLM 5.3, MiMo V2.6 Pro and DeepSeek V3.2, each aimed at what that model gets wrong, "
     "and none did better than the usual one without a new fault, so those models are sent it "
     "as it is (but for Opus 5.5's one sentence below)."
 )
-KINDS = {"prompt": "Prompt", "request": "Request"}
+KINDS = {"prompt": "Prompt", "lore": "Lore", "request": "Request"}
 # Each use the lists cover, in the order a story calls them, as Settings →
 # Models names the field (and Played by on a card, for a character).
 USES = (
