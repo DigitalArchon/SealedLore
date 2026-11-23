@@ -2250,7 +2250,9 @@ passage after it is written again from your version, as a new take, with the
 one there now kept (‹ ›). Beside it, **Regenerate** asks that character's
 model for the answer again, sent what it would be sent there (the story as
 they saw it up to that point, your notes for their model, what they
-remember); nobody else is asked, and the others' answers stay as they are. Once the new answer is in, you are
+remember); nobody else is asked, and the others' answers stay as they are. A
+passage edited since they answered is read again first, as their round would
+read it, for who saw which part of it and for the public record. Once the new answer is in, you are
 asked whether to have the passage after it written again from it (**Write it
 again**, a new take beside the one there now) or **Keep the passage**. Stop,
 or a model that fails or gives no answer, leaves their answer as it was, and

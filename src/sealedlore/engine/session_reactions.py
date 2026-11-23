@@ -614,13 +614,19 @@ class ReactionRuntime:
         answer as it was; logged and counted as the round's are.
 
         The record and who saw which part of a passage are read as the round
-        left them on the messages: asking one character again is not a reason
-        to read the story for everyone."""
+        left them on the messages, up to that message, and read again first,
+        as the round reads them, only where that is out of date: a passage
+        edited since (its views and, the newest the record read, the record
+        with it). Otherwise a passage that moves, edited, counted whole, and
+        gave them paragraphs they were never there for. Those are paid calls
+        the round makes too, said in the status bar as it says them."""
         refusal = self.reaction_refusal(node_id, character_id)
         if refusal is not None:
             raise ValueError(refusal)
         node = next(n for n in self.nodes if n.id == node_id)
         history = self._path_to(node.id)
+        yield from self.keep_public_record(history)
+        yield from self.mark_views(history)
         cast = self.visible_cast(history)
         character = next(c for c in cast if c.id == character_id)
         # A turn's answers were given having seen it; a passage's, blind to

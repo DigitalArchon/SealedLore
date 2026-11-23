@@ -165,3 +165,85 @@ def test_an_older_answer_is_asked_for_with_only_the_memories_the_round_then_had(
     list(session.regenerate_reaction(passages[-1].id, "char-maela"))
     [again] = provider.requests[before:]
     assert again == rounds[-1]
+
+
+# --- asked again after the passage was edited ------------------------------------------
+
+
+def replies(session, *texts: str) -> None:
+    """The mock's next replies, in order, from the first (it takes them by
+    its count of calls)."""
+    session.provider.responses = list(texts)
+    session.provider._call_count = 0
+
+
+def test_asked_again_after_an_edit_she_is_given_only_what_she_was_there_for(tmp_path) -> None:
+    """Edited since the round, a passage that moves counts whole until its
+    views are read again: the round reads them first, and so does asking one
+    of them again, as a paid call said in the status bar."""
+    from sealedlore.engine.reactions import apply_views
+    from sealedlore.engine.session import SessionNotice
+    from tests.test_passage_views import ASKS, BOTH, MOVING, TOWER
+    from tests.test_reactions import MAELA_MODEL, make_session, play, sent, turn
+
+    session = make_session(tmp_path, ["The door gives.", "Hm."])
+    session.story.setup.starting_scene = BOTH
+    play(session, turn())
+    node = session.path()[-1]
+    node.content = MOVING
+    node.meta.scene = TOWER
+    assert apply_views('{"Maela Orr": [1]}', node, [session.cast[1]])
+    # Read as the round left it: nothing more is asked.
+    replies(session, "AGAIN-1")
+    before = len(session.provider.requests)
+    list(session.regenerate_reaction(node.id, "char-maela"))
+    [first] = session.provider.requests[before:]
+    assert first.model == MAELA_MODEL and "TOWER-SECRET" not in sent(first)
+
+    session.edit_node(node.id, MOVING.replace("argue over", "argue about"))
+    replies(session, '{"Maela Orr": [1]}', "AGAIN-2")
+    before = len(session.provider.requests)
+    events = list(session.regenerate_reaction(node.id, "char-maela"))
+    views, again = session.provider.requests[before:]
+    assert ASKS in sent(views) and again.model == MAELA_MODEL
+    assert "TOWER-SECRET" not in sent(again) and "argue about the map" in sent(again)
+    assert any(
+        isinstance(e, SessionNotice) and e.text.startswith("Working out who saw what")
+        for e in events
+    )
+    assert [a.text for a in node.meta.reactions] == ["AGAIN-2"]
+
+
+def test_asked_again_after_an_edit_the_record_reads_the_passage_again(tmp_path) -> None:
+    from sealedlore.engine.session import SessionNotice
+    from tests.test_public_record import character_calls, record_calls
+    from tests.test_reactions import make_session, play, sent, turn
+
+    session = make_session(
+        tmp_path,
+        [
+            "The door gives. Across the town the bells ring noon.",
+            '{"facts": ["The town bells rang at noon."]}',
+            "MAELA-ONE",
+        ],
+        record=True,
+    )
+    play(session, turn())
+    passage = session.path()[-1]
+    assert len(record_calls(session)) == 1
+    # Asked again with nothing changed: the record as the round left it.
+    replies(session, "MAELA-TWO")
+    list(session.regenerate_reaction(passage.id, "char-maela"))
+    assert len(record_calls(session)) == 1
+
+    session.edit_node(passage.id, "The door gives. Across the town the bells ring midnight.")
+    replies(session, '{"facts": ["The town bells rang at midnight."]}', "MAELA-THREE")
+    events = list(session.regenerate_reaction(passage.id, "char-maela"))
+    keeper = record_calls(session)[-1]
+    assert len(record_calls(session)) == 2 and "ring midnight" in sent(keeper)
+    assert "The town bells rang at midnight." in sent(character_calls(session)[-1])
+    assert passage.meta.public_record == ["The town bells rang at midnight."]
+    assert any(
+        isinstance(e, SessionNotice) and e.text.startswith("Keeping the public record")
+        for e in events
+    )
