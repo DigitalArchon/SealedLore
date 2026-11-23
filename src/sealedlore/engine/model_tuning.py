@@ -100,8 +100,41 @@ _GO_BY_THE_STORY = (
 )
 
 
+# Before a Claude id on Bedrock: a region's inference profile ("us.", "eu.",
+# "apac.", "global."), then the maker ("anthropic.").
+_BEDROCK_MAKER = re.compile(r"^(?:[a-z]{2,4}\.|global\.)?anthropic\.")
+# Path parts before an id that say who routes it, not who made it (LiteLLM's,
+# OpenRouter's): "bedrock/anthropic.claude-…", "openrouter/anthropic/claude-…".
+_ROUTERS = frozenset({"bedrock", "vertex_ai", "vertex", "openrouter", "litellm"})
+# A word in an id that names another model, which one named for Claude was
+# made from or on ("Claude-Opus-Distill-Qwen3"): Anthropic's own ids hold none.
+_MADE_FROM = re.compile(
+    r"distill(?:ed)?|qwen\d*|llama\d*|mistral|mixtral|gemma\d*|phi\d*|deepseek|glm\d*|"
+    r"kimi|gpt|gguf|mlx|awq|gptq|exl2|lora|abliterated"
+)
+
+
 def _claude(model: str) -> bool:
-    return bare(model).startswith("claude-")
+    """A Claude model, by any spelling it is served under: a bare id
+    ("claude-sonnet-4-6", Anthropic's and NanoGPT's), a maker before it
+    ("anthropic/claude-sonnet-4.6"), Bedrock's region and maker
+    ("us.anthropic.claude-sonnet-4-20250514-v1:0",
+    "bedrock/anthropic.claude-3-5-sonnet-…"). Where the id names its maker it
+    must be Anthropic, so another's model named for Claude
+    ("someone/claude-sonnet-4-6") isn't one; nor is one that names the model it
+    was made from ("Claude-Opus-Distill-Qwen3" on a server of one's own). The
+    endpoint's own name (before "::") is the author's and says nothing."""
+    name = split_model(model.strip())[1].strip().lower().split(":", 1)[0]
+    *path, last = name.split("/")
+    makers = [part for part in path if part and part not in _ROUTERS]
+    on_bedrock = _BEDROCK_MAKER.match(last)
+    if on_bedrock:
+        last = last[on_bedrock.end() :]
+    if makers and makers[-1] != "anthropic":
+        return False
+    if not last.startswith("claude-"):
+        return False
+    return not any(_MADE_FROM.fullmatch(word) for word in re.split(r"[-_.@\s]+", last))
 
 
 def _cache_marked(model: str) -> bool:
