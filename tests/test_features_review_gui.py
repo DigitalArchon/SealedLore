@@ -161,3 +161,29 @@ def test_a_stop_leaves_a_job_out_making_them(app, tmp_path, story, cast) -> None
     window._poll_lore_vectors()
     assert session.lore_without_vectors() == []
     window.close()
+
+
+def test_edit_on_the_answer_of_the_character_played_now_says_why_and_opens_nothing(
+    app, tmp_path, story, cast, monkeypatch
+) -> None:
+    """Their answers are never sent with their turns, so Edit's hint ("given
+    with your next turn") was untrue for them; Regenerate refuses in words."""
+    from sealedlore.gui import window_answers
+    from sealedlore.gui.window_answers import HELD_EDIT
+
+    window = together(tmp_path, story, cast, ["P1.", "MAELA-ONE"])
+    window.config.scene_reads = "manual"
+    _send(window, "T1")
+    wait_for(app, lambda: not window._busy)
+    session = window.session
+    passage = session.path()[-1]
+    session.hold("char-maela")  # the author takes Maela up
+    opened: list = []
+    monkeypatch.setattr(window_answers, "NoteDialog", lambda *a, **k: opened.append(a))
+    said: list[str] = []
+    window.statusBar().messageChanged.connect(said.append)
+    maela = next(r for r in passage.meta.reactions)
+    window._edit_answer(passage.id, maela.character_id)
+    assert not opened
+    assert HELD_EDIT.format(name=maela.name) in said
+    window.close()

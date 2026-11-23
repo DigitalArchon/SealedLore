@@ -35,6 +35,12 @@ SHOW_ANSWERS_TIP = (
     "gets all of them with your turn either way"
 )
 EDIT_TITLE = "Edit what {name} means to do"
+# An answer by the character the author now plays: never sent with their
+# turns, so there is nothing to change it for.
+HELD_EDIT = (
+    "{name} is yours to play now: what you write as them is what they do, and their own "
+    "model's answer isn't given to the storyteller."
+)
 EDIT_ASKS = "What does {name} mean to do? Their own model wrote this; it's yours to change."
 EDIT_KEEP = "Save"
 EDIT_REDO = "Save and write the next passage again"
@@ -179,6 +185,11 @@ class AnswersWindow:
             (a for a in path[index].meta.reactions if a.character_id == character_id), None
         )
         if answer is None:
+            return
+        if character_id == session.story.held_character_id:
+            # Their answers go with no turn played as them (engine/prompt.py):
+            # the dialog's "given with your next turn" would be untrue.
+            self.statusBar().showMessage(HELD_EDIT.format(name=answer.name), 8000)
             return
         after, spent = written_from(path, index)
         dialog = NoteDialog(
