@@ -180,10 +180,12 @@ def test_a_paired_phone_gets_every_answer_it_asked_for_as_it_reads(server, short
         client.received.extend(bytes(client.socket.read(48 * 1024).data()))
         wait_for(lambda: False, timeout=0.002)
         most = max(most, unsent(server))
+    # Kept while it was read; idle afterwards, the test's 400 ms deadline
+    # closes it (on a slow machine before the checks below were done).
+    assert client.socket.state() == CONNECTED
     assert wait_for(lambda: client.read().endswith(PICTURE[-64:]))
     assert client.read().count(b"\xff\xd8") == 6
     assert most <= phone_server.MAX_UNSENT + len(PICTURE) + 1024, f"{most / 1e6:.1f} MB unsent"
-    assert client.socket.state() == CONNECTED
 
 
 # --- P2: an editor open on the desktop ---------------------------------------------------
