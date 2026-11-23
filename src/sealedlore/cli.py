@@ -1044,6 +1044,8 @@ class Repl:
             print(f"    {injection.name:<30} {injection.describe()}")
         for injection in report.dropped:
             print(f"    {injection.entry.title:<30} left out: no room left this turn")
+        if report.in_full_note:
+            print(f"    lore from the full entries: {report.in_full_note}")
 
     def command_archive(self) -> None:
         session = self.session

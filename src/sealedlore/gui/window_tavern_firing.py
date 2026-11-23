@@ -35,6 +35,8 @@ class TavernFiringWindow:
         self.session.save()
         self.statusBar().showMessage(SAID[mode], 8000)
         self._reassemble_inspector()
+        # Another budget, so other entries may go condensed.
+        self._lore_vectors_later()
 
     def _open_tavern_settings(self) -> None:
         if self.session is None or self._busy:
@@ -46,5 +48,6 @@ class TavernFiringWindow:
                 self.session.story.defaults.tavern_world_info = dialog.settings()
                 self.session.save()
                 self._reassemble_inspector()
+                self._lore_vectors_later()
         finally:
             dialog.deleteLater()

@@ -31,7 +31,9 @@ chosen lore (`Config.lore_cap`) up to `ROOM_MOST`, never taken from the
 chosen lore's.
 
 Sent to every storyteller but those engine/model_tuning.py leaves it out
-for (Claude).
+for (Claude); the parts' vectors are made ahead of the turns
+(engine/session_lore_vectors.py), and a turn before they are in ranks by
+words alone.
 
 Pure: the session ranks (engine/session_lore_condense.py) and calls this.
 """

@@ -135,6 +135,11 @@ class OpenAICompatibleEmbeddings:
             self._client.close()
             self._client = None
 
+    def detached(self) -> OpenAICompatibleEmbeddings:
+        """A copy with a client of its own, for embedding in the background
+        beside the turns (engine/session_lore_vectors.py); its owner closes it."""
+        return OpenAICompatibleEmbeddings(self.config)
+
     @property
     def endpoint(self) -> str:
         return self.config.base_url.rstrip("/") + "/embeddings"

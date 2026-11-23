@@ -118,6 +118,23 @@ class RecallRuntime:
             return {}, f"keywords only: {exc}"
         return {item.id: score for item, score in zip(scored, similarities, strict=True)}, None
 
+    def embedding_batches(self, texts: Sequence[str]) -> list[list[str]]:
+        """`texts` in the requests `embed_in_batches` sends them in, in order:
+        each at most `EMBED_BATCH_TOKENS` by estimate (one alone may be more)."""
+        batches: list[list[str]] = []
+        batch: list[str] = []
+        size = 0
+        for text in texts:
+            cost = self.estimator.estimate(text, None)
+            if batch and size + cost > EMBED_BATCH_TOKENS:
+                batches.append(batch)
+                batch, size = [], 0
+            batch.append(text)
+            size += cost
+        if batch:
+            batches.append(batch)
+        return batches
+
     def embed_in_batches(
         self, texts: Sequence[str], *, stopped: Callable[[], bool] | None = None
     ) -> list[tuple[float, ...]]:
@@ -135,18 +152,7 @@ class RecallRuntime:
         the embeddings before, so a lorebook's embedding ran on to its end
         after Stop, and quitting meanwhile waited for all of it (the author,
         Nov 21 2026)."""
-        batches: list[list[str]] = []
-        batch: list[str] = []
-        size = 0
-        for text in texts:
-            cost = self.estimator.estimate(text, None)
-            if batch and size + cost > EMBED_BATCH_TOKENS:
-                batches.append(batch)
-                batch, size = [], 0
-            batch.append(text)
-            size += cost
-        if batch:
-            batches.append(batch)
+        batches = self.embedding_batches(texts)
         done: dict[int, list[tuple[float, ...]]] = {}
 
         def one(numbered: tuple[int, list[str]]) -> None:

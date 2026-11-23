@@ -54,6 +54,8 @@ LIST_ICON = 28
 # The most entries the list shows before it scrolls, and the report's list.
 LIST_ROWS = 8
 REPORT_ROWS = 6
+# The report's row when lore from the full entry was ranked by words alone.
+IN_FULL_HEAD = "Lore from the full entries"
 
 
 FIRING_SEALEDLORE = NAMES["sealedlore"]
@@ -531,6 +533,12 @@ class LorePanel(QWidget):
             self.injected.addItem(f"{injection.name} — {injection.describe()}")
         for injection in report.dropped:
             self.injected.addItem(f"{injection.name} — left out: no room left this turn")
+        if report.in_full_note:
+            # The parts of the entries sent condensed, ranked by words alone
+            # this turn: their vectors are made ahead, and weren't yet.
+            item = QListWidgetItem(f"{IN_FULL_HEAD} — {report.in_full_note}")
+            item.setForeground(Qt.gray)
+            self.injected.addItem(item)
         # Fired as SillyTavern fires: what didn't, and SillyTavern's reason.
         for entry, why in report.not_fired:
             item = QListWidgetItem(f"{entry.title} — not fired: {why}")

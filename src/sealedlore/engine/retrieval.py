@@ -168,6 +168,10 @@ class RetrievalReport:
     condensed: tuple[str, ...] = ()
     # (the chat's length in messages, what fired): what the author's node keeps.
     tavern_record: tuple[int, tuple[str, ...]] | None = None
+    # Why the parts of the entries sent condensed were ranked by words alone
+    # this turn, when it was for want of their vectors (engine/lore_whole_back.py,
+    # engine/session_lore_vectors.py): "" otherwise.
+    in_full_note: str = ""
 
     @property
     def entries(self) -> tuple[LoreEntry, ...]:

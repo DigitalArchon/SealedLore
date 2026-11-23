@@ -29,6 +29,7 @@ from tests.test_lore_whole_back import (
     guild,
     harbour,
     keep,
+    made_ahead,
     sent,
     session_with,
     system_block,
@@ -142,7 +143,7 @@ def test_a_claude_storyteller_gets_no_parts_and_the_rest_as_before(
     claude.story.defaults.main_model = model
     list(claude.send(turn(HESK_TURN)))
     report = claude.last_retrieval
-    assert report.in_full == ()
+    assert report.in_full == () and report.in_full_note == ""
     assert "(from the full entry)" not in sent(claude)
     # The rest as before: the same lore chosen, the same condensed versions
     # in the same system block.
@@ -171,6 +172,7 @@ def test_regenerate_reproduces_it_and_a_new_model_changes_it_from_the_next_turn(
 ) -> None:
     session = session_with(tmp_path, story, cast, lore())
     with_embeddings(session)
+    made_ahead(session)
     list(session.send(turn(HESK_TURN)))
     first = [(i.entry.id, i.matches) for i in session.last_retrieval.in_full]
     assert first

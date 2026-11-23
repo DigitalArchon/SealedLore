@@ -24,6 +24,7 @@ from sealedlore.engine.prompt_edits import set_text
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS
 from sealedlore.engine.retrieval import GAP, Injection, RetrievalReport, content_hash
 from sealedlore.engine.session import StorySession
+from sealedlore.engine.session_lore_vectors import PARTS_BEING_MADE
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
 from sealedlore.models.config import EmbeddingProviderConfig
 from sealedlore.models.lore import LoreEntry, lore_fingerprint
@@ -133,6 +134,13 @@ def with_embeddings(session: StorySession) -> MockEmbeddings:
     backend = MockEmbeddings()
     session.embeddings = backend
     return backend
+
+
+def made_ahead(session: StorySession) -> None:
+    """The lore's vectors made ahead of the turn and taken in, as the window
+    has them made once the story opens (the mock embeds then and there)."""
+    assert session.start_lore_vectors()
+    assert session.adopt_lore_vectors() == []
 
 
 def turn(text: str) -> TurnRequest:
@@ -247,7 +255,9 @@ def test_by_similarity_where_there_are_embeddings(tmp_path, story, cast, top):
     top(1)
     session = session_with(tmp_path, story, cast, [harbour(), keep(), guild()])
     with_embeddings(session)
+    made_ahead(session)
     list(session.send(turn(HESK_TURN)))
+    assert session.last_retrieval.in_full_note == ""
     (back,) = session.last_retrieval.in_full
     ((rank, score),) = back.matches
     assert back.name == "The Guild" and rank == 1 and score is not None
@@ -261,12 +271,15 @@ def test_each_parts_vector_is_made_once_and_kept_with_the_entries(tmp_path, stor
     lore = [harbour(), keep(), guild()]
     session = session_with(tmp_path, story, cast, lore)
     backend = with_embeddings(session)
-    list(session.send(turn(HESK_TURN)))
+    made_ahead(session)
     documents = [text for texts, as_query in backend.calls if not as_query for text in texts]
     parts = [piece for item in (lore[0], lore[2]) for piece in pieces(item)]
     assert len(parts) == len(HARBOUR) + len(GUILD)
     # Each part with its entry's title, as an entry is embedded.
     assert {f"{p.entry.title}\n{p.text}" for p in parts} <= set(documents)
+    backend.calls.clear()
+    list(session.send(turn(HESK_TURN)))
+    assert all(as_query for _texts, as_query in backend.calls)  # the turn's alone
     cached = {row.content_hash for row in session.bundle.embeddings}
     assert {content_hash(f"{p.entry.title}\n{p.text}") for p in parts} <= cached
     assert all(row.kind == "lore" for row in session.bundle.embeddings)
@@ -343,7 +356,9 @@ def test_the_preview_never_embeds(tmp_path, story, cast, top):
     report = session.retrieve(turn(HESK_TURN), session.path(), allow_network=False)
     assert [i.name for i in report.in_full] == ["The Guild"]  # by words alone
     assert report.in_full[0].score is None and backend.calls == []
-    # Once a turn has embedded them, the preview ranks by the vectors made.
+    # Once they are made, and a turn has embedded its text, the preview ranks
+    # by the vectors made.
+    made_ahead(session)
     list(session.send(turn(HESK_TURN)))
     made = len(backend.calls)
     report = session.retrieve(turn(HESK_TURN), session.path()[:-2], allow_network=False)
@@ -353,6 +368,7 @@ def test_the_preview_never_embeds(tmp_path, story, cast, top):
 def test_regenerate_brings_back_the_same(tmp_path, story, cast, top):
     session = session_with(tmp_path, story, cast, [harbour(), keep(), guild()])
     with_embeddings(session)
+    made_ahead(session)
     list(session.send(turn(HESK_TURN)))
     first, first_tail = session.last_retrieval.in_full, tail(session)
     list(session.regenerate())
@@ -418,11 +434,17 @@ def test_under_sillytaverns_rules_too_and_only_then_embedded(tmp_path, story, ca
     backend = with_embeddings(session)
     session.story.defaults.context_token_budget = 6_000  # its budget: 1,500
     assert session.lore_layout().condensed == (lore[1].id,)  # order 10: condensed first
+    # Nothing is embedded in the turn: by words, the first time.
+    list(session.send(turn(HESK_TURN)))
+    (back,) = session.last_retrieval.in_full
+    assert back.name == "The Guild" and back.score is None
+    assert session.last_retrieval.in_full_note == PARTS_BEING_MADE
+    assert TITLE in tail(session) and GUILD[1] in tail(session)
+    # Made after its passage, for the next turn.
+    assert any(not as_query for _texts, as_query in backend.calls)
     list(session.send(turn(HESK_TURN)))
     (back,) = session.last_retrieval.in_full
     assert back.name == "The Guild" and back.score is not None  # embedded for it
-    assert TITLE in tail(session) and GUILD[1] in tail(session)
-    assert any(not as_query for _texts, as_query in backend.calls)
     # With nothing condensed, nothing is embedded under SillyTavern's rules.
     session.story.defaults.context_token_budget = 60_000
     backend.calls.clear()

@@ -445,16 +445,21 @@ class LorebooksWindow:
         """The open story's lore embedded now, while a progress dialog says so,
         when retrieval will want vectors and `least` entries or more have none:
         a story's first turn otherwise waited for the whole lorebook, saying
-        nothing (most of a minute for 320 entries, Nov 20 2026). Stop leaves
-        the rest for the first turn, as before."""
+        nothing (most of a minute for 320 entries, Nov 20 2026). The parts of
+        the always-on entries sent condensed count too, while lore from the
+        full entry goes with the turns (engine/session_lore_vectors.py), and
+        are embedded with the entries. Stop leaves the rest to be made in the
+        background, as the story opens."""
         session = self.session
         if session is None or self.in_chat or self._busy or session.in_private:
             return
-        if session.embeddings is None or session.lore_layout().mode != "select":
+        if session.embeddings is None:
             return
-        if session.fires_like_tavern:
-            # Fired by SillyTavern's rules, the lore is never ranked by its
-            # vectors: every entry was sent to be embedded, for nothing.
+        # Fired by SillyTavern's rules, or all sent whole, the lore is ranked
+        # by its vectors only for lore from the full entry: else every entry
+        # was sent to be embedded, for nothing.
+        chosen = session.lore_layout().mode == "select" and not session.fires_like_tavern
+        if not chosen and not session.lore_vectors_wanted():
             return
         pending = session.lore_without_vectors()
         if len(pending) < least:
@@ -464,17 +469,28 @@ class LorebooksWindow:
 
         def job():
             try:
-                session.ensure_lore_vectors(stopped=stopping.is_set)
+                session.ensure_lore_vectors(stopped=stopping.is_set, embed_parts=True)
             except StreamCancelled:
-                return  # what was embedded is kept; the first turn does the rest
+                return  # what was embedded is kept; the rest is made in the background
             session.save()
             return
             yield  # a generator, so GenerationWorker can run it
 
+        entry_ids = {entry.id for entry in session.bundle.lore}
+        entries = sum(1 for item in pending if item.id in entry_ids)
+        parts = len(pending) - entries
+        what = []
+        if entries:
+            what.append(f"{entries} lore {'entry' if entries == 1 else 'entries'}")
+        if parts:
+            what.append(
+                f"{parts} {'part' if parts == 1 else 'parts'} of the always-on entries "
+                "sent condensed"
+            )
         run_with_progress(
             self._dialog_parent(),
             session,
-            f"Embedding {len(pending)} lore entries, so each turn can find what it needs…",
+            f"Embedding {' and '.join(what)}, so each turn can find what it needs…",
             job,
             result,
             title="Embedding the lore",

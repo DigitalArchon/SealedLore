@@ -209,6 +209,7 @@ from sealedlore.engine.session_followup import FollowUpRuntime, FollowUpUndo
 from sealedlore.engine.session_images import ImageRuntime
 from sealedlore.engine.session_looks import LooksRuntime
 from sealedlore.engine.session_lore_condense import LoreCondenseRuntime
+from sealedlore.engine.session_lore_vectors import LoreVectorsRuntime, VectorPlan
 from sealedlore.engine.session_merge import MergeRuntime, _close
 from sealedlore.engine.session_placeholders import PlaceholdersRuntime
 from sealedlore.engine.session_plot import NoticeSeverity, PlotRuntime, SessionNotice
@@ -623,6 +624,7 @@ class StorySession(
     StorySuggestionsRuntime,
     TavernRuntime,
     LoreCondenseRuntime,
+    LoreVectorsRuntime,
     PlaceholdersRuntime,
 ):
     def __init__(
@@ -1616,61 +1618,19 @@ class StorySession(
             named_first=reach == 0,
         )
 
-    def lore_without_vectors(self) -> list[LoreEntry]:
-        """The entries `ensure_lore_vectors` would embed now."""
+    def _lore_vector_plan(self, parts: Mapping[str, str] | None = None) -> VectorPlan:
+        """What the lore's vectors are made of now: each entry a model may
+        see, and each part of the entries sent condensed while parts go with
+        the turn (`parts`, id → what is embedded; else the session's own,
+        `_part_texts`), with the vectors kept for the model in use."""
         settings = self.config.embeddings()
         model = settings.model if settings else ""
         wanted = settings.dimensions if settings else 0
-        have = {
-            (row.content_hash, row.model)
-            for row in self.bundle.embeddings
-            if not wanted or row.dimensions == wanted
-        }
-        held = self.held_back_ids() | self.hidden_ids()
-        names = self.placeholder_names()
-        return [
-            entry
-            for entry in self.bundle.lore
-            if entry.enabled
-            and entry.id not in held
-            and (content_hash(embedding_text(names.entry(entry))), model) not in have
-        ]
-
-    def ensure_lore_vectors(
-        self,
-        *,
-        stopped: Callable[[], bool] | None = None,
-        embed: bool = True,
-        parts: Mapping[str, str] | None = None,
-    ) -> dict[str, tuple[float, ...]]:
-        """Embed any entry whose text or model has changed; return id → vector.
-
-        Vectors are cached by content hash *and* model, so editing one entry
-        re-embeds one entry, and switching models re-embeds everything exactly
-        once (§7). `stopped` ends it between requests (`embed_in_batches`):
-        the entries done by then are kept and saved, and `EmbeddingStopped`
-        is raised. While a private scene is open nothing is embedded,
-        whoever asks: only the scene's own model is called then, and what
-        has a vector already is all that is returned, as it is with `embed`
-        off (the prompt's preview: never the network).
-
-        While parts of the always-on entries sent condensed go with the turn
-        (engine/lore_whole_back.py), each part (`parts`, id → what is
-        embedded; else the session's own, `_part_texts`) is embedded and kept
-        as an entry is, returned by its id with the entries'.
-        """
-        settings = self.config.embeddings()
-        model = settings.model if settings else ""
-        wanted = settings.dimensions if settings else 0
-
         cache = {
             (row.content_hash, row.model): row
             for row in self.bundle.embeddings
             if not wanted or row.dimensions == wanted
         }
-
-        pending: list[str] = []
-        hashes: dict[str, str] = {}
         # A held-back entry reaches no model, the embeddings endpoint's
         # included; it is embedded on the first turn after it is named. Nor
         # does lore the plot hasn't revealed yet (`visible_lore`).
@@ -1685,15 +1645,60 @@ class StorySession(
                 continue
             entries[entry.id] = entry
             texts_of[entry.id] = embedding_text(names.entry(entry))
-        texts_of.update(self._part_texts() if parts is None else parts)
-        for item_id, text in texts_of.items():
-            digest = content_hash(text)
-            hashes[item_id] = digest
-            if (digest, model) not in cache:
-                pending.append(item_id)
+        part_texts = dict(self._part_texts() if parts is None else parts)
+        texts_of.update(part_texts)
+        hashes = {item_id: content_hash(text) for item_id, text in texts_of.items()}
+        return VectorPlan(model, cache, texts_of, entries, set(part_texts), hashes)
+
+    def lore_without_vectors(self) -> list[LoreEntry]:
+        """The entries, and the parts of those sent condensed while parts go
+        with the turn (as items of its ranking, `part_items`), with no vector
+        for the model in use: what `ensure_lore_vectors(embed_parts=True)`
+        would embed now."""
+        plan = self._lore_vector_plan()
+        missing = {item_id for item_id in plan.texts_of if not plan.has(item_id)}
+        found = [plan.entries[item_id] for item_id in plan.entries if item_id in missing]
+        if plan.part_ids & missing:
+            found += [item for item in self.part_items() if item.id in missing]
+        return found
+
+    def ensure_lore_vectors(
+        self,
+        *,
+        stopped: Callable[[], bool] | None = None,
+        embed: bool = True,
+        parts: Mapping[str, str] | None = None,
+        embed_parts: bool = False,
+    ) -> dict[str, tuple[float, ...]]:
+        """Embed any entry whose text or model has changed; return id → vector.
+
+        Vectors are cached by content hash *and* model, so editing one entry
+        re-embeds one entry, and switching models re-embeds everything exactly
+        once (§7). `stopped` ends it between requests (`embed_in_batches`):
+        the entries done by then are kept and saved, and `EmbeddingStopped`
+        is raised. While a private scene is open nothing is embedded,
+        whoever asks: only the scene's own model is called then, and what
+        has a vector already is all that is returned, as it is with `embed`
+        off (the prompt's preview: never the network).
+
+        While parts of the always-on entries sent condensed go with the turn
+        (engine/lore_whole_back.py), each part (`parts`, id → what is
+        embedded; else the session's own, `_part_texts`) has its vector kept
+        as an entry's is and returned by its id with the entries'. Parts are
+        embedded here only with `embed_parts`: the lore embedded now, on
+        purpose (`embed_lore_now`, Re-embed lorebook). A turn never makes
+        them (engine/session_lore_vectors.py does, ahead).
+        """
+        plan = self._lore_vector_plan(parts)
+        cache, model = plan.cache, plan.model
+        pending = [
+            item_id
+            for item_id in plan.texts_of
+            if not plan.has(item_id) and (embed_parts or item_id not in plan.part_ids)
+        ]
 
         if pending and embed and self.embeddings is not None and not self.in_private:
-            texts = [texts_of[item_id] for item_id in pending]
+            texts = [plan.texts_of[item_id] for item_id in pending]
             try:
                 done = dict(enumerate(self.embed_in_batches(texts, stopped=stopped)))
             except EmbeddingStopped as stop:
@@ -1706,23 +1711,23 @@ class StorySession(
                     # Keyed by the model *we asked for*, not the name the
                     # endpoint echoes back: a proxy that renames the model
                     # would otherwise miss the cache on every single turn.
-                    content_hash=hashes[item_id],
+                    content_hash=plan.hashes[item_id],
                     model=model,
                     dimensions=len(vector),
                     vector=list(vector),
                 )
                 self.bundle.embeddings.append(row)
                 cache[(row.content_hash, row.model)] = row
-                if item_id in entries:
-                    entries[item_id].embedding_hash = row.content_hash
+                if item_id in plan.entries:
+                    plan.entries[item_id].embedding_hash = row.content_hash
             if stopping is not None:
                 self.save()
                 raise stopping
-            self._prune_embeddings(set(hashes.values()))
+            self._prune_embeddings(set(plan.hashes.values()))
             self.save()
 
         vectors: dict[str, tuple[float, ...]] = {}
-        for entry_id, digest in hashes.items():
+        for entry_id, digest in plan.hashes.items():
             row = cache.get((digest, model))
             if row is not None:
                 vectors[entry_id] = tuple(row.vector)
@@ -1735,7 +1740,7 @@ class StorySession(
         away: nothing but the scene's own model is called until it ends."""
         self._refuse_in_private("Embedding the lorebook again")
         self.bundle.embeddings.clear()
-        return self.ensure_lore_vectors()
+        return self.ensure_lore_vectors(embed_parts=True)
 
     def _prune_embeddings(self, live_hashes: set[str]) -> None:
         """Drop vectors for text no entry holds any more, so the file can shrink.
@@ -1901,8 +1906,8 @@ class StorySession(
             yield from self.react_to_turn(user_node, history)
             turn = replace(turn, round_answers=tuple(user_node.meta.reactions))
         # A rebuild the author asked for goes in before this turn's prompt,
-        # and so do cards condensed since the last.
-        for text in [*self.adopt_rebuild(), *self.adopt_condensed()]:
+        # and so do cards condensed and lore vectors made since the last.
+        for text in self._adopt_at_turn():
             yield SessionNotice(text)
         yield from self.archive_if_due(turn, history)
         lore = self._retrieve_for_turn(turn, history)
@@ -1923,6 +1928,13 @@ class StorySession(
         self.prepare_archival()
         self.start_background_merge()
         self.start_condensing()
+        self.start_lore_vectors()
+
+    def _adopt_at_turn(self) -> list[str]:
+        """What the background made since the last turn, taken in before this
+        one's prompt: a rebuild the author asked for, condensed cards, the
+        lore's vectors. The notices to show."""
+        return [*self.adopt_rebuild(), *self.adopt_condensed(), *self.adopt_lore_vectors()]
 
     def begin(self, held_character_id: str | None) -> Iterator[StreamEvent | SessionNotice]:
         """Start an unplayed story from its setup, as the character the author picked.
@@ -1982,6 +1994,7 @@ class StorySession(
                 self.last_result = None
             # Written while the author reads the opening, for the first turn.
             self.start_condensing()
+            self.start_lore_vectors()
             return
         yield from self.send(
             TurnRequest(
@@ -2400,8 +2413,8 @@ class StorySession(
             turn = self._directed(turn, user_node.meta.direction, [*history, user_node])
             turn = yield from self._answered_first(turn, user_node, history)
             # A rebuild the author asked for goes in before this turn's prompt,
-            # and so do cards condensed since the last.
-            for text in [*self.adopt_rebuild(), *self.adopt_condensed()]:
+            # and so do cards condensed and lore vectors made since the last.
+            for text in self._adopt_at_turn():
                 yield SessionNotice(text)
             yield from self.archive_if_due(turn, history)
             lore = self._retrieve_for_turn(turn, history, trigger=RETAKE)
@@ -2449,6 +2462,7 @@ class StorySession(
         self.prepare_archival()
         self.start_background_merge()
         self.start_condensing()
+        self.start_lore_vectors()
 
     def _round_owed(self, user_node: Node, history: Sequence[Node]) -> bool:
         """Whether another take of this turn's passage asks the characters
@@ -2775,6 +2789,7 @@ class StorySession(
         self.prepare_archival()
         self.start_background_merge()
         self.start_condensing()
+        self.start_lore_vectors()
 
     def _retake_in_place(
         self,
@@ -5461,6 +5476,8 @@ class StorySession(
         if condensing is not None:
             condensing.done.wait(wait_seconds)
             self._drop_condensing("not adopted: the story was closed")
+        # The lore's vectors made ahead: stopped, and what was made kept.
+        self._drop_lore_vectors(wait_seconds)
         if self._memory_pictures is not None:
             # A memory-only chat's pictures go with it.
             self._memory_pictures.close()

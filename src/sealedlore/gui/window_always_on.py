@@ -5,12 +5,18 @@ versions, one entry's is written from its own page, and a kept lorebook's
 from Lorebooks (on Your characters' session, as Find the people… is).
 
 Condensing is a paid call to the authoring model: never while a job runs,
-never in a private scene or a chat."""
+never in a private scene or a chat.
+
+The vectors lore from the full entry is ranked by are made ahead of the turns
+(engine/session_lore_vectors.py): a moment after a story opens or its lore
+changes (condensed versions written, entries made optional, the rules or the
+model changed), while nothing else runs, and taken in by a poll once made."""
 
 from __future__ import annotations
 
 from typing import Any
 
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QDialog, QMessageBox
 
 from sealedlore.engine.lore_condense import (
@@ -26,6 +32,11 @@ from sealedlore.storage import lorebooks
 
 CONDENSE_TITLE = "Condensing lore"
 NOT_IN_PRIVATE = "Not in a private scene: nothing else is sent to a model until it ends."
+# The lore's vectors are seen to this long after the story opened or its lore
+# last changed (typing in an entry changes it at every key), and a job out is
+# looked for this often.
+LORE_VECTORS_AFTER_MS = 2_000
+LORE_VECTORS_POLL_MS = 1_000
 
 
 def always_on_note(whole: int, sent: int, room: int, condensed: int) -> str:
@@ -42,6 +53,56 @@ def always_on_note(whole: int, sent: int, room: int, condensed: int) -> str:
 
 class AlwaysOnWindow:
     _always_on_said: set[str]
+
+    def _init_always_on(self) -> None:
+        self._lore_vectors_soon = QTimer(self)
+        self._lore_vectors_soon.setSingleShot(True)
+        self._lore_vectors_soon.setInterval(LORE_VECTORS_AFTER_MS)
+        self._lore_vectors_soon.timeout.connect(self._lore_vectors_if_needed)
+        self._lore_vectors_timer = QTimer(self)
+        self._lore_vectors_timer.setInterval(LORE_VECTORS_POLL_MS)
+        self._lore_vectors_timer.timeout.connect(self._poll_lore_vectors)
+
+    # --- the vectors lore from the full entry is ranked by -----------------------
+
+    def _lore_vectors_later(self) -> None:
+        """The lore's vectors seen to a moment from now (`_lore_vectors_if_needed`)."""
+        self._lore_vectors_soon.start()
+
+    def _lore_vectors_if_needed(self) -> None:
+        """Have the vectors the turns' ranking lacks made in the background,
+        while nothing else runs; while a dialog's thread works on the story,
+        once it is done with it."""
+        session = self.session
+        if session is None or session.in_private or session.story.chat:
+            return
+        if self._story_in_use(session):
+            # The window's job, or a dialog's thread: once it is done.
+            self._wait_for_story(session, "vectors")
+            return
+        if session.start_lore_vectors():
+            self._lore_vectors_timer.start()
+
+    def _poll_lore_vectors(self) -> None:
+        """Take the vectors in once made, when nothing else is writing the
+        story. A turn started meanwhile takes them in itself."""
+        session = self.session
+        if session is None or not session.lore_vectors_out():
+            self._lore_vectors_timer.stop()
+            return
+        if self._story_in_use(session) or not session.lore_vectors_ready():
+            return
+        notices = session.adopt_lore_vectors()
+        self._lore_vectors_timer.stop()
+        self._reassemble_inspector()
+        if notices:
+            self.statusBar().showMessage(" ".join(notices), 12000)
+
+    def _after_lore_vectors_job(self) -> None:
+        """After a job: its passage may have set the vectors going."""
+        session = self.session
+        if session is not None and session.lore_vectors_out():
+            self._lore_vectors_timer.start()
 
     def _sync_always_on(self) -> None:
         """The Lore page's line, and once a story a word in the status bar."""
@@ -109,6 +170,8 @@ class AlwaysOnWindow:
                 session.save()
         self.refresh_panels()
         self._reassemble_inspector()
+        # What goes condensed may have changed, condensed versions been written.
+        self._lore_vectors_later()
 
     def condense_lore_entry(self, entry_id: str) -> None:
         """The Lore page's Write a condensed version: one entry."""
@@ -132,6 +195,7 @@ class AlwaysOnWindow:
         self.refresh_panels()
         self.lore_panel.select_entry(entry_id)
         self._reassemble_inspector()
+        self._lore_vectors_later()
 
     def _condense_story_lore(self, entries: list[LoreEntry], *, parent) -> None:  # noqa: ANN001
         session = self.session

@@ -287,6 +287,12 @@ class LocalEmbeddings:
     def close(self) -> None:
         """Nothing to close: the model stays loaded for the next story."""
 
+    def detached(self) -> LocalEmbeddings:
+        """A copy for embedding in the background (engine/session_lore_vectors.py):
+        the same model, loaded once, but a lock of its own, so a turn's text is
+        embedded beside it rather than after it."""
+        return LocalEmbeddings(self.root)
+
     def embed(self, texts: Sequence[str], *, as_query: bool = False) -> EmbeddingResult:
         if not texts:
             return EmbeddingResult(vectors=(), model=BUILTIN_EMBEDDING_MODEL, dimensions=0)

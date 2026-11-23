@@ -2957,7 +2957,12 @@ report lists them as **from the full entry**, with how many parts came and
 where they ranked. Claude storytellers aren't sent them: in blind comparisons
 Claude wrote no better with them (and on Sonnet each turn cost about a third
 more), where GLM 5.3 wrote clearly better, so every other storyteller is. With
-embeddings (Settings → Lore) the parts are ranked by meaning as well as words.
+embeddings (Settings → Lore) the parts are ranked by meaning as well as words;
+their vectors are made ahead, in the background, after a story opens, after
+its always-on entries change and after each passage, so no turn waits for
+them. A turn that comes before they are made ranks the parts by words alone,
+and the report says "ranked by words: the parts' vectors are being made".
+Nothing is made for a private scene or a chat.
 
 An entry's own page shows its condensed version under **Condensed**, to read
 or change in your own words, with **Write a condensed version** (or **Write

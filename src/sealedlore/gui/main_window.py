@@ -744,6 +744,7 @@ class MainWindow(
         self._init_board()
         self._init_collection()
         self._init_lorebooks()
+        self._init_always_on()
         self._init_card_link()
         self._init_phone()
         self._init_videos()
@@ -1966,6 +1967,8 @@ class MainWindow(
         self.status_strip.set_lore(None)
         self.cast_panel.set_cast([], [], [])
         self._condense_soon.stop()
+        self._lore_vectors_soon.stop()
+        self._lore_vectors_timer.stop()
         self._refresh_cast_room()
         self.composer.clear_cast()
         self.scene_panel.set_scene(SceneState(), [])
@@ -2405,8 +2408,10 @@ class MainWindow(
             except Exception as exc:  # noqa: BLE001 - said below; the other parts are still shown
                 traceback.print_exc()
                 failed.append(f"{what} ({type(exc).__name__}: {str(exc)[:160]})")
-        # Cards over the cast's room are condensed while the author reads.
+        # Cards over the cast's room are condensed while the author reads, and
+        # the lore's vectors made for the turns (engine/session_lore_vectors.py).
         self._condense_soon.start()
+        self._lore_vectors_later()
         if failed:
             self._warn_plain(
                 "Part of this story couldn't be shown",
@@ -4178,6 +4183,11 @@ class MainWindow(
         if self._busy and self._worker is not None:
             self._waits.stop()
             self._worker.stop()
+            if self.session is not None:
+                # The lore's vectors being made in the background stop too,
+                # once the request out has come back: what was made is kept,
+                # and the rest made after the next passage.
+                self.session.stop_lore_vectors()
             if self._background:
                 self._drop_queued()
                 self.statusBar().showMessage("Stopping the background reads", 4000)
@@ -4413,6 +4423,10 @@ class MainWindow(
                 self._poll_condensing()
             if "condense" in waiting:
                 self._condense_if_needed()
+            if self._lore_vectors_timer.isActive():
+                self._poll_lore_vectors()
+            if "vectors" in waiting:
+                self._lore_vectors_if_needed()
             if "pictures" in waiting:
                 self._take_card_pictures()
             if "waiting" in waiting:
@@ -4467,6 +4481,7 @@ class MainWindow(
             self._refresh_scene_panel()
             self._refresh_composer()
             self._after_cast_job()
+            self._after_lore_vectors_job()
         if self._asking:
             if self.session is not None and len(self.session.bundle.asides) > self._asides_before:
                 self.status_strip.add_usage(self.session.bundle.asides[-1].usage)
@@ -5285,6 +5300,10 @@ class MainWindow(
         self.session.save()
         if self.in_chat:
             self._chat_model_changed(before)
+        else:
+            # A storyteller lore from the full entry goes to, or doesn't
+            # (engine/model_tuning.py): its vectors, made ahead.
+            self._lore_vectors_later()
         self.stories.refresh(selected_id=self.session.story.id)
         self._reassemble_inspector()
         self._update_controls()
@@ -5744,9 +5763,11 @@ class MainWindow(
         self.session.forget_review_undo()
         self.session.save()
         # Vectors are keyed by content hash, so an edited entry re-embeds
-        # itself on the next turn; nothing to do here but persist.
+        # itself on the next turn; what lore from the full entry is ranked by
+        # is made ahead, a moment after the last change.
         self.lore_panel.set_held_back(self.session.held_back_ids())
         self._reassemble_inspector()
+        self._lore_vectors_later()
 
     def reembed_lore(self) -> None:
         """Rebuild every vector — for when the model changed outside the app."""
@@ -5769,7 +5790,10 @@ class MainWindow(
     def _reembed_job(self):
         assert self.session is not None
         vectors = self.session.reembed_lore()
-        yield SessionNotice(f"Embedded {len(vectors)} lore entries")
+        entries = sum(1 for entry in self.session.bundle.lore if entry.id in vectors)
+        parts = len(vectors) - entries
+        also = f" and {parts} parts of those sent condensed" if parts else ""
+        yield SessionNotice(f"Embedded {entries} lore entries{also}")
 
     def _on_held_changed(self, character_id: str) -> None:
         """Taking up a character hands them the voice, and the scene follows them.
@@ -5928,6 +5952,9 @@ class MainWindow(
             self.session.embeddings = self._current_embeddings()
             self.lore_panel.set_embeddings_available(self.session.embeddings is not None)
             self._reassemble_inspector()
+            # Another embeddings model, budget or storyteller: the lore's
+            # vectors for the turns, made ahead.
+            self._lore_vectors_later()
             # The budget or the archival switch may have changed, and
             # with them the cast's room.
             self.refresh_summaries()
@@ -6252,6 +6279,9 @@ class MainWindow(
         self.show_collection(False)
         self.show_lorebooks(False)
         self.show_cast_board(False)
+        # Nothing more is set going: a job out ends with the story's close.
+        self._lore_vectors_soon.stop()
+        self._lore_vectors_timer.stop()
         if self.session is not None:
             self.session.close()
             self.session.save()

@@ -421,6 +421,9 @@ class PrivateRuntime:
         self.story.private_spans.append(span)
         self.private_provider = provider
         span.privacy = record_of(self.privacy(model), self._span_origin(base_url))
+        # Nothing else is called while it is open: lore's vectors being made
+        # ahead stop once the request out has come back.
+        self.stop_lore_vectors()
         self.save()
         return span
 
