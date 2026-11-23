@@ -99,10 +99,18 @@ class AlwaysOnWindow:
             self.statusBar().showMessage(" ".join(notices), 12000)
 
     def _after_lore_vectors_job(self) -> None:
-        """After a job: its passage may have set the vectors going."""
+        """After a job: its passage may have set the vectors going; if none
+        is out and some are wanted, a moment from now. A Stop during the
+        reads after a passage closes the job before the end of send(), where
+        they are set going, so the Lore page said they were being made for
+        good."""
         session = self.session
-        if session is not None and session.lore_vectors_out():
+        if session is None:
+            return
+        if session.lore_vectors_out():
             self._lore_vectors_timer.start()
+        elif session.lore_vectors_wanted():
+            self._lore_vectors_later()
 
     def _sync_always_on(self) -> None:
         """The Lore page's line, and once a story a word in the status bar."""

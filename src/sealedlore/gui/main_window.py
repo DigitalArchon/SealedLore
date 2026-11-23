@@ -4183,11 +4183,10 @@ class MainWindow(
         if self._busy and self._worker is not None:
             self._waits.stop()
             self._worker.stop()
-            if self.session is not None:
-                # The lore's vectors being made in the background stop too,
-                # once the request out has come back: what was made is kept,
-                # and the rest made after the next passage.
-                self.session.stop_lore_vectors()
+            # The lore's vectors being made in the background go on: Stop is
+            # the turn's, and stopping them left none to be made until the
+            # next passage, which a Stop during the reads never set going
+            # either. Closing the story ends them.
             if self._background:
                 self._drop_queued()
                 self.statusBar().showMessage("Stopping the background reads", 4000)

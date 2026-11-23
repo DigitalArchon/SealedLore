@@ -103,3 +103,61 @@ def test_regenerate_on_it_offers_no_passage_and_says_why(app, tmp_path, story, c
     assert window.session.full_path()[-1] is leaf
     assert window.statusBar().currentMessage() == ANSWERED_AGAIN_PRIVATE.format(name="Maela Orr")
     window.close()
+
+
+# --- the vectors lore from the full entry is ranked by, after a Stop --------------------
+
+
+def stopped_turn(app, window) -> None:
+    """A turn sent and stopped while its passage is written: the job ends
+    without reaching the end of send(), where the vectors are set going."""
+    provider = MockChatProvider(["A passage written slowly."])
+    provider.delay = 5.0
+    window._provider = provider
+    window.composer.select_speaker("char-serrik")
+    window.composer.input.setPlainText("I go to the guild.")
+    window.send_turn()
+    wait_for(app, lambda: bool(provider.requests))
+    window.stop_generation()
+    wait_for(app, lambda: not window._busy)
+    provider.delay = 0.0
+    app.processEvents()
+
+
+def test_after_a_stop_the_window_sets_the_vectors_going(app, tmp_path, story, cast) -> None:
+    from tests.test_lore_vectors_ahead import gated, lore, window_on
+
+    window = window_on(tmp_path, story, cast, lore())
+    session = window.session
+    backend = gated(session)
+    window._lore_vectors_soon.stop()
+    stopped_turn(app, window)
+    assert not session.lore_vectors_out()
+    # A moment after, as after a story opens: never "being made" for good.
+    assert window._lore_vectors_soon.isActive()
+    window._lore_vectors_soon.stop()
+    window._lore_vectors_if_needed()
+    assert session.lore_vectors_out()
+    backend.gate.set()
+    window.close()
+
+
+def test_a_stop_leaves_a_job_out_making_them(app, tmp_path, story, cast) -> None:
+    """Stop is the turn's: the vectors made in the background go on, and only
+    closing the story stops them."""
+    from tests.test_lore_vectors_ahead import finished, gated, lore, window_on
+
+    window = window_on(tmp_path, story, cast, lore())
+    session = window.session
+    backend = gated(session)
+    window._lore_vectors_soon.stop()
+    window._lore_vectors_if_needed()
+    job = session._vectors_job
+    assert job is not None
+    stopped_turn(app, window)
+    assert not job.stop.is_set()
+    backend.gate.set()
+    finished(session)
+    window._poll_lore_vectors()
+    assert session.lore_without_vectors() == []
+    window.close()
