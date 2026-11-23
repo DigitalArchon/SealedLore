@@ -490,3 +490,28 @@ def test_a_turn_takes_in_what_the_job_has_made_so_far(tmp_path, story, cast) -> 
     session.adopt_lore_vectors()
     rows = [(row.content_hash, row.model) for row in session.bundle.embeddings]
     assert len(rows) == len(set(rows))
+
+
+def test_an_endpoint_that_refuses_every_text_isnt_taken_as_refusing_each(
+    tmp_path, story, cast
+) -> None:
+    """A model the endpoint won't embed with answers 400 to everything: that
+    is a failure, said and tried again after the next passage, not every text
+    kept from ever being asked for again."""
+    from sealedlore.providers.base import ProviderError
+
+    session, backend, _guild = big_book_session(tmp_path, story, cast)
+
+    def refuse(texts, *, as_query: bool = False):
+        with backend.lock:
+            backend.requests += 1
+        raise ProviderError("the model doesn't embed (HTTP 400)", status_code=400)
+
+    backend.embed = refuse
+    said: list[str] = []
+    after_passages(session, 1, said)
+    assert said and "couldn't be made (the model doesn't embed (HTTP 400))" in said[-1]
+    assert not session._vectors_refused
+    asked = backend.requests
+    after_passages(session, 1)
+    assert backend.requests > asked  # tried again

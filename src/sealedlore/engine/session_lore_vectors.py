@@ -368,6 +368,16 @@ def _embed_batch(job: _VectorJob, backend: Any, batch: list[tuple[str, str]]) ->
         for one in batch:
             if job.stop.is_set() or not _embed_batch(job, backend, [one]):
                 return False
+        digests = [digest for digest, _ in batch]
+        with job.lock:
+            if all(digest in job.refused for digest in digests):
+                # Every one refused alone too: the request, not a text (a
+                # model the endpoint won't embed with), so none is kept from
+                # being asked for again, and the job ends as for any failure.
+                for digest in digests:
+                    job.refused.pop(digest, None)
+                job.error = _words(exc)
+                return False
         return True
     with job.lock:
         for (digest, _), vector in zip(batch, result.vectors, strict=True):
