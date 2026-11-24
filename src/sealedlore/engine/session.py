@@ -3362,44 +3362,7 @@ class StorySession(
             ledger_on(previous),
             earlier="" if ledger_on(previous) else "\n\n".join(s.content for s in previous),
         )
-        messages = build_summary_messages(
-            chunk,
-            self.visible_cast(),
-            previous=previous[-1] if previous else None,
-            target_words=self.config.summary_target_words,
-            chat=self.story.chat,
-            texts=self.texts,
-        )
-        request = ChatRequest(
-            model=self.summarization_model,
-            extra_body=self.route_for("summarisation"),
-            messages=messages,
-            params=self.side_params(self.summarization_model),
-        )
-        log_ref = self._log(
-            "summary_request",
-            {
-                "node_ids": [node.id for node in chunk],
-                "payload": self.provider.build_payload(request),
-            },
-        )
-
-        text, completed = self.provider.complete(request)
-        text = text.strip()
-        self._log(
-            "summary_response",
-            {
-                "request_log_ref": log_ref,
-                "text": text,
-                "usage": completed.raw_usage,
-            },
-        )
-        if not text:
-            raise ProviderError("the summariser returned no text")
-        unfit = summary_unfit(completed)
-        if unfit is not None:
-            raise ProviderError(unfit)
-
+        text, completed = self._summarise(chunk, previous[-1] if previous else None)
         summary = Summary(
             covered_node_ids=[node.id for node in chunk],
             content=text,
@@ -3410,6 +3373,49 @@ class StorySession(
         self.bundle.summaries.append(summary)
         self.save()
         return summary
+
+    def _summarise(
+        self, chunk: Sequence[Node], previous: Summary | None, **logged: Any
+    ) -> tuple[str, StreamCompleted]:
+        """The summariser's chapter of `chunk`, continuing from `previous`, on
+        this thread (`archive`, `rebuild_summary`; the background chapters
+        build theirs off the worker's thread and are checked as they are
+        taken in, session_archival.py). Logged, `logged` ahead of the node
+        ids; its text, stripped, and the reply. Raises ProviderError for no
+        text or a reply that isn't whole."""
+        request = ChatRequest(
+            model=self.summarization_model,
+            extra_body=self.route_for("summarisation"),
+            messages=build_summary_messages(
+                chunk,
+                self.visible_cast(),
+                previous=previous,
+                target_words=self.config.summary_target_words,
+                chat=self.story.chat,
+                texts=self.texts,
+            ),
+            params=self.side_params(self.summarization_model),
+        )
+        log_ref = self._log(
+            "summary_request",
+            {
+                **logged,
+                "node_ids": [node.id for node in chunk],
+                "payload": self.provider.build_payload(request),
+            },
+        )
+        text, completed = self.provider.complete(request)
+        text = text.strip()
+        self._log(
+            "summary_response",
+            {"request_log_ref": log_ref, "text": text, "usage": completed.raw_usage},
+        )
+        if not text:
+            raise ProviderError("the summariser returned no text")
+        unfit = summary_unfit(completed)
+        if unfit is not None:
+            raise ProviderError(unfit)
+        return text, completed
 
     def _start_ledger(
         self, chunk: Sequence[Node], previous: str | None, *, earlier: str = ""
@@ -3506,41 +3512,9 @@ class StorySession(
             raise ValueError("the nodes this summary covers are no longer in the story")
         chunk = [index[node_id] for node_id in summary.covered_node_ids]
 
-        previous = self.previous_on_branch(summary)
-        messages = build_summary_messages(
-            chunk,
-            self.visible_cast(),
-            previous=previous,
-            target_words=self.config.summary_target_words,
-            chat=self.story.chat,
-            texts=self.texts,
+        text, completed = self._summarise(
+            chunk, self.previous_on_branch(summary), summary_id=summary.id
         )
-        request = ChatRequest(
-            model=self.summarization_model,
-            extra_body=self.route_for("summarisation"),
-            messages=messages,
-            params=self.side_params(self.summarization_model),
-        )
-        log_ref = self._log(
-            "summary_request",
-            {
-                "summary_id": summary.id,
-                "node_ids": list(summary.covered_node_ids),
-                "payload": self.provider.build_payload(request),
-            },
-        )
-        text, completed = self.provider.complete(request)
-        text = text.strip()
-        self._log(
-            "summary_response",
-            {"request_log_ref": log_ref, "text": text, "usage": completed.raw_usage},
-        )
-        if not text:
-            raise ProviderError("the summariser returned no text")
-        unfit = summary_unfit(completed)
-        if unfit is not None:
-            raise ProviderError(unfit)
-
         summary.content = text
         summary.model = self.summarization_model
         summary.usage = self.priced(completed.usage, self.summarization_model)
