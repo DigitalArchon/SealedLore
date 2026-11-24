@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from sealedlore.engine.session_lore_vectors import LORE_BEING_MADE, PARTS_BEING_MADE
+from sealedlore.engine.tokens import TokenEstimator, fallback_counter
 from sealedlore.models.config import EmbeddingProviderConfig
 from sealedlore.models.lore import lore_fingerprint
 from sealedlore.providers.base import ProviderError
@@ -300,6 +301,9 @@ def window_on(tmp_path: Path, story, cast, entries, *, model: str = GLM):
     story.defaults.main_model = model
     save_story_bundle(StoryBundle(story=story, cast=list(cast), lore=entries), root=tmp_path / "d")
     window = MainWindow(root=tmp_path / "d", use_mock=True)
+    # Counted as `session_with` counts, whatever tiktoken has cached: with its
+    # vocabulary the Harbour fitted whole and the dialog's count was another.
+    window.estimator = TokenEstimator(counter=fallback_counter)
     window.config.lore_whole_share = 0.0
     window.config.lore_limit = "tokens"
     window.config.lore_token_cap = 200
@@ -396,10 +400,13 @@ def test_the_embed_now_dialog_embeds_the_parts_with_the_entries(
     parts = len(session.part_items())
     assert parts
     window.embed_lore_now(least=1)
-    # Not the Guild: it goes condensed, and its parts are embedded in place
-    # of its whole text.
+    # The Keep alone: the Harbour and the Guild go condensed, and their parts
+    # are embedded in place of their whole texts.
+    assert set(session.lore_layout().condensed) == {
+        entry.id for entry in session.bundle.lore if entry.title != "The Keep"
+    }
     assert said == [
-        f"Embedding 2 lore entries and {parts} parts of the always-on entries sent "
+        f"Embedding 1 lore entry and {parts} parts of the always-on entries sent "
         "condensed, so each turn can find what it needs…"
     ]
     assert session.lore_without_vectors() == []
