@@ -98,7 +98,8 @@ from sealedlore.engine.looks import COMMON_EXPRESSIONS, COMMON_LOOKS, look_words
 from sealedlore.engine.plot_md import PICTURE_SUFFIXES
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.gui import text_size, theme
-from sealedlore.gui.ref_images import StoryPictures, pixmap_of
+from sealedlore.gui.picture_cache import COVER, PictureCache
+from sealedlore.gui.ref_images import StoryPictures
 from sealedlore.gui.sheet_labels import HEADING_AND_WORDING, ask_sheet_label
 from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.models.character import Character
@@ -141,27 +142,32 @@ def _characters(count: int) -> str:
     return f"{count} character{'' if count == 1 else 's'}"
 
 
-def cover(pixmap: QPixmap, width: int, height: int) -> QPixmap:
-    """The picture filling `width` by `height`, cut from the top (a face is
-    near the top of a portrait), centred across."""
-    scaled = pixmap.scaled(width, height, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
-    x = max(0, (scaled.width() - width) // 2)
-    y = max(0, min((scaled.height() - height) // 6, scaled.height() - height))
-    return scaled.copy(x, y, width, height)
-
-
 class Thumbs:
     """Pictures as the board shows them, each read once at each size, a few
     at a time: asked for one not read yet, the board draws its place empty
     and is told (`ready`) when there is more to show, so a cast of a
-    hundred pictures never holds the window while its files are read."""
+    hundred pictures never holds the window while its files are read.
+
+    Kept in a `picture_cache.PictureCache` (by the file as it is now, so one
+    written again is read again; bounded, far above a screenful of cells),
+    the transcript's own mechanism, read at once there."""
 
     PER_TICK = 3
+    # A screen of the board's largest cells is under 30 MB.
+    BUDGET = 128 * 1024 * 1024
 
-    def __init__(self, pictures: StoryPictures, ready: Callable[[], None], owner: QObject) -> None:
+    def __init__(
+        self,
+        pictures: StoryPictures,
+        ready: Callable[[], None],
+        owner: QObject,
+        *,
+        shape: str = COVER,
+    ) -> None:
         self._pictures = pictures
         self._ready = ready
-        self._cache: dict[tuple[str, int, int], QPixmap] = {}
+        self._shape = shape
+        self._cache = PictureCache(self.BUDGET)
         self._queue: list[tuple[str, int, int]] = []
         # The owner's: a timer of its own outlived the page whose pictures it
         # read, and told the page's deleted widgets of them.
@@ -170,19 +176,19 @@ class Thumbs:
         self._timer.timeout.connect(self._work)
 
     def forget(self) -> None:
-        self._cache.clear()
+        self._cache.forget()
         self._queue.clear()
         self._timer.stop()
 
     def forget_file(self, file: str) -> None:
         """One file read afresh next time: a card's file can come back under
-        the name of one taken off (a picture's name is its own for good)."""
-        for key in [key for key in self._cache if key[0] == file]:
-            del self._cache[key]
+        the name of one taken off, as soon as one is written (the same size,
+        within the same tick of the file system's clock)."""
+        self._cache.forget(file)
 
     def get(self, file: str, width: int, height: int) -> QPixmap | None:
+        pixmap = self._cache.peek(self._pictures(), file, width, height, self._shape)
         key = (file, width, height)
-        pixmap = self._cache.get(key)
         if pixmap is None and key not in self._queue:
             self._queue.append(key)
             self._timer.start()
@@ -190,23 +196,14 @@ class Thumbs:
 
     def now(self, file: str, width: int, height: int) -> QPixmap:
         """Read at once (a small icon the list needs whole)."""
-        key = (file, width, height)
-        if key not in self._cache:
-            self._cache[key] = self._read(*key)
-        return self._cache[key]
-
-    def _read(self, file: str, width: int, height: int) -> QPixmap:
-        store = self._pictures()
-        data = store.read(file) if store is not None and file else None
-        pixmap = pixmap_of(data) if data else QPixmap()
-        return QPixmap() if pixmap.isNull() else cover(pixmap, width, height)
+        return self._cache.picture(self._pictures(), file, width, height, self._shape)
 
     def _work(self) -> None:
+        store = self._pictures()
         for _ in range(self.PER_TICK):
             if not self._queue:
                 break
-            key = self._queue.pop(0)
-            self._cache[key] = self._read(*key)
+            self._cache.picture(store, *self._queue.pop(0), self._shape)
         if not self._queue:
             self._timer.stop()
         self._ready()

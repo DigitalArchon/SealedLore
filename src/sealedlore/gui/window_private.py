@@ -257,8 +257,10 @@ class PrivateWindow:
         if span is None:
             if was_open:
                 # The scene's messages' drawings go with it: a memory-only
-                # scene's words mustn't stay in the process after it.
+                # scene's words mustn't stay in the process after it, nor
+                # its pictures as shown.
                 forget_drawn_text()
+                self.shown_pictures.forget()
             # Pictures for the cards approved while a scene was open waited
             # for it to end (window_board): now they can be drawn.
             self._start_waiting()

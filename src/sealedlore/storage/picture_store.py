@@ -15,9 +15,10 @@ the GUI thread only (`add_images`), as images.json has always had one writer.
 
 from __future__ import annotations
 
+import itertools
 import json
 import threading
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Hashable, Iterable, Mapping
 from pathlib import Path, PurePosixPath
 from typing import Any, Protocol
 
@@ -45,6 +46,7 @@ from sealedlore.storage.repository import append_api_log
 
 class PictureStore(Protocol):
     def read(self, relative: str) -> bytes | None: ...
+    def stamp(self, relative: str) -> Hashable | None: ...
     def write(self, relative: str, data: bytes) -> None: ...
     def remove(self, relative: str) -> None: ...
     def images(self) -> list[GeneratedImage]: ...
@@ -72,6 +74,17 @@ class DiskPictures:
 
     def read(self, relative: str) -> bytes | None:
         return read_story_file(self.story_id, relative, self.root)
+
+    def stamp(self, relative: str) -> Hashable | None:
+        """What the file is now, to tell a copy read from it before from one
+        written since (an edit, a file under a name used before): its path,
+        inode, size and modification time. None for no such file."""
+        try:
+            path = story_path(self.story_id, relative, self.root)
+            found = path.stat()
+        except (OSError, ValueError):
+            return None
+        return (str(path), found.st_ino, found.st_size, found.st_mtime_ns)
 
     def write(self, relative: str, data: bytes) -> None:
         write_story_file(self.story_id, relative, data, self.root)
@@ -124,6 +137,11 @@ class DiskPictures:
         return entry_id
 
 
+# Every write to a memory store, numbered across the process: a file's
+# number is its stamp (`MemoryPictures.stamp`).
+_WRITES = itertools.count(1)
+
+
 class MemoryPictures:
     """A memory-only chat's pictures, in this process only.
 
@@ -140,6 +158,7 @@ class MemoryPictures:
         self._log = log
         self._lock = threading.Lock()
         self._files: dict[str, bytes] = {}
+        self._stamps: dict[str, int] = {}
         self._images: list[GeneratedImage] = []
         self._videos: list[GeneratedVideo] = []
         self._closed = False
@@ -154,6 +173,7 @@ class MemoryPictures:
                 ]
             elif is_safe_relative(relative):
                 self._files[relative] = data
+                self._stamps[relative] = next(_WRITES)
 
     @staticmethod
     def _checked(relative: str) -> str:
@@ -165,15 +185,24 @@ class MemoryPictures:
         with self._lock:
             return self._files.get(relative)
 
+    def stamp(self, relative: str) -> Hashable | None:
+        """The number of the write that put the file there (unique in the
+        process), None for no such file."""
+        with self._lock:
+            number = self._stamps.get(relative)
+        return ("memory", number) if number is not None else None
+
     def write(self, relative: str, data: bytes) -> None:
         relative = self._checked(relative)
         with self._lock:
             if not self._closed:
                 self._files[relative] = data
+                self._stamps[relative] = next(_WRITES)
 
     def remove(self, relative: str) -> None:
         with self._lock:
             self._files.pop(relative, None)
+            self._stamps.pop(relative, None)
 
     def images(self) -> list[GeneratedImage]:
         with self._lock:
@@ -189,6 +218,7 @@ class MemoryPictures:
             for image in self._images:
                 if image.id == image_id:
                     self._files.pop(image.file, None)
+                    self._stamps.pop(image.file, None)
             self._images = [image for image in self._images if image.id != image_id]
 
     def videos(self) -> list[GeneratedVideo]:
@@ -211,6 +241,7 @@ class MemoryPictures:
                 if video.id == video_id:
                     for relative in (video.file, video.poster, video.last_frame):
                         self._files.pop(relative, None)
+                        self._stamps.pop(relative, None)
             self._videos = [video for video in self._videos if video.id != video_id]
 
     def all_files(self) -> dict[str, bytes]:
@@ -237,5 +268,6 @@ class MemoryPictures:
         with self._lock:
             self._closed = True
             self._files.clear()
+            self._stamps.clear()
             self._images.clear()
             self._videos.clear()

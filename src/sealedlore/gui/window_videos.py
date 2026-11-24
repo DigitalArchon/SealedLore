@@ -22,7 +22,13 @@ from PySide6.QtWidgets import QMessageBox
 from sealedlore.gui import file_dialogs
 from sealedlore.gui.video_dialog import VideoDialog
 from sealedlore.gui.video_jobs import VideoCatalog, VideoJobs
-from sealedlore.gui.video_view import FrameGrabber, VideoItem, multimedia_available, stop_playback
+from sealedlore.gui.video_view import (
+    POSTER_BOX,
+    FrameGrabber,
+    VideoItem,
+    multimedia_available,
+    stop_playback,
+)
 from sealedlore.gui.winprivacy import exclude_from_capture
 from sealedlore.models.config import _same_host, shown, without_password
 from sealedlore.models.image import RefUse
@@ -99,7 +105,7 @@ class VideosWindow:
             items.append(
                 VideoItem(
                     record=video,
-                    poster=store.read(video.poster) if video.poster else None,
+                    poster=self.shown_pictures.picture(store, video.poster, *POSTER_BOX),
                     source=lambda v=video: self._video_source(v),
                     running=video.id in running,
                     can_open=isinstance(store, DiskPictures),

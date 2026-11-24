@@ -40,22 +40,24 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.gui.image_codec import encoded
-from sealedlore.gui.ref_images import pixmap_within
 from sealedlore.models.video import GeneratedVideo
 
 # The largest a video is shown in the column (as a picture's height cap).
 VIDEO_MAX_HEIGHT = 520
+# What its poster is held at: the column's reading width (transcript.py).
+POSTER_BOX = (920, VIDEO_MAX_HEIGHT)
 # How long taking a video's frames may take before it is given up.
 GRAB_TIMEOUT_MS = 20_000
 
 
 @dataclass(frozen=True)
 class VideoItem:
-    """A video for the transcript: its record, its poster's bytes, and how
-    to reach its file (a path on disk, else its bytes)."""
+    """A video for the transcript: its record, its poster as shown
+    (`POSTER_BOX`; null for none), and how to reach its file (a path on
+    disk, else its bytes)."""
 
     record: GeneratedVideo
-    poster: bytes | None
+    poster: QPixmap
     source: Callable[[], Path | bytes | None]
     # A job is asking after it now (else it can be asked after again).
     running: bool = False
@@ -478,7 +480,7 @@ class VideoMessageWidget(QFrame):
             note.setWordWrap(True)
             layout.addWidget(note)
 
-        poster = pixmap_within(item.poster, QSize(920, VIDEO_MAX_HEIGHT))
+        poster = item.poster
         aspect = poster.size() if not poster.isNull() else _aspect_of(video)
         self.surface = VideoSurface(poster, aspect)
         self.surface.setToolTip("Click to play or pause")

@@ -114,13 +114,43 @@ def pixmap_within(data: bytes | None, box: QSize) -> QPixmap:
     (`QImageReader.setScaledSize`) read a picture in two thirds of the time
     and lost detail: a JPEG's text and fine lines came out visibly softer.
     """
-    pixmap = pixmap_of(data)
+    return within(pixmap_of(data), box.width(), box.height())
+
+
+# How a picture read whole is brought to the size it is shown at
+# (`picture_cache.PictureCache` keeps it by which).
+
+
+def within(pixmap: QPixmap, width: int, height: int) -> QPixmap:
+    """`pixmap` no larger than `width` by `height`, its shape kept and never
+    enlarged (a picture in the transcript)."""
     size = pixmap.size()
-    if size.width() <= box.width() and size.height() <= box.height():
+    if size.width() <= width and size.height() <= height:
         return pixmap
     return pixmap.scaled(
-        size.scaled(box, Qt.KeepAspectRatio), Qt.KeepAspectRatio, Qt.SmoothTransformation
+        size.scaled(QSize(width, height), Qt.KeepAspectRatio),
+        Qt.KeepAspectRatio,
+        Qt.SmoothTransformation,
     )
+
+
+def fit(pixmap: QPixmap, width: int, height: int) -> QPixmap:
+    """`pixmap` as large as fits `width` by `height`, its shape kept (a
+    thumbnail)."""
+    if pixmap.isNull():
+        return QPixmap()
+    return pixmap.scaled(width, height, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+
+def cover(pixmap: QPixmap, width: int, height: int) -> QPixmap:
+    """The picture filling `width` by `height`, cut from the top (a face is
+    near the top of a portrait), centred across (the cast board's cells)."""
+    if pixmap.isNull():
+        return QPixmap()
+    scaled = pixmap.scaled(width, height, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+    x = max(0, (scaled.width() - width) // 2)
+    y = max(0, min((scaled.height() - height) // 6, scaled.height() - height))
+    return scaled.copy(x, y, width, height)
 
 
 def picture_bytes(source: Path) -> tuple[bytes, str]:
@@ -275,20 +305,15 @@ def load_plot_pictures(parsed: ParsedPlotFile, folder: Path) -> list[PlotProblem
     return problems
 
 
-def _scaled(pixmap: QPixmap, side: int) -> QPixmap:
-    if pixmap.isNull():
-        return QPixmap()
-    return pixmap.scaled(side, side, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-
-
 def thumbnail(path: Path, side: int = THUMB) -> QPixmap:
     """A file's thumbnail (the plot editor's pictures, beside the plot file)."""
-    return _scaled(load_pixmap(path), side)
+    return fit(load_pixmap(path), side, side)
 
 
 def thumbnail_of(data: bytes | None, side: int = THUMB) -> QPixmap:
-    """A stored picture's thumbnail, made here and kept nowhere."""
-    return _scaled(pixmap_of(data), side)
+    """A stored picture's thumbnail, made here and kept nowhere (one shown
+    again and again is kept by `picture_cache`)."""
+    return fit(pixmap_of(data), side, side)
 
 
 WHOLE_TIP = "\nDouble-click to see it full size; right-click for more."

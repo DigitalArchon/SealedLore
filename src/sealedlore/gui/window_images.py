@@ -36,13 +36,14 @@ from sealedlore.gui.image_dialog import (
 from sealedlore.gui.image_jobs import FailedPicture, ImageCatalog, ImageJobs
 from sealedlore.gui.image_picker import pick_image_model
 from sealedlore.gui.images_panel import ImagesPanel
+from sealedlore.gui.picture_cache import PictureCache
 from sealedlore.gui.picture_use import CHARACTER, PLACE, UsePictureDialog
 from sealedlore.gui.picture_variant import PictureVariantDialog, VariantSubject
 from sealedlore.gui.portraits_dialog import PortraitsDialog
 from sealedlore.gui.ref_images import PICTURE_FILTER
 from sealedlore.gui.restyle_dialog import RESTYLE_LABEL, ask_restyle
 from sealedlore.gui.style_from_picture import describe_style
-from sealedlore.gui.transcript import FailedPictureItem, PendingPicture
+from sealedlore.gui.transcript import PICTURE_BOX, FailedPictureItem, PendingPicture
 from sealedlore.gui.winprivacy import exclude_from_capture
 from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage, ImageRef
@@ -66,6 +67,9 @@ class ImagesWindow:
         self.image_jobs.failed.connect(self._on_image_failed)
         self.image_jobs.changed.connect(self._on_image_jobs_changed)
         self._images: list[GeneratedImage] = []
+        # The transcript's pictures, faces and video posters as shown, kept
+        # across its rebuilds; emptied as a story closes.
+        self.shown_pictures = PictureCache()
         self.images_panel = ImagesPanel()
         self.images_panel.action_requested.connect(self._image_action)
         self.images_panel.generate_requested.connect(lambda: self.generate_image())
@@ -261,8 +265,9 @@ class ImagesWindow:
             return []
         story_id = self.session.story.id
         store = self.session.pictures
+        shown = self.shown_pictures
         items: list = [
-            (image, store.read(image.file))
+            (image, shown.picture(store, image.file, *PICTURE_BOX))
             for image in self._images
             if image.anchor_node_id == anchor and not _passage_less(image)
         ]

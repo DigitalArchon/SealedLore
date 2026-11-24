@@ -1963,8 +1963,9 @@ class MainWindow(
         self.session = None
         self._sync_answers_action()
         # Its messages' drawings go with it (a memory-only chat's words
-        # mustn't stay in the process after it).
+        # mustn't stay in the process after it), and its pictures as shown.
         forget_drawn_text()
+        self.shown_pictures.forget()
         self._keep_draft()
         self._restore_draft(None)
         self._sync_stories_list()
@@ -2348,6 +2349,7 @@ class MainWindow(
         memory-only chat) from memory."""
         # The story left's messages' drawings go with it (`_close_story`).
         forget_drawn_text()
+        self.shown_pictures.forget()
         # A route to one host is checked against that host's price.
         self.session.host_price = self._host_price
         self._fetch_host_prices()

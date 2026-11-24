@@ -33,12 +33,12 @@ from sealedlore.engine.images import ImageRequest
 from sealedlore.engine.looks import look_words
 from sealedlore.engine.picture_styles import style_key, style_words
 from sealedlore.engine.portraits import Card, card_size
-from sealedlore.gui.cast_board import ASPECT, cover
+from sealedlore.gui.cast_board import ASPECT
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.model_picker import ModelField
 from sealedlore.gui.picture_style import PictureStyleField
 from sealedlore.gui.portraits_dialog import card_name
-from sealedlore.gui.ref_images import pixmap_of
+from sealedlore.gui.ref_images import cover, pixmap_of
 from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, may_discard, size_to_screen
 from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS
 from sealedlore.models.image import ImageRef

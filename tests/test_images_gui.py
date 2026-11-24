@@ -643,12 +643,19 @@ def test_a_photo_held_sideways_is_upright_within_the_box(app):
         assert shown.size().toTuple() == (24, 32)
 
 
-def test_the_transcript_holds_a_picture_at_the_size_it_shows(app):
+def test_the_transcript_holds_a_picture_at_the_size_it_shows(app, window: MainWindow):
     from sealedlore.gui.transcript import PICTURE_MAX_HEIGHT, READING_WIDTH
     from sealedlore.models.image import GeneratedImage
 
-    record = GeneratedImage(file="images/big.png", prompt="p", model="m", size="2048x1152")
-    widget = ImageMessageWidget(record, plain_picture(2048, 1152))
+    store = window.session.pictures
+    store.write("images/big.png", plain_picture(2048, 1152))
+    record = GeneratedImage(
+        anchor_node_id="a1", file="images/big.png", prompt="p", model="m", size="2048x1152"
+    )
+    store.add_images([record])
+    window._load_images()
+    [(image, pixmap)] = window._pictures_for("a1")
+    widget = ImageMessageWidget(image, pixmap)
     held = widget.picture._pixmap.size()
     assert held.width() <= READING_WIDTH and held.height() == PICTURE_MAX_HEIGHT
     # Shown at the size it was decoded, it is drawn as it is: no second copy.
@@ -676,6 +683,82 @@ def test_a_picture_held_smaller_is_what_the_view_would_have_shown(app):
         held = pixmap_within(data, QSize(100, 60))
         assert held.size().toTuple() == (80, 60)
         assert held.toImage() == shown.toImage()
+
+
+def counted_decodes(monkeypatch) -> list[int]:
+    from sealedlore.gui import picture_cache
+
+    decoded: list[int] = []
+    real = picture_cache.pixmap_of
+
+    def counting(data):
+        decoded.append(len(data))
+        return real(data)
+
+    monkeypatch.setattr(picture_cache, "pixmap_of", counting)
+    return decoded
+
+
+def shown_colour(window: MainWindow, image_id: str) -> str:
+    flush(QApplication.instance())
+    [widget] = [
+        w for w in window.transcript.findChildren(ImageMessageWidget) if w.image_id == image_id
+    ]
+    image = widget.picture._pixmap.toImage()
+    return image.pixelColor(image.width() // 2, image.height() // 2).name()
+
+
+def test_a_rebuild_decodes_no_picture_again(app, window: MainWindow, monkeypatch):
+    """Every rebuild (after each turn, a picture landing, Answers or Looks
+    switched) read and decoded every picture it built: each is decoded once,
+    and again only once its file has been written since."""
+    from sealedlore.models.image import GeneratedImage
+
+    store = window.session.pictures
+    store.write("images/scene.png", plain_picture(2048, 1152))
+    record = GeneratedImage(
+        anchor_node_id="a1", file="images/scene.png", prompt="p", model="m", size="1k"
+    )
+    store.add_images([record])
+    window._load_images()
+    decoded = counted_decodes(monkeypatch)
+    window.reload_transcript()
+    assert len(decoded) == 1
+    assert shown_colour(window, record.id) == "#336699"
+    for _ in range(3):
+        window.reload_transcript()
+    assert len(decoded) == 1, "an unchanged picture is not decoded again"
+
+    # The file written again (an edit, a picture under a name used before).
+    image = QImage(2048, 1152, QImage.Format_RGB32)
+    image.fill(QColor("#993322"))
+    from sealedlore.gui.ref_images import _encoded
+
+    store.write("images/scene.png", _encoded(image, "PNG"))
+    window.reload_transcript()
+    assert len(decoded) == 2
+    assert shown_colour(window, record.id) == "#993322"
+    window.reload_transcript()
+    assert len(decoded) == 2
+
+
+def test_another_story_s_pictures_are_not_kept_once_it_closes(app, window: MainWindow):
+    from sealedlore.models.image import GeneratedImage
+
+    store = window.session.pictures
+    store.write("images/scene.png", PNG)
+    store.add_images(
+        [
+            GeneratedImage(
+                anchor_node_id="a1", file="images/scene.png", prompt="p", model="m", size="1k"
+            )
+        ]
+    )
+    window._load_images()
+    window.reload_transcript()
+    assert len(window.shown_pictures) == 1
+    window._close_story()
+    assert len(window.shown_pictures) == 0
 
 
 def test_a_card_s_picture_with_no_passage_is_not_drawn_above_the_story(app, window: MainWindow):

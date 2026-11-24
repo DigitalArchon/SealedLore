@@ -36,7 +36,7 @@ from sealedlore.gui import theme
 from sealedlore.gui.markdown_text import markdown_html, shown_text
 from sealedlore.gui.picture_words import EDIT_LABEL, USE_CHARACTER_LABEL, USE_PLACE_LABEL
 from sealedlore.gui.plain_text import plain_tip
-from sealedlore.gui.ref_images import pixmap_of, pixmap_within
+from sealedlore.gui.ref_images import pixmap_of
 from sealedlore.gui.sizing import GrowingText
 from sealedlore.gui.video_view import PendingVideoWidget, VideoItem, VideoMessageWidget
 from sealedlore.models.aside import Aside
@@ -70,6 +70,8 @@ PICTURE_MAX_HEIGHT = 480
 # ran to ~1,170px, far past a comfortable reading measure.
 READING_WIDTH = 920
 COLUMN_MARGIN = 18
+# What a picture is held at: no larger than the column shows it.
+PICTURE_BOX = (READING_WIDTH, PICTURE_MAX_HEIGHT)
 
 # With a background picture: the view and column see through to it, a wash
 # keeps the text readable, and the message frames go translucent.
@@ -137,10 +139,10 @@ class FailedPictureItem:
 
 
 # The pictures anchored after a node (None: before the first): a finished
-# one as (record, its file), or one still being drawn.
-# A picture with its bytes (None: its file is missing), or one still being drawn.
+# one as (record, its picture at the size it is shown: `PICTURE_BOX`, null
+# when its file is missing or unreadable), or one still being drawn.
 # A video (gui/video_view.VideoItem) comes the same way, done or not.
-PictureItem = "tuple[GeneratedImage, bytes | None] | PendingPicture | FailedPictureItem | VideoItem"
+PictureItem = "tuple[GeneratedImage, QPixmap] | PendingPicture | FailedPictureItem | VideoItem"
 PicturesFor = Callable[[str | None], f"Sequence[{PictureItem}]"]
 
 
@@ -1273,7 +1275,13 @@ class ImageMessageWidget(QFrame):
     # (action, image id): open, prompt, save, reference, again, background, delete.
     action_requested = Signal(str, str)
 
-    def __init__(self, image: GeneratedImage, data: bytes | None, *, chat: bool = False) -> None:
+    def __init__(
+        self, image: GeneratedImage, pixmap: QPixmap | None, *, chat: bool = False
+    ) -> None:
+        """`pixmap`: the picture no larger than the column shows it
+        (`PICTURE_BOX`, read once by the window's `picture_cache`); the file
+        has the rest, and everything done with a picture reads the file.
+        None or null: its file is missing."""
         super().__init__()
         self.setObjectName("message")
         self.setProperty("kind", "picture")
@@ -1316,10 +1324,7 @@ class ImageMessageWidget(QFrame):
         header_row.addWidget(more)
         layout.addLayout(header_row)
 
-        # No larger than the column shows it: the file has the rest, and
-        # everything done with a picture reads the file.
-        pixmap = pixmap_within(data, QSize(READING_WIDTH, PICTURE_MAX_HEIGHT))
-        if pixmap.isNull():
+        if pixmap is None or pixmap.isNull():
             missing = QLabel(f"The picture file is missing ({image.file}).")
             missing.setObjectName("hintLabel")
             layout.addWidget(missing)
@@ -2094,8 +2099,8 @@ class TranscriptView(QScrollArea):
                 if widget is not None:
                     widget.resume_edit(state)
 
-    def add_picture(self, image: GeneratedImage, data: bytes | None) -> ImageMessageWidget:
-        widget = ImageMessageWidget(image, data, chat=self._chat)
+    def add_picture(self, image: GeneratedImage, pixmap: QPixmap | None) -> ImageMessageWidget:
+        widget = ImageMessageWidget(image, pixmap, chat=self._chat)
         widget.action_requested.connect(self.image_action_requested)
         self._place(widget)
         return widget

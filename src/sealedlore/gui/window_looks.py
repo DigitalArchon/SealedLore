@@ -8,12 +8,10 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 
-from PySide6.QtCore import QSize
 from PySide6.QtGui import QAction, QPixmap
 
 from sealedlore.engine.looks import faces_along
 from sealedlore.engine.scene_state import same_person
-from sealedlore.gui.ref_images import pixmap_within
 from sealedlore.gui.stage import STAGE_HEIGHT
 from sealedlore.models.node import Node
 from sealedlore.storage.repository import save_config
@@ -26,9 +24,6 @@ PASSAGES_LABEL = "Characters &on each passage"
 
 class LooksWindow:
     def _init_looks(self) -> None:
-        # Pictures as shown, by (story, file, height): read once each (a
-        # picture's file never changes; a new picture is a new file).
-        self._face_pixmaps: dict[tuple[str, str, int], QPixmap] = {}
         self.centre_stack.currentChanged.connect(lambda _index: self._sync_stage())
 
     def _looks_actions(self, view_menu) -> None:
@@ -67,14 +62,9 @@ class LooksWindow:
     # --- pictures ---------------------------------------------------------------------
 
     def _face_pixmap(self, file: str, height: int) -> QPixmap:
-        session = self.session
-        key = (session.story.id, file, height)
-        pixmap = self._face_pixmaps.get(key)
-        if pixmap is None:
-            data = session.pictures.read(file) if file else None
-            pixmap = pixmap_within(data, QSize(height * 2, height)) if data else QPixmap()
-            self._face_pixmaps[key] = pixmap
-        return pixmap
+        """A picture as a face shows it, read once (the window's
+        `shown_pictures`, which the transcript's pictures share)."""
+        return self.shown_pictures.picture(self.session.pictures, file, height * 2, height)
 
     # --- the faces on each passage ---------------------------------------------------
 

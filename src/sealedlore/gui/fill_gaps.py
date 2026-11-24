@@ -36,10 +36,10 @@ from sealedlore.engine.images import ImageRequest
 from sealedlore.engine.look_sheet import Gap, gap_change
 from sealedlore.engine.looks import look_words
 from sealedlore.engine.portraits import card_size
-from sealedlore.gui.cast_board import ASPECT, cover
+from sealedlore.gui.cast_board import ASPECT
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.model_picker import ModelField
-from sealedlore.gui.ref_images import pixmap_of
+from sealedlore.gui.ref_images import cover, pixmap_of
 from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, may_discard, size_to_screen
 from sealedlore.models.character import Character
 from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS
