@@ -10,7 +10,7 @@ Length control survives a detach: the per-turn length directive and the final
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, SignalInstance
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
@@ -68,6 +68,9 @@ PERSPECTIVE_SUMMARIES = {
 
 class StylePanel(QWidget):
     changed = Signal()
+    # A key typed in one of the style's text fields: the style has it at
+    # once, and the window saves it a moment after the last key.
+    edited = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -132,14 +135,15 @@ class StylePanel(QWidget):
 
         self.length.currentIndexChanged.connect(self._apply_form)
         self.perspective.currentIndexChanged.connect(self._apply_form)
-        self.custom_length.textChanged.connect(self._apply_form)
+        self.custom_length.textChanged.connect(self._typed)
         self.person.currentIndexChanged.connect(self._apply_form)
         self.tense.currentIndexChanged.connect(self._apply_form)
+        # Typed into, or a stop chosen from the list: either way, text.
         for combo in (self.density, self.balance, self.pacing, self.rating):
-            combo.currentTextChanged.connect(self._apply_form)
-        self.limits.textChanged.connect(self._apply_form)
-        self.forbidden.textChanged.connect(self._apply_form)
-        self.notes.textChanged.connect(self._apply_form)
+            combo.currentTextChanged.connect(self._typed)
+        self.limits.textChanged.connect(self._typed)
+        self.forbidden.textChanged.connect(self._typed)
+        self.notes.textChanged.connect(self._typed)
 
         # Length has its own host: it must stay live when the block is detached,
         # and a disabled parent would disable it along with everything else.
@@ -310,6 +314,14 @@ class StylePanel(QWidget):
     # --- editing ----------------------------------------------------------
 
     def _apply_form(self) -> None:
+        self._take_form(self.changed)
+
+    def _typed(self) -> None:
+        self._take_form(self.edited)
+
+    def _take_form(self, said: SignalInstance) -> None:
+        """The style as the form has it, then `said`: `changed` for a choice
+        made, `edited` for a key typed."""
         if self._loading or self._style is None:
             return
         style = self._style
@@ -328,13 +340,13 @@ class StylePanel(QWidget):
         ]
         style.notes = self.notes.toPlainText().strip() or None
         self._sync()
-        self.changed.emit()
+        said.emit()
 
     def _apply_detached_text(self) -> None:
         if self._loading or self._style is None or not self._style.detached:
             return
         self._style.custom_text = self.preview.toPlainText()
-        self.changed.emit()
+        self.edited.emit()
 
     def _detach(self) -> None:
         if self._style is None:

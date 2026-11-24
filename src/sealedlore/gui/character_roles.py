@@ -258,6 +258,9 @@ class PlayedBy(QWidget):
     stories they join and a model of their own isn't offered."""
 
     changed = Signal()
+    # A key typed in their own model's name (the Cast page saves it a moment
+    # after the last one).
+    edited = Signal()
     # What their model is sent… (gui/character_prompt_dialog.py).
     prompt_requested = Signal()
 
@@ -340,7 +343,7 @@ class PlayedBy(QWidget):
     def _model_typed(self, _text: str) -> None:
         self._say()
         if self.value() == OWN:
-            self.changed.emit()
+            self.edited.emit()
 
     def _say(self) -> None:
         own = self.value() == OWN

@@ -388,6 +388,9 @@ class PrivateWindow:
             self.config.private_keep = keep
             save_config(self.config, root=self.root)
         provider = self._make_private_provider(settings)
+        # What was typed on the pages a moment ago is the story's, kept
+        # before a scene that may never reach the disk.
+        self._flush_edits()
         self.session.enter_private(
             keep=keep, provider=provider, model=settings.model, base_url=settings.base_url
         )

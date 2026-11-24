@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QEvent, QObject, QSize, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, QSize, Qt, Signal, SignalInstance
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -110,6 +110,9 @@ CHAT_HINT = (
 
 class CastPanel(QWidget):
     changed = Signal()
+    # A key typed in a card's text field: the card has it at once, and the
+    # window saves it a moment after the last key (`MainWindow._story_edited`).
+    edited = Signal()
     # (character id, the name before): the rosters hold supporting cards by name.
     renamed = Signal(str, str)
     # (character id): Remove, asked and answered. The window takes them out
@@ -420,12 +423,13 @@ class CastPanel(QWidget):
             self.voice_notes,
             self.competence,
         ):
-            widget.textChanged.connect(self._apply_edits)
-        self.name.textChanged.connect(self._apply_edits)
+            widget.textChanged.connect(self._typed)
+        self.name.textChanged.connect(self._typed)
         self.name.editingFinished.connect(self.finish_rename)
-        self.aliases.textChanged.connect(self._apply_edits)
-        self.canon.textChanged.connect(self._apply_edits)
+        self.aliases.textChanged.connect(self._typed)
+        self.canon.textChanged.connect(self._typed)
         self.played_by.changed.connect(self._apply_edits)
+        self.played_by.edited.connect(self._typed)
         self.played_by.prompt_requested.connect(
             lambda: self._current and self.own_prompt_requested.emit(self._current.id)
         )
@@ -951,6 +955,14 @@ class CastPanel(QWidget):
     # --- editing ----------------------------------------------------------
 
     def _apply_edits(self) -> None:
+        self._take_edits(self.changed)
+
+    def _typed(self) -> None:
+        self._take_edits(self.edited)
+
+    def _take_edits(self, said: SignalInstance) -> None:
+        """The card as the form has it, then `said`: `changed` for a choice
+        made, `edited` for a key typed."""
         if self._loading or self._current is None:
             return
         character = self._current
@@ -983,7 +995,7 @@ class CastPanel(QWidget):
         if item is not None:
             mark = MODEL_MARK if character.origin == "model" else ""
             item.setText((character.name or "(unnamed)") + mark)
-        self.changed.emit()
+        said.emit()
 
     def finish_rename(self) -> None:
         """The name typed in full (the field left, Return, another card shown,

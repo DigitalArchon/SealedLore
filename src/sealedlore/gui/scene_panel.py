@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, SignalInstance
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -54,6 +54,9 @@ def _split_names(text: str) -> list[str]:
 
 class ScenePanel(QWidget):
     changed = Signal()
+    # A key typed in one of the card's text fields: the scene has it at once,
+    # and the window saves it a moment after the last key.
+    edited = Signal()
     update_requested = Signal()
     undo_requested = Signal()
 
@@ -86,10 +89,10 @@ class ScenePanel(QWidget):
             "passes it on. Public: people around see it, and word travels."
         )
 
-        self.location.textChanged.connect(self._apply_edits)
-        self.time_of_day.textChanged.connect(self._apply_edits)
-        self.situation.textChanged.connect(self._apply_edits)
-        self.still_open.textChanged.connect(self._apply_edits)
+        self.location.textChanged.connect(self._typed)
+        self.time_of_day.textChanged.connect(self._typed)
+        self.situation.textChanged.connect(self._typed)
+        self.still_open.textChanged.connect(self._typed)
         self.privacy.currentIndexChanged.connect(self._apply_edits)
 
         form = QFormLayout()
@@ -290,7 +293,7 @@ class ScenePanel(QWidget):
             else:
                 note.setPlaceholderText("e.g. in the corridor, out of earshot")
                 note.setEnabled(not here)
-            note.textChanged.connect(self._apply_edits)
+            note.textChanged.connect(self._typed)
             self.roster.setCellWidget(row, 2, note)
         self._fit_roster()
 
@@ -327,7 +330,7 @@ class ScenePanel(QWidget):
     def _others_edited(self, _text: str) -> None:
         # Typing here is keeping track of everyone, not just the cast.
         self._others_touched = True
-        self._apply_edits()
+        self._typed()
 
     def _held_toggled(self, box: QCheckBox, character: Character, on: bool) -> None:
         """The character the author plays can be ticked in (that puts them in
@@ -370,6 +373,14 @@ class ScenePanel(QWidget):
         return names
 
     def _apply_edits(self) -> None:
+        self._take_edits(self.changed)
+
+    def _typed(self) -> None:
+        self._take_edits(self.edited)
+
+    def _take_edits(self, said: SignalInstance) -> None:
+        """The scene as the page has it, then `said`: `changed` for a choice
+        made, `edited` for a key typed."""
         if self._loading or self._scene is None:
             return
         scene = self._scene
@@ -410,7 +421,7 @@ class ScenePanel(QWidget):
 
         scene.present_character_ids = present
         scene.offstage_but_nearby = offstage
-        self.changed.emit()
+        said.emit()
 
     # --- what the story changed -------------------------------------------
 

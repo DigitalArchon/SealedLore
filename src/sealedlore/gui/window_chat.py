@@ -93,7 +93,9 @@ class ChatWindow:
         """A chat that is never written: its session is made here, from the
         bundle in memory, where every other story is loaded from disk.
         `files` and `log`: its pictures and log, from a backup."""
-        # As `open_story`: nothing of the window's full pages stays over it.
+        # As `open_story`: what was typed in the story left is kept, and
+        # nothing of the window's full pages stays over the chat.
+        self._flush_edits()
         self.show_collection(False)
         self.show_lorebooks(False)
         self.show_cast_board(False)

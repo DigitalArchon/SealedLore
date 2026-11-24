@@ -3921,13 +3921,17 @@ class StorySession(
         self.unreported_usage.append(self.priced(completed.usage, self.scene_model))
         return parse_scene(text, cast=self.visible_cast(), supporting=self.visible_supporting())
 
-    def set_scene(self, scene: SceneState, *, source: SceneSource = "author") -> None:
+    def set_scene(
+        self, scene: SceneState, *, source: SceneSource = "author", save: bool = True
+    ) -> None:
         """Record a scene, as a snapshot on the current leaf.
 
         The leaf may be a passage or an author turn still waiting for one;
         either way the scene from here on is this one, until the next read.
         An author's scene replaces a read's on the same passage, which is
         what "author edits win" means: the next read starts from it.
+        `save=False`: recorded, the story saved by the caller later (the
+        Scene page, a moment after the last key typed there).
         """
         # In a private scene the card is frozen: an edit would be stamped on
         # the last public passage, saved even in memory mode, and shape every
@@ -3949,7 +3953,8 @@ class StorySession(
             setup.absent_at_start = [
                 i for i in setup.absent_at_start if i not in scene.present_character_ids
             ]
-        self.save()
+        if save:
+            self.save()
 
     def _sync_scene(self, path: Sequence[Node] | None = None) -> None:
         """Point the live scene at the one standing at the end of `path`.

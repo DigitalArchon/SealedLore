@@ -166,6 +166,22 @@ def test_a_cards_picture_waits_for_the_dialogs_thread_and_is_never_lost(
     wait_for(app, lambda: taken == [1])
 
 
+def test_a_typed_edit_is_saved_once_the_dialogs_thread_is_done(app, window: MainWindow, lend):
+    """A key typed on a page is saved a moment later (gui/window_edits.py):
+    while a thread works on the story then, once it is done with it."""
+    session = window.session
+    saves: list[int] = []
+    session.save = lambda: saves.append(1)
+    window.style_panel.notes.setPlainText("Keep it grim.")
+    assert session.story.style.notes == "Keep it grim."
+    thread, job = lend(session)
+    window._edits_save.timeout.emit()  # the moment after the last key
+    assert saves == [], "saved while a thread was writing from the story"
+    job.go.set()
+    wait_for(app, lambda: saves == [1])
+    assert not window._edits_waiting
+
+
 def test_the_image_dialogs_prompt_writer_lends_the_story(app, window: MainWindow):
     """The dialog's own thread, as Write prompt runs it."""
     go = threading.Event()

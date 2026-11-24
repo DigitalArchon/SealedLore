@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal, SignalInstance
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -86,6 +86,9 @@ def unused_here(entries: list[LoreEntry]) -> int:
 
 class LorePanel(QWidget):
     changed = Signal()
+    # A key typed in an entry's title, words or keywords: the entry has it at
+    # once, and the window saves it a moment after the last key.
+    edited = Signal()
     reembed_requested = Signal()
     # A SillyTavern lorebook (storage/tavern_lore.py) read into this story's
     # lore, or the lore written out as one.
@@ -301,9 +304,9 @@ class LorePanel(QWidget):
         self.pictures.again_requested.connect(lambda ref: self._ask("again", ref))
         self.pictures.edit_requested.connect(lambda ref: self._ask("edit", ref))
 
-        self.title.textChanged.connect(self._apply_edits)
-        self.content.textChanged.connect(self._apply_edits)
-        self.keywords.textChanged.connect(self._apply_edits)
+        self.title.textChanged.connect(self._typed)
+        self.content.textChanged.connect(self._typed)
+        self.keywords.textChanged.connect(self._typed)
         self.always_on.toggled.connect(self._apply_edits)
         self.enabled.toggled.connect(self._apply_edits)
         self.until_mentioned.toggled.connect(self._apply_edits)
@@ -738,6 +741,14 @@ class LorePanel(QWidget):
         self._fit_panes()
 
     def _apply_edits(self) -> None:
+        self._take_edits(self.changed)
+
+    def _typed(self) -> None:
+        self._take_edits(self.edited)
+
+    def _take_edits(self, said: SignalInstance) -> None:
+        """The entry as the form has it, then `said`: `changed` for a choice
+        made, `edited` for a key typed."""
         if self._loading or self._current is None:
             return
         entry = self._current
@@ -753,7 +764,7 @@ class LorePanel(QWidget):
         item = self.list.currentItem()
         if item is not None:
             item.setText(self._label(entry))
-        self.changed.emit()
+        said.emit()
 
     def _add_entry(self) -> None:
         entry = LoreEntry(title="New entry", content="")

@@ -141,6 +141,7 @@ from sealedlore.gui.window_card_start import CardStartWindow
 from sealedlore.gui.window_cast import CastWindow
 from sealedlore.gui.window_chat import ChatWindow
 from sealedlore.gui.window_collection import CollectionWindow
+from sealedlore.gui.window_edits import CAST, LORE, SCENE, STYLE, EditsWindow
 from sealedlore.gui.window_find import FindWindow
 from sealedlore.gui.window_followup import FollowUpWindow
 from sealedlore.gui.window_images import ImagesWindow
@@ -405,6 +406,7 @@ class MainWindow(
     StorySuggestionsWindow,
     TavernFiringWindow,
     AlwaysOnWindow,
+    EditsWindow,
     QMainWindow,
 ):
     # (origin, text): a turn queued from somewhere other than the composer
@@ -745,6 +747,7 @@ class MainWindow(
         self._init_collection()
         self._init_lorebooks()
         self._init_always_on()
+        self._init_edits()
         self._init_card_link()
         self._init_phone()
         self._init_videos()
@@ -1370,6 +1373,9 @@ class MainWindow(
 
     def _on_page_changed(self, _index: int) -> None:
         self._sync_dock_title()
+        if self.right_tabs.currentWidget() is self.inspector:
+            # The prompt as the pages have it now, not as they had it a key ago.
+            self._flush_edits()
         if self.right_tabs.currentWidget() is self.people_page and self._people_dirty:
             self._build_people()
         if self.right_tabs.currentWidget() is self.images_panel:
@@ -1815,6 +1821,7 @@ class MainWindow(
     def _bundle_for(self, story_id: str, *, quiet: bool = False) -> StoryBundle | None:
         """The open story's live bundle, or the one on disk."""
         if self.session is not None and self.session.story.id == story_id:
+            self._flush_edits()
             self.session.save()
             return self.session.bundle
         try:
@@ -1922,6 +1929,7 @@ class MainWindow(
     def _open_story_folder(self, story_id: str) -> None:
         """The story's folder in the desktop's file manager (the story list's
         right-click menu)."""
+        self._flush_edits()  # its files as the pages have them
         folder = story_dir(story_id, self.root)
         if not folder.is_dir():
             self._warn_plain("No folder", f"{folder} isn't there any more.")
@@ -1940,6 +1948,7 @@ class MainWindow(
 
     def _close_story(self) -> None:
         """Back to the no-story state the window starts in."""
+        self._flush_edits()
         self.show_collection(False)
         self.show_lorebooks(False)
         self.show_cast_board(False)
@@ -1989,6 +1998,7 @@ class MainWindow(
     def export_scenario(self) -> None:
         if self.session is None:
             return
+        self._flush_edits()
         story = self.session.story
         safe = "".join(ch if ch.isalnum() or ch in " -_" else "_" for ch in story.title).strip()
         path, _ = file_dialogs.save_file_name(
@@ -2232,6 +2242,9 @@ class MainWindow(
     def open_story(self, story_id: str) -> None:
         if self._busy:
             return
+        # Before the story is read: the same one opened again has what was
+        # typed in it a moment ago.
+        self._flush_edits()
         # Leaving a memory-only chat or scene loses it, whichever story opens
         # next (the same one again comes back from disk, without it): asked,
         # and let go only once the story to open has been read.
@@ -3153,6 +3166,7 @@ class MainWindow(
     def export_story_archive(self) -> None:
         if self.session is None:
             return
+        self._flush_edits()
         files = self.session.backup_files()
         video_bytes = sum(len(data) for name, data in files.items() if is_video_file(name))
         if video_bytes:
@@ -4088,6 +4102,9 @@ class MainWindow(
         passage's place. `progress`: the job's notices say how far it has
         got, in its progress dialog (a plot being written).
         """
+        # What was typed on the pages is in the story already: saved before
+        # the worker becomes its only writer.
+        self._flush_edits()
         self._job_name = job or ("Question" if question is not None else "Generation")
         self._progress_in_dialog = progress
         self._sent = sent
@@ -4412,6 +4429,8 @@ class MainWindow(
         waiting = {what for sid, what in self._waiting_on_story if sid == story_id}
         self._waiting_on_story -= {(story_id, what) for what in waiting}
         if session is self.session:
+            if "edits" in waiting:
+                self._flush_edits()
             if "save" in waiting:
                 session.save()
             if self._rebuild_timer.isActive():
@@ -4558,16 +4577,10 @@ class MainWindow(
             setup.character_removed(untouched=untouched)
 
     def _on_cast_changed(self) -> None:
-        if self.session is None:
-            return
-        self.session.forget_review_undo()
-        self.session.save()
-        # Presence and the selectors are keyed on the cast, so they follow it
-        # (and the People page with the scene).
-        self._refresh_scene_panel()
-        self._refresh_composer()
-        self._reassemble_inspector()
-        self._cast_changed_soon()
+        """The cast changed (on the Cast page, the board, with pictures):
+        kept, and what shows it brought up to date, now (gui/window_edits.py;
+        a key typed in a card waits a moment)."""
+        self._story_edited(CAST)
 
     def _after_tier_change(self, select_id: str | None = None) -> None:
         assert self.session is not None
@@ -5474,17 +5487,7 @@ class MainWindow(
         )
 
     def _on_scene_changed(self) -> None:
-        if self.session is None:
-            return
-        # Stamped on the passage the story has reached: the author's card is
-        # the scene from here, and the next read starts from it.
-        self.session.set_scene(self.session.story.scene)
-        self.scene_panel.show_changes(self.session.story.scene, passage=0, can_undo=False)
-        self.scene_panel.show_age(
-            self.session.scene_age(), kept=self.config.scene_reads == "every_turn"
-        )
-        self._refresh_composer()
-        self._reassemble_inspector()
+        self._story_edited(SCENE)
 
     def _undo_scene_update(self) -> None:
         if self.session is None or self._busy:
@@ -5755,16 +5758,7 @@ class MainWindow(
         self.statusBar().showMessage("Scene updated from the story", 5000)
 
     def _on_lore_changed(self) -> None:
-        if self.session is None:
-            return
-        self.session.forget_review_undo()
-        self.session.save()
-        # Vectors are keyed by content hash, so an edited entry re-embeds
-        # itself on the next turn; what lore from the full entry is ranked by
-        # is made ahead, a moment after the last change.
-        self.lore_panel.set_held_back(self.session.held_back_ids())
-        self._reassemble_inspector()
-        self._lore_vectors_later()
+        self._story_edited(LORE)
 
     def reembed_lore(self) -> None:
         """Rebuild every vector — for when the model changed outside the app."""
@@ -5831,12 +5825,7 @@ class MainWindow(
         self._sync_answers_action()
 
     def _on_style_changed(self) -> None:
-        if self.session is None:
-            return
-        self.session.forget_review_undo()
-        self.session.save()
-        self.composer.set_default_length(self.session.story.style.response_style)
-        self._reassemble_inspector()
+        self._story_edited(STYLE)
 
     def _reassemble_inspector(self) -> None:
         """Re-derive the prompt because story state changed since the last turn.
@@ -6259,6 +6248,8 @@ class MainWindow(
             self._close_when_idle = False
             event.ignore()
             return
+        # What was typed on the pages a moment ago, kept.
+        self._flush_edits()
         # What the answers agreed to lose, now that nothing else writes the story.
         self._discard_memory_scene()
         self.stories.stop_search()
