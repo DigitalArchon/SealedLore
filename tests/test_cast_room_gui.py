@@ -142,6 +142,9 @@ def test_the_authors_own_condensed_card_ends_a_failed_ones_note(app, window: Mai
     jane = panel.current
     assert jane.condensed == "Jane, in my words." and jane.condensed_from == fingerprint(jane)
     assert window.session.condense_failures() == {}
+    # Typed, so the page shows it a moment after the last key, with the save.
+    assert window._edits_save.isActive()
+    window._flush_edits()
     assert "Couldn't be written" not in panel.condensed_note.text()
     assert "Sent in place of the description" in panel.condensed_note.text()
     assert "Couldn't be condensed" not in panel.room_banner.message.text()

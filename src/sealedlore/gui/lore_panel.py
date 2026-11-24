@@ -731,7 +731,7 @@ class LorePanel(QWidget):
             return
         self.keep_condensed(self._current, self.condensed.toPlainText())
         self._show_condensed()
-        self.changed.emit()
+        self.edited.emit()  # typed: saved a moment after the last key
 
     def set_always_on(self, note: str, any_on: bool) -> None:
         """What always-on lore takes against the lore budget, when over."""

@@ -128,6 +128,30 @@ def test_their_own_models_name_is_saved_a_moment_after_it_is_typed(app, window, 
     assert on_disk(window).cast[1].own_model == "Local::maela"
 
 
+def test_a_condensed_text_typed_is_saved_a_moment_after_the_last_key(app, window, monkeypatch):
+    """The card's and the entry's own condensed words, kept by the session
+    (`set_condensed`, `set_condensed_lore`) at every key and saved once."""
+    window.show_cast_board(True, "char-serrik", card=True)
+    saves = count_saves(window, monkeypatch)
+    words = "Serrik, in my words."
+    for typed in range(1, len(words) + 1):  # a key at a time
+        window.cast_panel.condensed.setPlainText(words[:typed])
+    assert window.session.cast[0].condensed == words and saves == []
+    past_the_delay(app)
+    assert saves == [1]
+    assert on_disk(window).cast[0].condensed == words
+    window.show_cast_board(False)
+    window.lore_panel.select_entry("lore-keep")
+    del saves[:]
+    words = "The Keep, briefly."
+    for typed in range(1, len(words) + 1):
+        window.lore_panel.condensed.setPlainText(words[:typed])
+    assert window.session.bundle.lore[0].condensed_now() == words and saves == []
+    past_the_delay(app)
+    assert saves == [1]
+    assert on_disk(window).lore[0].condensed_now() == words
+
+
 def test_a_choice_made_is_kept_at_once_with_what_was_typed_before_it(app, window, monkeypatch):
     window.right_tabs.setCurrentWidget(window.lore_panel)
     panel = window.lore_panel

@@ -1018,7 +1018,7 @@ class CastPanel(QWidget):
         if self._loading or self._current is None:
             return
         self.keep_condensed(self._current, self.condensed.toPlainText())
-        self.changed.emit()
+        self.edited.emit()  # typed: saved a moment after the last key
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802 - Qt naming
         if watched is self.condensed and event.type() == QEvent.FocusOut:
