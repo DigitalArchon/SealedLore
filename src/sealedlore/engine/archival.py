@@ -171,6 +171,8 @@ def swap_covered(summaries: Sequence[Summary], old_id: str, new_id: str) -> list
 
 
 def stale_summaries(summaries: Sequence[Summary]) -> list[Summary]:
+    """The ones an edit has left out of date, in order: what the staleness
+    banner names and Rebuild rebuilds (§5.3)."""
     return [summary for summary in summaries if summary.stale]
 
 

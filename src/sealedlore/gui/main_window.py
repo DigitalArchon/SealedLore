@@ -36,7 +36,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore import __version__
-from sealedlore.engine.archival import chapter_number, chapter_numbers, turns_in
+from sealedlore.engine.archival import chapter_number, chapter_numbers, stale_summaries, turns_in
 from sealedlore.engine.authoring import describe, placeholders_view, stale_voicing_notes
 from sealedlore.engine.branches import next_branch_name, unique_branch_name
 from sealedlore.engine.chronicle import format_clock
@@ -2496,7 +2496,7 @@ class MainWindow(
 
         self._refresh_over_budget()
 
-        stale = [summary for summary in split.summaries if summary.stale]
+        stale = stale_summaries(split.summaries)
         rebuilding = self.session.rebuilding_ids()
         if stale and not self._staleness_dismissed and not self._page_covers():
             self.staleness.show_stale(
@@ -3877,7 +3877,7 @@ class MainWindow(
         """The banner's one action (§5.3)."""
         if self.session is None or self._busy:
             return
-        stale = [summary for summary in self.session.split().summaries if summary.stale]
+        stale = stale_summaries(self.session.split().summaries)
         hand_edited = [summary for summary in stale if summary.hand_edited]
         if hand_edited and not self._confirm_overwrite(hand_edited):
             return
