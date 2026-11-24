@@ -951,8 +951,6 @@ _MEDIA_HOSTS = {
     "openrouter.ai": "openrouter",
     "wavespeed.ai": "wavespeed",
 }
-WAVESPEED_BASE_URL = "https://api.wavespeed.ai/api/v3"
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 
 def media_api(base_url: str, api: str = "auto") -> str:
@@ -1236,9 +1234,6 @@ class WindowLayout(BaseModel):
     # The composer's height, as the divider above it was last dragged; 0 is
     # its natural height.
     composer_height: int = 0
-    # The Cast page's list of names, as its divider was last dragged; 0 is
-    # as tall as its names.
-    cast_list_height: int = 0
 
 
 class PhoneDevice(BaseModel):
@@ -1638,7 +1633,6 @@ class Config(BaseModel):
     video_params: dict[str, Any] = Field(
         default_factory=lambda: {"resolution": "480p", "duration": "5"}
     )
-    video_prompt_model: str | None = None
     video_models: list[dict] = Field(default_factory=list)
     video_models_fetched_at: str | None = None
     video_models_source: str | None = None

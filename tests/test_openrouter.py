@@ -13,12 +13,14 @@ import httpx
 from sealedlore.engine.catalog import chat_models
 from sealedlore.engine.pricing import estimate_cost, parse_price
 from sealedlore.messages import ContentPart, PromptMessage
-from sealedlore.models.config import OPENROUTER_BASE_URL, ProviderConfig
+from sealedlore.models.config import ProviderConfig
 from sealedlore.models.generation import GenerationParams
 from sealedlore.providers.base import ChatRequest, StreamCompleted, TextDelta
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
 
 DATA = Path(__file__).parent / "data"
+
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 
 def listing() -> dict[str, dict]:

@@ -157,6 +157,41 @@ def test_a_newer_versions_story_isnt_opened_unless_asked(tmp_path: Path) -> None
     assert format_of(data) == STORY_FORMAT and "a_newer_field" not in data
 
 
+def test_fields_no_longer_kept_are_read_past_and_go_with_the_next_save(tmp_path: Path) -> None:
+    """Dropped from the models as dead (Nov 24 2026): a character's
+    `portrait_path` (never set), Settings' `video_prompt_model` (read
+    nowhere) and the window's `cast_list_height` (the Cast page's, gone).
+    Files from before still open, and are written without them."""
+    bundle = StoryBundle(story=Story(title="Doomsville"), cast=[Character(name="Mayor Bell")])
+    save_story_bundle(bundle, root=tmp_path)
+    cast_path = story_dir(bundle.story.id, tmp_path) / "cast.json"
+    cast = json.loads(cast_path.read_text(encoding="utf-8"))
+    cast[0]["portrait_path"] = "/home/someone/bell.png"
+    cast_path.write_text(json.dumps(cast), encoding="utf-8")
+    opened = load_story_bundle(bundle.story.id, root=tmp_path)
+    assert [c.name for c in opened.cast] == ["Mayor Bell"]
+    save_story_bundle(opened, root=tmp_path)
+    assert "portrait_path" not in json.loads(cast_path.read_text(encoding="utf-8"))[0]
+
+    path = config_file(tmp_path)
+    path.write_text(
+        json.dumps(
+            {
+                FORMAT_KEY: 2,
+                "video_prompt_model": "z-ai/glm-5.3",
+                "window": {"width": 1200, "height": 800, "cast_list_height": 240},
+            }
+        ),
+        encoding="utf-8",
+    )
+    config, note = load_config_or_recover(tmp_path)
+    assert note is None and config.window is not None and config.window.width == 1200
+    save_config(config, root=tmp_path)
+    written = json.loads(path.read_text(encoding="utf-8"))
+    assert "video_prompt_model" not in written and "cast_list_height" not in written["window"]
+    assert written["window"]["width"] == 1200
+
+
 def test_config_json_says_its_format(tmp_path: Path) -> None:
     save_config(Config(), root=tmp_path)
     data = json.loads(config_file(tmp_path).read_text(encoding="utf-8"))

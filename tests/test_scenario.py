@@ -35,7 +35,6 @@ def bundle(story, cast) -> StoryBundle:
         ),
         suggested_character_id="char-serrik",
     )
-    cast[0].portrait_path = "/home/someone/serrik.png"
     lore = [LoreEntry(title="The Keep", content="Built on a fault line.", embedding_hash="abc")]
     nodes = [Node(kind="user", speaker_id="char-serrik", content="I go in.")]
     return StoryBundle(

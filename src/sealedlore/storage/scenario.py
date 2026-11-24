@@ -51,18 +51,14 @@ def scenario_from_bundle(
     # the best guess at where it began.
     starting = setup.starting_scene if not _is_empty(setup.starting_scene) else story.scene
     cast = [
-        # A portrait is a path on this machine, meaningless anywhere else.
-        character.model_copy(update={"portrait_path": None}, deep=True)
+        character.model_copy(deep=True)
         # Whoever wasn't picked from a "play one of these" choice is back in
         # the cast, so the next playthrough gets the choice again.
         for character in [*bundle.cast, *setup.set_aside]
     ]
     # Vectors are cached per endpoint and model, so the importer re-embeds.
     lore = [entry.model_copy(update={"embedding_hash": None}, deep=True) for entry in bundle.lore]
-    supporting = [
-        character.model_copy(update={"portrait_path": None}, deep=True)
-        for character in bundle.supporting.characters
-    ]
+    supporting = [character.model_copy(deep=True) for character in bundle.supporting.characters]
     return Scenario(
         title=story.title,
         template=setup.template,

@@ -69,7 +69,6 @@ def test_character_roundtrip():
             tiers={"combat": "expert", "social": "poor", "arcane": "none"},
         ),
         is_player_available=True,
-        portrait_path="/portraits/serrik.png",
     )
     assert roundtrip(character) == character
 

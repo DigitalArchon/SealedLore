@@ -46,7 +46,6 @@ class Character(BaseModel):
     # on turns the author is holding someone else.
     is_player_available: bool = True
     author_only: bool = False
-    portrait_path: str | None = None
     # Pictures sent with an image prompt so they look the same every time.
     reference_images: list[ImageRef] = Field(default_factory=list)
     # Their pictures as a sheet on the cast board (engine/look_sheet.py): its
