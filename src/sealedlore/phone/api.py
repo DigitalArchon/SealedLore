@@ -38,6 +38,9 @@ TEXT_LIMIT = 20_000
 NOTE_LIMIT = 2_000
 TRANSCRIPT_PAGE = 40
 TRANSCRIPT_MOST = 200
+# The most digits a count in a query may have (`_int`): any count asked for
+# fits, and is then held to its bounds.
+_INT_DIGITS = 9
 # Wrong logins and pairing codes are never answered by refusing anyone: a
 # token is 256 bits and a code 128, so there is nothing to slow down, and a
 # lockout anyone with the address could set off would lock the author's own
@@ -521,9 +524,16 @@ def _object(request: Request) -> dict:
 
 
 def _int(value: str | None, default: int) -> int:
-    if value is None or not value.isdigit():
+    """A count a query gives, or `default` for anything else. ASCII digits
+    only, and never many of them (as http.py's `_body_length`): str.isdigit
+    takes "²", which int() then refuses, and int() refuses past about 4,300
+    digits; either answered 500."""
+    if value is None or not value.isascii() or not value.isdigit():
         return default
-    return int(value)
+    digits = value.lstrip("0") or "0"
+    if len(digits) > _INT_DIGITS:
+        return default
+    return int(digits)
 
 
 def _node_id(body: dict, *, required: bool = True) -> str | None:

@@ -526,6 +526,20 @@ def test_transcript_pages_are_bounded():
     assert answer(api, "GET", "/api/transcript?before=%2E%2E%2Fx")[0] == 400
 
 
+def test_a_limit_that_isnt_a_plain_count_is_the_page_not_a_crash():
+    """str.isdigit took "²" (and other scripts' digits), which int() then
+    refused, and int() refuses past about 4,300 digits: the handler raised,
+    and the phone got a 500."""
+    api, backend = make()
+    for limit in ("%C2%B2", "%D9%A3", "9" * 5000, "-5", "", "1e3", "0x10"):
+        assert answer(api, "GET", f"/api/transcript?limit={limit}")[0] == 200, limit
+        assert backend.calls[-1] == ("transcript", None, phone_api.TRANSCRIPT_PAGE), limit
+    answer(api, "GET", "/api/transcript?limit=0000000000000000000007")
+    assert backend.calls[-1] == ("transcript", None, 7), "leading zeros are no digits more"
+    answer(api, "GET", "/api/transcript?limit=0")
+    assert backend.calls[-1] == ("transcript", None, 1)
+
+
 def test_a_picture_comes_as_its_bytes():
     api, backend = make()
     response = api.handle(request("GET", "/api/pictures/img1?thumb=1"))
