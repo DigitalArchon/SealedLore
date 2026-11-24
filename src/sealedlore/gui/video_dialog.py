@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import Qt, QThread
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -51,16 +52,18 @@ from sealedlore.engine.session import StorySession
 from sealedlore.engine.video_price import VideoQuote, pictures_worth, quote_video
 from sealedlore.engine.videos import VideoRequest
 from sealedlore.gui import file_dialogs
+from sealedlore.gui.cast_board import Thumbs
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.fields import FormScroll
 from sealedlore.gui.model_picker import ModelField, _Row
+from sealedlore.gui.picture_cache import FIT
 from sealedlore.gui.picture_style import (
     DEFAULT_TIP,
     WRITER_CHOOSES,
     WRITER_CHOOSES_TIP,
     PictureStyleField,
 )
-from sealedlore.gui.ref_images import PICTURE_FILTER, store_reference, thumbnail_of
+from sealedlore.gui.ref_images import PICTURE_FILTER, THUMB, store_reference
 from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, may_discard, size_to_screen
 from sealedlore.gui.video_jobs import VideoCatalog
 from sealedlore.gui.worker import GenerationWorker, as_job
@@ -113,6 +116,8 @@ class VideoDialog(QDialog):
         self.setMinimumWidth(760)
         size_to_screen(self, 0.55, 0.88)
         self.session = session
+        # The frames' thumbnails, each read once while the dialog lives.
+        self._thumbs = Thumbs(lambda: session.pictures, lambda: None, self, shape=FIT)
         self.catalog = catalog
         self._browse = browse
         self.anchor_id = anchor_id or session.story.active_leaf_id
@@ -519,10 +524,16 @@ class VideoDialog(QDialog):
 
     def _show_thumb(self, combo: QComboBox, thumb: QLabel) -> None:
         use = combo.currentData()
-        if isinstance(use, RefUse):
-            thumb.setPixmap(thumbnail_of(self.session.pictures.read(use.file)))
-        else:
+        if not isinstance(use, RefUse):
             thumb.clear()
+            return
+
+        def put(pixmap: QPixmap) -> None:
+            chosen = combo.currentData()
+            if isinstance(chosen, RefUse) and chosen.file == use.file:
+                thumb.setPixmap(pixmap)  # still the one chosen
+
+        self._thumbs.fill(use.file, THUMB, THUMB, put)
 
     def frame(self, combo: QComboBox) -> RefUse | None:
         data = combo.currentData()

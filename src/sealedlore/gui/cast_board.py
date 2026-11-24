@@ -150,7 +150,8 @@ class Thumbs:
 
     Kept in a `picture_cache.PictureCache` (by the file as it is now, so one
     written again is read again; bounded, far above a screenful of cells),
-    the transcript's own mechanism, read at once there."""
+    the transcript's own mechanism, read at once there. A dialog listing
+    pictures (`fill`) opens at once and its pictures come in."""
 
     PER_TICK = 3
     # A screen of the board's largest cells is under 30 MB.
@@ -169,6 +170,8 @@ class Thumbs:
         self._shape = shape
         self._cache = PictureCache(self.BUDGET)
         self._queue: list[tuple[str, int, int]] = []
+        # What waits for a picture being read (`fill`).
+        self._puts: dict[tuple[str, int, int], list[Callable[[QPixmap], None]]] = {}
         # The owner's: a timer of its own outlived the page whose pictures it
         # read, and told the page's deleted widgets of them.
         self._timer = QTimer(owner)
@@ -178,6 +181,7 @@ class Thumbs:
     def forget(self) -> None:
         self._cache.forget()
         self._queue.clear()
+        self._puts.clear()
         self._timer.stop()
 
     def forget_file(self, file: str) -> None:
@@ -198,15 +202,43 @@ class Thumbs:
         """Read at once (a small icon the list needs whole)."""
         return self._cache.picture(self._pictures(), file, width, height, self._shape)
 
+    def fill(self, file: str, width: int, height: int, put: Callable[[QPixmap], None]) -> None:
+        """`put` given the picture (null for none that reads) now if it has
+        been read, else once it is: a dialog's labels and icons."""
+        pixmap = self.get(file, width, height)
+        if pixmap is not None:
+            put(pixmap)
+        else:
+            self._puts.setdefault((file, width, height), []).append(put)
+
+    def cancel_fills(self) -> None:
+        """Nothing waiting is given its picture: the labels or icons it
+        would go to are being made again."""
+        self._puts.clear()
+
     def _work(self) -> None:
         store = self._pictures()
         for _ in range(self.PER_TICK):
             if not self._queue:
                 break
-            self._cache.picture(store, *self._queue.pop(0), self._shape)
+            key = self._queue.pop(0)
+            pixmap = self._cache.picture(store, *key, self._shape)
+            for put in self._puts.pop(key, ()):
+                put(pixmap)
         if not self._queue:
             self._timer.stop()
         self._ready()
+
+
+def shown_in(label: QLabel) -> Callable[[QPixmap], None]:
+    """What gives `label` its picture once read (`Thumbs.fill`): one that
+    doesn't read leaves it as it is."""
+
+    def put(pixmap: QPixmap) -> None:
+        if not pixmap.isNull():
+            label.setPixmap(pixmap)
+
+    return put
 
 
 @dataclass

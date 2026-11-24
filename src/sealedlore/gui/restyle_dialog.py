@@ -33,12 +33,11 @@ from sealedlore.engine.images import ImageRequest
 from sealedlore.engine.looks import look_words
 from sealedlore.engine.picture_styles import style_key, style_words
 from sealedlore.engine.portraits import Card, card_size
-from sealedlore.gui.cast_board import ASPECT
+from sealedlore.gui.cast_board import ASPECT, Thumbs, shown_in
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.model_picker import ModelField
 from sealedlore.gui.picture_style import PictureStyleField
 from sealedlore.gui.portraits_dialog import card_name
-from sealedlore.gui.ref_images import cover, pixmap_of
 from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, may_discard, size_to_screen
 from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS
 from sealedlore.models.image import ImageRef
@@ -97,17 +96,16 @@ class RestyleDialog(QDialog):
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(10)
-        store = session.pictures
+        # Every card's every picture, read a few a tick once the dialog is
+        # up: read here, a large cast held the window (cast_board.Thumbs).
+        self._thumbs = Thumbs(lambda: session.pictures, lambda: None, self)
         key = self.chosen_key()
         for card in cards:
             for ref in card.reference_images:
                 picture = QLabel()
                 picture.setFixedSize(QSize(THUMB, int(THUMB * ASPECT)))
                 picture.setAlignment(Qt.AlignCenter)
-                data = store.read(ref.file) if store is not None else None
-                pixmap = pixmap_of(data) if data else None
-                if pixmap is not None and not pixmap.isNull():
-                    picture.setPixmap(cover(pixmap, THUMB, int(THUMB * ASPECT)))
+                self._thumbs.fill(ref.file, THUMB, int(THUMB * ASPECT), shown_in(picture))
                 words = look_words(ref) or ref.caption
                 tick = QCheckBox(f"{card_name(card)}: {words}" if words else card_name(card))
                 tick.setChecked(ref.style != key)

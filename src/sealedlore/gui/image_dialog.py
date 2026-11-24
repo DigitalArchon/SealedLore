@@ -56,10 +56,12 @@ from sealedlore.engine.session import StorySession
 from sealedlore.engine.session_images import DEFAULT_MAX_REFS
 from sealedlore.engine.session_portraits import PORTRAIT_CAPTION
 from sealedlore.gui import file_dialogs
+from sealedlore.gui.cast_board import Thumbs
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.image_picker import ImagePickerDialog, pick_image_model
 from sealedlore.gui.model_picker import ModelField
+from sealedlore.gui.picture_cache import FIT
 from sealedlore.gui.picture_style import (
     DEFAULT_TIP,
     WRITER_CHOOSES,
@@ -73,7 +75,6 @@ from sealedlore.gui.ref_images import (
     THUMB,
     pixmap_of,
     store_reference,
-    thumbnail_of,
 )
 from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, size_to_screen
 from sealedlore.gui.worker import GenerationWorker, as_job
@@ -156,6 +157,9 @@ class ImageDialog(QDialog):
         self.setMinimumWidth(720)
         size_to_screen(self, 0.55, 0.88)
         self.session = session
+        # The references' thumbnails, each read once while the dialog lives,
+        # a few a tick (a list made again as they change read them all).
+        self._thumbs = Thumbs(lambda: session.pictures, lambda: None, self, shape=FIT)
         self.anchor_id = anchor_id or session.story.active_leaf_id
         self.request: ImageRequest | None = None
         self._choices = session.image_ref_choices(self.anchor_id)
@@ -642,14 +646,16 @@ class ImageDialog(QDialog):
 
     def _set_refs(self, refs: list[RefUse]) -> None:
         self._refs = refs
+        self._thumbs.cancel_fills()  # their items go now
         self.refs.clear()
-        store = self.session.pictures
         for number, use in enumerate(refs, start=1):
             caption = f" ({use.caption})" if use.caption else ""
             item = QListWidgetItem(f"{number} · {use.owner_name}")
             item.setToolTip(f"image {number}: {use.owner_name}{caption}")
-            item.setIcon(QIcon(thumbnail_of(store.read(use.file))))
             self.refs.addItem(item)
+            self._thumbs.fill(
+                use.file, THUMB, THUMB, lambda pixmap, item=item: item.setIcon(QIcon(pixmap))
+            )
         self._sync_ref_buttons()
         self._sync()
 

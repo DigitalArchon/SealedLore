@@ -20,6 +20,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 
 from PySide6.QtCore import QSize, Qt, QThread, QTimer
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -45,11 +46,12 @@ from sealedlore.engine.portraits import (
     Card,
     card_size,
 )
+from sealedlore.gui.cast_board import Thumbs
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.model_picker import ModelField
+from sealedlore.gui.picture_cache import FIT
 from sealedlore.gui.picture_style import PictureStyleField
 from sealedlore.gui.picture_words import WORDS_ONLY
-from sealedlore.gui.ref_images import thumbnail_of
 from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, may_discard, size_to_screen
 from sealedlore.gui.worker import GenerationWorker, as_job
 from sealedlore.gui.workers import WorkerThread
@@ -74,7 +76,8 @@ def card_name(card: Card) -> str:
 class _Row(QFrame):
     """One card: drawn or not, what it looks like now, the prompt."""
 
-    def __init__(self, card: Card, thumbnail) -> None:
+    def __init__(self, card: Card, pictured: bool) -> None:
+        """`pictured`: it has a picture, given once read (`show_picture`)."""
         super().__init__()
         self.setObjectName("portraitRow")
         self.card = card
@@ -86,12 +89,9 @@ class _Row(QFrame):
         picture = QLabel()
         picture.setFixedSize(THUMB_SIDE, THUMB_SIDE)
         picture.setAlignment(Qt.AlignCenter)
-        if thumbnail is not None and not thumbnail.isNull():
-            picture.setPixmap(thumbnail)
-            picture.setToolTip("Its first picture now: a new one goes first, this one stays")
-        else:
-            picture.setText("—")
-            picture.setToolTip("No picture yet")
+        self.picture = picture
+        if not pictured:
+            self.show_picture(QPixmap())
         left = QVBoxLayout()
         left.setContentsMargins(0, 0, 0, 0)
         left.addWidget(picture, 0, Qt.AlignTop)
@@ -110,6 +110,14 @@ class _Row(QFrame):
         # The author changed the prompt: a new style or framing leaves it be.
         self.edited = False
         self._filling = False
+
+    def show_picture(self, thumbnail: QPixmap) -> None:
+        if not thumbnail.isNull():
+            self.picture.setPixmap(thumbnail)
+            self.picture.setToolTip("Its first picture now: a new one goes first, this one stays")
+        else:
+            self.picture.setText("—")
+            self.picture.setToolTip("No picture yet")
 
     def fill(self, prompt: str) -> None:
         self.written = True
@@ -232,7 +240,9 @@ class PortraitsDialog(QDialog):
         form.addRow("Drawn by", self.model)
         form.addRow(self.model_note)
 
-        pictures = session.pictures
+        # Each card's first picture, read a few a tick once the dialog is up:
+        # read here, a large cast held the window (cast_board.Thumbs).
+        self._thumbs = Thumbs(lambda: session.pictures, lambda: None, self, shape=FIT)
         self.rows: list[_Row] = []
         # Rows whose prompts are being written, and rows ticked meanwhile
         # that wait for theirs.
@@ -250,12 +260,9 @@ class PortraitsDialog(QDialog):
                 rows.addWidget(title)
             for card in cards:
                 first = card.reference_images[0] if card.reference_images else None
-                thumb = (
-                    thumbnail_of(pictures.read(first.file), THUMB_SIDE)
-                    if first is not None and pictures is not None
-                    else None
-                )
-                row = _Row(card, thumb)
+                row = _Row(card, pictured=first is not None)
+                if first is not None:
+                    self._thumbs.fill(first.file, THUMB_SIDE, THUMB_SIDE, row.show_picture)
                 if first is not None and len(characters) + len(lore) > 1:
                     # Has a picture already: drawn again only if ticked (all
                     # were, and each new one went in front of the old).
