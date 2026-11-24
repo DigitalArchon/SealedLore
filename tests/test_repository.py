@@ -145,6 +145,38 @@ def test_copy_story_duplicates_everything_under_a_fresh_id(tmp_path, story, cast
     assert load_story_bundle(story.id, root=tmp_path).story.title == "The Sundering"
 
 
+def test_a_copys_log_is_the_originals_byte_for_byte(tmp_path, story, monkeypatch):
+    """Copied as it stands, never read into records: a line that isn't JSON
+    (a hand edit) is kept as the original keeps it, and a record holding
+    U+2028 is one line still. The copy's next record is a line of its own,
+    after a last line a crash cut short."""
+    from sealedlore.storage import atomic, repository
+
+    save_story_bundle(StoryBundle(story=story), root=tmp_path)
+    log = story_dir(story.id, tmp_path) / "api_log.jsonl"
+    append_api_log(story.id, {"kind": "request", "text": "a\u2028b"}, root=tmp_path)
+    with log.open("ab") as handle:
+        handle.write(b"not json\n")
+        handle.write(b'{"kind": "response", "usage": {"cost"')  # cut short
+    original = log.read_bytes()
+    monkeypatch.setattr(atomic, "_COPY_PIECE", 7)  # many pieces
+    monkeypatch.setattr(repository, "read_api_log", None)  # never read whole
+
+    copy = copy_story(story.id, title="Copy", root=tmp_path)
+
+    copied = story_dir(copy.story.id, tmp_path) / "api_log.jsonl"
+    assert copied.read_bytes() == original
+    append_api_log(copy.story.id, {"kind": "response", "id": "after"}, root=tmp_path)
+    records = atomic.read_jsonl(copied)
+    assert [r["kind"] for r in records] == ["request", "response"]
+    assert records[0]["text"] == "a\u2028b" and records[1]["id"] == "after"
+    # A story with no log yet: none is made for the copy.
+    other = Story(title="Quiet")
+    save_story_bundle(StoryBundle(story=other), root=tmp_path)
+    quiet = copy_story(other.id, title="Quiet copy", root=tmp_path)
+    assert not (story_dir(quiet.story.id, tmp_path) / "api_log.jsonl").exists()
+
+
 def test_delete_story_removes_its_folder_and_refuses_paths(tmp_path, story):
     save_story_bundle(StoryBundle(story=story), root=tmp_path)
     delete_story(story.id, root=tmp_path)

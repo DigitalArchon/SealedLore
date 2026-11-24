@@ -34,6 +34,7 @@ from sealedlore.models.supporting import SupportingCast
 from sealedlore.storage import folder_lock, keychain
 from sealedlore.storage.atomic import (
     append_jsonl,
+    append_jsonl_file,
     atomic_write_json,
     nests_deeper,
     open_private,
@@ -800,8 +801,11 @@ def copy_story(story_id: str, *, title: str, root: Path | None = None) -> StoryB
         update={"id": new_id(), "title": title, "created_at": now, "updated_at": now}
     )
     save_story_bundle(bundle, root=root)
-    for record in read_api_log(story_id, root=root):
-        append_api_log(bundle.story.id, record, root=root)
+    # Its records as they stand: the copy's cost history is the original's.
+    append_jsonl_file(
+        story_dir(bundle.story.id, root) / "api_log.jsonl",
+        story_dir(story_id, root) / "api_log.jsonl",
+    )
     copy_image_files(story_id, bundle.story.id, root)
     return bundle
 

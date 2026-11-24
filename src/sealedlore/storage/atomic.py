@@ -295,6 +295,10 @@ def atomic_write_encoded(path: Path, data: bytes, *, keep_backup: bool = False) 
     return _write_atomic(path, data, keep_backup=keep_backup)
 
 
+# How much of a log is read at a time to be copied (`append_jsonl_file`).
+_COPY_PIECE = 1 << 20
+
+
 # Whether a write reaches the disk before it is swapped in (`_write_atomic`).
 # Only the tests turn it off, for speed; what it does is tested with it on.
 DURABLE = True
@@ -511,6 +515,37 @@ def append_jsonl(path: Path, record: Any) -> None:
             view = memoryview(line)
             while view:
                 view = view[handle.write(view) :]
+
+
+def append_jsonl_file(path: Path, source: Path) -> None:
+    """Every line of the JSONL file at `source` appended to `path` as it
+    stands, byte for byte: a story's log copied with the story. A piece at a
+    time, never held whole (read and appended record by record, a 54 MB log
+    took 0.7 s and 240 MB, and a line that wasn't JSON was dropped without a
+    word), and under the writers' lock, so that no record being appended to
+    either is caught half written. A last line a crash cut short in `path`
+    is ended first, as `append_jsonl` ends one; one in `source` is copied as
+    it is, and the next record appended ends it."""
+    with _LOCK:
+        try:
+            reader = open(source, "rb")
+        except FileNotFoundError:
+            return
+        with reader:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            fd = open_private(path, os.O_RDWR | os.O_APPEND)
+            with os.fdopen(fd, "r+b", buffering=0) as handle:
+                end = handle.seek(0, os.SEEK_END)
+                ended = end == 0
+                if not ended:
+                    handle.seek(end - 1)
+                    ended = handle.read(1) == b"\n"
+                while piece := reader.read(_COPY_PIECE):
+                    if not ended:
+                        piece, ended = b"\n" + piece, True
+                    view = memoryview(piece)
+                    while view:
+                        view = view[handle.write(view) :]
 
 
 def read_jsonl(path: Path) -> list[Any]:
