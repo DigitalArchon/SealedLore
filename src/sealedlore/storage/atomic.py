@@ -28,8 +28,10 @@ import sys
 import tempfile
 import threading
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 _LOCK = threading.Lock()
 
@@ -295,8 +297,35 @@ def atomic_write_encoded(path: Path, data: bytes, *, keep_backup: bool = False) 
     return _write_atomic(path, data, keep_backup=keep_backup)
 
 
-# How much of a log is read at a time to be copied (`append_jsonl_file`).
+# How much is read, or held to be written, at a time (`append_jsonl_file`,
+# `atomic_stream`).
 _COPY_PIECE = 1 << 20
+
+
+@contextmanager
+def atomic_stream(path: Path) -> Iterator[BinaryIO]:
+    """A file written a piece at a time, swapped in at `path` whole once the
+    block ends, flushed to the disk first as `_write_atomic` flushes one: for
+    what is too big to make in memory first (a story backup holds the whole
+    log and every picture). An error in the block leaves `path` as it was,
+    and the temp file is removed. Readable by its owner alone."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=path.name + ".", suffix=TEMP_SUFFIX, dir=path.parent)
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "wb", buffering=_COPY_PIECE) as handle:
+            yield handle
+            if DURABLE:
+                handle.flush()
+                os.fsync(handle.fileno())
+        with _LOCK:
+            replace(tmp_path, path)
+            _KNOWN.pop(os.path.abspath(path), None)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+    if DURABLE:
+        sync_folder(path.parent)
 
 
 # Whether a write reaches the disk before it is swapped in (`_write_atomic`).

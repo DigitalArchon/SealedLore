@@ -20,6 +20,7 @@ from sealedlore.models.story import Story
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.storage.archive import (
     ArchiveError,
+    archive_data,
     file_format,
     import_archive,
     read_archive,
@@ -28,6 +29,7 @@ from sealedlore.storage.archive import (
 from sealedlore.storage.paths import stories_dir, story_dir
 from sealedlore.storage.repository import (
     StoryBundle,
+    iter_api_log,
     load_story_bundle,
     read_api_log,
     save_story_bundle,
@@ -186,6 +188,47 @@ def test_an_archive_round_trips_everything(session: StorySession, tmp_path: Path
     assert bundle.supporting.characters[0].name == "Patel"
     assert api_log == log
     assert "embeddings" not in json.loads(file.read_text(encoding="utf-8"))
+
+
+def test_an_archive_is_written_as_it_goes_and_is_the_json_it_was(
+    session: StorySession, tmp_path: Path, monkeypatch
+):
+    """Written a piece at a time (the log read a record at a time, each
+    picture's base64 a piece at a time), it is byte for byte the indented
+    JSON of the whole backup, which is what every reader of one reads."""
+    from sealedlore.storage import archive, atomic
+
+    play(session, "one", "two")
+    session.bundle.supporting.characters.append(Character(name="Patel — ✓", origin="model"))
+    session.save()
+    files = {"images/a.png": bytes(range(256)) * 9000, "images/é ✓.png": b"\x00", "images/e": b""}
+    monkeypatch.setattr(archive, "utc_now_iso", lambda: "2026-11-24T12:00:00+00:00")
+    monkeypatch.setattr(archive, "_BASE64_PIECE", 3 * 1000)
+    log = read_api_log(session.story.id, root=tmp_path) + [7, "a line that is JSON"]
+    for bundle_files in (files, {}):
+        whole = json.dumps(
+            archive_data(session.bundle, log, bundle_files), indent=2, ensure_ascii=False
+        )
+        file = tmp_path / "story.sealedlore-archive.json"
+        write_archive(file, session.bundle, iter(log), bundle_files)
+        assert file.read_bytes() == whole.encode("utf-8")
+    assert read_archive(file)[1] == log[:-2], "only records are taken back"
+
+    # Straight from the disk: the log as `read_api_log` reads it.
+    write_archive(file, session.bundle, iter_api_log(session.story.id, root=tmp_path))
+    assert read_archive(file)[1] == read_api_log(session.story.id, root=tmp_path)
+
+    # Cut short, nothing is swapped in and nothing is left beside it.
+    before = file.read_bytes()
+
+    def failing():
+        yield {"kind": "request"}
+        raise OSError(28, "No space left on device")
+
+    with pytest.raises(OSError):
+        write_archive(file, session.bundle, failing())
+    assert file.read_bytes() == before
+    assert [p.name for p in tmp_path.iterdir() if p.name.endswith(atomic.TEMP_SUFFIX)] == []
 
 
 def test_importing_over_an_existing_story_gets_a_fresh_id(session: StorySession, tmp_path: Path):

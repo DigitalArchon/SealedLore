@@ -76,9 +76,9 @@ from sealedlore.storage.repository import (
     config_newer,
     copy_story,
     delete_story,
+    iter_api_log,
     load_config,
     load_story_bundle,
-    read_api_log,
     save_config,
     save_story_bundle,
 )
@@ -396,7 +396,7 @@ def cmd_export(args: argparse.Namespace) -> int:
             write_archive(
                 args.file,
                 bundle,
-                read_api_log(bundle.story.id, root=root),
+                iter_api_log(bundle.story.id, root=root),
                 all_image_files(bundle.story.id, root),
             )
     except OSError as exc:

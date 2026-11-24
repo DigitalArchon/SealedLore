@@ -12,7 +12,7 @@ import json
 import os
 import shutil
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -745,6 +745,20 @@ def append_api_log(story_id: str, record: dict, root: Path | None = None) -> Non
 
 def read_api_log(story_id: str, root: Path | None = None) -> list[dict]:
     return read_jsonl(story_dir(story_id, root) / "api_log.jsonl")
+
+
+def iter_api_log(story_id: str, root: Path | None = None) -> Iterator[Any]:
+    """The story's API log as `read_api_log` reads it, a record at a time
+    and never held whole (a story backup writes it out as it goes). A byte
+    that isn't UTF-8 is read as U+FFFD, as `read_api_log_since` reads one."""
+    path = story_dir(story_id, root) / "api_log.jsonl"
+    try:
+        handle = path.open("rb")
+    except FileNotFoundError:
+        return
+    with handle:
+        for line in handle:  # binary: split at "\n" alone
+            yield from parse_jsonl_lines([line.decode("utf-8", errors="replace")])
 
 
 def read_api_log_since(

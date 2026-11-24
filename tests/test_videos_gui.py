@@ -272,6 +272,7 @@ def test_closing_while_a_video_is_made_leaves_it_to_be_fetched_later(
 
 def test_a_backup_can_leave_the_videos_out(app, window: MainWindow, monkeypatch, tmp_path):
     from sealedlore.storage.archive import read_archive
+    from sealedlore.storage.repository import append_api_log, read_api_log
 
     done = GeneratedVideo(
         anchor_node_id="a1",
@@ -284,6 +285,7 @@ def test_a_backup_can_leave_the_videos_out(app, window: MainWindow, monkeypatch,
     )
     window.session.pictures.write(done.file, MP4)
     window.session.pictures.put_video(done)
+    append_api_log(window.session.story.id, {"id": "r1", "kind": "video_request"}, window.root)
     target = tmp_path / "out.sealedlore-archive.json"
     monkeypatch.setattr(window, "_save_path", lambda *a: target)
     choices: list[str] = []
@@ -297,6 +299,8 @@ def test_a_backup_can_leave_the_videos_out(app, window: MainWindow, monkeypatch,
     monkeypatch.setattr(QMessageBox, "exec", answer)
     window.export_story_archive()
     assert choices and "MB" in choices[0]
-    bundle, _log = read_archive(target)
+    bundle, log = read_archive(target)
     assert done.file not in bundle.pending_files and "videos.json" not in bundle.pending_files
     assert "images/refs/serrik.png" in bundle.pending_files
+    # The story's log, read from the disk as the backup was written.
+    assert log and log == read_api_log(window.session.story.id, root=window.root)

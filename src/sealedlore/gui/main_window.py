@@ -11,7 +11,7 @@ from __future__ import annotations
 import html
 import sys
 import traceback
-from collections.abc import Callable, Collection, Sequence
+from collections.abc import Callable, Collection, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -209,6 +209,7 @@ from sealedlore.storage.repository import (
     StoryBundle,
     config_newer,
     copy_story,
+    iter_api_log,
     load_config_or_recover,
     load_story_bundle,
     read_api_log,
@@ -3191,7 +3192,7 @@ class MainWindow(
             return
         try:
             # From memory for a chat kept there: its log and its pictures.
-            write_archive(path, self.session.bundle_to_save(), self._story_log(), files)
+            write_archive(path, self.session.bundle_to_save(), self._story_log_read(), files)
         except OSError as exc:
             self._warn_plain("Could not write the story backup", f"{path}: {exc.strerror or exc}")
             return
@@ -3290,6 +3291,13 @@ class MainWindow(
         if self.session is not None and self.session.memory_only:
             return list(self.session.memory_log)
         return read_api_log(self.session.story.id, root=self.root)
+
+    def _story_log_read(self) -> Iterable[dict]:
+        """`_story_log`, read from disk a record at a time as it is used, for
+        what writes it out (a story backup): never held whole."""
+        if self.session is not None and self.session.memory_only:
+            return list(self.session.memory_log)
+        return iter_api_log(self.session.story.id, root=self.root)
 
     def show_usage(self) -> None:
         if self.session is None:

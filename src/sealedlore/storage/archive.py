@@ -17,7 +17,7 @@ import base64
 import binascii
 import json
 import shutil
-from collections.abc import Mapping
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -37,9 +37,10 @@ from sealedlore.models.supporting import SupportingCast
 from sealedlore.models.video import GeneratedVideo
 from sealedlore.storage.atomic import (
     NumberTooLong,
-    atomic_write_json,
+    atomic_stream,
     loads,
     nests_deeper,
+    utf8,
     whole_characters,
 )
 from sealedlore.storage.formats import STORY_FORMAT
@@ -74,19 +75,15 @@ def file_format(path: Path) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def archive_data(
-    bundle: StoryBundle,
-    api_log: list[dict[str, Any]],
-    files: Mapping[str, bytes] | None = None,
-) -> dict[str, Any]:
-    """`files` are the story's pictures and images.json (`storage.images.all_image_files`)."""
+def _story_parts(bundle: StoryBundle, exported_at: str) -> dict[str, Any]:
+    """Everything in a backup but its log and its files, in the order written."""
     return {
         "format": ARCHIVE_FORMAT,
         "version": ARCHIVE_VERSION,
         # The story folder's own layout (storage/formats.py), which the
         # archive's version doesn't cover: its records are the folder's.
         STORY_FORMAT_KEY: STORY_FORMAT,
-        "exported_at": utc_now_iso(),
+        "exported_at": exported_at,
         "story": bundle.story.model_dump(),
         "cast": [character.model_dump() for character in bundle.cast],
         "supporting": bundle.supporting.model_dump(),
@@ -96,6 +93,18 @@ def archive_data(
         "asides": [aside.model_dump() for aside in bundle.asides],
         "reviews": [record.model_dump() for record in bundle.reviews],
         "memories": [memory.model_dump() for memory in bundle.memories],
+    }
+
+
+def archive_data(
+    bundle: StoryBundle,
+    api_log: list[dict[str, Any]],
+    files: Mapping[str, bytes] | None = None,
+) -> dict[str, Any]:
+    """The backup as one object, as `write_archive` writes it. `files` are
+    the story's pictures and images.json (`storage.images.all_image_files`)."""
+    return {
+        **_story_parts(bundle, utc_now_iso()),
         "api_log": api_log,
         "files": {
             relative: base64.b64encode(data).decode("ascii")
@@ -104,13 +113,65 @@ def archive_data(
     }
 
 
+# Read at a time to be written as base64: a multiple of 3, so the pieces'
+# base64 put together is the whole's.
+_BASE64_PIECE = 3 << 18
+
+
 def write_archive(
     path: Path,
     bundle: StoryBundle,
-    api_log: list[dict[str, Any]],
+    api_log: Iterable[Any],
     files: Mapping[str, bytes] | None = None,
 ) -> None:
-    atomic_write_json(Path(path), archive_data(bundle, api_log, files))
+    """The backup, written a piece at a time and swapped in whole
+    (`atomic_stream`): exactly the JSON `archive_data` is, indented, but
+    never made in memory. Made whole, the log parsed and every picture as
+    base64 in one string, a 57 MB story took 1.1 s and 420 MB. `api_log` is
+    read as it is written (`repository.iter_api_log`, or a memory chat's
+    own list)."""
+    with atomic_stream(Path(path)) as handle:
+
+        def put(text: str) -> None:
+            handle.write(utf8(text))
+
+        put("{")
+        for key, value in _story_parts(bundle, utc_now_iso()).items():
+            put(f"\n  {_json(key)}: ")
+            if isinstance(value, list):
+                _put_list(put, value)
+            else:
+                put(_json(value, indent=2).replace("\n", "\n  "))
+            put(",")
+        put('\n  "api_log": ')
+        _put_list(put, api_log)
+        put(',\n  "files": ')
+        if not files:
+            put("{}")
+        else:
+            for number, (relative, data) in enumerate(files.items()):
+                put(f'{"," if number else "{"}\n    {_json(relative)}: "')
+                view = memoryview(data)
+                for start in range(0, len(view), _BASE64_PIECE):
+                    handle.write(base64.b64encode(view[start : start + _BASE64_PIECE]))
+                put('"')
+            put("\n  }")
+        put("\n}")
+
+
+def _json(value: Any, **how: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, **how)
+
+
+def _put_list(put: Callable[[str], None], items: Iterable[Any]) -> None:
+    """A list of the backup's, as `json.dumps(backup, indent=2)` writes it,
+    an item at a time."""
+    opened = False
+    for item in items:
+        put(",\n    " if opened else "[\n    ")
+        put(_json(item, indent=2).replace("\n", "\n    "))
+        opened = True
+    put("\n  ]" if opened else "[]")
 
 
 def _decoded_files(raw: Any, name: str) -> dict[str, bytes]:
