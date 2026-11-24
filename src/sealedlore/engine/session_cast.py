@@ -318,14 +318,16 @@ class CastRuntime:
         return condensed
 
     def set_condensed(self, character: Character, text: str) -> None:
-        """The author's own condensed text: kept as written, and current for
-        the card as it now stands (they wrote it from that card). Blank takes
-        it off."""
+        """The author's own condensed text (the Cast page's box): kept as
+        written, and current for the card as it now stands (they wrote it
+        from that card), so a failure to write one is over. Blank takes it
+        off, and a failure stands: not tried again until the card changes or
+        the author asks."""
         cleaned = text.strip()
         character.condensed = cleaned or None
         character.condensed_from = fingerprint(character) if cleaned else None
         failed = getattr(self, "_condense_failed", None)
-        if failed:
+        if failed and cleaned:
             failed.pop(character.id, None)
 
     def _drop_condensing(self, reason: str) -> None:

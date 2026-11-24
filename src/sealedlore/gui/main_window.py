@@ -707,6 +707,7 @@ class MainWindow(
         self.lore_panel.tavern_settings_requested.connect(self._open_tavern_settings)
         self.lore_panel.always_on_requested.connect(self.open_always_on)
         self.lore_panel.condense_requested.connect(self.condense_lore_entry)
+        self.lore_panel.keep_condensed = self._keep_condensed_lore
         self.style_panel = StylePanel()
         self.style_panel.changed.connect(self._on_style_changed)
         self.summaries_panel = SummariesPanel()

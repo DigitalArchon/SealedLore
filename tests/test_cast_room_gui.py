@@ -21,6 +21,7 @@ from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.models.character import Character  # noqa: E402
 from sealedlore.models.config import Config, ProviderConfig  # noqa: E402
 from sealedlore.models.supporting import SupportingCast  # noqa: E402
+from sealedlore.providers.base import ProviderError  # noqa: E402
 from sealedlore.providers.mock import MockChatProvider  # noqa: E402
 from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa: E402
 
@@ -119,6 +120,31 @@ def test_the_author_edits_a_condensed_card_and_keeps_a_card_whole(app, window: M
     assert panel.condense_button.isVisibleTo(window)
     assert panel.condense_button.text() == "Condense this card"
     assert "condensing the other cards" in panel.condensed_note.text()
+
+
+def test_the_authors_own_condensed_card_ends_a_failed_ones_note(app, window: MainWindow):
+    """The panel kept the text itself, as the session's `set_condensed` does
+    but without taking the failure off, and a failure stands while the card's
+    fingerprint (which leaves the condensed text out) is unchanged: the card
+    said "Couldn't be written" over the author's own words."""
+    window.session.provider.error = ProviderError("the model was out")
+    window._condense_soon.stop()
+    window._condense_if_needed()
+    window._poll_condensing()
+    panel = window.cast_panel
+    panel.select_character("char-jane")
+    assert "Couldn't be written (the model was out)" in panel.condensed_note.text()
+    # Blank, it still couldn't be written, and isn't tried again unasked.
+    panel.condensed.setPlainText(" ")
+    assert window.session.condense_failures() == {"char-jane": "the model was out"}
+    assert "Couldn't be written" in panel.condensed_note.text()
+    panel.condensed.setPlainText("Jane, in my words.")
+    jane = panel.current
+    assert jane.condensed == "Jane, in my words." and jane.condensed_from == fingerprint(jane)
+    assert window.session.condense_failures() == {}
+    assert "Couldn't be written" not in panel.condensed_note.text()
+    assert "Sent in place of the description" in panel.condensed_note.text()
+    assert "Couldn't be condensed" not in panel.room_banner.message.text()
 
 
 def test_a_cast_that_fits_says_nothing(app, window: MainWindow):

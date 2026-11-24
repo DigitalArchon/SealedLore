@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QMessageBox, QWidget
 from sealedlore.engine.session import SessionNotice
 from sealedlore.gui.cast_room import cast_room
 from sealedlore.gui.lore_cast_dialog import LoreCastDialog
+from sealedlore.models.character import Character
 from sealedlore.storage.paths import story_dir
 from sealedlore.storage.repository import StoryBundle, save_story_bundle
 from sealedlore.storage.repository import delete_story as remove_story
@@ -36,6 +37,7 @@ class CastWindow:
         # description doesn't send a card it is still changing, and taken
         # in whenever nothing else is writing the story.
         self.cast_panel.condense_requested.connect(self._condense_requested)
+        self.cast_panel.keep_condensed = self._keep_condensed_card
         self.cast_panel.cast_room_requested.connect(lambda: self.open_settings("Context"))
         self._condense_soon = QTimer(self)
         self._condense_soon.setSingleShot(True)
@@ -93,6 +95,13 @@ class CastWindow:
         if session.start_condensing():
             self._condense_timer.start()
         self._refresh_cast_room()
+
+    def _keep_condensed_card(self, character: Character, text: str) -> None:
+        """The author's own condensed text typed on a card: the session keeps
+        it, and a failure to write one ends with it (`set_condensed`). The
+        panel shows only the open story's cards."""
+        if self.session is not None:
+            self.session.set_condensed(character, text)
 
     def _condense_requested(self, character_id: str) -> None:
         """The Cast page's Condense / Write it again ("" for every card

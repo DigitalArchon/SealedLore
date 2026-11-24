@@ -181,6 +181,13 @@ class AlwaysOnWindow:
         # What goes condensed may have changed, condensed versions been written.
         self._lore_vectors_later()
 
+    def _keep_condensed_lore(self, entry: LoreEntry, text: str) -> None:
+        """The author's own condensed version typed on the Lore page: the
+        session keeps it (`set_condensed_lore`). The page shows only the open
+        story's lore."""
+        if self.session is not None:
+            self.session.set_condensed_lore(entry, text)
+
     def condense_lore_entry(self, entry_id: str) -> None:
         """The Lore page's Write a condensed version: one entry."""
         session = self.session

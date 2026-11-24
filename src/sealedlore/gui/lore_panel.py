@@ -7,6 +7,8 @@ why, and — when embeddings weren't used — that it was keywords alone.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -42,7 +44,7 @@ from sealedlore.gui.tavern_dialog import (
     LOREBOOK_LINK_LABEL,
 )
 from sealedlore.gui.wrap_row import WrapRow
-from sealedlore.models.lore import LoreEntry, lore_fingerprint
+from sealedlore.models.lore import LoreEntry
 from sealedlore.storage.tavern_lore import uses_tavern_settings
 
 PEOPLE_LABEL = "Find the people…"
@@ -115,6 +117,9 @@ class LorePanel(QWidget):
         self._held_back: set[str] = set()
         self._current: LoreEntry | None = None
         self._loading = False
+        # Keeps the author's own condensed version of an entry (the window's:
+        # the session's `set_condensed_lore`).
+        self.keep_condensed: Callable[[LoreEntry, str], None] = lambda _entry, _text: None
 
         self.list = QListWidget()
         self.list.setObjectName("loreList")
@@ -717,13 +722,11 @@ class LorePanel(QWidget):
         )
 
     def _condensed_edited(self) -> None:
-        """The author's own words: current for the entry as it stands."""
+        """The author's own words, current for the entry as it stands: kept by
+        the session (`keep_condensed`: StorySession.set_condensed_lore)."""
         if self._loading or self._current is None:
             return
-        entry = self._current
-        text = self.condensed.toPlainText().strip()
-        entry.condensed = text or None
-        entry.condensed_from = lore_fingerprint(entry.content) if text else None
+        self.keep_condensed(self._current, self.condensed.toPlainText())
         self._show_condensed()
         self.changed.emit()
 

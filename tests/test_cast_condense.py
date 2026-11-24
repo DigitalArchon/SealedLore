@@ -124,6 +124,25 @@ def test_a_failure_is_said_and_not_asked_again_until_the_card_changes(tmp_path: 
     assert [c.id for c in session.cards_to_condense()] == ["char-elena"]
 
 
+def test_the_authors_own_condensed_text_ends_a_failure_and_a_blank_one_doesnt(
+    tmp_path: Path, story
+):
+    session = make_session(tmp_path, story, ["unused"])
+    session.provider.error = ProviderError("HTTP 503")
+    session.start_condensing()
+    session.adopt_condensed()
+    jane, elena = by_id(session, "char-jane"), by_id(session, "char-elena")
+    session.set_condensed(jane, "   ")
+    assert set(session.condense_failures()) == {"char-jane", "char-elena"}, "still unwritten"
+    assert session.cards_to_condense() == [], "and not tried again unasked"
+    session.set_condensed(jane, "Jane, John's wife, in my words.")
+    assert set(session.condense_failures()) == {"char-elena"}
+    session.set_condensed(jane, "")
+    assert set(session.condense_failures()) == {"char-elena"}
+    assert [c.id for c in session.cards_to_condense()] == ["char-jane"], "nothing failed now"
+    assert elena.condensed is None
+
+
 def test_a_turn_adopts_them_and_starts_the_next_after_its_passage(tmp_path: Path, story):
     session = make_session(tmp_path, story, ["Condensed card."])
     session.start_condensing()

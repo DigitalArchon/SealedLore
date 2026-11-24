@@ -48,7 +48,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from sealedlore.engine.card_condense import fingerprint
 from sealedlore.engine.look_sheet import keep_order
 from sealedlore.gui import text_size, theme
 from sealedlore.gui.banners import CastRoomBanner
@@ -164,6 +163,9 @@ class CastPanel(QWidget):
         # lorebook (the window's, which has the lore); None for a story whose
         # lore predates saying where it came from.
         self.lore_from: Callable[[Character], int | None] = lambda _character: None
+        # Keeps the author's own condensed text for a card (the window's: the
+        # session's `set_condensed`).
+        self.keep_condensed: Callable[[Character, str], None] = lambda _character, _text: None
         self._loading = False
         # The card being renamed and the name it had as its rename began: the
         # rosters (supporting cards are on them by name) follow once, when
@@ -998,13 +1000,12 @@ class CastPanel(QWidget):
             self._loading = False
 
     def _condensed_edited(self) -> None:
-        """The author's own words for the condensed card: kept as written,
-        and current for the card as it stands (they wrote it from it)."""
+        """The author's own words for the condensed card, kept by the session
+        (`keep_condensed`: StorySession.set_condensed, which also ends a
+        failure to write one)."""
         if self._loading or self._current is None:
             return
-        text = self.condensed.toPlainText().strip()
-        self._current.condensed = text or None
-        self._current.condensed_from = fingerprint(self._current) if text else None
+        self.keep_condensed(self._current, self.condensed.toPlainText())
         self.changed.emit()
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802 - Qt naming
