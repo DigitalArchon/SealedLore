@@ -10,9 +10,16 @@ has to keep. What the app does, feature by feature, is in the
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
-pytest                       # ~1 minute, no network, no display needed
+pytest                       # a few minutes, no network, no display needed
 ruff check . && ruff format --check .
 ```
+
+The tests never use the network: `tests/conftest.py` refuses every
+connection and name lookup off this computer, and a test that tries one
+fails. tiktoken's vocabulary is read only from its cache, so where it has
+never been downloaded the token counts are the estimator's approximate ones,
+as in the app offline; `python tools/fetch_tokenizer.py DIR` and
+`TIKTOKEN_CACHE_DIR=DIR` give the tests the AppImage's file, as CI does.
 
 The tests run the Qt parts offscreen; on a machine without a display set
 `QT_QPA_PLATFORM=offscreen`. On X11 the GUI itself also needs Qt's X11
@@ -87,8 +94,11 @@ came from a failure in real use.
   call.
 - **Dependencies stay as they are** (`PySide6`, `httpx`, `tiktoken`, `numpy`,
   `pydantic`, `tinfoil` with `tinfoil-ehbp` and `pyhpke` pinned beside it,
-  `keyring`, and `pytest`/`ruff` for development). Open an issue before adding
-  one.
+  `sigstore` and `tuf` held to the versions the attestation's guard reads,
+  `keyring`, `onnxruntime` and `tokenizers` for embeddings made on this
+  computer, `cryptography` for the TEE checks, floors on `certifi`, `pyasn1`
+  and `dnspython` for their fixes, and `pytest`/`ruff` for development;
+  `pyproject.toml` says why each is there). Open an issue before adding one.
 
 ### Prompt caching
 
