@@ -352,6 +352,7 @@ class ImagesWindow:
         place: bool = False,
         place_entry: LoreEntry | None = None,
         source: ImageRef | None = None,
+        replaces: str | None = None,
     ) -> bool:
         """`card`: a picture of that character alone, in the scene now, added
         to their card (In the scene… on the Cast page). `background`: a
@@ -359,8 +360,10 @@ class ImagesWindow:
         `place`: a picture of the place the scene is at, for its lore entry
         (engine/places.py), or of `place_entry`. `source`: a picture kept on
         the card or entry to draw from (gui/picture_use.py): a portrait of
-        the person it shows, or the place it shows with nobody in it. True
-        when a picture is being drawn."""
+        the person it shows, or the place it shows with nobody in it.
+        `replaces`: the job of a failed picture (Edit… on it), dismissed once
+        this one is drawing, in the same rebuild. True when a picture is
+        being drawn."""
         if self.session is None:
             return False
         if self._busy:
@@ -428,6 +431,8 @@ class ImagesWindow:
         if client is None:
             return False
         self.image_jobs.start(request, client, self.session.pictures)
+        if replaces is not None:
+            self.image_jobs.dismiss(replaces)
         self.statusBar().showMessage(
             "Drawing the picture in the background. It appears after its passage when done.",
             8000,
@@ -658,17 +663,19 @@ class ImagesWindow:
             return
         self._show_whole(name + (f" · {ref.caption}" if ref.caption else ""), data)
 
-    def _take_card_pictures(self) -> None:
+    def _take_card_pictures(self) -> bool:
         """Pictures drawn for the open story's cards go on them, and one drawn
-        to be the background goes behind the story."""
+        to be the background goes behind the story. True when the
+        transcript was rebuilt here (an opening's pictures put under it), so
+        the caller needn't rebuild it again."""
         if self.session is None or self._busy:
-            return  # the worker owns the story; taken when it is done
+            return False  # the worker owns the story; taken when it is done
         if self._story_in_use():
             # A dialog's thread is writing a prompt from it: taken once it is done.
             self._wait_for_story(self.session, "pictures")
-            return
-        if self.session.show_opening_pictures():
-            self._load_images()
+            return False
+        rebuilt = self._take_opening_pictures()
+        if rebuilt:
             self._reload_unless_editing()
         names = self.session.take_card_pictures()
         if names:
@@ -687,12 +694,24 @@ class ImagesWindow:
             changed = self.session.take_background_pictures()
         except (OSError, ValueError) as exc:
             self._warn_plain("Couldn't use the new background", str(exc))
-            return
+            return rebuilt
         if changed:
             self._apply_background()
             self.refresh_images()
             self._update_controls()
             self.statusBar().showMessage("The new background is in.", 8000)
+        return rebuilt
+
+    def _take_opening_pictures(self) -> bool:
+        """The pictures an as-written opening shows put under it, once it is
+        written (`StorySession.show_opening_pictures`), when nothing works on
+        the story: True when any went in, for the transcript to show."""
+        if self.session is None or self._story_in_use():
+            return False
+        if not self.session.show_opening_pictures():
+            return False
+        self._load_images()
+        return True
 
     def _on_image_jobs_changed(self) -> None:
         count = len(self.image_jobs.pending())
@@ -722,10 +741,15 @@ class ImagesWindow:
                         )
                     )
             self._refresh_story_cost()
-            self._refresh_image_views()
             self.statusBar().showMessage("Picture ready.", 8000)
-            if any(record.card_id or record.background for record in records):
-                self._take_card_pictures()
+            # Put on its card or behind the story first: that may rebuild the
+            # transcript itself (an opening's pictures put under it), and the
+            # picture landing is one rebuild, not two.
+            for_cards = any(record.card_id or record.background for record in records)
+            if for_cards and self._take_card_pictures():
+                self.refresh_images()
+            else:
+                self._refresh_image_views()
         else:
             self.statusBar().showMessage(
                 "A picture for another story is ready; it's in that story's Media page.", 8000
@@ -795,9 +819,11 @@ class ImagesWindow:
                 references=list(request.references),
                 private_span=request.private_span,
             )
-            if self.generate_image(anchor_id=request.anchor_node_id, prefill=prefill, card=card):
-                self.image_jobs.dismiss(job_id)
-                self._refresh_image_views()
+            # The failure goes once the new picture is drawing, in the
+            # rebuild that shows it drawing.
+            self.generate_image(
+                anchor_id=request.anchor_node_id, prefill=prefill, card=card, replaces=job_id
+            )
 
     # --- a picture's menu --------------------------------------------------------
 

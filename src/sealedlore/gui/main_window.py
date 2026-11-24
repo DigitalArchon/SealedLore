@@ -4469,6 +4469,9 @@ class MainWindow(
         # A reader who scrolled up while it ran stays where they were: the
         # rebuild goes to the end.
         place = None if self.transcript.following else self.transcript.place_of()
+        # An opening just written gets its pictures before the rebuild, not
+        # in a second one after (`_take_card_pictures` below).
+        self._take_opening_pictures()
         self._reload_unless_editing()
         self.transcript.keep_place(place)
         focus, self._focus_after_job = self._focus_after_job, None

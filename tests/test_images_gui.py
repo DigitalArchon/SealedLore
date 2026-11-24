@@ -821,6 +821,96 @@ def test_a_picture_landing_leaves_the_card_being_typed_in_alone(app, window: Mai
     assert not panel.portrait.picture.isHidden()
 
 
+def counted_rebuilds(window: MainWindow, monkeypatch) -> list[int]:
+    rebuilds: list[int] = []
+    real = window.reload_transcript
+
+    def counting() -> None:
+        rebuilds.append(1)
+        real()
+
+    monkeypatch.setattr(window, "reload_transcript", counting)
+    return rebuilds
+
+
+def test_a_picture_landing_rebuilds_the_transcript_once(app, window: MainWindow, monkeypatch):
+    """A card's picture landing rebuilt the transcript, then taking it onto
+    its card rebuilt it again when an opening's pictures went in."""
+    from sealedlore.models.image import GeneratedImage
+
+    store = window.session.pictures
+    rebuilds = counted_rebuilds(window, monkeypatch)
+
+    def land(**fields) -> None:
+        file = f"images/{len(rebuilds)}-{len(fields)}.png"
+        store.write(file, PNG)
+        record = GeneratedImage(file=file, prompt="A man.", model="m", size="1k", **fields)
+        window._on_image_finished("job", window.session.story.id, [record], store)
+
+    land(anchor_node_id="a1")
+    assert len(rebuilds) == 1
+    land(card_id="char-serrik", card_first=True)
+    assert len(rebuilds) == 2
+    assert window.session.cast[0].reference_images[0].drawn_as, "taken onto the card"
+    # An opening's pictures waiting to go under it: taking the card's
+    # picture puts them in and rebuilds; the landing adds no second one.
+    waiting = [True]
+    monkeypatch.setattr(
+        window.session, "show_opening_pictures", lambda: bool(waiting and waiting.pop())
+    )
+    land(card_id="char-maela", card_first=True)
+    assert len(rebuilds) == 3 and not waiting
+
+
+def test_a_job_that_writes_the_opening_rebuilds_once_for_its_pictures(
+    app, window: MainWindow, monkeypatch
+):
+    rebuilds = counted_rebuilds(window, monkeypatch)
+    waiting = [True]
+    loaded: list[int] = []
+    monkeypatch.setattr(
+        window.session, "show_opening_pictures", lambda: bool(waiting and waiting.pop())
+    )
+    real_load = window._load_images
+    monkeypatch.setattr(window, "_load_images", lambda: loaded.append(len(rebuilds)) or real_load())
+    window._finish_job()
+    assert len(rebuilds) == 1 and not waiting
+    assert loaded[0] == 0, "the opening's pictures are in before the rebuild"
+
+
+def test_edit_on_a_failed_picture_rebuilds_the_transcript_once(
+    app, window: MainWindow, monkeypatch
+):
+    """Edit… drew the new picture and rebuilt the transcript, then dismissed
+    the failure and rebuilt it again."""
+    from sealedlore.gui import window_images
+    from sealedlore.models.config import ProviderConfig
+
+    request = duellist_request(window)
+    window.image_jobs.start(request, failing_image_client())
+    wait_for(app, lambda: not window.image_jobs.pending())
+    (widget,) = failed_widgets(app, window)
+
+    class Approved(ImageDialog):
+        def exec(self):  # noqa: A003 - Qt naming
+            self.request = request
+            return 1
+
+    monkeypatch.setattr(window_images, "ImageDialog", Approved)
+    if window.config.active_provider() is None:
+        window.config.providers.append(ProviderConfig(name="p", base_url="https://x.test/v1"))
+        window.config.active_provider_name = "p"
+    monkeypatch.setattr(window.session, "image_client", lambda: mock_image_client(delay=0.5))
+    rebuilds = counted_rebuilds(window, monkeypatch)
+    window.transcript.failed_picture_action.emit(widget.job_id, "edit")
+    assert len(rebuilds) == 1
+    flush(app)
+    assert not window.transcript.findChildren(FailedPictureWidget)
+    assert len(window.transcript.findChildren(PendingPictureWidget)) == 1
+    assert not window.image_jobs.failures
+    wait_for(app, lambda: not window.image_jobs.pending())
+
+
 def test_card_icons_read_each_picture_once(app, tmp_path, monkeypatch):
     """A story on disk makes its store anew each time it is asked: the cache
     took that for another story's and read every picture on every refresh."""
@@ -1030,11 +1120,10 @@ def test_edit_opens_the_dialog_with_the_request_and_replaces_the_failure(
     assert prefill.prompt == "A duellist." and prefill.direction == "by torchlight"
     assert prefill.model == "bytedance/seedream-v5.0-pro" and prefill.size == "16:9"
     assert prefill.references == [use]
+    # Replaced once the new one is drawing (generate_image dismisses it:
+    # test_edit_on_a_failed_picture_rebuilds_the_transcript_once).
+    assert kwargs["replaces"] == widget.job_id
     assert len(failed_widgets(app, window)) == 1
-
-    monkeypatch.setattr(window, "generate_image", lambda **_: True)
-    window.transcript.failed_picture_action.emit(widget.job_id, "edit")
-    assert not failed_widgets(app, window)
 
 
 def test_a_picture_that_timed_out_says_it_may_still_be_charged(app, window: MainWindow):
