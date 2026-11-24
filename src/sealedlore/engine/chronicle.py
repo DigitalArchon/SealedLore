@@ -684,8 +684,8 @@ REST_ENDS_AFTER_MINUTES = 6 * 60
 
 def rest_moment(place: str | None, people: Collection[str]) -> str:
     """The moment a declined event rests in (`EventStatus.asked_scene`): where
-    the author's character is among the plot's places (the map's, when the
-    plot has none for them) and who is with them, by card or by name.
+    the author's character is among the plot's places and who is with them,
+    by card or by name.
 
     Never the scene card's own words. The scene read rewords the location on
     a journey ("the road" → "the road near the gate", 5 to 11 times in 21

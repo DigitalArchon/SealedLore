@@ -22,8 +22,8 @@ class ContentPart:
     cache_breakpoint: bool = False
     # A picture sent after the part's text, as a data URL
     # ("data:image/jpeg;base64,…"), for a model that reads pictures: the
-    # tile set designer is shown the author's pictures of their world. Never
-    # part of `PromptMessage.text`, and never in the API log
+    # picture a story's style is taken from (`describe_picture_style`).
+    # Never part of `PromptMessage.text`, and never in the API log
     # (`wire.without_pictures`).
     image: str = ""
     # Joined to the part before it with nothing between: the same text cut

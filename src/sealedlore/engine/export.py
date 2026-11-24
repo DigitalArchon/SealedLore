@@ -16,7 +16,7 @@ from sealedlore.models.node import CHAT_USER_ID, DIRECTOR_SPEAKER_ID, NARRATOR_S
 from sealedlore.models.story import Story
 
 # What a chat calls its user when it has no name for them (the transcript's
-# `speaker_label_for`, and the map's `CHAT_MAP_NAME`, say the same).
+# `speaker_label_for` says the same).
 CHAT_USER_NAME = "You"
 
 

@@ -218,8 +218,7 @@ def _sentence_at(text: str, first: int, last: int) -> str:
     return text[start : min(stops) + 1 if stops else len(text)].strip()
 
 
-# Words of a place's name that name nothing on their own ("the", "old"), as
-# the map's `world._names_place` has them.
+# Words of a place's name that name nothing on their own ("the", "old").
 _PLACE_NOISE = frozenset("the a an of and in at on to old new place area land lands".split())
 
 
@@ -267,30 +266,6 @@ _NAMED_DAY = re.compile(
     rf"(?:^|\b(?:by|on|of|is|now)\s+|,\s*)day\s+(?:number\s+)?(\d+|{_COUNT})(?![\w-])",
     re.IGNORECASE,
 )
-_TIME_OF_DAY = {
-    "dawn": 6 * 60,
-    "morning": 7 * 60,
-    "day": 9 * 60,
-    "noon": 12 * 60,
-    "afternoon": 14 * 60,
-    "evening": 18 * 60,
-    "dusk": 18 * 60,
-    "night": 21 * 60,
-}
-_NEXT_TIME = re.compile(
-    r"\b(?:the\s+)?(?:next|following)\s+(dawn|morning|day|noon|afternoon|evening|dusk|night)\b",
-    re.IGNORECASE,
-)
-# Told as what had happened before ("she had left the next morning, years
-# ago"), not what happens now: "had" with a past participle, not "had
-# breakfast" or "had to"; "ago"; "used to".
-_BACKSTORY = re.compile(
-    r"\b(?:had\s+(?!(?:a|an|the|some|no|nothing|to|his|her|their|its|my|our|your|"
-    r"breakfast|lunch|dinner|supper|tea|coffee|words)\b)\w+|ago|used\s+to)\b",
-    re.IGNORECASE,
-)
-# Before this hour, the night isn't over: "the next morning" is this day's.
-_NIGHT_ENDS = 5 * 60
 _PLAN_WORDS = (
     r"will|would|must|should|shall|plans?|planned|expect(?:s|ed)?|scheduled|due|"
     r"hopes?|intends?|aims?|going to"
@@ -309,13 +284,11 @@ _PLANNED = re.compile(
 )
 
 
-def stated_skip(text: str, now: int, *, next_time: bool = False) -> tuple[int, str] | None:
+def stated_skip(text: str, now: int) -> tuple[int, str] | None:
     """Where a Director or Narration turn moves the clock to, before anything
     is written: the latest day it names as now, ahead of now ("By day 81"),
     else the first stretch it says goes by ("Three weeks pass."), and the
-    sentence. `next_time`: also "the next morning", "the following evening"
-    (the map's own clock in a story with no plot; the plot's clock keeps
-    what was measured for it, and its read after the passage).
+    sentence. "The next morning" is left to the read after the passage.
 
     Moved before the director runs, a skip's events are known to the passage
     that tells the skip, rather than fitted in a turn later against prose
@@ -341,16 +314,6 @@ def stated_skip(text: str, now: int, *, next_time: bool = False) -> tuple[int, s
         sentence = _sentence_around(text, match)
         if _PASSING.search(sentence) and not _PLANNED.search(sentence):
             return now + _span_minutes(match), sentence
-    # "The next morning", "the following evening": the next day, at that
-    # time of day (the three playtests, Oct 18 2026: the map's own clock
-    # stood at 16:35 through two nights told this way).
-    for match in _NEXT_TIME.finditer(text) if next_time else ():
-        sentence = _sentence_around(text, match)
-        if _FUTURE.search(sentence) or _BACKSTORY.search(sentence):
-            continue
-        hour = _TIME_OF_DAY[match.group(1).lower()]
-        day = today - 1 if now % MINUTES_PER_DAY < _NIGHT_ENDS else today
-        return day * MINUTES_PER_DAY + hour, sentence
     return None
 
 
@@ -499,7 +462,7 @@ class ChronicleDelta:
 
         `place_words`: each place's other names (its lore entry's keywords).
         A move to a place needs its quote's sentence to name the place by one
-        of them, as the map holds its reads to (`world._names_place`).
+        of them.
 
         `author_states_facts`: the author's turn is a Director or Narration
         turn, the author's own statement of what happens, so its sentences

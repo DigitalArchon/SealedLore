@@ -473,8 +473,8 @@ class PlotRuntime:
             yield SessionNotice(note)
 
     def _read_after_turn(self) -> Iterator[SessionNotice]:
-        """The scene read, the chronicle read and the map read
-        (session_world.py), after a passage.
+        """The scene read, the chronicle read and the look pick
+        (session_looks.py), after a passage.
 
         None uses another's answer, so with a provider that can make more
         calls alongside (`sibling()`), every call goes out on its own line at
@@ -482,7 +482,7 @@ class PlotRuntime:
         back (one writer of session state). Before, the side reads were
         applied only after the scene read: live, a scene read that ran away
         (4,000 tokens of reasoning, an empty reply, asked once more) held the
-        map back 68 seconds though its own read was done (the author's
+        map's read (gone since) back 68 seconds though it was done (the author's
         castle, Oct 15 2026). A scripted provider has no sibling, and its
         replies are taken in order as before.
 
@@ -1535,7 +1535,7 @@ _READ_WORDS = {
 def _reading_words(
     reads: Sequence[tuple[object, Callable[..., object]]], *, still: bool = False
 ) -> str:
-    """ "Reading the scene and the map with A and B…", for reads out at once."""
+    """ "Reading the scene and the looks with A and B…", for reads out at once."""
     what = [_READ_WORDS.get(getattr(f, "__name__", ""), "the passage") for _p, f in reads]
     models: list[str] = []
     for pending, _finish in reads:

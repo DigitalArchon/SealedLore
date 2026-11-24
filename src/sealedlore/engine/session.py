@@ -673,10 +673,12 @@ class StorySession(
         self.unreported_usage: list[Usage] = []
         # A memory-only chat's API log, which is never written (`memory_only`).
         self.memory_log: list[dict[str, Any]] = []
-        # Set at the end of `close()`, under the lock `_log` and the map's
-        # art writes take: nothing of the story is written after it.
+        # Set at the end of `close()`, under the lock `_log` takes on
+        # whichever thread a call is logged from (the worker's, a picture
+        # job's, the portrait prompt writer's second lane): nothing of the
+        # story is written after it.
         self._closed = False
-        self._closing = threading.RLock()  # `_log` is called under it by the map's writes
+        self._closing = threading.RLock()
         # A memory-only chat's pictures (`pictures`); a story's are on disk.
         self._memory_pictures: MemoryPictures | None = None
         # Prices fetched for a memory-only chat, never written to the config.
@@ -4274,13 +4276,13 @@ class StorySession(
 
     def card_for(self, name: str, *, to_cast: bool = False) -> tuple[Character, bool]:
         """A card for someone the story has by name alone (the scene's "also
-        here", someone on the map with no card): written from what the story
-        says of them by the scan for new characters, else the name alone; a
-        supporting card, or one of the cast (`to_cast`: the author may play
-        them). (The card, whether the story filled it in.) AfterDark (Oct 18
-        2026): Suzuka, named in the opening, had no card, so no avatar of
-        her own to see or change, and nothing offered to make one; the Cast
-        page's Scan was the way, and nothing pointed to it."""
+        here"): written from what the story says of them by the scan for new
+        characters, else the name alone; a supporting card, or one of the
+        cast (`to_cast`: the author may play them). (The card, whether the
+        story filled it in.) AfterDark (Oct 18 2026): Suzuka, named in the
+        opening, had no card, so no picture of her own to see or change, and
+        nothing offered to make one; the Cast page's Scan was the way, and
+        nothing pointed to it."""
         self._refuse_in_private("Making a card")
         name = " ".join(name.split())
         found = next((c for c in (*self.cast, *self.supporting) if same_person(name, c)), None)
@@ -4306,7 +4308,7 @@ class StorySession(
             card = card_from_suggestion(suggestion)
             self.character_suggestions.remove(suggestion)
             if card.name != name:
-                # The name the story and the map use; the scan's as an alias.
+                # The name the story uses; the scan's as an alias.
                 if card.name.lower() not in name.lower():
                     card.aliases = [card.name, *card.aliases]
                 card.name = name
@@ -5405,9 +5407,9 @@ class StorySession(
 
     def _log(self, kind: str, body: dict[str, Any]) -> str:
         """One API log entry; its id. Nothing is written once the story is
-        closed (`close`): a map painting still out on its thread wrote its
-        prompt writer's request into a story being deleted, and the folder
-        came back as a ghost (or `rmtree` failed on it). The lock holds a
+        closed (`close`): a call still out on its own thread (the map's
+        painting, Oct 2026) wrote its request into a story being deleted,
+        and the folder came back as a ghost (or `rmtree` failed on it). The lock holds a
         write that passed the check until it is done, so `close` can't slip
         in between."""
         entry_id = new_id()
