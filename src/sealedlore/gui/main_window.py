@@ -6273,8 +6273,10 @@ class MainWindow(
         # seconds for each of them in turn, and a QThread still running after
         # that was destroyed, which aborts. A speed test's requests are ended.
         speed_tests().stop_all()
-        # The phones are told it stopped, nothing listens any more, tor ends.
+        # The phones are told it stopped, nothing listens any more, tor ends:
+        # waited for here (a bounded while), so none outlives us holding its lock.
         self.stop_phone_access()
+        self._end_tor_now()
         # Under a full page the composer and the docks are put away: their
         # sizes are remembered as the story has them.
         self.show_collection(False)

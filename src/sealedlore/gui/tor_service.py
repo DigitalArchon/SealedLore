@@ -13,12 +13,22 @@ The steps, each said by `changed` for the window to show:
     publishing    the onion service added; its descriptor on its way
     ready         a directory has the descriptor: phones can reach it
     restarting    it stopped; it is started again in a moment
+    waiting       an earlier tor of ours is still ending; started once it has
     failed        given up on, with why
-    stopped       stopped by the author
+    stopping      told to stop, not yet gone
+    stopped       stopped by the author, and gone
 
 A tor that dies or drops its control connection is started again after 2,
 10, then 30 seconds; after that it is given up on and the window says why,
 with the last lines tor printed (`log`, kept in memory only).
+
+Stopping never waits on the GUI thread: tor is told to go (its control
+connection closed, then SIGTERM), killed if it is still there after
+STOP_WAIT_MS, and `ended` says when it has gone. A tor is never started while
+one of ours may still hold the DataDirectory's lock: `start(after=)` names the
+services still ending, and the start waits for them ("waiting"), as a restart
+waits for the tor it killed. At quit, `end_now` waits for it a bounded while
+(the window is closing), so no tor outlives the app holding the lock.
 
 Tor knows when the network no longer recommends its version, and says so here
 (`outdated`, `warning`), asked once it has a consensus and told by event after
@@ -30,6 +40,7 @@ from __future__ import annotations
 
 import os
 from collections import deque
+from collections.abc import Iterable
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QObject, QProcess, QProcessEnvironment, QTimer, Signal
@@ -61,6 +72,8 @@ class TorService(QObject):
     address = Signal(str)
     # (private key, service id): a key tor made, for the keychain.
     key_made = Signal(str, str)
+    # Stopped, and its tor gone: another may take the DataDirectory now.
+    ended = Signal()
 
     def __init__(
         self,
@@ -83,6 +96,12 @@ class TorService(QObject):
         self.version_status = ""
         self.log: deque[str] = deque(maxlen=LOG_LINES)
         self._process: QProcess | None = None
+        # A tor told to go and not yet gone; nothing is started until it has.
+        self._ending: QProcess | None = None
+        # Earlier services whose tor is still ending (start's `after`).
+        self._after: list[TorService] = []
+        # A start waiting for one of those, or for `_ending`.
+        self._held = False
         self._control: QLocalSocket | None = None
         self._reader = ReplyReader()
         self._waiting: deque = deque()  # a callback per command sent, in order
@@ -97,33 +116,59 @@ class TorService(QObject):
         self._retry = QTimer(self)
         self._retry.setSingleShot(True)
         self._retry.timeout.connect(self._launch)
+        self._kill = QTimer(self)
+        self._kill.setSingleShot(True)
+        self._kill.timeout.connect(self._kill_ending)
 
     # --- the author's -------------------------------------------------------------
 
-    def start(self) -> None:
+    def start(self, after: Iterable[TorService] = ()) -> None:
+        """Started, once every service in `after` has no tor left: theirs
+        would hold the DataDirectory's lock, and this one would fail on it."""
         self._stopping = False
         self._restarts = 0
+        self._after = [service for service in after if service.ending()]
+        for service in self._after:
+            service.ended.connect(self._other_ended)
         self._launch()
 
     def stop(self) -> None:
-        """Ends tor: its control connection closed, which ends tor as its
-        owner; killed if it hasn't gone in three seconds."""
+        """Ends tor without waiting for it: its control connection closed,
+        which ends tor as its owner, and SIGTERM; killed if it hasn't gone in
+        STOP_WAIT_MS. "stopping" until it has gone, then "stopped" and `ended`."""
         self._stopping = True
+        self._held = False
         self._retry.stop()
         self._poll.stop()
         self._close_control()
         process, self._process = self._process, None
         if process is not None:
-            if process.state() != QProcess.ProcessState.NotRunning:
-                process.terminate()
-                if not process.waitForFinished(STOP_WAIT_MS):
-                    process.kill()
-                    process.waitForFinished(STOP_WAIT_MS)
-            process.deleteLater()
-        self._set("stopped", "Phone access is off.")
+            self._end(process, kill=False)
+        if self._ending is not None:
+            self._set("stopping", "Stopping tor…")
+        else:
+            self._settle()
+
+    def end_now(self) -> None:
+        """At quit only: the tor still ending waited for (a bounded while, the
+        window is closing), killed if need be, so none is left holding the
+        lock and no QProcess is destroyed with its tor alive."""
+        process = self._ending
+        if process is None:
+            return
+        if not process.waitForFinished(STOP_WAIT_MS):
+            process.kill()
+            process.waitForFinished(STOP_WAIT_MS)
+        if self._ending is process and process.state() == QProcess.ProcessState.NotRunning:
+            self._ended()
 
     def running(self) -> bool:
-        return self._process is not None
+        """A tor of ours is alive: running, or told to go and not yet gone."""
+        return self._process is not None or self._ending is not None
+
+    def ending(self) -> bool:
+        """Its tor told to go and not yet gone."""
+        return self._ending is not None
 
     @property
     def outdated(self) -> bool:
@@ -150,6 +195,13 @@ class TorService(QObject):
     def _launch(self) -> None:
         if self._stopping:
             return
+        self._after = [service for service in self._after if service.ending()]
+        if self._ending is not None or self._after:
+            # A tor of ours still holds the DataDirectory: started when it goes.
+            self._held = True
+            self._set("waiting", "Waiting for the last tor to stop…")
+            return
+        self._held = False
         make_folders(self.paths)
         self.paths.control.unlink(missing_ok=True)  # a socket a dead tor left
         with os.fdopen(open_private(self.paths.torrc, os.O_WRONLY | os.O_TRUNC), "w") as torrc:
@@ -296,10 +348,9 @@ class TorService(QObject):
     # --- ending ------------------------------------------------------------------------
 
     def _read_log(self) -> None:
-        if self._process is None:
-            return
-        text = bytes(self._process.readAllStandardOutput().data()).decode("utf-8", "replace")
-        self.log.extend(line for line in text.splitlines() if line.strip())
+        for process in (self._process, self._ending):
+            if process is not None:
+                self._read_log_of(process)
 
     def _on_finished(self, code: int, _status) -> None:
         if not self._stopping:
@@ -328,11 +379,8 @@ class TorService(QObject):
         self._close_control()
         process, self._process = self._process, None
         if process is not None:
-            process.finished.disconnect(self._on_finished)
-            if process.state() != QProcess.ProcessState.NotRunning:
-                process.kill()
-                process.waitForFinished(STOP_WAIT_MS)
-            process.deleteLater()
+            # Killed, not waited for: the restart waits for it (`_launch`).
+            self._end(process, kill=True)
         if self._restarts < len(RESTART_SECONDS):
             wait = RESTART_SECONDS[self._restarts]
             self._restarts += 1
@@ -340,6 +388,58 @@ class TorService(QObject):
             self._retry.start(wait * 1000)
             return
         self._set("failed", f"Tor stopped: {why}")
+
+    def _end(self, process: QProcess, *, kill: bool) -> None:
+        """`process` told to go; `_ended` once it has. Nothing it does from
+        now on is a failure of the running tor's."""
+        process.finished.disconnect(self._on_finished)
+        process.errorOccurred.disconnect(self._on_error)
+        if process.state() == QProcess.ProcessState.NotRunning:
+            self._read_log_of(process)
+            process.deleteLater()
+            return
+        self._ending = process
+        # NotRunning comes both when it exits and when it never started.
+        process.stateChanged.connect(self._on_ending_state)
+        if kill:
+            process.kill()
+        else:
+            process.terminate()
+            self._kill.start(STOP_WAIT_MS)
+
+    def _read_log_of(self, process: QProcess) -> None:
+        text = bytes(process.readAllStandardOutput().data()).decode("utf-8", "replace")
+        self.log.extend(line for line in text.splitlines() if line.strip())
+
+    def _kill_ending(self) -> None:
+        if self._ending is not None:
+            self._ending.kill()
+
+    def _on_ending_state(self, state) -> None:
+        if state == QProcess.ProcessState.NotRunning and self._ending is not None:
+            self._ended()
+
+    def _ended(self) -> None:
+        process, self._ending = self._ending, None
+        self._kill.stop()
+        if process is not None:
+            self._read_log_of(process)
+            process.stateChanged.disconnect(self._on_ending_state)
+            process.deleteLater()
+        self._settle()
+
+    def _other_ended(self) -> None:
+        if self._held:
+            self._launch()
+
+    def _settle(self) -> None:
+        """Nothing of ours ending any more: stopped, or the held start goes."""
+        if self._stopping:
+            self._after = []
+            self._set("stopped", "Phone access is off.")
+            self.ended.emit()
+        elif self._held:
+            self._launch()
 
     def _set(self, step: str, words: str) -> None:
         self.step, self.words = step, words

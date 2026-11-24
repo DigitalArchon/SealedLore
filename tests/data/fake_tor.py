@@ -17,18 +17,24 @@ FAKE_TOR_MODE (environment):
   late_warning  recommended at first, then a DANGEROUS_VERSION event, as when a
                 new consensus stops recommending it
   new_warning   a DANGEROUS_VERSION event saying it is newer than the list
+  stuck         as ok, but ignores SIGTERM and its control connection closing:
+                it goes only when killed
 FAKE_TOR_LOG: a file each command received is appended to.
 
-Stops when its control connection closes (TAKEOWNERSHIP), as tor does.
+Stops when its control connection closes (TAKEOWNERSHIP), as tor does. Like
+tor it locks DataDirectory/lock first, and exits at once if another holds it
+(tor waits 5 s first, then exits the same).
 """
 
 from __future__ import annotations
 
 import base64
+import fcntl
 import hashlib
 import hmac
 import os
 import secrets
+import signal
 import socket
 import sys
 import time
@@ -67,6 +73,20 @@ def main() -> None:
     data = unquote(torrc["DataDirectory"])
     control = unquote(torrc["ControlPort"].removeprefix("unix:"))
     os.makedirs(data, exist_ok=True)
+    if mode == "stuck":
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    lock = open(os.path.join(data, "lock"), "w")  # held until it exits
+    try:
+        fcntl.lockf(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        print(
+            "[warn] It looks like another Tor process is running with the same data directory.",
+            flush=True,
+        )
+        if log:
+            with open(log, "a", encoding="utf-8") as f:
+                f.write("LOCKED out\n")
+        sys.exit(1)
     cookie_path = os.path.join(data, "control_auth_cookie")
     cookie = secrets.token_bytes(32)
     with open(cookie_path, "wb") as f:
@@ -98,6 +118,8 @@ def main() -> None:
     while True:
         raw = files.readline()
         if not raw:
+            while mode == "stuck":
+                time.sleep(1)
             return  # the controller went: tor exits
         line = raw.decode().rstrip("\r\n")
         if log:

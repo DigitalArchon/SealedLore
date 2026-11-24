@@ -108,6 +108,9 @@ class PhoneWindow:
     def _init_phone(self) -> None:
         self._phone: _PhoneService | None = None
         self._tor = None  # gui/tor_service.TorService while phone access is on
+        # Services turned off whose tor hasn't gone yet: a new one waits for
+        # them (tor's DataDirectory lock), and quitting waits for them.
+        self._tor_ending: list = []
         # Memory-only chats shared for this run: never written to the config,
         # which learns nothing from them.
         self._phone_memory_shared: set[str] = set()
@@ -144,7 +147,7 @@ class PhoneWindow:
         service.address.connect(self._on_tor_address)
         service.key_made.connect(self._on_tor_key)
         self._tor = service
-        service.start()
+        service.start(after=self._tor_ending)
         return None
 
     def stop_phone_access(self) -> None:
@@ -153,9 +156,30 @@ class PhoneWindow:
         service, self._tor = self._tor, None
         if service is not None:
             service.changed.disconnect(self._on_tor_changed)
-            service.stop()
+            service.stop()  # never waits: its tor may take a moment to go
+            if service.ending():
+                self._tor_ending.append(service)
+                service.ended.connect(self._on_tor_ended)
+            else:
+                service.deleteLater()
+        self.phone_access_changed.emit()
+
+    @property
+    def tor_stopping(self) -> bool:
+        """A tor turned off is still on its way out."""
+        return bool(self._tor_ending)
+
+    def _on_tor_ended(self) -> None:
+        for service in [s for s in self._tor_ending if not s.ending()]:
+            self._tor_ending.remove(service)
             service.deleteLater()
         self.phone_access_changed.emit()
+
+    def _end_tor_now(self) -> None:
+        """At quit, after stop_phone_access: each tor still going waited for,
+        a bounded while, and killed if need be (TorService.end_now)."""
+        for service in list(self._tor_ending):
+            service.end_now()
 
     @property
     def phone_step(self) -> str:

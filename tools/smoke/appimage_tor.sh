@@ -46,7 +46,8 @@ reached = service.step
 print(f"tor {service.version} says of its version: {service.version_status or 'nothing'}")
 if reached != "ready":
     print("\n".join(list(service.log)[-15:]))
-service.stop()
+service.stop()  # never waits; end_now waits a bounded while, as quitting does
+service.end_now()
 if service.running():
     sys.exit("tor still running after stop")
 sys.exit(0 if reached == "ready" else f"tor reached {reached}, not ready")

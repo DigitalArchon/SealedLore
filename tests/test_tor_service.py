@@ -178,12 +178,21 @@ def app() -> QApplication:
     return QApplication.instance() or QApplication([])
 
 
+_STARTED: list[TorService] = []
+
+
 @pytest.fixture
 def place(monkeypatch):
-    """A short folder for the data and the sockets (107-byte socket paths)."""
+    """A short folder for the data and the sockets (107-byte socket paths).
+    Every service `run` started is ended after the test, its tor gone."""
     folder = Path(tempfile.mkdtemp(prefix="slt"))
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(folder / "run"))
     yield folder
+    while _STARTED:
+        service = _STARTED.pop()
+        service.stop()
+        service.end_now()
+        assert not service.running()
     shutil.rmtree(folder, ignore_errors=True)
 
 
@@ -209,15 +218,23 @@ def wait_for(app: QApplication, condition, timeout: float = 20.0) -> None:
         time.sleep(0.005)
 
 
-def run(app, place, mode="ok", key=None):
+def run(app, place, mode="ok", key=None, after=()):
     tor, log = fake_tor(place, mode)
     service = TorService(tor, phone_paths(place / "data"), key=key)
+    _STARTED.append(service)
     seen = {"steps": [], "address": [], "keys": []}
     service.changed.connect(lambda step, _words: seen["steps"].append(step))
     service.address.connect(seen["address"].append)
     service.key_made.connect(lambda k, s: seen["keys"].append((k, s)))
-    service.start()
+    service.start(after=after)
     return service, seen, log
+
+
+def stopped(app, service: TorService) -> None:
+    """Stopped, and waited for (the event loop running) until its tor is gone."""
+    service.stop()
+    wait_for(app, lambda: not service.running())
+    assert service.step == "stopped"
 
 
 def commands(log: Path) -> list[str]:
@@ -246,8 +263,12 @@ def test_tor_is_started_logged_into_and_publishes_the_onion(app, place):
     assert (service.paths.data.stat().st_mode & 0o777) == 0o700
     assert (service.paths.torrc.stat().st_mode & 0o777) == 0o600
 
+    ended = []
+    service.ended.connect(lambda: ended.append(service.step))
     service.stop()
-    assert service.step == "stopped" and not service.running()
+    assert service.step == "stopping", "it is never waited for"
+    wait_for(app, lambda: ended)
+    assert ended == ["stopped"] and not service.running()
     assert not service.paths.control.exists() or not _listening(service.paths.control)
 
 
@@ -283,7 +304,7 @@ def test_a_warning_later_in_the_run_is_heard_and_says_it_changed(app, place):
     assert service.version_status == "obsolete"
     assert heard[-1] is True, "the window hears of it through `changed`"
     wait_for(app, lambda: service.step == "ready")
-    service.stop()
+    stopped(app, service)
 
 
 def test_what_to_do_about_it_depends_on_whose_tor_it_is(app, place):
@@ -338,11 +359,101 @@ def test_a_kept_key_keeps_the_address(app, place):
     assert seen["keys"] == []
     assert "ADD_ONION ED25519-V3:kept-key " in log.read_text(encoding="utf-8")
     first = seen["address"]
-    service.stop()
+    stopped(app, service)
     again, seen_again, _ = run(app, place, key="ED25519-V3:kept-key")
     wait_for(app, lambda: again.step == "ready")
     assert seen_again["address"] == first
-    again.stop()
+    stopped(app, again)
+
+
+def _gone(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    return False
+
+
+def test_stopping_never_waits_and_a_tor_that_wont_go_is_killed(app, place, monkeypatch):
+    """Stopping used to wait on the GUI thread for tor to go, up to 6 s, the
+    window frozen. Now it returns at once; a tor still there after
+    STOP_WAIT_MS is killed."""
+    monkeypatch.setattr(tor_service_module, "STOP_WAIT_MS", 400)
+    service, _, _ = run(app, place, "stuck")
+    wait_for(app, lambda: service.step == "ready")
+    pid = service._process.processId()
+    began = time.monotonic()
+    service.stop()
+    assert time.monotonic() - began < 0.2
+    assert service.step == "stopping" and service.running() and not _gone(pid)
+    wait_for(app, lambda: not service.running())
+    assert time.monotonic() - began >= 0.35, "SIGTERM is ignored: it was killed"
+    assert service.step == "stopped" and _gone(pid)
+
+
+def test_the_fake_tor_like_tor_wont_share_its_data_directory(app, place, monkeypatch):
+    """What the next test guards against: a second tor on our DataDirectory
+    while the first still holds its lock fails to start."""
+    monkeypatch.setattr(tor_service_module, "RESTART_SECONDS", ())
+    first, _, _ = run(app, place, "stuck")
+    wait_for(app, lambda: first.step == "ready")
+    second, _, log = run(app, place, "ok")
+    wait_for(app, lambda: second.step == "failed")
+    assert "exit code 1" in second.words and commands(log) == ["LOCKED"]
+
+
+def test_a_start_right_after_a_stop_waits_for_the_old_tor(app, place, monkeypatch):
+    """Phone access off and on again at once: the new tor is started only once
+    the old one has gone and let go of the DataDirectory, and says it waits."""
+    monkeypatch.setattr(tor_service_module, "STOP_WAIT_MS", 500)
+    first, _, _ = run(app, place, "stuck")
+    wait_for(app, lambda: first.step == "ready")
+    first.stop()
+    order = []
+    first.ended.connect(lambda: order.append("old gone"))
+    second, seen, log = run(app, place, "ok", after=[first])
+    second.changed.connect(lambda step, _: order.append(step))
+    assert second.step == "waiting" and seen["steps"] == ["waiting"]
+    assert "last tor" in second.words and not second.running()
+    wait_for(app, lambda: second.step == "ready")
+    assert order[:2] == ["old gone", "starting"]
+    assert "LOCKED" not in commands(log)
+    assert not {"restarting", "failed"} & set(seen["steps"])
+    stopped(app, second)
+
+
+def test_a_start_after_a_stop_that_was_quick_doesnt_wait(app, place):
+    first, _, _ = run(app, place, "ok")
+    wait_for(app, lambda: first.step == "ready")
+    stopped(app, first)
+    second, seen, _ = run(app, place, "ok", after=[first])
+    assert seen["steps"][0] == "starting"
+    wait_for(app, lambda: second.step == "ready")
+
+
+def test_a_tor_stopped_while_it_waits_never_starts(app, place, monkeypatch):
+    monkeypatch.setattr(tor_service_module, "STOP_WAIT_MS", 300)
+    first, _, _ = run(app, place, "stuck")
+    wait_for(app, lambda: first.step == "ready")
+    first.stop()
+    second, seen, log = run(app, place, "ok", after=[first])
+    second.stop()
+    assert second.step == "stopped" and not second.running()
+    wait_for(app, lambda: not first.running())
+    app.processEvents()
+    assert "starting" not in seen["steps"] and not log.exists()
+
+
+def test_quitting_while_tor_stops_waits_for_it_a_bounded_while(app, place, monkeypatch):
+    monkeypatch.setattr(tor_service_module, "STOP_WAIT_MS", 300)
+    service, _, _ = run(app, place, "stuck")
+    wait_for(app, lambda: service.step == "ready")
+    pid = service._process.processId()
+    service.stop()
+    began = time.monotonic()
+    service.end_now()  # no event loop: as in closeEvent
+    assert time.monotonic() - began < 2
+    assert not service.running() and service.step == "stopped" and _gone(pid)
 
 
 def test_a_tor_that_dies_is_started_again(app, place, monkeypatch):
@@ -358,7 +469,8 @@ def test_a_tor_that_keeps_dying_is_given_up_on_with_why(app, place, monkeypatch)
     service, seen, _ = run(app, place, "crash")
     wait_for(app, lambda: service.step == "failed")
     assert seen["steps"].count("restarting") == 3
-    assert "Tor stopped" in service.words and not service.running()
+    assert "Tor stopped" in service.words
+    wait_for(app, lambda: not service.running())  # the last one killed, and gone
     assert any("fake" in line for line in service.log)
 
 
@@ -417,6 +529,7 @@ def test_the_window_turns_phone_access_on_and_off(app, place, monkeypatch, memor
     assert window.phone_step == "off" and not window.phone_on
     paths = phone_paths(root)
     assert not paths.http.exists()  # nothing listens for phones
+    wait_for(app, lambda: not window.tor_stopping)
     assert not _listening(paths.control)  # and tor is gone
     window.close()
 
@@ -452,3 +565,58 @@ def test_closing_the_window_ends_tor(app, place, monkeypatch, memory_keychain):
     assert json.loads((place / "data" / "config.json").read_text(encoding="utf-8"))["phone"][
         "service_id"
     ]
+
+
+def test_phone_access_off_and_on_at_once_waits_for_the_old_tor(
+    app, place, monkeypatch, memory_keychain
+):
+    monkeypatch.setattr(tor_service_module, "STOP_WAIT_MS", 500)
+    tor, _ = fake_tor(place, "stuck")
+    monkeypatch.setenv("SEALEDLORE_TOR", str(tor))
+    window = MainWindow(root=place / "data", use_mock=True)
+    window.start_phone_access()
+    wait_for(app, lambda: window.phone_step == "ready")
+    old = window._tor
+    began = time.monotonic()
+    window.set_phone_access(False)
+    assert time.monotonic() - began < 0.3, "the window never waits for tor"
+    assert window.phone_step == "off" and window.tor_stopping and old.running()
+    from sealedlore.gui.phone_dialog import PhoneDevicesDialog
+
+    dialog = PhoneDevicesDialog(window)
+    assert "tor is stopping" in dialog.status.text()
+    window.set_phone_access(True)
+    assert window.phone_step == "waiting"
+    assert window.phone_status.text() == "Phone: starting"
+    assert "last tor" in window.phone_words
+    wait_for(app, lambda: window.phone_step == "ready")
+    assert not window.tor_stopping and not old.running()
+    assert "tor isn't running" not in dialog.status.text()
+    dialog.close()
+    window.close()
+
+
+def test_quitting_while_tor_is_stopping_leaves_no_tor(app, place, monkeypatch, memory_keychain):
+    """A QProcess destroyed with its tor alive kills it and Qt warns; a tor
+    left behind would hold the DataDirectory's lock for the next run."""
+    from PySide6.QtCore import qInstallMessageHandler
+
+    monkeypatch.setattr(tor_service_module, "STOP_WAIT_MS", 300)
+    tor, _ = fake_tor(place, "stuck")
+    monkeypatch.setenv("SEALEDLORE_TOR", str(tor))
+    window = MainWindow(root=place / "data", use_mock=True)
+    window.start_phone_access()
+    wait_for(app, lambda: window.phone_step == "ready")
+    service = window._tor
+    pid = service._process.processId()
+    window.stop_phone_access()
+    assert window.tor_stopping and not _gone(pid)
+    said: list[str] = []
+    previous = qInstallMessageHandler(lambda _kind, _context, text: said.append(text))
+    try:
+        window.close()
+        app.processEvents()
+    finally:
+        qInstallMessageHandler(previous)
+    assert not window.tor_stopping and not service.running() and _gone(pid)
+    assert not [line for line in said if "QProcess" in line]

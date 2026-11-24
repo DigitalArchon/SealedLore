@@ -51,7 +51,7 @@ def _step_words(step: str, progress: int, connected: int) -> str:
         return "Phone: ready"
     if step == "bootstrapping":
         return f"Phone: connecting {progress}%"
-    if step in ("starting", "connecting"):
+    if step in ("waiting", "starting", "connecting"):
         return "Phone: starting"
     if step == "publishing":
         return "Phone: publishing"

@@ -234,7 +234,9 @@ class PhoneDevicesDialog(QDialog):
             return
         step = window.phone_step
         on = step != "off"
-        if not on:
+        if not on and window.tor_stopping:
+            self.status.setText("Phone access is off: nothing listens for phones; tor is stopping.")
+        elif not on:
             self.status.setText(
                 "Phone access is off: nothing listens for phones and tor isn't running."
             )
