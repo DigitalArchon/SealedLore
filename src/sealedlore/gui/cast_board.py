@@ -150,8 +150,8 @@ class Thumbs:
 
     Kept in a `picture_cache.PictureCache` (by the file as it is now, so one
     written again is read again; bounded, far above a screenful of cells),
-    the transcript's own mechanism, read at once there. A dialog listing
-    pictures (`fill`) opens at once and its pictures come in."""
+    the transcript's own mechanism, read at once there. A page or dialog
+    listing pictures (`fill`) is built at once and its pictures come in."""
 
     PER_TICK = 3
     # A screen of the board's largest cells is under 30 MB.
@@ -189,6 +189,11 @@ class Thumbs:
         the name of one taken off, as soon as one is written (the same size,
         within the same tick of the file system's clock)."""
         self._cache.forget(file)
+
+    def keep(self, files: Collection[str]) -> None:
+        """Only the pictures of `files` kept, or read: what a page lists now."""
+        self._cache.keep(files)
+        self._queue = [key for key in self._queue if key[0] in files]
 
     def get(self, file: str, width: int, height: int) -> QPixmap | None:
         pixmap = self._cache.peek(self._pictures(), file, width, height, self._shape)

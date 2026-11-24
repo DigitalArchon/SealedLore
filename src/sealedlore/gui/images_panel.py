@@ -16,10 +16,8 @@ cast board and the Lore page.
 
 from __future__ import annotations
 
-import zlib
-
 from PySide6.QtCore import QPoint, QSize, Qt, Signal
-from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFrame,
@@ -35,13 +33,14 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.looks import look_words
+from sealedlore.gui.cast_board import Thumbs
+from sealedlore.gui.picture_cache import FIT
 from sealedlore.gui.picture_words import (
     AGAIN_LABEL,
     EDIT_LABEL,
     USE_CHARACTER_LABEL,
     USE_PLACE_LABEL,
 )
-from sealedlore.gui.ref_images import thumbnail_of
 from sealedlore.gui.transcript import IMAGE_ACTIONS, NOT_DRAWN, PLACES_ONLY, picture_caption
 from sealedlore.gui.video_view import VIDEO_ACTIONS, video_caption
 from sealedlore.models.character import Character
@@ -115,13 +114,18 @@ class ImagesPanel(QWidget):
 
     def __init__(self) -> None:
         super().__init__()
-        # Each picture's thumbnail, kept by its file, size and bytes: every
-        # listed picture was decoded afresh on every open of the tab and
-        # every picture that landed while it showed, 14 ms each, a few dozen
-        # in a short map story (the review, Oct 20 2026). Pruned to the
-        # pictures listed on every `set_images`.
-        self._thumbs: dict[tuple, QPixmap] = {}
-        self._thumbs_used: set[tuple] = set()
+        # Each picture's thumbnail, read a few a tick once the page is built
+        # (cast_board.Thumbs) and kept by the file as it is now, so one written
+        # over under its name (the background) is read again. Every listed
+        # picture was decoded afresh on every open of the tab and every
+        # picture that landed while it showed (the review, Oct 20 2026); then
+        # each was read whole on every build to tell its bytes by, and the
+        # first build decoded them all (40 cards' and 40 story pictures of
+        # 1024 x 1536: 0.53 s). Pruned to the pictures listed on every
+        # `set_images`.
+        self._store: PictureStore | None = None
+        self._thumbs = Thumbs(lambda: self._store, lambda: None, self, shape=FIT)
+        self._listed: set[str] = set()
         self._chat = False
         # The story's own pictures and videos (`list`, as it has always been).
         self.list = _Gallery(GALLERY_THUMB)
@@ -219,10 +223,12 @@ class ImagesPanel(QWidget):
         on_cards |= drawn_for_cards or set()
         if background:
             on_cards.add(background_drawn_as)
-        self._thumbs_used = set()
+        self._store = store
+        # The items waiting for their pictures go now.
+        self._thumbs.cancel_fills()
+        self._listed = set()
         self.list.clear()
-        data = store.read(background) if store is not None and background else None
-        if data is not None:
+        if store is not None and background and store.stamp(background) is not None:
             item = QListWidgetItem("Background\n(behind the story's text)")
             item.setData(Qt.UserRole, "background")
             item.setData(Qt.UserRole + 1, "background")
@@ -230,7 +236,7 @@ class ImagesPanel(QWidget):
                 "The picture behind the story's text. Right-click to see it whole, save it, "
                 "draw a new one or edit it"
             )
-            item.setIcon(self._icon(data, background, GALLERY_THUMB))
+            self._show(item, background, GALLERY_THUMB)
             self.list.addItem(item)
         for ref in added or []:
             item = QListWidgetItem("Added picture" + (f"\n{ref.caption}" if ref.caption else ""))
@@ -238,7 +244,7 @@ class ImagesPanel(QWidget):
             item.setData(Qt.UserRole + 1, "added")
             item.setToolTip("A picture added from disk, to send with picture prompts")
             if store is not None:
-                item.setIcon(self._icon(store.read(ref.file), ref.file, GALLERY_THUMB))
+                self._show(item, ref.file, GALLERY_THUMB)
             self.list.addItem(item)
         made = sorted(
             [
@@ -262,7 +268,7 @@ class ImagesPanel(QWidget):
             item.setData(Qt.UserRole + 2, bool(image.from_card))
             item.setToolTip(image.prompt)
             if store is not None:
-                item.setIcon(self._icon(store.read(image.file), image.file, GALLERY_THUMB))
+                self._show(item, image.file, GALLERY_THUMB)
             self.list.addItem(item)
         counts: dict[str, int] = {}
         card_galleries = ((self.cast_list, cast, "Cast"), (self.lore_list, lore, "Lore"))
@@ -289,7 +295,7 @@ class ImagesPanel(QWidget):
                     item.setData(Qt.UserRole + 1, ref.id)
                     item.setToolTip(ref.prompt or ref.caption or name)
                     if store is not None:
-                        item.setIcon(self._icon(store.read(ref.file), ref.file, CARD_THUMB))
+                        self._show(item, ref.file, CARD_THUMB)
                     gallery.addItem(item)
             counts[word] = gallery.count()
         counts["Story"] = self.list.count()
@@ -307,21 +313,14 @@ class ImagesPanel(QWidget):
         anything = any(counts.values())
         self.hint.setVisible(not anything)
         self.save_all_button.setEnabled(anything)
-        used = self._thumbs_used
-        self._thumbs = {key: pixmap for key, pixmap in self._thumbs.items() if key in used}
+        self._thumbs.keep(self._listed)
 
-    def _icon(self, data: bytes | None, file: str, side: int) -> QIcon:
-        """The picture's thumbnail at `side`, decoded once for these bytes
-        (the file's name alone isn't enough: the background is written over
-        under one name)."""
-        if data is None:
-            return QIcon(thumbnail_of(data, side))
-        key = (file, side, len(data), zlib.crc32(data))
-        pixmap = self._thumbs.get(key)
-        if pixmap is None:
-            pixmap = self._thumbs[key] = thumbnail_of(data, side)
-        self._thumbs_used.add(key)
-        return QIcon(pixmap)
+    def _show(self, item: QListWidgetItem, file: str, side: int) -> None:
+        """`item` given its picture's thumbnail at `side` now if it has been
+        read, else once it is (`set_images` cancels what waits before its
+        items go)."""
+        self._listed.add(file)
+        self._thumbs.fill(file, side, side, lambda pixmap: item.setIcon(QIcon(pixmap)))
 
     def _add_video(
         self, video: GeneratedVideo, store: PictureStore | None, on_path: set[str]
@@ -334,7 +333,7 @@ class ImagesPanel(QWidget):
         item.setData(Qt.UserRole + 1, "video")
         item.setToolTip(video.prompt)
         if store is not None and video.poster:
-            item.setIcon(self._icon(store.read(video.poster), video.poster, GALLERY_THUMB))
+            self._show(item, video.poster, GALLERY_THUMB)
         self.list.addItem(item)
 
     def _card_action(self, action: str, item: QListWidgetItem | None) -> None:

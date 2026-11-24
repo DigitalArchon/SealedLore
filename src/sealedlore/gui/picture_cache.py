@@ -24,13 +24,15 @@ used again) or it is wanted at another size or shape.
   view would scale it, never by the decoder.
 
 The transcript asks at once (`picture`): a picture's height is its
-message's. The cast board's `Thumbs` reads through one a few a tick.
+message's. Everything else that lists pictures (the cast board, the Media,
+Cast and Lore pages, the picture dialogs) reads through `cast_board.Thumbs`,
+a few a tick once it is up, so building it decodes nothing.
 """
 
 from __future__ import annotations
 
 from collections import OrderedDict
-from collections.abc import Callable, Hashable
+from collections.abc import Callable, Collection, Hashable
 
 from PySide6.QtGui import QPixmap
 
@@ -115,6 +117,12 @@ class PictureCache:
             self._bytes = 0
             return
         for key in [key for key in self._held if key[0] == file]:
+            self._bytes -= size_of(self._held.pop(key))
+
+    def keep(self, files: Collection[str]) -> None:
+        """Only the pictures of `files`, at every size: what a page lists
+        now (another story's, or one taken off, no longer held)."""
+        for key in [key for key in self._held if key[0] not in files]:
             self._bytes -= size_of(self._held.pop(key))
 
     def _key(

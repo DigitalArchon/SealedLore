@@ -40,7 +40,7 @@ from sealedlore.providers.images import ImageClient  # noqa: E402
 from sealedlore.providers.mock import MockChatProvider  # noqa: E402
 from sealedlore.storage.images import load_generated_images, write_story_file  # noqa: E402
 from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa: E402
-from tests.conftest import make_exchange  # noqa: E402
+from tests.conftest import make_exchange, pictures_read  # noqa: E402
 from tests.test_images import LISTING, PNG  # noqa: E402
 
 
@@ -74,6 +74,7 @@ def window(app, tmp_path: Path, story, cast) -> MainWindow:
     window.config.image_models = LISTING["data"]
     window.config.image_models_fetched_at = utc_now_iso()
     window.open_story(story.id)
+    pictures_read(window)
     yield window
     window.image_jobs.stop_all()
     window.image_jobs.wait_all()
@@ -975,40 +976,78 @@ def test_save_all_saves_each_picture_once_and_no_hidden_card_s(
 def test_the_media_tab_keeps_its_thumbnails(app, window: MainWindow, tmp_path: Path, monkeypatch):
     """Every listed picture was decoded afresh on every open of the Media
     tab and every picture that landed while it showed (the review, Oct 20
-    2026): a thumbnail is made once for a file's bytes, and only what is
-    listed is kept."""
+    2026), then read whole on every build to be told by its bytes: each is
+    read once the page is built, kept by its file as it stands, and only what
+    is listed is kept."""
     from sealedlore.gui import images_panel
 
-    decoded: list[int] = []
-    real = images_panel.thumbnail_of
-
-    def counting(data, side):
-        decoded.append(side)
-        return real(data, side)
-
-    monkeypatch.setattr(images_panel, "thumbnail_of", counting)
+    decoded = counted_decodes(monkeypatch)
     panel = window.images_panel
-    panel._thumbs.clear()  # opening the story filled it already
+    panel._thumbs.forget()  # opening the story read it already
     window.refresh_images()
-    assert decoded == [images_panel.CARD_THUMB]  # Serrik's one picture
+    assert decoded == [], "nothing decoded while the page is built"
+    item = panel.cast_list.item(0)
+    assert item.icon().isNull()
+    wait_for(app, lambda: not item.icon().isNull())
+    assert len(decoded) == 1  # Serrik's one picture
+    assert item.icon().pixmap(images_panel.CARD_THUMB).width() == images_panel.CARD_THUMB
     window.refresh_images()
     window.refresh_images()
-    assert len(decoded) == 1 and len(panel._thumbs) == 1
+    pictures_read(window)
+    assert len(decoded) == 1 and len(panel._thumbs._cache) == 1
+    assert not panel.cast_list.item(0).icon().isNull(), "given at once when read before"
 
     # A picture landing on another card: that one alone is decoded.
     session = window.session
     write_story_file(session.story.id, "images/refs/maela.png", PNG, tmp_path)
     session.cast[1].reference_images.append(ImageRef(id="ref-2", file="images/refs/maela.png"))
     window.refresh_images()
-    assert len(decoded) == 2 and len(panel._thumbs) == 2
+    pictures_read(window)
+    assert len(decoded) == 2 and len(panel._thumbs._cache) == 2
     # The same bytes under a new name are decoded once more; the old name's go.
     session.cast[1].reference_images[0].file = "images/refs/maela2.png"
     write_story_file(session.story.id, "images/refs/maela2.png", PNG, tmp_path)
     window.refresh_images()
-    assert len(decoded) == 3 and len(panel._thumbs) == 2
+    pictures_read(window)
+    assert len(decoded) == 3 and len(panel._thumbs._cache) == 2
     # Nothing listed: nothing kept.
     panel.set_images([], None, set())
-    assert panel._thumbs == {} and len(decoded) == 3
+    assert len(panel._thumbs._cache) == 0 and len(decoded) == 3
+
+
+def coloured(colour: str) -> bytes:
+    from sealedlore.gui.ref_images import _encoded
+
+    image = QImage(64, 64, QImage.Format_RGB32)
+    image.fill(QColor(colour))
+    return _encoded(image, "PNG")
+
+
+def test_a_background_written_over_is_read_again_on_the_media_tab(
+    app, window: MainWindow, monkeypatch
+):
+    """The background is written over under one name: the Media tab tells
+    the new one by its file as it stands, not its name, and the old one's
+    thumbnail goes."""
+    session = window.session
+    window._set_background_data(coloured("#cc2200"), ".png")
+    pictures_read(window)
+    decoded = counted_decodes(monkeypatch)
+    panel = window.images_panel
+
+    def background_colour() -> str:
+        item = panel.list.item(0)
+        assert item.data(Qt.UserRole) == "background"
+        image = item.icon().pixmap(32, 32).toImage()
+        return image.pixelColor(image.width() // 2, image.height() // 2).name()
+
+    assert background_colour() == "#cc2200"
+    window.refresh_images()
+    assert decoded == []
+    window._set_background_data(coloured("#2244cc"), ".png")
+    assert session.story.background_image
+    pictures_read(window)
+    assert len(decoded) == 1 and background_colour() == "#2244cc"
 
 
 def failing_image_client(

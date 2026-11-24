@@ -132,6 +132,20 @@ def test_a_photo_held_sideways_is_kept_upright(app):
     assert shown.size().toTuple() == (24, 32)
 
 
+def test_only_the_files_listed_are_kept(app, decodes):
+    store = memory()
+    for name in "ab":
+        store.write(f"images/{name}.png", coloured("red", 10, 10))
+    cache = PictureCache()
+    for name in "ab":
+        cache.picture(store, f"images/{name}.png", 10, 10, FIT)
+        cache.picture(store, f"images/{name}.png", 5, 5, FIT)
+    cache.keep({"images/b.png"})
+    assert len(cache) == 2 and cache.held_bytes == 10 * 10 * 4 + 5 * 5 * 4
+    assert cache.peek(store, "images/a.png", 10, 10, FIT) is None
+    assert cache.peek(store, "images/b.png", 5, 5, FIT) is not None
+
+
 def test_what_is_kept_stays_within_its_budget(app, decodes):
     store = memory()
     for name in "abc":

@@ -38,7 +38,7 @@ from sealedlore.models.image import ImageRef, RefUse  # noqa: E402
 from sealedlore.storage.images import write_story_file  # noqa: E402
 from sealedlore.storage.picture_store import MemoryPictures  # noqa: E402
 from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa: E402
-from tests.conftest import make_exchange  # noqa: E402
+from tests.conftest import make_exchange, pictures_read  # noqa: E402
 from tests.test_images import LISTING  # noqa: E402
 from tests.test_videos import nanogpt_models  # noqa: E402
 
@@ -117,6 +117,7 @@ def window(app, tmp_path: Path, story, cast) -> MainWindow:
     window.config.video_models_fetched_at = utc_now_iso()
     window.config.video_endpoint.api_key = "video-key"
     window.open_story(story.id)
+    pictures_read(window)
     yield window
     window.image_jobs.stop_all()
     window.image_jobs.wait_all()

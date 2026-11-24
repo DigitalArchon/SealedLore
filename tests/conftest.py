@@ -510,6 +510,22 @@ def story() -> Story:
     )
 
 
+def pictures_read(widget, timeout: float = 20.0) -> None:
+    """Every page and dialog under `widget` has read the pictures it lists.
+    They are read a few a tick once it is built (gui/cast_board.py `Thumbs`),
+    so a test that counts decodes starts once they are in."""
+    import time
+
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import QApplication
+
+    app = QApplication.instance()
+    deadline = time.monotonic() + timeout
+    while any(t.isActive() and t.interval() == 0 for t in widget.findChildren(QTimer)):
+        assert time.monotonic() < deadline, "pictures still being read"
+        app.processEvents()
+
+
 def make_exchange(count: int, *, speaker_id: str = "char-serrik") -> list[Node]:
     """`count` linked user/assistant pairs, oldest first."""
     nodes: list[Node] = []
