@@ -51,9 +51,9 @@ def listing_is_stale(fetched_at: str | None) -> bool:
 
 class ImageCatalog(QObject):
     """The endpoint's image models (sizes, reference limits, prices), kept in
-    config for a day and fetched by the window's catalog, on a daemon thread
-    nobody waits for (gui/workers.py): neither a dialog closed mid-fetch nor
-    quitting waits for it.
+    config for a day (saved beside config.json, not in it) and fetched by the
+    window's catalog, on a daemon thread nobody waits for (gui/workers.py):
+    neither a dialog closed mid-fetch nor quitting waits for it.
 
     While a chat kept in memory only is open (`in_memory`), a listing fetched
     is kept here and not in the config: its fetch time would say when that
@@ -148,7 +148,7 @@ class ImageCatalog(QObject):
         self.config.image_models_fetched_at = utc_now_iso()
         media = self.config.images()
         # Never the password an address may carry (the chat's too, when the
-        # picture address is blank and inherits it): config.json keeps none.
+        # picture address is blank and inherits it): no file keeps one.
         self.config.image_models_source = (
             without_password(media.base_url) if media is not None else None
         )

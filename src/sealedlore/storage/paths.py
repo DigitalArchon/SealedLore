@@ -165,6 +165,11 @@ def config_file(root: Path | None = None) -> Path:
     return (root or data_home()) / "config.json"
 
 
+def image_listing_file(root: Path | None = None) -> Path:
+    """The picture endpoint's listing, kept a day (`Config.image_models`)."""
+    return (root or data_home()) / "image_models.json"
+
+
 def stories_dir(root: Path | None = None) -> Path:
     return (root or data_home()) / "stories"
 

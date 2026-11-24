@@ -60,6 +60,7 @@ from sealedlore.storage.paths import (
     config_file,
     ensure_data_home,
     ensure_story_dir,
+    image_listing_file,
     is_safe_story_id,
     stories_dir,
     story_dir,
@@ -119,6 +120,7 @@ def save_config(config: Config, root: Path | None = None) -> None:
         ensure_data_home(root)
         written = with_format(_as_written(config, root), CONFIG_FORMAT)
         atomic_write_json(config_file(root), written, mode=CONFIG_FILE_MODE)
+        _keep_image_listing(config, root)
 
 
 # config.json files saved by a newer SealedLore, by path, and their format:
@@ -176,14 +178,18 @@ def _copy_of(config: Config) -> Config:
     """A deep copy of the config, taken again should the GUI thread change
     one of its dicts in the middle of it. The window makes its changes
     without the lock, on its own thread, and saves after each, so a copy
-    taken a moment early is only ever followed by the window's own save."""
+    taken a moment early is only ever followed by the window's own save.
+
+    The picture listing is no part of config.json (`Config.image_models`):
+    the copy shares it rather than copying it, which was most of the time
+    every save took."""
     for _ in range(_COPY_TRIES - 1):
         try:
-            return config.model_copy(deep=True)
+            return copy.deepcopy(config, {id(config.image_models): config.image_models})
         except RuntimeError as exc:
             if "changed size during iteration" not in str(exc):
                 raise
-    return config.model_copy(deep=True)
+    return copy.deepcopy(config, {id(config.image_models): config.image_models})
 
 
 def _as_written(config: Config, root: Path | None) -> dict[str, Any]:
@@ -251,11 +257,74 @@ def _as_written(config: Config, root: Path | None) -> dict[str, Any]:
         if slot in kept:
             holder.base_url = without_password(holder.base_url)
     # Where a listing came from is only ever compared, never used to send:
-    # it needs no password in any case (gui/image_jobs.py, video_jobs.py).
-    for source in ("image_models_source", "video_models_source"):
-        if getattr(written, source):
-            setattr(written, source, without_password(getattr(written, source)))
+    # it needs no password in any case (gui/video_jobs.py; the pictures'
+    # is kept with its listing, `_keep_image_listing`).
+    if written.video_models_source:
+        written.video_models_source = without_password(written.video_models_source)
     return written.model_dump()
+
+
+# The picture listing each config file's was last written with, or read
+# with (`Config.image_models`): the list itself, which a fetch replaces whole
+# and nothing changes in place, when it was fetched, and where from.
+_LISTING_SAVED: dict[Path, tuple[list[dict], str | None, str | None]] = {}
+
+
+def _listing_of(config: Config) -> tuple[list[dict], str | None, str | None]:
+    return config.image_models, config.image_models_fetched_at, config.image_models_source
+
+
+def _keep_image_listing(config: Config, root: Path | None) -> None:
+    """The picture endpoint's listing the config holds, with when it was
+    fetched and where from, written to a file of its own when it is not what
+    was last written or read: a cache, fetched once a day, that config.json
+    is saved without. Its 135 KB were most of every save of the config."""
+    held = _listing_of(config)
+    was = _LISTING_SAVED.get(_config_key(root))
+    if was is not None and was[0] is held[0] and was[1:] == held[1:]:
+        return
+    path = image_listing_file(root)
+    if held[0] or held[1] or path.exists():
+        source = config.image_models_source
+        atomic_write_json(
+            path,
+            {
+                "models": config.image_models,
+                "fetched_at": config.image_models_fetched_at,
+                "source": without_password(source) if source else source,
+            },
+        )
+    _LISTING_SAVED[_config_key(root)] = held
+
+
+def _take_image_listing(config: Config, root: Path | None) -> None:
+    """The picture listing put in the config, just read from config.json,
+    from its own file. One config.json holds (saved before the listing had a
+    file, or by such a version since) and fetched later than the file's, or
+    with no file, is moved there instead; the config's next save leaves it
+    out."""
+    try:
+        kept = read_json(image_listing_file(root))
+    except (OSError, ValueError):
+        kept = None  # unreadable: fetched again, as one a day old is
+    fetched = config.image_models_fetched_at or ""
+    if config.image_models and (
+        not isinstance(kept, dict) or fetched > str(kept.get("fetched_at") or "")
+    ):
+        try:
+            _keep_image_listing(config, root)
+        except OSError:
+            pass  # moved with the next save; the config holds it meanwhile
+        return
+    models = kept.get("models") if isinstance(kept, dict) else None
+    fetched_at = kept.get("fetched_at") if isinstance(kept, dict) else None
+    source = kept.get("source") if isinstance(kept, dict) else None
+    config.image_models = (
+        [entry for entry in models if isinstance(entry, dict)] if isinstance(models, list) else []
+    )
+    config.image_models_fetched_at = fetched_at if isinstance(fetched_at, str) else None
+    config.image_models_source = source if isinstance(source, str) else None
+    _LISTING_SAVED[_config_key(root)] = _listing_of(config)
 
 
 def _fill_keys(config: Config, root: Path | None) -> str | None:
@@ -366,6 +435,7 @@ def _load_config(root: Path | None) -> tuple[Config, str | None]:
     data = read_json(config_file(root), default=None)
     config = Config() if data is None else Config.model_validate(data)
     _settle_older(config, data)
+    _take_image_listing(config, root)
     newer = _note_format(data, root)
     keys = _fill_keys(config, root)
     return config, " ".join(note for note in (newer, keys) if note) or None
@@ -396,6 +466,7 @@ def load_config_or_recover(root: Path | None = None) -> tuple[Config, str | None
         raw = path.read_bytes()
     except FileNotFoundError:
         config = Config()
+        _take_image_listing(config, root)
         return config, _fill_keys(config, root)
     except OSError as exc:
         reason = _first_line(exc)
@@ -435,6 +506,7 @@ def load_config_or_recover(root: Path | None = None) -> tuple[Config, str | None
                 f"{kept}"
             )
     config = config or Config()
+    _take_image_listing(config, root)
     key_note = _fill_keys(config, root)
     return config, " ".join(note for note in [*notes, key_note] if note) or None
 

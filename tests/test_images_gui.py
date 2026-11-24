@@ -512,7 +512,8 @@ def test_an_image_listing_fetched_in_a_memory_chat_stays_out_of_the_config(app, 
     found = parse_image_models(LISTING)
     catalog._on_finished(found)
     assert config.model_dump_json() == before, "the fetch reached the config"
-    assert not (tmp_path / "config.json").exists()
+    assert not config.image_models and config.image_models_fetched_at is None
+    assert not list(tmp_path.iterdir()), "the fetch reached the disk"
     assert [info.id for info in catalog.models] == [info.id for info in found]
     # Out of the memory chat, a fetch is kept in the config as ever.
     memory[0] = False

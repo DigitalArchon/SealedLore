@@ -1606,13 +1606,17 @@ class Config(BaseModel):
     image_size: str = "16:9"
     image_count: int = Field(default=1, ge=1, le=4)
     # The endpoint's image listing (sizes, reference limits, prices), fetched
-    # when Settings or the image dialog first needs it and kept a day.
-    image_models: list[dict] = Field(default_factory=list)
-    image_models_fetched_at: str | None = None
+    # when Settings or the image dialog first needs it and kept a day. A
+    # cache, not a setting: kept in a file of its own beside config.json
+    # (storage/repository.py `save_image_listing`), never in config.json,
+    # where it was most of the file (135 KB of 203) and of every save's time.
+    # One an older config.json holds is read once and moved there.
+    image_models: list[dict] = Field(default_factory=list, exclude=True)
+    image_models_fetched_at: str | None = Field(default=None, exclude=True)
     # Which endpoint that listing came from: another endpoint's is stale.
     # Always without a password written into the address (`without_password`):
     # the listing is compared by the address without it.
-    image_models_source: str | None = None
+    image_models_source: str | None = Field(default=None, exclude=True)
     # Where pictures are made. Blank address and key are the chat
     # endpoint's (the key only on the chat's own host), as before this
     # setting existed.

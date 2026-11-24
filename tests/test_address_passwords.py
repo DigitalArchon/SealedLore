@@ -48,7 +48,8 @@ def configured(base_url: str = ENDPOINT, **fields) -> Config:
 
 
 def on_disk(root: Path) -> str:
-    return (root / "config.json").read_text(encoding="utf-8")
+    """config.json and the picture listing's file beside it."""
+    return "".join(path.read_text(encoding="utf-8") for path in sorted(root.glob("*.json")))
 
 
 def as_new_process(root: Path) -> Config:
