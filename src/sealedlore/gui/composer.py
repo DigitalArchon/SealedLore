@@ -299,7 +299,7 @@ class Composer(QWidget):
         self.length.setToolTip(
             "Length of the passages from here on. Your choice stays until you change it "
             "back; Regenerate uses it too. The story's own default is the first entry, "
-            "and is set in the Style tab."
+            "and is set on the Style page."
         )
         self.set_default_length(DEFAULT_RESPONSE_STYLE)
 

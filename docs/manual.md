@@ -75,7 +75,7 @@ part of the window, and what each feature does. The README's
   (suggested, never added by themselves), a lorebook sent whole when small and
   selected per turn when large.
 - **The scene keeps itself**: after each passage a small model reads who came
-  and went, where the scene moved and whether it is private; the Scene tab
+  and went, where the scene moved and whether it is private; the Scene page
   follows, with Undo. Recent scenes and who was in them stay with the story.
 - **Simple chat**: a plain conversation with your own system prompt (or a
   saved one, or one of your characters' cards), with branches, pictures and
@@ -748,7 +748,7 @@ archiving, rebuilding summaries.
   View → Theme → High contrast is white on black, every control outlined,
   yellow for focus and what is current. View → Fonts… picks the font for the
   window, for the story (passages, turns and the boxes you write them in) and
-  for the monospace Prompt tab; Restore Defaults goes back to the app's own.
+  for the monospace Prompt page; Restore Defaults goes back to the app's own.
   Both are kept for next time.
 - **The composer**: *Playing* is the character you write (the storyteller
   never writes them); *Speaking as* is who your text lands as (that
@@ -2024,7 +2024,7 @@ chat model, and so does a plot written by the model. These are occasional
 calls the whole story rests on, so a stronger
 model can be worth it here, such as Opus 5.5 (`anthropic/claude-opus-5.5`);
 you can also change it in each dialog. The story is still played with your
-chat model. Both calls count toward the story's cost. The Style tab's
+chat model. Both calls count toward the story's cost. The Style page's
 **Other notes** field is where plain-words style requests go ("let the
 narration show what other characters are thinking").
 
@@ -2545,7 +2545,7 @@ aftermath makes it plain.
 
 **The scene keeps itself.** After each passage a small, cheap model reads what
 it changed: who came in and how, who left, whether the scene moved, and
-whether it is private. The Scene tab follows, and says what changed — "Changed
+whether it is private. The Scene page follows, and says what changed — "Changed
 by the story at passage 213: +Hollis (came in from the constable's office),
 −Ruiz (left for the clinic)" — with an **Undo**. Anything you change yourself
 wins, and the next read starts from your version. The roster covers everyone
@@ -2856,11 +2856,11 @@ words appear anywhere in its title, keywords or text, endings aside, so
 keyword. The five best go (**Entries per turn**, under Retrieval (advanced)
 in Settings → Lore), along with any entry whose keyword your turn names. A
 turn of a word or two ("I nod.") is matched together with the message before
-it. The Lore tab lists the matches sent, in order, and the next few, which a
+it. The Lore page lists the matches sent, in order, and the next few, which a
 higher number would send too.
 
 Similarity scores are not comparable between models, so the threshold needs
-tuning: the Lore tab shows the score on every hit and on the near-misses that
+tuning: the Lore page shows the score on every hit and on the near-misses that
 fell just under it. An entry below the threshold can still match by its
 words. With embeddings off or the endpoint failing, the ranking goes by the
 words alone and the status bar says so.
@@ -2871,13 +2871,13 @@ Retrieval (advanced) in Settings → Lore, sets another share, or a fixed number
 of tokens. The best-chosen entries go first, each whole while it fits and takes
 no more than half the room; an entry too long for what is left goes in part:
 its opening, and the parts of it that the turn and the story just before it
-are about, with "[…]" where the rest was left out. The Lore tab says which
+are about, with "[…]" where the rest was left out. The Lore page says which
 went in part, and how much of each. Only an entry with too little room left
 to say anything useful is left out, and it is listed there too.
 
 Keywords are matched against your own turn. When your turn names no entry,
 the last exchange (your previous turn and the passage that answered it) is
-searched too, then the last two, then the last three; the Lore tab says how
+searched too, then the last two, then the last three; the Lore page says how
 far back they reached. Your turn is the better guide: the story's own prose
 names its everyday people and places on every turn, and matching it all
 brought in far more than the scene needed.
@@ -2933,7 +2933,7 @@ reads: many alternatives, a long stretch after an open-ended repeat, or
 counts inside counts that come to thousands (`/(?:\w{1,10} ){0,2}farmhouse/`
 still reads more than a story scans; `/(?:(?:\w{16}){16}){16}!/` reads
 19,000 characters). One that could read fewer than a hundred characters is
-never run. The Lore tab says so beside any entry this kept from firing.
+never run. The Lore page says so beside any entry this kept from firing.
 
 Where the entries go is SealedLore's, so caching keeps working: a constant
 entry nothing can stop (no chance, timing, group, trigger or filter) is sent
@@ -2944,7 +2944,7 @@ minimum activations. It stands outside the budget, the one way these rules
 differ from SillyTavern's own: SillyTavern leaves out a constant its budget
 can't hold, SealedLore sends every one, so the budget is for the entries that
 fire. In a private scene the budget is a share of the private model's context.
-Positions, depths and outlets aren't used. The Lore tab
+Positions, depths and outlets aren't used. The Lore page
 shows why each entry fired and why each other didn't ("on cooldown", "its
 40% chance didn't come up", "its group “x”: y won", "over the lore budget").
 Timed effects follow the story's branches: each of your turns keeps what
@@ -3028,7 +3028,7 @@ out near the end, an event you have in mind) tends to happen early. Leave
 such things out of the lorebook, write them as the plan they are ("Planned:
 …"), or tick **Hold back until I mention it** on the entry. A held-back entry
 reaches no model until one of your own turns or Directions names it, by its
-title or one of its keywords; from then on it is ordinary lore. The Lore tab
+title or one of its keywords; from then on it is ordinary lore. The Lore page
 marks it "held back" or "mentioned".
 
 - It is decided per branch: on a branch that starts before your mention, the
@@ -3098,7 +3098,7 @@ and charged for by the service, so look in your account there before you
 retry. A picture can be set as the transcript's background (from
 its ⋯ menu, or any picture file with View → Background picture…). Pictures
 are kept even when their passage is deleted; only their own Delete removes
-them, since they cost money. The Media tab shows every picture and video in
+them, since they cost money. The Media page shows every picture and video in
 the story in one place: **Cast** (every picture on every character's card),
 **Lore** (the same for lore entries, the pictures of places among them) and
 **Story** (the background first, then the story's own pictures and videos,
@@ -3368,7 +3368,7 @@ Once a place has a picture the button reads **New picture of this place…**:
 the last picture goes with the prompt as a reference, and the direction asks
 for the same place as it is now, so a bar first pictured quiet comes back
 wrecked after the fight, the same bar. Every picture stays on the entry
-(newest last, and the newest is the one shown) and in the Media tab under
+(newest last, and the newest is the one shown) and on the Media page under
 Lore. A place is found by its entry's title or keywords in the scene's
 location, the nearer place first ("the kitchen of the farmhouse" is the
 farmhouse's), so an entry called "The diner" with a keyword "diner" catches
@@ -3398,7 +3398,7 @@ stays among the card's pictures.
 
 ## Videos
 
-**Story → Pictures and video → Generate video…**, **Video…** in the Media tab,
+**Story → Pictures and video → Generate video…**, **Video…** on the Media page,
 or **Video of this passage…** in a passage's ⋯ menu makes a few seconds of
 video of the story.
 
@@ -3446,7 +3446,7 @@ handler names and padding are blanked in place. It shows as its first frame:
 click to play it in place, with sound and a position bar. Its ⋯ menu opens it
 in your default player, saves it, shows its prompt, makes the next video from
 its last frame, or uses that frame as a reference picture. Videos are listed
-in the Media tab and saved by **Save all…**. A story backup of a story with
+on the Media page and saved by **Save all…**. A story backup of a story with
 videos asks whether to put them in (they are megabytes each) or leave them out.
 
 The default is Seedance 2.5 at 480p for 5 seconds with sound, on NanoGPT

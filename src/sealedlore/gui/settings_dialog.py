@@ -1388,7 +1388,7 @@ class SettingsDialog(QDialog):
         self.keep_scene.setChecked(self.config.scene_reads == "every_turn")
         self.keep_scene.setToolTip(
             "After each passage, a small model reads who came in, who left, where the "
-            "scene moved and whether it is private, and the Scene tab follows (with an "
+            "scene moved and whether it is private, and the Scene page follows (with an "
             "Undo). One extra call per passage, on the scene model below, or on the "
             "story's summarisation model (then its story model) when that is blank. "
             "Off, the roster is kept by hand as before."

@@ -57,7 +57,7 @@ from sealedlore.storage.repository import save_config
 
 class ImagesWindow:
     def _init_images(self) -> None:
-        """Called from `_build_ui`: the jobs, the Media tab and the transcript's signals."""
+        """Called from `_build_ui`: the jobs, the Media page and the transcript's signals."""
         self.image_jobs = ImageJobs(self.root, self)
         self.image_catalog = ImageCatalog(
             self.config, self.root, self, in_memory=lambda: self.memory_chat
@@ -329,7 +329,7 @@ class ImagesWindow:
         return {ref.drawn_as for card in cards for ref in card.reference_images if ref.drawn_as}
 
     def _refresh_image_views(self) -> None:
-        """The Media tab now; the transcript once no passage is streaming into
+        """The Media page now; the transcript once no passage is streaming into
         it, and no message is being edited."""
         self.refresh_images()
         if not self._busy:
@@ -626,7 +626,7 @@ class ImagesWindow:
             self._start_card_pictures([request], session)
 
     def _card_picture_action(self, action: str, card_id: str, ref_id: str) -> None:
-        """A card's picture in the Media tab: see it whole, go to its card,
+        """A card's picture on the Media page: see it whole, go to its card,
         save it, or draw it again or edit it, as on its card."""
         session = self.session
         card = session.card(card_id) if session is not None else None
@@ -723,7 +723,7 @@ class ImagesWindow:
                 self._take_card_pictures()
         else:
             self.statusBar().showMessage(
-                "A picture for another story is ready; it's in that story's Media tab.", 8000
+                "A picture for another story is ready; it's in that story's Media page.", 8000
             )
 
     def _on_image_failed(self, job_id: str, story_id: str, message: str) -> None:
@@ -1082,7 +1082,7 @@ class ImagesWindow:
         self.refresh_images()
 
     def _background_action(self, action: str) -> None:
-        """The background in the Media tab: see it whole, save it, draw a new
+        """The background on the Media page: see it whole, save it, draw a new
         one or edit it (each drawn one goes behind the story when it comes
         back), choose a file instead, or clear it."""
         session = self.session

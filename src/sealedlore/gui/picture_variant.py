@@ -4,7 +4,7 @@ with something changed (a scar, other clothes, another background, years
 older), is added to the card's pictures; the original stays until the author
 removes it. Edit… works the same on a picture of the story (the new one goes
 after the same passage) and on the background (the new one goes behind the
-story once drawn): the Media tab offers it on every picture.
+story once drawn): the Media page offers it on every picture.
 
 Draw again sends the picture's own prompt (kept on the card when it was
 drawn here; otherwise one is written from the card), by the same model or

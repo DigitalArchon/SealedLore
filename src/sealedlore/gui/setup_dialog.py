@@ -966,13 +966,13 @@ class SetupDialog(QDialog):
 
         if self.first_message is not None:
             current = QPushButton("Use the current scene")
-            current.setToolTip("Copy the Scene tab's location, time, situation and roster")
+            current.setToolTip("Copy the Scene page's location, time, situation and roster")
             current.clicked.connect(self._copy_current_scene)
             layout.addWidget(current, 0, Qt.AlignLeft)
         layout.addWidget(
             _hint(
                 "Where the story begins, and where a Restart begins again. Once it has "
-                "begun, the scene as it stands is edited in the Scene tab."
+                "begun, the scene as it stands is edited on the Scene page."
             )
         )
         return widget
