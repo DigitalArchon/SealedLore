@@ -57,8 +57,7 @@ def describe_style(
         return None
     data, suffix = kept
     model = session.image_prompt_model
-    info = (models or {}).get(model)
-    if info is not None and getattr(info, "vision", None) is False:
+    if session.reads_pictures(model, models) is False:
         QMessageBox.information(
             parent,
             TITLE,

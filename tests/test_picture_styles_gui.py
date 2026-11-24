@@ -410,6 +410,10 @@ def test_a_story_s_style_can_be_taken_from_a_picture(app, window, monkeypatch, t
         is None
     )
     assert "can't see pictures" in said[0] and len(session.provider.requests) == sent
+    # With no listing in the window yet, the one the session fetched says.
+    session._models = {session.image_prompt_model: Blind()}
+    assert style_from_picture.describe_style(window, session) is None
+    assert len(said) == 2 and len(session.provider.requests) == sent
 
 
 def test_the_style_picture_goes_with_portraits_and_restyles_when_ticked(app, window):

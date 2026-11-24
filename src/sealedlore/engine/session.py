@@ -4751,10 +4751,14 @@ class StorySession(
         info = self._models.get(model) if self._models else None
         return info.context_length if info else None
 
-    def reads_pictures(self, model: str) -> bool | None:
-        """Whether a model reads pictures, from the list already fetched
-        (never the network); None when the list is not in or doesn't say."""
-        info = self._models.get(model) if self._models else None
+    def reads_pictures(
+        self, model: str, listing: Mapping[str, ModelInfo] | None = None
+    ) -> bool | None:
+        """Whether a model reads pictures, from `listing` (the window's, which
+        the model pickers fetch) or else the list this session has fetched;
+        never the network. None when neither is in or it doesn't say."""
+        models = listing if listing is not None else self._models
+        info = models.get(model) if models else None
         return info.vision if info else None
 
     def cached_output_limit(self, model: str) -> int | None:
