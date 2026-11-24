@@ -40,7 +40,7 @@ from sealedlore.gui.picture_use import CHARACTER, PLACE, UsePictureDialog
 from sealedlore.gui.picture_variant import PictureVariantDialog, VariantSubject
 from sealedlore.gui.portraits_dialog import PortraitsDialog
 from sealedlore.gui.ref_images import PICTURE_FILTER
-from sealedlore.gui.restyle_dialog import ask_restyle
+from sealedlore.gui.restyle_dialog import RESTYLE_LABEL, ask_restyle
 from sealedlore.gui.style_from_picture import describe_style
 from sealedlore.gui.transcript import FailedPictureItem, PendingPicture
 from sealedlore.gui.winprivacy import exclude_from_capture
@@ -101,7 +101,7 @@ class ImagesWindow:
         story_menu.addAction(self.portraits_action)
         # Pictures redrawn in a style, keeping what each shows (the author,
         # Nov 3 2026: imported pictures quickly made to suit the style).
-        self.restyle_action = QAction("Re&style pictures…", self)
+        self.restyle_action = QAction(RESTYLE_LABEL, self)
         self.restyle_action.setStatusTip(
             "The cards' pictures redrawn in a style, keeping what each shows; you see every "
             "prompt first"

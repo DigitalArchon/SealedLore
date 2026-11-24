@@ -29,7 +29,6 @@ from PySide6.QtWidgets import (
 from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, may_discard, size_to_screen
 
 TITLE = "What {name}'s model is sent"
-OPEN_LABEL = "What their model is sent…"
 SENT_TAB = "Sent next"
 NOTES_TAB = "Notes for their model"
 MEMORY_TAB = "What they remember"

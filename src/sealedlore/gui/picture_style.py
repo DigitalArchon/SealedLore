@@ -21,6 +21,7 @@ from sealedlore.engine.picture_styles import BY_ID, DEFAULT_LABEL, OWN_LABEL, ST
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.gui.fields import set_field_text
 from sealedlore.gui.plain_text import plain_tip
+from sealedlore.gui.style_from_picture import FROM_PICTURE_LABEL
 
 OWN = "own"  # the combo's data for the author's own words
 KEEP = "keep"  # a picture changed in its own style (`keep=`)
@@ -95,7 +96,7 @@ class PictureStyleField(QWidget):
         layout.addWidget(self.own, 1)
         self.from_picture: QPushButton | None = None
         if from_picture is not None:
-            self.from_picture = QPushButton("From a picture…")
+            self.from_picture = QPushButton(FROM_PICTURE_LABEL)
             self.from_picture.setToolTip(
                 "A picture whose style the story takes: a model that sees pictures describes it "
                 "in words, yours to read and change"

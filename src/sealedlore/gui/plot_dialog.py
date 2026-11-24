@@ -37,7 +37,8 @@ from sealedlore.gui.sizing import enter_only_on_buttons, may_discard, size_to_sc
 from sealedlore.models.config import model_label
 from sealedlore.models.plot_file import OpeningDoc, PlotDocument
 
-WRITE_LABEL = "Write a plot with the model…"
+# Story → Plot's item that opens the dialog.
+WRITE_LABEL = "&Write a plot with the model…"
 EDIT, CONTINUE, FOLLOW_UP = "edit", "continue", "follow_up"
 # After a plot that wrote notes for the storyteller: that it did, and where
 # they are. Never what they say (as a draft's, gui/followup_dialog.py).

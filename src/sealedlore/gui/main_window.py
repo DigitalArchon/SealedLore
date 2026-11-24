@@ -96,6 +96,7 @@ from sealedlore.gui.new_story_guide import NewStoryGuide
 from sealedlore.gui.people_page import PeoplePage, chat_view, people_view
 from sealedlore.gui.phone_status import PhoneStatusButton
 from sealedlore.gui.plain_text import plain_tip
+from sealedlore.gui.plot_dialog import WRITE_LABEL
 from sealedlore.gui.plot_editor import PlotEditorWindow
 from sealedlore.gui.plot_panel import ClockDialog, PlotPanel
 from sealedlore.gui.prompt_editor import PromptEditorDialog
@@ -990,7 +991,7 @@ class MainWindow(
         # The plot's four in a submenu (Nov 22 2026), hidden in a chat.
         self.plot_menu = story_menu.addMenu("Pl&ot")
         # The author (Nov 2026): a plot without writing one by hand.
-        self.write_plot_action = QAction("&Write a plot with the model…", self)
+        self.write_plot_action = QAction(WRITE_LABEL, self)
         self.write_plot_action.setStatusTip(WRITE_PLOT_TIP)
         self.write_plot_action.triggered.connect(self.write_plot)
         self.plot_menu.addAction(self.write_plot_action)

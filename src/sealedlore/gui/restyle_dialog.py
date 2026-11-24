@@ -45,7 +45,8 @@ from sealedlore.models.image import ImageRef
 from sealedlore.providers.images import ImageModelInfo
 
 THUMB = 72
-RESTYLE_LABEL = "Restyle pictures…"
+# Story → Pictures and video's item (the cast board's button is Restyle…).
+RESTYLE_LABEL = "Re&style pictures…"
 
 
 class _Row:
