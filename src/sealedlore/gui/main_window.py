@@ -1279,18 +1279,16 @@ class MainWindow(
             )
         hidden = set() if self.config.show_plot_spoilers else session.hidden_ids()
         missing, _lore = session.without_pictures()
-        scene, unnamed = session.story.scene, []
         return people_view(
             [c for c in session.cast if c.id not in hidden],
             [c for c in session.supporting if c.id not in hidden],
-            scene,
+            session.story.scene,
             session.story.held_character_id,
             story_id=session.story.id,
             begun=bool(session.nodes),
             missing=[c.name for c in missing],
             pictures_ready=session.config.images() is not None,
             background=bool(session.story.background_image),
-            unnamed=unnamed,
             looks=session.looks_now(),
             wanted=session.looks_wanted_now(),
         )

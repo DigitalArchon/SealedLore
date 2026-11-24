@@ -1,11 +1,11 @@
 """The People page: who is in the story, by their faces.
 
-The author (Oct 18 2026): the start page's graphical look should carry into
-play. A story with a map has the map beside it; one without should have
-"characters and their profiles to keep things visual, along with easy ways
-to get people who play without a map started with portraits and stuff to
-suit their story". So a story without a map opens on this page: who is here
-now, large, the author's own character first; who is elsewhere and the
+The author (Oct 18 2026, when a story could still keep a map): the start
+page's graphical look should carry into play, and a story without the map
+should have "characters and their profiles to keep things visual, along with
+easy ways to get people who play without a map started with portraits and
+stuff to suit their story". So a story opens on this page: who is here now,
+large, the author's own character first; who is elsewhere and the
 supporting characters smaller; each card a portrait, a name and the first
 line of their summary. A click opens their card on the cast board
 (gui/story_cast_page.py, Cast board… at the top: every card and picture of
@@ -94,9 +94,6 @@ BOARD_MENU = "All their pictures, on the cast board"
 PORTRAIT_WORDS = "Their portrait"
 ANOTHER_LOOK = "Draw another look…"
 ALSO_HERE_HEADING = "Also here, with no card yet"
-NAME_LABEL = "Name…"
-# How the map's scene lists someone it has no name for (engine/map_presence.py).
-NOT_NAMED_SUFFIX = " (not named yet)"
 MAKE_CARD_LABEL = "Make a card"
 # A simple chat's characters (`chat_view`).
 CHAT_HERE_HEADING = "Here now"
@@ -166,9 +163,6 @@ class PeopleView:
     others: list[Person] = field(default_factory=list)
     # People named in the scene with no card ("a guard, Gus").
     also_here: list[str] = field(default_factory=list)
-    # In a story played on the map, people it has here with no name yet:
-    # (the map's label, "Unknown 1", and how the story described them).
-    unnamed: list[tuple[str, str]] = field(default_factory=list)
     # Names of the visible characters with no picture that one can be drawn of.
     missing: list[str] = field(default_factory=list)
     # Whether an image endpoint is set up, and whether the story has a background.
@@ -231,14 +225,11 @@ def people_view(
     missing: Sequence[str] = (),
     pictures_ready: bool = False,
     background: bool = False,
-    unnamed: Sequence[tuple[str, str]] = (),
     looks: Mapping[str, str] | None = None,
     wanted: Mapping[str, str] | None = None,
 ) -> PeopleView:
     """Who is where, from the scene card. `cast` and `supporting` are the
     cards the author may see (the plot's hidden ones already left out).
-    `unnamed`: on a map, the people it has here not named yet (label,
-    description); the map's scene lists them as "… (not named yet)".
     `looks`: which picture each is shown with now (engine/looks.py)."""
     present = set(scene.present_character_ids)
     notes = {entry.character_id: entry.note for entry in scene.offstage_but_nearby}
@@ -250,7 +241,6 @@ def people_view(
         missing=list(missing),
         pictures_ready=pictures_ready,
         background=background,
-        unnamed=list(unnamed),
     )
     for character in cast:
         if character.id in present:
@@ -270,7 +260,6 @@ def people_view(
         for name in scene.present_others
         if not any(same_person(name, character) for character in supporting)
         and not any(same_person(name, character) for character in cast)
-        and not name.endswith(NOT_NAMED_SUFFIX)
     ]
     # The author's own character first.
     view.here.sort(key=lambda person: not person.you)
@@ -577,8 +566,6 @@ class PeoplePage(QScrollArea):
     add_requested = Signal()
     # Make a card for someone here with none: their name, into the cast.
     card_requested = Signal(str, bool)
-    # Name someone the map has here with no name yet: their label.
-    name_requested = Signal(str)
     # A simple chat: characters from Your characters, and (card id, here)
     # one set aside or brought back.
     collection_requested = Signal()
@@ -677,7 +664,7 @@ class PeoplePage(QScrollArea):
             "where and when, as the story has it"
         )
         correct.clicked.connect(self.scene_requested)
-        if view.here or view.away or view.others or view.also_here or view.unnamed:
+        if view.here or view.away or view.others or view.also_here:
             layout.addWidget(correct, 0, Qt.AlignLeft)
 
         self._add_tip(layout)
@@ -706,9 +693,9 @@ class PeoplePage(QScrollArea):
             self._grid(layout, SUPPORTING_HEADING, view.others, other_columns, OTHERS_MAX_HEIGHT)
         else:
             self._grid(layout, HERE_HEADING, view.here, here_columns, HERE_MAX_HEIGHT)
-            if view.also_here or view.unnamed:
-                self._also_here(layout, view.also_here, view.unnamed)
-            if not view.here and not view.also_here and not view.unnamed:
+            if view.also_here:
+                self._also_here(layout, view.also_here)
+            if not view.here and not view.also_here:
                 nobody = QLabel("Nobody the story knows is here.")
                 nobody.setObjectName("hintLabel")
                 layout.addWidget(nobody)
@@ -764,41 +751,15 @@ class PeoplePage(QScrollArea):
             chat_here=False,
         )
 
-    def _also_here(
-        self,
-        layout: QVBoxLayout,
-        names: Sequence[str],
-        unnamed: Sequence[tuple[str, str]] = (),
-    ) -> None:
+    def _also_here(self, layout: QVBoxLayout, names: Sequence[str]) -> None:
         """Those here with no card, each with Make a card (AfterDark, Oct 18
         2026: Suzuka, named in the opening, was only a name here, with no
-        way to give her a card, a portrait or an avatar of her own); on a
-        map, those it has here with no name yet, each with Name… (the woman
-        at the rail in Doomsville was on no list until she said her name)."""
+        way to give her a card, a portrait or an avatar of her own)."""
         heading = QLabel(ALSO_HERE_HEADING)
         heading.setObjectName("peopleSituation")
         heading.setWordWrap(True)
         layout.addWidget(heading)
         self.make_card_buttons = {}
-        self.name_buttons = {}
-        for label, described in unnamed:
-            row = QHBoxLayout()
-            row.setSpacing(10)
-            face = QLabel()
-            face.setPixmap(_placeholder("?", QSize(48, 64)))
-            words = QLabel(f"{described[:1].upper()}{described[1:]} · {label}")
-            words.setWordWrap(True)
-            button = QPushButton(NAME_LABEL)
-            button.setToolTip(
-                "Not named by the story yet. Say who they are: one of the cards, or a "
-                "name (they then get a card of their own with Make a card)"
-            )
-            button.clicked.connect(lambda _c=False, n=label: self.name_requested.emit(n))
-            self.name_buttons[label] = button
-            row.addWidget(face, 0)
-            row.addWidget(words, 1)
-            row.addWidget(button, 0)
-            layout.addLayout(row)
         for name in names:
             row = QHBoxLayout()
             row.setSpacing(10)
