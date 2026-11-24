@@ -91,7 +91,7 @@ class CastRuntime:
     def condense_failures(self) -> dict[str, str]:
         """Why a card's condensed text couldn't be written, by character id,
         while the card is as it was."""
-        failed = getattr(self, "_condense_failed", None) or {}
+        failed = self._condense_failed
         by_id = {c.id: c for c in (*self.cast, *self.supporting)}
         return {
             cid: why
@@ -155,11 +155,8 @@ class CastRuntime:
         wanted = list(characters) if characters is not None else self.cards_to_condense()
         if not wanted:
             return False
-        failed = getattr(self, "_condense_failed", None)
-        if failed is None:
-            failed = self._condense_failed = {}
         for character in wanted:
-            failed.pop(character.id, None)
+            self._condense_failed.pop(character.id, None)
         supporting = {c.id for c in self.supporting}
         items = [
             _Condense(
@@ -208,9 +205,7 @@ class CastRuntime:
         if job is None or not job.done.is_set() or self.in_private:
             return []
         self._condense_job = None
-        failed = getattr(self, "_condense_failed", None)
-        if failed is None:
-            failed = self._condense_failed = {}
+        failed = self._condense_failed
         by_id = {c.id: c for c in (*self.cast, *self.supporting)}
         written: list[str] = []
         problems: list[str] = []
@@ -326,9 +321,8 @@ class CastRuntime:
         cleaned = text.strip()
         character.condensed = cleaned or None
         character.condensed_from = fingerprint(character) if cleaned else None
-        failed = getattr(self, "_condense_failed", None)
-        if failed and cleaned:
-            failed.pop(character.id, None)
+        if cleaned:
+            self._condense_failed.pop(character.id, None)
 
     def _drop_condensing(self, reason: str) -> None:
         """The story is being left: what the job has is logged, not adopted."""
