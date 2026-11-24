@@ -18,6 +18,8 @@ import httpx
 from sealedlore.providers.http import make_client, reply_json
 
 # The programs, where each starts by default, in the order they are offered.
+# Programs that start at the same address share one entry, so each address
+# is asked once.
 KNOWN_SERVERS: tuple[tuple[str, str], ...] = (
     ("Ollama", "http://127.0.0.1:11434/v1"),
     ("LM Studio", "http://127.0.0.1:1234/v1"),
@@ -52,11 +54,8 @@ def find_local_servers(*, get: Callable[[str], httpx.Response] | None = None) ->
         client = make_client("http://127.0.0.1", timeout=httpx.Timeout(PROBE_SECONDS))
         get = client.get
     found: list[FoundServer] = []
-    seen: set[str] = set()
     try:
         for name, base in KNOWN_SERVERS:
-            if base in seen:
-                continue
             try:
                 response = get(base + "/models")
                 body = reply_json(response) if response.status_code < 400 else None
@@ -69,7 +68,6 @@ def find_local_servers(*, get: Callable[[str], httpx.Response] | None = None) ->
                 for item in body["data"]
                 if isinstance(item, dict) and item.get("id")
             )
-            seen.add(base)
             found.append(FoundServer(name, base, models))
     finally:
         if client is not None:

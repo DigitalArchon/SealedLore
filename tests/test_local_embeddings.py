@@ -36,7 +36,12 @@ from sealedlore.providers.local_embeddings import (
     model_dir,
     remove,
 )
-from sealedlore.providers.local_servers import FoundServer, find_local_servers, found_words
+from sealedlore.providers.local_servers import (
+    KNOWN_SERVERS,
+    FoundServer,
+    find_local_servers,
+    found_words,
+)
 
 NANO = "https://nano-gpt.com/api/v1"
 
@@ -289,6 +294,11 @@ def test_servers_on_this_computer_are_found_with_their_embedding_models():
 
     found = find_local_servers(get=get)
     assert all(url.startswith("http://127.0.0.1:") and url.endswith("/v1/models") for url in asked)
+    # Each address once: programs that start at the same one (llama.cpp,
+    # LocalAI and TEI at 8080) share an entry, so one answer is one server.
+    addresses = [base for _name, base in KNOWN_SERVERS]
+    assert len(set(addresses)) == len(addresses)
+    assert asked == [base + "/models" for base in addresses]
     ollama, other = found
     assert ollama.name == "Ollama" and ollama.base_url == "http://127.0.0.1:11434/v1"
     assert ollama.embedding_models == ("bge-m3:latest", "nomic-embed-text")  # bge-m3 first
