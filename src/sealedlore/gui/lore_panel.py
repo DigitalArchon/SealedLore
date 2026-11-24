@@ -169,12 +169,6 @@ class LorePanel(QWidget):
         for button in (add_button, self.remove_button, self.tavern_button, self.people_button):
             buttons.add_group([button])
         self._buttons_row = buttons
-        self._list_buttons = (
-            add_button,
-            self.remove_button,
-            self.tavern_button,
-            self.people_button,
-        )
 
         # How the entries are chosen each turn: SealedLore's ways (Settings →
         # Lore), or exactly as SillyTavern fires a lorebook's.
@@ -732,10 +726,6 @@ class LorePanel(QWidget):
         entry.condensed_from = lore_fingerprint(entry.content) if text else None
         self._show_condensed()
         self.changed.emit()
-
-    def set_busy_condensing(self, busy: bool) -> None:
-        self.condense_button.setEnabled(not busy)
-        self.always_on_button.setEnabled(not busy)
 
     def set_always_on(self, note: str, any_on: bool) -> None:
         """What always-on lore takes against the lore budget, when over."""

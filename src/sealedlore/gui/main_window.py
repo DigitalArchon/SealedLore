@@ -406,7 +406,6 @@ class MainWindow(
     AlwaysOnWindow,
     QMainWindow,
 ):
-    generation_requested = Signal()
     # (origin, text): a turn queued from somewhere other than the composer
     # (a phone) and stopped before it went; the composer's own goes back
     # into the composer instead.

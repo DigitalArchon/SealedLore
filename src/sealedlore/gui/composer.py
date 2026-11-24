@@ -733,9 +733,6 @@ class Composer(QWidget):
         self._more = on
         self._sync_more()
 
-    def more_open(self) -> bool:
-        return self.more_row.isVisibleTo(self)
-
     def _on_more_toggled(self, checked: bool) -> None:
         self._more = checked
         self._sync_more()

@@ -170,9 +170,6 @@ class StoryCastPage(QWidget):
         if card_id is not None and not panel.everyone_shown():
             panel.tabs.setCurrentIndex(0 if card else panel.tabs.indexOf(self.board))
 
-    def show_card(self) -> None:
-        self.panel.tabs.setCurrentIndex(0)
-
     def sync_from_board(self) -> None:
         """The board's template and spoilers, on the page's own buttons."""
         template, tip = self.board.template

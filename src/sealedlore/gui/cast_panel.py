@@ -126,8 +126,6 @@ class CastPanel(QWidget):
     # (character id, picture id or "", what): a picture drawn for the card:
     # "new" (a portrait), "again" or "edit" (of that picture), "scene".
     picture_requested = Signal(str, str, str)
-    # (character id): a portrait chosen from a file went first on the card.
-    portrait_added = Signal(str)
     # Cards for a published world's people, written by a model.
     lore_fill_requested = Signal()
     # SillyTavern character cards (storage/tavern_cards.py): one read into
@@ -768,9 +766,7 @@ class CastPanel(QWidget):
         return len(self._current.reference_images) > before
 
     def _add_portrait(self) -> None:
-        character = self._current
-        if self.pictures.add_portrait() and character is not None:
-            self.portrait_added.emit(character.id)
+        self.pictures.add_portrait()
 
     def _remove_portrait(self) -> None:
         character = self._current

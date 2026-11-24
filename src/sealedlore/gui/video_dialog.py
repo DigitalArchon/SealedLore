@@ -132,7 +132,6 @@ class VideoDialog(QDialog):
         self._remote_quotes: dict[str, tuple[float | None, str]] = {}
         media = session.config.videos()
         self._shared_key = bool(media and media.shared_key)
-        self._api = media.api if media is not None else ""
 
         self._build()
         wanted = prefill.model if prefill is not None else session.config.video_model

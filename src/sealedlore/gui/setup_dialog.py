@@ -290,7 +290,6 @@ class SetupDialog(QDialog):
         super().reject()
 
     def _characters_tab(self, panel: QWidget) -> QWidget:
-        self._lent_panel = panel
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.addWidget(
