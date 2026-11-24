@@ -165,9 +165,11 @@ def config_file(root: Path | None = None) -> Path:
     return (root or data_home()) / "config.json"
 
 
-def image_listing_file(root: Path | None = None) -> Path:
-    """The picture endpoint's listing, kept a day (`Config.image_models`)."""
-    return (root or data_home()) / "image_models.json"
+def listing_file(field: str, root: Path | None = None) -> Path:
+    """An endpoint's model listing, kept a day beside config.json, named by
+    its field of Config: image_models.json (`Config.image_models`, the
+    pictures'), video_models.json (`Config.video_models`)."""
+    return (root or data_home()) / f"{field}.json"
 
 
 def stories_dir(root: Path | None = None) -> Path:

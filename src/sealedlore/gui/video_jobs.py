@@ -165,7 +165,7 @@ class VideoCatalog(QObject):
             return
         self.config.video_models = entries
         self.config.video_models_fetched_at = utc_now_iso()
-        # Never a password written into the address: config.json keeps none.
+        # Never a password written into the address: no file keeps one.
         self.config.video_models_source = without_password(source)
         try:
             save_config(self.config, root=self.root)

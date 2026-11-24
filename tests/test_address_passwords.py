@@ -48,7 +48,7 @@ def configured(base_url: str = ENDPOINT, **fields) -> Config:
 
 
 def on_disk(root: Path) -> str:
-    """config.json and the picture listing's file beside it."""
+    """config.json and the listings' files beside it."""
     return "".join(path.read_text(encoding="utf-8") for path in sorted(root.glob("*.json")))
 
 
@@ -244,6 +244,7 @@ def test_an_older_files_listing_source_loses_its_password(tmp_path, memory_keych
     data = configured(image_endpoint=MediaEndpoint(base_url=PICTURES)).model_dump()
     data["image_models"] = LISTING["data"]
     data["image_models_source"] = PICTURES
+    data["video_models"] = [{"id": "vendor/mover", "params": [], "fixed": []}]
     data["video_models_source"] = VIDEO
     (tmp_path / "config.json").write_text(json.dumps(data))
     config = load_config(root=tmp_path)
@@ -251,6 +252,7 @@ def test_an_older_files_listing_source_loses_its_password(tmp_path, memory_keych
     assert config.video_models_source == "https://video.example/v1"
     assert ImageCatalog(config, tmp_path).models, "the listing kept stands"
     save_config(config, root=tmp_path)
+    assert (tmp_path / "video_models.json").exists(), "both listings moved out"
     assert not any(secret in on_disk(tmp_path) for secret in PASSWORDS)
 
 

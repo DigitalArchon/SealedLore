@@ -1305,9 +1305,10 @@ class Config(BaseModel):
     @field_validator("image_models_source", "video_models_source")
     @classmethod
     def _source_without_password(cls, value: str | None) -> str | None:
-        # Which endpoint a listing came from is kept in config.json, and a
-        # password written into that address belongs in the keychain alone
-        # (storage/repository.py): one an older file kept goes here, on load.
+        # Which endpoint a listing came from is kept in a file beside
+        # config.json, and a password written into that address belongs in
+        # the keychain alone (storage/repository.py): one an older file kept
+        # goes here, on load.
         return without_password(value) if value else value
 
     providers: list[ProviderConfig] = Field(default_factory=list)
@@ -1608,8 +1609,8 @@ class Config(BaseModel):
     # The endpoint's image listing (sizes, reference limits, prices), fetched
     # when Settings or the image dialog first needs it and kept a day. A
     # cache, not a setting: kept in a file of its own beside config.json
-    # (storage/repository.py `save_image_listing`), never in config.json,
-    # where it was most of the file (135 KB of 203) and of every save's time.
+    # (storage/repository.py `LISTINGS`), never in config.json, where it was
+    # most of the file (135 KB of 203) and of every save's time.
     # One an older config.json holds is read once and moved there.
     image_models: list[dict] = Field(default_factory=list, exclude=True)
     image_models_fetched_at: str | None = Field(default=None, exclude=True)
@@ -1637,9 +1638,12 @@ class Config(BaseModel):
     video_params: dict[str, Any] = Field(
         default_factory=lambda: {"resolution": "480p", "duration": "5"}
     )
-    video_models: list[dict] = Field(default_factory=list)
-    video_models_fetched_at: str | None = None
-    video_models_source: str | None = None
+    # The video endpoint's listing, kept as the pictures' is (a day, in a
+    # file of its own beside config.json, `LISTINGS`), and its source
+    # without a password, as theirs.
+    video_models: list[dict] = Field(default_factory=list, exclude=True)
+    video_models_fetched_at: str | None = Field(default=None, exclude=True)
+    video_models_source: str | None = Field(default=None, exclude=True)
 
     # Private scenes (engine/session_private.py): a separate endpoint and model
     # the main provider never hears about — a local server (Ollama, LM Studio,

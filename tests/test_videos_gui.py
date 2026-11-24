@@ -304,3 +304,34 @@ def test_a_backup_can_leave_the_videos_out(app, window: MainWindow, monkeypatch,
     assert "images/refs/serrik.png" in bundle.pending_files
     # The story's log, read from the disk as the backup was written.
     assert log and log == read_api_log(window.session.story.id, root=window.root)
+
+
+def test_a_video_listing_fetched_is_kept_beside_the_config(app, tmp_path: Path):
+    """In video_models.json, not config.json (storage/repository.py
+    `LISTINGS`); in a memory-only chat, on neither."""
+    import json
+
+    from sealedlore.gui.video_jobs import VideoCatalog
+    from sealedlore.models.config import Config
+    from sealedlore.storage.repository import load_config
+
+    config = Config()
+    before = config.model_dump_json()
+    memory = [True]
+    catalog = VideoCatalog(config, tmp_path, in_memory=lambda: memory[0])
+    found = list(nanogpt_models().values())
+    catalog._on_finished(found, "https://videos.example/v1")
+    assert config.model_dump_json() == before, "the fetch reached the config"
+    assert not config.video_models and config.video_models_fetched_at is None
+    assert not list(tmp_path.iterdir()), "the fetch reached the disk"
+    assert [info.id for info in catalog.models] == [info.id for info in found]
+    memory[0] = False
+    catalog._on_finished(found, "https://bob:hunter2@videos.example/v1")
+    saved = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
+    assert not any(key.startswith("video_models") for key in saved)
+    kept = json.loads((tmp_path / "video_models.json").read_text(encoding="utf-8"))
+    assert kept["models"] == json.loads(json.dumps(config.video_models))
+    assert kept["source"] == "https://videos.example/v1"
+    assert kept["fetched_at"] == config.video_models_fetched_at
+    again = VideoCatalog(load_config(root=tmp_path), tmp_path)
+    assert [info.id for info in again.models] == [info.id for info in found]
