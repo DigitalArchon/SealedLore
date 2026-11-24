@@ -233,9 +233,10 @@ def _clashes(menu: QMenu, path: list[str]) -> list[str]:
 
 
 @pytest.mark.parametrize("mode", ["story", "chat"])
-def test_every_item_in_file_story_and_view_has_a_key_of_its_own(tmp_path, story, cast, mode):
+def test_every_menu_item_has_a_key_of_its_own(tmp_path, story, cast, mode):
     """The README says so (New in version 3.5), but Import from a link…, Your
-    characters…, Lorebooks…, the text sizes and the themes had none. Hidden
+    characters…, Lorebooks…, the text sizes, the themes and Help → Model
+    trouble's two had none. Hidden
     items count too (Close story, Start story…), and a chat's own wording
     (What the model sees, Current part as Markdown…)."""
     from sealedlore.gui.main_window import MainWindow
@@ -250,7 +251,9 @@ def test_every_item_in_file_story_and_view_has_a_key_of_its_own(tmp_path, story,
         assert window.in_chat == (mode == "chat")
         menus = {_clean(a.text()): a.menu() for a in window.menuBar().actions() if a.menu()}
         assert "Story" in menus, "the Story menu is built whatever is open"
-        problems = [p for name in ("File", "Story", "View") for p in _clashes(menus[name], [name])]
+        problems = [
+            p for name in ("File", "Story", "View", "Help") for p in _clashes(menus[name], [name])
+        ]
         assert not problems, "Menu items without a key of their own:\n" + "\n".join(problems)
     finally:
         window.close()

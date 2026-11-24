@@ -1122,13 +1122,13 @@ class MainWindow(
         writing_action.triggered.connect(lambda: open_guide(self))
         help_menu.addAction(writing_action)
         trouble_menu = help_menu.addMenu("Model &trouble")
-        slow_action = QAction("The model takes too long before it writes…", self)
+        slow_action = QAction("The model takes too &long before it writes…", self)
         slow_action.setStatusTip(
             "Time your current route against other hosts: is it the host, the model or the prompt?"
         )
         slow_action.triggered.connect(lambda: self.open_model_trouble("slow"))
         trouble_menu.addAction(slow_action)
-        worse_action = QAction("The model's writing has got worse…", self)
+        worse_action = QAction("The model's writing has got &worse…", self)
         worse_action.setStatusTip(
             "Send your story's last prompt to a few hosts and compare the replies blind"
         )

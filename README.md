@@ -53,7 +53,7 @@ from playing with them:
   sending, have a **Hide** button where they are shown.
 - **Menus are shorter and clearer**: the Story menu's picture and plot items
   are submenus of their own (**Pictures and video**, **Plot**), and every
-  item in File, Story and View has a key of its own. The button that begins
+  menu item has a key of its own. The button that begins
   a private scene says so, **Private scene**, in a story and a chat alike,
   with **Kept in memory** or **Kept on disk** beside it.
 - **Pages read more easily**: a lore entry's words come before its pictures,
