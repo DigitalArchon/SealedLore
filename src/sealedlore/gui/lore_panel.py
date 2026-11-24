@@ -128,7 +128,7 @@ class LorePanel(QWidget):
         self.list.setObjectName("loreList")
         # Each title beside its picture, small.
         self.list.setIconSize(QSize(LIST_ICON, LIST_ICON))
-        self._icons = CardIcons(self._pictures, LIST_ICON)
+        self._icons = CardIcons(self._pictures, LIST_ICON, self._set_icons, self)
         self.list.setSelectionMode(QAbstractItemView.SingleSelection)
         self.list.currentItemChanged.connect(self._on_selection_changed)
 
@@ -661,15 +661,20 @@ class LorePanel(QWidget):
         if item is not None and entry is not None:
             item.setIcon(self._icons.icon(entry.reference_images))
 
-    def refresh_pictures(self) -> None:
-        """The entries' pictures as they are now, nothing else (as the Cast
-        page's `refresh_pictures`)."""
+    def _set_icons(self) -> None:
+        """The list's icons as read so far (`CardIcons` reads them a few a
+        tick once the list is built)."""
         entries = {e.id: e for e in self._entries}
         for row in range(self.list.count()):
             item = self.list.item(row)
             entry = entries.get(item.data(Qt.UserRole))
             if entry is not None:
                 item.setIcon(self._icons.icon(entry.reference_images))
+
+    def refresh_pictures(self) -> None:
+        """The entries' pictures as they are now, nothing else (as the Cast
+        page's `refresh_pictures`)."""
+        self._set_icons()
         current = self._current
         self.pictures.set_refs(current.reference_images if current is not None else None)
         self._show_picture()

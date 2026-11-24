@@ -914,22 +914,42 @@ def test_edit_on_a_failed_picture_rebuilds_the_transcript_once(
 
 def test_card_icons_read_each_picture_once(app, tmp_path, monkeypatch):
     """A story on disk makes its store anew each time it is asked: the cache
-    took that for another story's and read every picture on every refresh."""
+    took that for another story's and read every picture on every refresh.
+    Each is read a few a tick once the list is built, and `ready` is told."""
+    from PySide6.QtCore import QObject
+
     from sealedlore.gui.ref_images import CardIcons
     from sealedlore.storage import picture_store
 
+    for story_id in ("s", "other"):
+        write_story_file(story_id, "images/refs/a.png", PNG, tmp_path)
     reads: list[str] = []
+    real = picture_store.DiskPictures.read
     monkeypatch.setattr(
-        picture_store.DiskPictures, "read", lambda self, relative: reads.append(relative) or PNG
+        picture_store.DiskPictures,
+        "read",
+        lambda self, relative: reads.append(relative) or real(self, relative),
     )
-    icons = CardIcons(lambda: picture_store.DiskPictures("s", tmp_path), 24)
+    owner = QObject()
+    told: list[int] = []
+    icons = CardIcons(
+        lambda: picture_store.DiskPictures("s", tmp_path), 24, lambda: told.append(1), owner
+    )
     refs = [ImageRef(file="images/refs/a.png")]
-    icons.icon(refs)
-    icons.icon(refs)
+    blank = icons.icon(refs)
+    assert reads == [], "nothing read while the list is built"
+    assert blank.pixmap(24, 24).toImage().pixelColor(12, 12).alpha() == 0
+    wait_for(app, lambda: told)
     assert reads == ["images/refs/a.png"]
-    other = CardIcons(lambda: picture_store.DiskPictures("other", tmp_path), 24)
+    assert icons.icon(refs).pixmap(24, 24).toImage().pixelColor(12, 12).alpha() > 0
+    icons.icon(refs)
+    flush(app)
+    assert reads == ["images/refs/a.png"]
+    other = CardIcons(
+        lambda: picture_store.DiskPictures("other", tmp_path), 24, lambda: None, owner
+    )
     other.icon(refs)
-    assert len(reads) == 2
+    wait_for(app, lambda: len(reads) == 2)
 
 
 def test_save_all_saves_each_picture_once_and_no_hidden_card_s(

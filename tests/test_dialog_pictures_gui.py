@@ -1,9 +1,11 @@
 """The picture dialogs open before their pictures are read: Draw pictures for
-the cards, Redraw in a style, Fill the gaps, the picture and video dialogs
-decoded every card's picture while they were being built (a large cast held
-the window). They read through `cast_board.Thumbs` now, a few a tick once
-the dialog is up, each picture once while the dialog lives. Offscreen;
-nothing is sent anywhere."""
+the cards, Redraw in a style, Fill the gaps, the picture and video dialogs,
+A set of expressions, Change a picture, a SillyTavern card's and a linked
+character's changes decoded every picture while they were being built (a
+large cast held the window), and the Cast and Lore pages' lists and strips
+on every build. They read through `cast_board.Thumbs` now, a few a tick once
+built, each picture once while its file stands as it is. Offscreen; nothing
+is sent anywhere."""
 
 from __future__ import annotations
 
@@ -16,12 +18,12 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QObject, QSize  # noqa: E402
+from PySide6.QtCore import QObject, QSize, Qt  # noqa: E402
 from PySide6.QtGui import QColor, QImage, QPixmap  # noqa: E402
 from PySide6.QtWidgets import QApplication, QLabel  # noqa: E402
 
 from sealedlore.engine.look_sheet import sheet_for  # noqa: E402
-from sealedlore.gui import ref_images  # noqa: E402
+from sealedlore.gui import picture_cache, ref_images  # noqa: E402
 from sealedlore.gui.cast_board import ASPECT, Thumbs  # noqa: E402
 from sealedlore.gui.fill_gaps import FillGapsDialog  # noqa: E402
 from sealedlore.gui.image_codec import encoded  # noqa: E402
@@ -81,6 +83,21 @@ def decodes(monkeypatch) -> list[int]:
         return real(make_reader, fmt)
 
     monkeypatch.setattr(ref_images, "read_image", counting)
+    return counted
+
+
+@pytest.fixture
+def thumbnails(monkeypatch) -> list[int]:
+    """Every picture decoded for a thumbnail (`picture_cache`, which every
+    `Thumbs` reads through)."""
+    counted: list[int] = []
+    real = picture_cache.pixmap_of
+
+    def counting(data):
+        counted.append(1)
+        return real(data)
+
+    monkeypatch.setattr(picture_cache, "pixmap_of", counting)
     return counted
 
 
@@ -247,3 +264,50 @@ def test_the_video_dialog_shows_the_frame_chosen_last(app, window: MainWindow, d
         app.processEvents()
     assert colour_of(dialog.start_thumb.pixmap()) == COLOURS[1]
     dialog.reject()
+
+
+def icon_colour(item) -> str:
+    return colour_of(item.icon().pixmap(item.listWidget().iconSize()))
+
+
+def test_the_cast_page_is_built_before_its_pictures_are_read(
+    app, window: MainWindow, tmp_path: Path, thumbnails
+):
+    """The list's icons and the strip's thumbnails were decoded on every
+    build of the page (each card's first picture, every one of the chosen
+    card's others); now each once, and again only once its file is written."""
+    panel = window.cast_panel
+    serrik = window.session.cast[0]
+    panel._icons._thumbs.forget()
+    panel.pictures._thumbs.forget()
+    panel.set_cast(window.session.cast)
+    panel.select_character(serrik.id)
+    assert thumbnails == [], "nothing decoded while the page is built"
+    pictures_read(window)
+    items = {
+        panel.list.item(row).data(Qt.UserRole): panel.list.item(row)
+        for row in range(panel.list.count())
+        if panel.list.item(row).data(Qt.UserRole)
+    }
+    assert icon_colour(items[serrik.id]) == COLOURS[0]
+    assert icon_colour(items["char-3"]) == "#808080"
+    strip = panel.pictures.list
+    assert [icon_colour(strip.item(row)) for row in range(strip.count())] == list(COLOURS[1:])
+    read = len(thumbnails)
+    assert read == 10 + 2  # each card's first, and Serrik's two others
+    panel.set_cast(window.session.cast)
+    panel.select_character("char-3")
+    panel.select_character(serrik.id)
+    pictures_read(window)
+    assert len(thumbnails) == read, "an unchanged picture is never decoded again"
+    # His portrait's file written again: that one alone is read again.
+    write_story_file(window.session.story.id, "images/refs/0.png", picture("#ffcc00"), tmp_path)
+    panel.refresh_pictures()
+    pictures_read(window)
+    assert len(thumbnails) == read + 1
+    item = next(
+        panel.list.item(row)
+        for row in range(panel.list.count())
+        if panel.list.item(row).data(Qt.UserRole) == serrik.id
+    )
+    assert icon_colour(item) == "#ffcc00"

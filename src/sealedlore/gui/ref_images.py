@@ -23,7 +23,7 @@ import base64
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QSize, Qt, Signal
+from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QObject, QSize, Qt, Signal
 from PySide6.QtGui import QIcon, QImage, QImageReader, QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -340,7 +340,15 @@ class RefImageStrip(QWidget):
         and Make portrait puts the chosen one first. `crop` is the shape a
         picture added from disk is first offered at (engine/picture_shapes.py)."""
         super().__init__()
+        from sealedlore.gui.cast_board import Thumbs
+        from sealedlore.gui.picture_cache import FIT
+
         self._pictures = pictures
+        # The thumbnails, read a few a tick once the strip is built and kept
+        # while the story's pictures are shown: choosing a card decoded each
+        # of its pictures whole, every time.
+        self._thumbs = Thumbs(pictures, lambda: None, self, shape=FIT)
+        self._thumbs_for: object = None
         self._refs: list[ImageRef] | None = None
         self._after_portrait = after_portrait
         self._crop = crop
@@ -444,8 +452,13 @@ class RefImageStrip(QWidget):
     def set_refs(self, refs: list[ImageRef] | None) -> None:
         """Show (and edit in place) an owner's list; None for no owner."""
         self._refs = refs
+        # The items waiting for their pictures go now.
+        self._thumbs.cancel_fills()
         self.list.clear()
         store = self._pictures()
+        if story_key(store) != self._thumbs_for:
+            self._thumbs.forget()
+            self._thumbs_for = story_key(store)
         shown = (refs or [])[1:] if self._after_portrait else (refs or [])
         for number, ref in enumerate(shown, 2 if self._after_portrait else 1):
             if self._person:
@@ -466,7 +479,9 @@ class RefImageStrip(QWidget):
                 item.setToolTip((ref.caption or "(no caption)") + WHOLE_TIP)
             item.setData(Qt.UserRole, ref.id)
             if store is not None:
-                item.setIcon(QIcon(thumbnail_of(store.read(ref.file))))
+                self._thumbs.fill(
+                    ref.file, THUMB, THUMB, lambda pixmap, item=item: item.setIcon(QIcon(pixmap))
+                )
             self.list.addItem(item)
         self.list.setVisible(bool(shown))
         self.hint.setVisible(refs is not None and not shown)
@@ -656,36 +671,43 @@ class RefImageStrip(QWidget):
 
 class CardIcons:
     """Cards' first pictures, small, for a list of names (the Cast and Lore
-    pages): read once per picture and kept until another story's pictures
-    are shown. A card with none gets a blank square, so the names line up."""
+    pages), read a few a tick once the list is built (`cast_board.Thumbs`):
+    `icon` gives what is read so far and `ready` is told when there is more,
+    so the page sets its icons again. Each is read once while its file stands
+    as it is, and kept until another story's pictures are shown. A card with
+    none, or one not read yet, gets a blank square, so the names line up."""
 
-    def __init__(self, pictures: StoryPictures, side: int) -> None:
+    def __init__(
+        self, pictures: StoryPictures, side: int, ready: Callable[[], None], owner: QObject
+    ) -> None:
+        from sealedlore.gui.cast_board import Thumbs
+        from sealedlore.gui.picture_cache import FIT
+
         self._pictures = pictures
         self._side = side
-        self._icons: dict[str, QIcon] = {}
+        self._thumbs = Thumbs(pictures, ready, owner, shape=FIT)
         self._store: object = None
+        blank = QPixmap(side, side)
+        blank.fill(Qt.transparent)
+        self._blank = QIcon(blank)
 
     def icon(self, refs: list[ImageRef]) -> QIcon:
         store = self._pictures()
-        # Another story's pictures: by the story, not the object, which a
-        # story on disk makes anew each time it is asked (so nothing was ever
-        # read once: every refresh read and decoded every card's picture).
-        key = (store.story_id, store.root) if hasattr(store, "story_id") else id(store)
+        key = story_key(store)
         if key != self._store:
-            self._icons.clear()
+            self._thumbs.forget()
             self._store = key
         first = refs[0] if refs else None
-        key = first.file if first is not None else ""
-        icon = self._icons.get(key)
-        if icon is None:
-            pixmap = (
-                thumbnail_of(store.read(first.file), self._side)
-                if first is not None and store is not None
-                else QPixmap()
-            )
-            if pixmap.isNull():
-                pixmap = QPixmap(self._side, self._side)
-                pixmap.fill(Qt.transparent)
-            icon = QIcon(pixmap)
-            self._icons[key] = icon
-        return icon
+        if first is None or store is None:
+            return self._blank
+        pixmap = self._thumbs.get(first.file, self._side, self._side)
+        return self._blank if pixmap is None or pixmap.isNull() else QIcon(pixmap)
+
+
+def story_key(store: PictureStore | None) -> object:
+    """Which story's pictures `store` holds: by the story, not the object,
+    which a story on disk makes anew each time it is asked (so a cache by
+    the object never read anything once)."""
+    if store is None:
+        return None
+    return (store.story_id, store.root) if hasattr(store, "story_id") else id(store)

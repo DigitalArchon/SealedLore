@@ -182,7 +182,7 @@ class CastPanel(QWidget):
         # Each name beside its portrait, small.
         self.list.setIconSize(QSize(LIST_ICON, LIST_ICON))
         self.list.setMinimumHeight(LIST_ICON * 3)
-        self._icons = CardIcons(self._pictures, LIST_ICON)
+        self._icons = CardIcons(self._pictures, LIST_ICON, self._set_icons, self)
         self.list.setSelectionMode(QAbstractItemView.SingleSelection)
         self.list.currentItemChanged.connect(self._on_selection_changed)
 
@@ -738,17 +738,22 @@ class CastPanel(QWidget):
     def _icon(self, character: Character) -> QIcon:
         return self._icons.icon(character.reference_images)
 
-    def refresh_pictures(self) -> None:
-        """The cards' pictures as they are now (one just landed): the list's
-        icons, the portrait and the others, nothing else. Reloaded whole, the
-        card put the cursor at the start of the field being typed in and
-        lost its undo."""
+    def _set_icons(self) -> None:
+        """The list's icons as read so far (`CardIcons` reads them a few a
+        tick once the list is built)."""
         cards = {c.id: c for c in (*self._cast, *self._supporting)}
         for row in range(self.list.count()):
             item = self.list.item(row)
             character = cards.get(item.data(Qt.UserRole))
             if character is not None:
                 item.setIcon(self._icon(character))
+
+    def refresh_pictures(self) -> None:
+        """The cards' pictures as they are now (one just landed): the list's
+        icons, the portrait and the others, nothing else. Reloaded whole, the
+        card put the cursor at the start of the field being typed in and
+        lost its undo."""
+        self._set_icons()
         current = self._current
         self.pictures.set_refs(current.reference_images if current is not None else None)
         self._show_portrait()
