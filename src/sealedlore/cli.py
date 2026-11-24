@@ -41,6 +41,7 @@ from sealedlore.models.config import (
     key_problem,
     rebind_keys,
     recommended_models,
+    recommended_reference,
     require_https,
     shown,
 )
@@ -164,12 +165,13 @@ def cmd_configure(args: argparse.Namespace) -> int:
     name = args.endpoint_name if args.endpoint_name is not None else (args.name or "default")
     if ENDPOINT_SEPARATOR in name:
         raise SystemExit(f"An endpoint's name can't hold '{ENDPOINT_SEPARATOR}'.")
-    try:
-        # Assignment below skips the model's validator; check here so the
-        # answer comes now and not at the next start.
-        require_https(args.base_url)
-    except ValueError as exc:
-        raise SystemExit(str(exc)) from exc
+    if args.base_url is not None:
+        try:
+            # Assignment below skips the model's validator; check here so the
+            # answer comes now and not at the next start.
+            require_https(args.base_url)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
     # A key no header can carry: said, never echoed (models/config.py).
     if args.api_key is not None and (problem := key_problem(args.api_key, name)):
         raise SystemExit(problem)
@@ -178,16 +180,22 @@ def cmd_configure(args: argparse.Namespace) -> int:
     # and the config as saved, for where each key is for (`rebind_keys`).
     before = [(p.base_url, p.api_key) for p in config.providers]
     saved = config.model_copy(deep=True)
-    provider = existing or ProviderConfig(
-        name=name, base_url=args.base_url, model=DEFAULT_STORY_MODEL
-    )
-    provider.base_url = args.base_url
+    # A new endpoint starts at nano-gpt's address; one already saved keeps
+    # its own unless --base-url gives another (`--make-default`, or a key
+    # alone, used to point it at nano-gpt, and send the key given there).
+    provider = existing or ProviderConfig(name=name, base_url=DEFAULT_BASE_URL)
+    if args.base_url is not None:
+        provider.base_url = args.base_url
     if args.api_key is not None:
         provider.api_key = args.api_key
-    if args.model is not None:
-        provider.model = args.model
     if args.api is not None:
         provider.api = args.api
+    if args.model is not None:
+        provider.model = args.model
+    elif existing is None:
+        # The default storyteller as this endpoint names it: Anthropic's own
+        # API knows Sonnet 4.6 as claude-sonnet-4-6, not NanoGPT's id.
+        provider.model = recommended_reference(DEFAULT_STORY_MODEL, [provider], name)
     first = not config.providers
     if existing is None:
         if first:
@@ -1155,7 +1163,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="with --endpoint-name: make that endpoint the default one",
     )
-    configure.add_argument("--base-url", default=DEFAULT_BASE_URL)
+    configure.add_argument(
+        "--base-url",
+        default=None,
+        help=f"the endpoint's address (a new endpoint's default: {DEFAULT_BASE_URL}; one "
+        "already saved keeps its own unless this is given)",
+    )
     configure.add_argument("--api-key")
     configure.add_argument("--model")
     configure.add_argument(

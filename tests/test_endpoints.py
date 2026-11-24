@@ -416,8 +416,54 @@ def test_the_cli_adds_a_second_endpoint_beside_the_default(tmp_path: Path, capsy
     assert cfg.endpoint_for("Anthropic::claude-opus-5-5").api_key == "ant"
     assert cfg.endpoint_for("Anthropic::claude-opus-5-5").speaks() == "anthropic"
     cli_main([*data, "configure", "--endpoint-name", "Anthropic", "--make-default"])
-    assert load_config(root=tmp_path).active_provider_name == "Anthropic"
+    cfg = load_config(root=tmp_path)
+    assert cfg.active_provider_name == "Anthropic"
+    anthropic = cfg.active_provider()
+    assert anthropic.base_url == ANTHROPIC, "made the default where it was, not at nano-gpt"
+    assert anthropic.speaks() == "anthropic" and anthropic.sendable().api_key == "ant"
+    assert capsys.readouterr().err == "", "its key wasn't moved, so nothing to say of it"
+    assert cfg.providers[0].base_url == NANO and cfg.providers[0].api_key == "nano"
     with pytest.raises(SystemExit, match="not both"):
         cli_main([*data, "configure", "--name", "x", "--endpoint-name", "y"])
     with pytest.raises(SystemExit, match="::"):
         cli_main([*data, "configure", "--endpoint-name", "a::b"])
+
+
+def test_the_cli_keeps_a_saved_endpoints_address_unless_given_another(tmp_path: Path, capsys):
+    """--base-url defaulted to nano-gpt's address and was always written, so
+    a key alone (or --model, --key-storage, --make-default) pointed a saved
+    Anthropic endpoint at nano-gpt, and the key given with it went there."""
+    data = ["--data-dir", str(tmp_path)]
+    cli_main([*data, "configure", "--api-key", "nano", "--key-storage", "file"])
+    anthropic = ["--endpoint-name", "Anthropic", "--base-url", ANTHROPIC, "--api-key", "ant"]
+    cli_main([*data, "configure", *anthropic])
+    cli_main([*data, "configure", "--endpoint-name", "Anthropic", "--api-key", "ant-2"])
+    cli_main([*data, "configure", "--endpoint-name", "Anthropic", "--model", "claude-opus-5-5"])
+    capsys.readouterr()
+    cfg = load_config(root=tmp_path)
+    endpoint = cfg.endpoint_for("Anthropic::claude-opus-5-5")
+    assert endpoint.base_url == ANTHROPIC and endpoint.model == "claude-opus-5-5"
+    assert endpoint.api_key == "ant-2" and endpoint.key_saved_for == "https://api.anthropic.com"
+    assert endpoint.sendable().api_key == "ant-2", "bound to Anthropic, where it is sent"
+    # The default endpoint likewise, and an address given is still taken.
+    cli_main([*data, "configure", "--model", "z-ai/glm-5.3"])
+    assert load_config(root=tmp_path).active_provider().base_url == NANO
+    cli_main([*data, "configure", "--base-url", "https://nano-gpt.com/api/v2"])
+    assert load_config(root=tmp_path).active_provider().base_url == "https://nano-gpt.com/api/v2"
+
+
+def test_a_new_endpoint_starts_at_nano_gpt_with_the_storyteller_its_api_names(tmp_path: Path):
+    data = ["--data-dir", str(tmp_path)]
+    cli_main([*data, "configure", "--api-key", "nano", "--key-storage", "file"])
+    cli_main([*data, "configure", "--endpoint-name", "Second", "--api-key", "n2"])
+    cli_main([*data, "configure", "--endpoint-name", "Direct", "--base-url", ANTHROPIC])
+    cli_main([*data, "configure", "--endpoint-name", "Spoken", "--api", "anthropic"])
+    cli_main([*data, "configure", "--endpoint-name", "Blank", "--model", ""])
+    by_name = {p.name: p for p in load_config(root=tmp_path).providers}
+    assert by_name["default"].base_url == NANO
+    assert by_name["default"].model == by_name["Second"].model == "anthropic/claude-sonnet-4.6"
+    assert by_name["Second"].base_url == NANO
+    # Anthropic's own API names Sonnet 4.6 its own way (recommended_reference).
+    assert by_name["Direct"].speaks() == by_name["Spoken"].speaks() == "anthropic"
+    assert by_name["Direct"].model == by_name["Spoken"].model == "claude-sonnet-4-6"
+    assert by_name["Blank"].model == "", "a model given blank stays blank"

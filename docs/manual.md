@@ -489,7 +489,8 @@ removing the default names the models that went to it after it
 (`NanoGPT::z-ai/glm-5.3`), so none goes quietly to the next default, which
 may not serve it. The terminal client adds an endpoint with
 `sealedlore configure --endpoint-name Anthropic --base-url
-https://api.anthropic.com --api-key …`.
+https://api.anthropic.com --api-key …`; run again without `--base-url` (a new
+key, a model, `--make-default`), an endpoint keeps the address it has.
 
 **The defaults assume NanoGPT.** The base URL, the lore picker's model
 (`deepseek/deepseek-v4.1-flash`), the Jev decision model, the image model
