@@ -48,7 +48,6 @@ class Attestation(BaseModel):
 
     verified: bool = False
     signing_address: str | None = None
-    nonce_ok: bool = False
     gpu_ok: bool | None = None
     checked_at: str = Field(default_factory=utc_now_iso)
     detail: str = ""
@@ -112,7 +111,6 @@ class PrivateSpan(BaseModel):
     host: str = ""
     keep: PrivateKeep = "memory"
     status: PrivateStatus = "open"
-    summary_node_id: str | None = None
     # The story so far, condensed by the main model to fit the private model's
     # budget, and the last node it covers. Pre-scene material only.
     handoff: str | None = None

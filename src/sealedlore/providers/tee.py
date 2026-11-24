@@ -594,7 +594,6 @@ class _Checks:
             level="partial" if self.shortfalls else "full",
             shortfalls=list(self.shortfalls),
             signing_address=signing_address,
-            nonce_ok=True,
             gpu_ok=True if self.gpus else None,
             gpus=self.gpus,
             tcb_status=self.status,

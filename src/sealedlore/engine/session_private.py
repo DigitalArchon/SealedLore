@@ -1347,7 +1347,6 @@ class PrivateRuntime:
                 ),
             )
             self._attach(node, parent=parent)
-            span.summary_node_id = node.id
             self._sync_scene()
             from sealedlore.engine.session import GenerationResult
 
