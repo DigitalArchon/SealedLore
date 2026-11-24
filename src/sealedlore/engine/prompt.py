@@ -72,7 +72,7 @@ from sealedlore.models.node import (
     ResponseStyle,
     Roll,
 )
-from sealedlore.models.scene import SceneLogEntry, SceneState
+from sealedlore.models.scene import SceneLogEntry
 from sealedlore.models.story import Story
 from sealedlore.models.summary import Summary
 
@@ -95,7 +95,6 @@ SECTION_SUPPORTING = "tail.supporting"
 SECTION_SCENE_LOG = "tail.scene_log"
 SECTION_STORY_TIME = "tail.story_time"
 SECTION_SCENE = "tail.scene"
-SECTION_MAP = "tail.map"
 SECTION_DIRECTION = "tail.direction"
 SECTION_DIRECTIVES = "tail.directives"
 SECTION_AUTHOR_TURN = "tail.author_turn"
@@ -123,8 +122,9 @@ class TurnRequest:
     user_text: str
     controlled_character_id: str | None = None
     # The author's node this turn is, once attached (`send`, `regenerate`):
-    # the map section reads the turn's own snapshot by it, wherever the leaf
-    # is (a retake's leaf is the previous take).
+    # a notice about the turn is kept under it, and what fired under
+    # SillyTavern's rules is recorded on it (`record_tavern`), wherever the
+    # leaf is (a retake's leaf is the previous take).
     turn_node_id: str | None = None
     ooc: str | None = None
     # Regenerate with a note: the author's instruction for this take alone,
@@ -148,19 +148,12 @@ class TurnRequest:
     # this passage (engine/director.py), both rendered by the session. The
     # plot itself never reaches the prompt.
     story_time: str = ""
-    # The local map (engine/world.py `render_map_context`), for a story whose
-    # map came from its plot file; empty otherwise.
-    the_map: str = ""
     direction: str = ""
     # Whether the direction starts an event, which the REMEMBER line repeats.
     direction_begins: bool = False
     # The REMEMBER clause naming the things the author's turn names that
     # can't be moved this turn (`turn.remember.fixed`), or "".
     fixed_reminder: str = ""
-    # The scene card as the prompt shows it: in a story played on the map,
-    # the story's card with the map's word on who is where
-    # (engine/map_presence.py); None for the story's own.
-    scene: SceneState | None = None
     # The own-model round that answered this turn, when the story has them
     # answer after the author (`StoryDefaults.round_order` "after"): those
     # answers, and the storyteller told they saw the turn. None: the round
@@ -442,7 +435,7 @@ def assemble_prompt(
         (
             SECTION_SCENE,
             render_scene_block(
-                turn.scene or story.scene,
+                story.scene,
                 cast_by_id,
                 turn.controlled_character_id,
                 story.style.perspective,
@@ -452,8 +445,6 @@ def assemble_prompt(
                 show_time=scene_time_shown(story, history_nodes, summaries),
             ),
         ),
-        # Where the scene is, on the map: right after the scene, as measured.
-        (SECTION_MAP, turn.the_map),
         # After the scene it has to happen in, and close to the end: the
         # instruction the passage exists to carry out.
         (SECTION_DIRECTION, turn.direction),
@@ -580,17 +571,14 @@ def assemble_question(
     estimator: TokenEstimator | None = None,
     options: AssemblyOptions | None = None,
     rendered: str | None = None,
-    the_map: str = "",
-    scene: SceneState | None = None,
     story_time: str = "",
 ) -> AssembledPrompt:
     """Assemble an out-of-character question about the story (an aside).
 
     `rendered` replaces the author's question and its rules with a request
     of the program's own (the plot asking how a skipped-over event went),
-    on the same cached prefix. `the_map` is the local map, and `scene` the
-    card as the map has it, as a turn has them; `story_time` the plot's
-    events the author's character knows of, as a turn has them.
+    on the same cached prefix. `story_time` is the plot's events the
+    author's character knows of, as a turn has them.
 
     Everything ahead of the tail is exactly what a story turn sends, so the
     question rides on the same cached prefix. `history_nodes` is the whole
@@ -620,7 +608,7 @@ def assemble_question(
         (
             SECTION_SCENE,
             render_scene_block(
-                scene or story.scene,
+                story.scene,
                 cast_by_id,
                 story.held_character_id,
                 story.style.perspective,
@@ -630,7 +618,6 @@ def assemble_question(
                 show_time=scene_time_shown(story, history_nodes, summaries),
             ),
         ),
-        (SECTION_MAP, the_map),
         (SECTION_QUESTION, rendered or render_question(question, earlier, texts)),
     ]
     return _assemble(
@@ -655,17 +642,14 @@ def assemble_chat(
     estimator: TokenEstimator | None = None,
     options: AssemblyOptions | None = None,
     with_chat_tail: bool = True,
-    the_map: str = "",
     retake_note: str = "",
 ) -> AssembledPrompt:
     """A simple chat's request (engine/chat.py): the author's system prompt,
     the summaries with the kept messages, the conversation as written, and
     `tail` (the user's message, or the picture writer's request) last, then
     the chat's own tail text if it has one (not for the picture writer).
-    `the_map`: the chat's map (engine/world.py), when it keeps one, right
-    before the message, where a story's stands in its tail. `retake_note`:
-    the user's note for this reply alone (Regenerate with a note), after
-    their message."""
+    `retake_note`: the user's note for this reply alone (Regenerate with a
+    note), after their message."""
     from sealedlore.engine.chat import (
         SECTION_CHAT_PROMPT,
         SECTION_CHAT_TAIL,
@@ -674,7 +658,7 @@ def assemble_chat(
     )
 
     texts = (options or AssemblyOptions()).texts
-    tail_specs = [(SECTION_MAP, the_map), (SECTION_AUTHOR_TURN, tail.strip())]
+    tail_specs = [(SECTION_AUTHOR_TURN, tail.strip())]
     if retake_note.strip():
         note = texts.fill("chat.retake_note", note=retake_note.strip())
         tail_specs.append((SECTION_RETAKE_NOTE, note))
