@@ -215,6 +215,14 @@ def _unchanged(path: Path, digest: bytes, mode: int | None) -> bool:
     return known[1] == _standing(info)
 
 
+def stands_as_written(path: Path, digest: bytes) -> bool:
+    """Whether the file at `path` is still the one this process last wrote
+    (or read) with bytes of that `digest`, untouched since: what a save that
+    finds nothing changed needs to know to leave it alone
+    (storage/record_files.py)."""
+    return _unchanged(path, digest, None)
+
+
 def json_for_others(data: Any, **how: Any) -> str:
     """`data` as JSON any program reads: a number that is no number (NaN, an
     infinity) written as null, as JavaScript's JSON.stringify writes one.
@@ -266,6 +274,12 @@ def atomic_write_bytes(path: Path, data: bytes) -> None:
     """Write `data` to `path`, all or nothing (a picture, a record from a
     backup), readable by its owner alone."""
     _write_atomic(path, data)
+
+
+def atomic_write_encoded(path: Path, data: bytes, *, keep_backup: bool = False) -> bytes:
+    """JSON already made into bytes, written to `path` as `atomic_write_json`
+    writes it; the digest of the bytes the file now holds."""
+    return _write_atomic(path, data, keep_backup=keep_backup)
 
 
 # Whether a write reaches the disk before it is swapped in (`_write_atomic`).
@@ -343,7 +357,7 @@ _MKSTEMP_NAME = re.compile(r"[a-z0-9_]{8}")
 
 def _write_atomic(
     path: Path, data: bytes, *, keep_backup: bool = False, mode: int | None = None
-) -> None:
+) -> bytes:
     """`data` swapped in at `path` whole, through a temp file of its own.
 
     A rename alone isn't enough: on a file system that allocates late (ext4,
@@ -354,11 +368,11 @@ def _write_atomic(
 
     The same bytes as the file already holds are not written again
     (`_unchanged`), nor its backup moved on: the backup stays the version
-    before the last change."""
+    before the last change. Returns the bytes' digest."""
     digest = hashlib.sha256(data).digest()
     with _LOCK:
         if _unchanged(path, digest, mode):
-            return
+            return digest
         path.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp_name = tempfile.mkstemp(prefix=path.name + ".", suffix=TEMP_SUFFIX, dir=path.parent)
         tmp_path = Path(tmp_name)
@@ -383,6 +397,7 @@ def _write_atomic(
             _KNOWN[os.path.abspath(path)] = (digest, _standing(os.stat(path)))
         except OSError:
             _KNOWN.pop(os.path.abspath(path), None)
+    return digest
 
 
 def _keep_backup(path: Path) -> None:

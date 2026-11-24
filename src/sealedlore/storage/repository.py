@@ -65,6 +65,7 @@ from sealedlore.storage.paths import (
     stories_dir,
     story_dir,
 )
+from sealedlore.storage.record_files import write_record, write_records
 from sealedlore.tree import standing_leaf
 
 
@@ -604,29 +605,33 @@ def save_story_bundle(bundle: StoryBundle, root: Path | None = None) -> None:
     ensure_story_dir(story_id, root)
     directory = story_dir(story_id, root)
 
+    story_json = _story_json(bundle)
     if not (directory / "story.json").exists():
         # A folder without it is no story at all: a first save cut short
         # still leaves one, and the second write below is skipped unless
         # something changed.
-        atomic_write_json(directory / "story.json", _story_json(bundle))
+        write_record(directory / "story.json", story_json)
     for relative, data in bundle.pending_files.items():
         if relative not in RECORD_FILES:
             write_story_file(story_id, relative, data, root)
     for relative, data in bundle.pending_files.items():
         if relative in RECORD_FILES:
             write_record_file(story_id, relative, data, root)  # a story backup's
-    atomic_write_json(directory / "cast.json", [c.model_dump() for c in bundle.cast])
-    atomic_write_json(directory / "supporting.json", bundle.supporting.model_dump())
-    atomic_write_json(directory / "lore.json", [entry.model_dump() for entry in bundle.lore])
-    atomic_write_json(
-        directory / "nodes.json", [node.model_dump() for node in bundle.nodes], keep_backup=True
-    )
-    atomic_write_json(directory / "summaries.json", [s.model_dump() for s in bundle.summaries])
-    atomic_write_json(directory / "embeddings.json", [e.model_dump() for e in bundle.embeddings])
-    atomic_write_json(directory / "asides.json", [a.model_dump() for a in bundle.asides])
-    atomic_write_json(directory / "reviews.json", [r.model_dump() for r in bundle.reviews])
-    atomic_write_json(directory / "memories.json", [m.model_dump() for m in bundle.memories])
-    atomic_write_json(directory / "story.json", _story_json(bundle))
+    # Each written only as far as it changed (storage/record_files.py): a
+    # save comes after nearly everything a session does, and most change
+    # one file or none.
+    write_records(directory / "cast.json", bundle.cast)
+    write_record(directory / "supporting.json", bundle.supporting.model_dump())
+    write_records(directory / "lore.json", bundle.lore)
+    write_records(directory / "nodes.json", bundle.nodes, keep_backup=True)
+    write_records(directory / "summaries.json", bundle.summaries)
+    # Machine data nobody reads by hand, and the story's biggest file (14 MB
+    # indented for 500 vectors, 11 compact): written compact. Either reads.
+    write_records(directory / "embeddings.json", bundle.embeddings, compact=True, fixed=True)
+    write_records(directory / "asides.json", bundle.asides)
+    write_records(directory / "reviews.json", bundle.reviews)
+    write_records(directory / "memories.json", bundle.memories)
+    write_record(directory / "story.json", story_json)
     bundle.pending_files = {}
 
 

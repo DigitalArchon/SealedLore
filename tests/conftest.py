@@ -347,6 +347,18 @@ def _writes_left_to_the_cache(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _every_save_checked(monkeypatch):
+    """A story's files are made again only as far as their records changed
+    (storage/record_files.py). Across the suite, every save then reads each
+    file back and holds it to what writing it whole would have written: any
+    change a save missed, by any path, fails the test that made it."""
+    from sealedlore.storage import record_files
+
+    monkeypatch.setattr(record_files, "CHECKED", True)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _the_test_process_stays_dumpable(monkeypatch):
     """The command line's `main` makes its process undumpable, first thing
     (sealedlore/core_dumps.py): run in this process by the CLI's tests, it
