@@ -153,3 +153,19 @@ def test_the_report_estimates_old_log_entries_from_their_request_model():
     total = usage_report(entries, prices).total
     assert total.cost == pytest.approx(0.003)
     assert (total.estimated, total.unpriced) == (1, 1)
+
+
+def test_an_old_story_s_map_spending_stays_in_its_total():
+    """The map's calls left with Visual Stories, but their kinds keep their
+    labels: a kind without one is left out of the report."""
+    entries = [
+        {"kind": kind, "usage": {"cost": 0.01}}
+        for kind in ("world_response", "map_art_response", "isometric_prompt_response")
+    ]
+    report = usage_report(entries)
+    assert report.total.cost == pytest.approx(0.03)
+    assert {line.label for line in report.lines} == {
+        "Map reads",
+        "Map art",
+        "Isometric view prompts",
+    }

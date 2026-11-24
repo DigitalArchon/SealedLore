@@ -43,6 +43,9 @@ KIND_LABELS: dict[str, str] = {
     "director_response": "Plot: director",
     "variant_response": "Plot: choosing how events go",
     "gap_response": "Plot: skipped-over events",
+    # The map's calls (removed with Visual Stories, Oct 29 2026), kept on
+    # purpose: a kind missing here is dropped from the report (`_kind_of`),
+    # so an old story's map spending would vanish from its total.
     "world_response": "Map reads",
     "map_art_response": "Map art",
     "competence_response": "Skill suggestions",
@@ -65,6 +68,7 @@ KIND_LABELS: dict[str, str] = {
     "style_from_picture_response": "Picture styles",
     # Priced per picture: the reply's cost, or the listed price (marked).
     "image_response": "Images",
+    # The map's and the isometric view's, kept as above: an old story's spent.
     "map_picture_response": "Map pictures",
     "map_furnish_response": "Map furnishing",
     "map_tileset_response": "Map tile sets",
