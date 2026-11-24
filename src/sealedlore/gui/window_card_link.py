@@ -18,7 +18,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from PySide6.QtCore import QTimer
-from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QDialog, QInputDialog, QMessageBox
 
 from sealedlore.engine import card_link
@@ -26,7 +25,6 @@ from sealedlore.engine.card_link import changes, picture_mark
 from sealedlore.gui.card_changes import KEEP, SAVE, TAKE, VERSION, CardChangesDialog
 from sealedlore.gui.collection_picker import CollectionPicker
 from sealedlore.gui.lorebook_pick import LorebookPickDialog
-from sealedlore.gui.ref_images import thumbnail_of
 from sealedlore.gui.save_characters import SaveCharactersDialog
 from sealedlore.gui.tavern_dialog import lore_brought, lore_left_out
 from sealedlore.ids import new_id
@@ -541,18 +539,18 @@ class CardLinkWindow:
         card_refs = sides.card_refs
         sources = [(story_refs, session.pictures), (card_refs, self._collection_store())]
 
-        def thumb(sha: str, side: str) -> QPixmap | None:
-            """A picture seen from `side` ("story" or "card"), read from
-            whichever side has it."""
+        def where(sha: str, side: str) -> tuple[PictureStore, str] | None:
+            """A picture seen from `side` ("story" or "card"): in whichever
+            side has it (the dialog reads it)."""
             for refs, store in sources if side == "story" else sources[::-1]:
                 ref = refs.get(sha)
                 if ref is not None:
-                    return thumbnail_of(store.read(ref.file), 140)
+                    return store, ref.file
             return None
 
         which = collection.version_name(card, self._kept()).lower()
         dialog = CardChangesDialog(
-            character.name, f"their card ({which})", found, thumb, self._dialog_parent()
+            character.name, f"their card ({which})", found, where, self._dialog_parent()
         )
         accepted = dialog.exec() == QDialog.Accepted
         choice, chosen = dialog.choice, dialog.chosen()

@@ -41,7 +41,13 @@ from PySide6.QtWidgets import (
 from sealedlore.engine.looks import look_words
 from sealedlore.engine.plot_md import ParsedPlotFile, PlotProblem
 from sealedlore.gui import file_dialogs
-from sealedlore.gui.image_codec import HEAD_BYTES, encoded, raster_format, read_image
+from sealedlore.gui.image_codec import (
+    HEAD_BYTES,
+    encoded,
+    raster_format,
+    read_image,
+    read_size,
+)
 from sealedlore.gui.picture_words import AGAIN_LABEL, EDIT_LABEL
 from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.ids import new_id
@@ -97,6 +103,20 @@ def image_of(data: bytes | None) -> QImage:
     image = read_image(lambda: QImageReader(buffer), fmt)
     buffer.close()
     return image
+
+
+def shape_of(data: bytes | None) -> QSize:
+    """The size `image_of` would give these bytes, read from the picture's
+    header alone: nothing is decoded (an empty size for none that reads)."""
+    fmt = raster_format(data)
+    if not data or fmt is None:
+        return QSize()
+    array = QByteArray(data)
+    buffer = QBuffer(array)
+    buffer.open(QIODevice.ReadOnly)
+    size = read_size(lambda: QImageReader(buffer), fmt)
+    buffer.close()
+    return size
 
 
 def pixmap_of(data: bytes | None) -> QPixmap:
@@ -308,12 +328,6 @@ def load_plot_pictures(parsed: ParsedPlotFile, folder: Path) -> list[PlotProblem
 def thumbnail(path: Path, side: int = THUMB) -> QPixmap:
     """A file's thumbnail (the plot editor's pictures, beside the plot file)."""
     return fit(load_pixmap(path), side, side)
-
-
-def thumbnail_of(data: bytes | None, side: int = THUMB) -> QPixmap:
-    """A stored picture's thumbnail, made here and kept nowhere (one shown
-    again and again is kept by `picture_cache`)."""
-    return fit(pixmap_of(data), side, side)
 
 
 WHOLE_TIP = "\nDouble-click to see it full size; right-click for more."

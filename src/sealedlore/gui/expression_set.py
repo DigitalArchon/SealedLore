@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -33,9 +34,10 @@ from sealedlore.engine.images import ImageRequest
 from sealedlore.engine.look_sheet import sheet_change
 from sealedlore.engine.looks import COMMON_EXPRESSIONS, look_words
 from sealedlore.engine.portraits import card_size
+from sealedlore.gui.cast_board import Thumbs
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.model_picker import ModelField
-from sealedlore.gui.ref_images import thumbnail_of
+from sealedlore.gui.picture_cache import FIT
 from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, may_discard, size_to_screen
 from sealedlore.models.character import Character
 from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS
@@ -75,6 +77,9 @@ class ExpressionSetDialog(QDialog):
         # The author has clicked a tick: another picture to draw from no
         # longer resets them.
         self._ticked_by_hand = False
+        # The picture drawn from, read once the dialog is up, each once
+        # while it lives (cast_board.Thumbs).
+        self._thumbs = Thumbs(lambda: session.pictures, lambda: None, self, shape=FIT)
         self.setWindowTitle(f"A set of expressions: {character.name}")
         self.setMinimumWidth(640)
         size_to_screen(self, 0.5, 0.85)
@@ -191,11 +196,13 @@ class ExpressionSetDialog(QDialog):
                 box.blockSignals(True)
                 box.setChecked(expression in first)
                 box.blockSignals(False)
-        store = self.session.pictures
-        data = store.read(self.source_ref().file) if store is not None else None
-        thumb = thumbnail_of(data, THUMB_SIDE) if data else None
-        if thumb is not None and not thumb.isNull():
-            self.picture.setPixmap(thumb)
+        chosen = self.source.currentData()
+
+        def put(pixmap: QPixmap) -> None:
+            if not pixmap.isNull() and self.source.currentData() == chosen:
+                self.picture.setPixmap(pixmap)  # still the one chosen
+
+        self._thumbs.fill(self.source_ref().file, THUMB_SIDE, THUMB_SIDE, put)
         self._rebuild()
 
     def _rebuild(self, *_args) -> None:

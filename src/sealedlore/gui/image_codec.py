@@ -14,8 +14,9 @@ the lock too.
 
 Every decode and encode in the GUI goes through here: `image_from_data`,
 `read_image` (a reader made by the caller: a file or a buffer, auto-transform
-set), and `encoded`. Never call `QImage.fromData`, `QImageReader.read` or
-`QImage.save` elsewhere (`tests/test_image_codec.py` looks).
+set), `read_size` (its header only) and `encoded`. Never call
+`QImage.fromData`, `QImageReader.read` or `QImage.save` elsewhere
+(`tests/test_image_codec.py` looks).
 
 A picture is decoded only as the kind of picture its own first bytes say it
 is (`raster_format`), named to Qt, which then never guesses. Left to guess,
@@ -30,8 +31,8 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable
 
-from PySide6.QtCore import QBuffer, QByteArray, QIODevice
-from PySide6.QtGui import QImage, QImageReader
+from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QSize
+from PySide6.QtGui import QImage, QImageIOHandler, QImageReader
 
 from sealedlore.storage.image_meta import raster_kind
 
@@ -83,6 +84,24 @@ def read_image(make_reader: Callable[[], QImageReader], fmt: bytes | None) -> QI
         reader.setFormat(fmt)
         reader.setAutoTransform(True)
         return reader.read()
+
+
+def read_size(make_reader: Callable[[], QImageReader], fmt: bytes | None) -> QSize:
+    """The size `read_image` would give, from the picture's header alone (its
+    pixels are never decoded), EXIF orientation applied; an empty size for
+    None or a header that doesn't read. Under the lock: the reader goes
+    through the same plugins."""
+    if fmt is None:
+        return QSize()
+    with CODEC_LOCK:
+        reader = make_reader()
+        reader.setAutoDetectImageFormat(False)
+        reader.setFormat(fmt)
+        reader.setAutoTransform(True)
+        size = reader.size()
+        if size.isValid() and reader.transformation() & QImageIOHandler.TransformationRotate90:
+            size = size.transposed()
+        return size if size.isValid() else QSize()
 
 
 def encoded(image: QImage, fmt: str, quality: int = -1) -> bytes:

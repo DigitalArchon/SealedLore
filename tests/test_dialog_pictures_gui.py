@@ -22,16 +22,21 @@ from PySide6.QtCore import QObject, QSize, Qt  # noqa: E402
 from PySide6.QtGui import QColor, QImage, QPixmap  # noqa: E402
 from PySide6.QtWidgets import QApplication, QLabel  # noqa: E402
 
+from sealedlore.engine.card_link import BOTH, PORTRAIT, Change  # noqa: E402
 from sealedlore.engine.look_sheet import sheet_for  # noqa: E402
 from sealedlore.gui import picture_cache, ref_images  # noqa: E402
+from sealedlore.gui.card_changes import CardChangesDialog  # noqa: E402
 from sealedlore.gui.cast_board import ASPECT, Thumbs  # noqa: E402
+from sealedlore.gui.expression_set import ExpressionSetDialog  # noqa: E402
 from sealedlore.gui.fill_gaps import FillGapsDialog  # noqa: E402
 from sealedlore.gui.image_codec import encoded  # noqa: E402
 from sealedlore.gui.image_dialog import ImageDialog  # noqa: E402
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.gui.picture_cache import FIT  # noqa: E402
+from sealedlore.gui.picture_variant import PictureVariantDialog  # noqa: E402
 from sealedlore.gui.portraits_dialog import PortraitsDialog  # noqa: E402
 from sealedlore.gui.restyle_dialog import THUMB, RestyleDialog  # noqa: E402
+from sealedlore.gui.tavern_dialog import PICTURE_SIDE, CardImportDialog  # noqa: E402
 from sealedlore.gui.video_dialog import VideoDialog  # noqa: E402
 from sealedlore.gui.video_jobs import model_entry  # noqa: E402
 from sealedlore.ids import utc_now_iso  # noqa: E402
@@ -40,8 +45,10 @@ from sealedlore.models.image import ImageRef, RefUse  # noqa: E402
 from sealedlore.storage.images import write_story_file  # noqa: E402
 from sealedlore.storage.picture_store import MemoryPictures  # noqa: E402
 from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa: E402
+from sealedlore.storage.tavern_cards import read_card  # noqa: E402
 from tests.conftest import make_exchange, pictures_read  # noqa: E402
 from tests.test_images import LISTING  # noqa: E402
+from tests.test_tavern import png_card, v2  # noqa: E402
 from tests.test_videos import nanogpt_models  # noqa: E402
 
 COLOURS = ("#cc2200", "#22aa44", "#2244cc")
@@ -311,3 +318,77 @@ def test_the_cast_page_is_built_before_its_pictures_are_read(
         if panel.list.item(row).data(Qt.UserRole) == serrik.id
     )
     assert icon_colour(item) == "#ffcc00"
+
+
+def test_a_set_of_expressions_opens_before_its_picture_is_read(app, window: MainWindow, decodes):
+    serrik = window.session.cast[0]
+    dialog = ExpressionSetDialog(
+        window.session, serrik, source_id="ref-1", catalog=None, browse=None, parent=window
+    )
+    assert decodes == []
+    wait_for(app, lambda: not dialog.picture.pixmap().isNull())
+    assert colour_of(dialog.picture.pixmap()) == COLOURS[1]
+    # Another picture to draw from, and back before it is read: the one
+    # chosen last is shown, and each is read once.
+    dialog.source.setCurrentIndex(dialog.source.findData("ref-2"))
+    dialog.source.setCurrentIndex(dialog.source.findData("ref-1"))
+    pictures_read(dialog)
+    assert colour_of(dialog.picture.pixmap()) == COLOURS[1] and len(decodes) == 2
+    dialog.reject()
+
+
+def test_change_a_picture_opens_before_its_picture_is_read(app, window: MainWindow, decodes):
+    """It decoded the picture twice as it was built: once for its shape (now
+    from its header) and once for its thumbnail."""
+    serrik = window.session.cast[0]
+    dialog = PictureVariantDialog(
+        window.session,
+        serrik,
+        serrik.reference_images[2],
+        edit=True,
+        catalog=None,
+        browse=None,
+        parent=window,
+    )
+    assert decodes == []
+    assert dialog._shape == (300, 400)
+    wait_for(app, lambda: any(not label.pixmap().isNull() for label in dialog.findChildren(QLabel)))
+    [shown] = [label for label in dialog.findChildren(QLabel) if not label.pixmap().isNull()]
+    assert colour_of(shown.pixmap()) == COLOURS[2] and len(decodes) == 1
+    dialog.done(0)
+
+
+def test_a_card_s_own_picture_is_read_once_its_dialog_is_up(app, tmp_path: Path, decodes):
+    dialog = CardImportDialog(read_card(png_card(tmp_path, {"chara": v2()})))
+    assert decodes == []
+    [label] = [
+        label
+        for label in dialog.findChildren(QLabel)
+        if label.minimumSize() == QSize(PICTURE_SIDE, PICTURE_SIDE)
+    ]
+    wait_for(app, lambda: not label.pixmap().isNull())
+    assert len(decodes) == 1
+    dialog.deleteLater()
+
+
+def test_a_linked_character_s_changes_open_before_their_pictures_are_read(app, decodes):
+    """Each side's picture from its own store (the story's, Your characters'),
+    read once the dialog is up."""
+    story_side = MemoryPictures(lambda _kind, _body: "")
+    card_side = MemoryPictures(lambda _kind, _body: "")
+    story_side.write("images/refs/a.png", picture("#cc2200"))
+    card_side.write("images/refs/b.png", picture("#2244cc"))
+    where = {"sha-a": (story_side, "images/refs/a.png"), "sha-b": (card_side, "images/refs/b.png")}
+    found = [Change(key=PORTRAIT, label="Portrait", side=BOTH, story="sha-a", card="sha-b")]
+    dialog = CardChangesDialog("Elena", "their card", found, lambda sha, _side: where.get(sha))
+    assert decodes == []
+    wait_for(app, lambda: len(decodes) == 2)
+    app.processEvents()
+    shown = [
+        colour_of(label.pixmap())
+        for label in dialog.findChildren(QLabel)
+        if not label.pixmap().isNull()
+    ]
+    # Changed on both sides: shown under each heading, each read once.
+    assert shown == ["#cc2200", "#2244cc"] * 2 and len(decodes) == 2
+    dialog.deleteLater()

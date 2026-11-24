@@ -132,6 +132,26 @@ def test_a_photo_held_sideways_is_kept_upright(app):
     assert shown.size().toTuple() == (24, 32)
 
 
+def test_a_picture_s_shape_is_read_from_its_header_upright(app, monkeypatch):
+    """Change a picture… takes the shape the edit is drawn nearest from the
+    header alone (it decoded the picture whole for it): the same size a
+    decode gives, a photo held sideways turned."""
+    from sealedlore.gui import ref_images
+    from tests.test_image_meta import dirty_jpeg, dirty_webp
+
+    pictures = (dirty_jpeg(orientation=6), dirty_webp(), coloured("red", 30, 20))
+    decoded = [ref_images.image_of(data).size().toTuple() for data in pictures]
+    assert decoded[0] == (48, 64), "turned"
+
+    def never(*_args):
+        raise AssertionError("decoded")
+
+    monkeypatch.setattr(ref_images, "read_image", never)
+    assert [ref_images.shape_of(data).toTuple() for data in pictures] == decoded
+    assert not ref_images.shape_of(b"not a picture").isValid()
+    assert not ref_images.shape_of(None).isValid()
+
+
 def test_only_the_files_listed_are_kept(app, decodes):
     store = memory()
     for name in "ab":

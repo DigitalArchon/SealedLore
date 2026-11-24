@@ -63,12 +63,14 @@ from sealedlore.engine.portraits import (
     reframe_change,
     size_like,
 )
+from sealedlore.gui.cast_board import Thumbs, shown_in
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.model_picker import ModelField
+from sealedlore.gui.picture_cache import FIT
 from sealedlore.gui.picture_style import KEEP, PictureStyleField
 from sealedlore.gui.picture_words import WORDS_ONLY
 from sealedlore.gui.portraits_dialog import card_name
-from sealedlore.gui.ref_images import image_of, thumbnail_of
+from sealedlore.gui.ref_images import shape_of
 from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, may_discard, size_to_screen
 from sealedlore.gui.worker import GenerationWorker, as_job
 from sealedlore.gui.workers import WorkerThread
@@ -199,11 +201,13 @@ class PictureVariantDialog(QDialog):
         store = session.pictures
         data = store.read(subject.file) if store is not None else None
         # The picture's own shape: an edit is drawn in the size nearest it.
-        shape = image_of(data).size() if data else None
-        self._shape = (shape.width(), shape.height()) if shape is not None else (0, 0)
-        thumb = thumbnail_of(data, THUMB_SIDE) if data else None
-        if thumb is not None and not thumb.isNull():
-            picture.setPixmap(thumb)
+        # From its header: the picture itself is read once the dialog is up
+        # (cast_board.Thumbs), and was decoded here twice.
+        shape = shape_of(data)
+        self._shape = (shape.width(), shape.height()) if shape.isValid() else (0, 0)
+        self._thumbs = Thumbs(lambda: session.pictures, lambda: None, self, shape=FIT)
+        if data:
+            self._thumbs.fill(subject.file, THUMB_SIDE, THUMB_SIDE, shown_in(picture))
         if subject.background:
             goes = "The new picture becomes the background once it is drawn"
             stays = "this one stays in Media when it was drawn here"

@@ -17,7 +17,7 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QPixmap, QTextCharFormat, QTextCursor
+from PySide6.QtGui import QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -34,15 +34,21 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.card_link import BOTH, CARD, PORTRAIT, STORY, Change, picture_words
 from sealedlore.gui import theme
+from sealedlore.gui.cast_board import Thumbs, shown_in
+from sealedlore.gui.picture_cache import FIT
 from sealedlore.gui.sizing import GrowingText, size_to_screen
 from sealedlore.models.collection import PictureMark
+from sealedlore.storage.picture_store import PictureStore
 
 SAVE, VERSION, KEEP, TAKE = "save", "version", "keep", "take"
 THUMB = 96
 NONE = "(none)"
 
-# A picture shown by its mark ("story" or "card" side): the window reads it.
-Thumbnail = Callable[[str, str], QPixmap | None]
+# Where a picture shown by its mark ("story" or "card" side) is: its store
+# and file, None for neither side's. The dialog reads it once it is up.
+Where = Callable[[str, str], "tuple[PictureStore, str] | None"]
+# Its thumbnails are read at this size (and shown in THUMB by 1.5 THUMB).
+READ_SIDE = 140
 
 
 # A changed stretch longer than this (in words and spaces, both sides
@@ -186,7 +192,7 @@ class _Side(QWidget):
         change: Change,
         value: Any,
         side: str,
-        thumb: Thumbnail,
+        show: Callable[[str, str, QLabel], None],
         pieces: Pieces | None = None,
     ):
         """`pieces`: a field's words, marked where the other side differs."""
@@ -214,9 +220,7 @@ class _Side(QWidget):
         picture = QLabel()
         picture.setFixedSize(THUMB, int(THUMB * 1.5))
         picture.setAlignment(Qt.AlignCenter)
-        pixmap = thumb(sha, side)
-        if pixmap is not None and not pixmap.isNull():
-            picture.setPixmap(pixmap)
+        show(sha, side, picture)
         layout.addWidget(picture)
         if isinstance(value, PictureMark):
             words = QLabel(picture_words(value))
@@ -233,13 +237,17 @@ class CardChangesDialog(QDialog):
         name: str,
         card_words: str,
         found: Sequence[Change],
-        thumb: Thumbnail,
+        where: Where,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(f"{name}: this story and their card")
         size_to_screen(self, 0.5, 0.8, at_least=QSize(760, 640))
         self.choice = ""
+        self._where = where
+        # Each side's pictures, read a few a tick once the dialog is up
+        # (cast_board.Thumbs): by the store they are in.
+        self._thumbs: dict[int, Thumbs] = {}
         self._found = list(found)
         self._ticks: dict[str, list[tuple[QCheckBox, Change]]] = {STORY: [], CARD: []}
         lead = QLabel(
@@ -256,7 +264,7 @@ class CardChangesDialog(QDialog):
         if mine:
             rows.addWidget(self._heading("Changed in this story"))
             for change in mine:
-                rows.addWidget(self._row(change, STORY, thumb))
+                rows.addWidget(self._row(change, STORY))
             self.save_button = QPushButton("Save the ticked to the card")
             self.save_button.setObjectName("sendButton")
             self.save_button.setToolTip(
@@ -279,7 +287,7 @@ class CardChangesDialog(QDialog):
         if theirs:
             rows.addWidget(self._heading("Changed on their card since they joined"))
             for change in theirs:
-                rows.addWidget(self._row(change, CARD, thumb))
+                rows.addWidget(self._row(change, CARD))
             self.take_button = QPushButton("Take the ticked into this story")
             self.take_button.setToolTip(
                 "The card's changes into this story's character (a change to someone in the "
@@ -321,7 +329,19 @@ class CardChangesDialog(QDialog):
         row.addStretch(1)
         return row
 
-    def _row(self, change: Change, section: str, thumb: Thumbnail) -> QWidget:
+    def _show_picture(self, sha: str, side: str, label: QLabel) -> None:
+        """`label` given the picture seen from `side` once it is read."""
+        found = self._where(sha, side)
+        if found is None:
+            return
+        store, file = found
+        thumbs = self._thumbs.get(id(store))
+        if thumbs is None:
+            thumbs = Thumbs(lambda: store, lambda: None, self, shape=FIT)
+            self._thumbs[id(store)] = thumbs
+        thumbs.fill(file, READ_SIDE, READ_SIDE, shown_in(label))
+
+    def _row(self, change: Change, section: str) -> QWidget:
         box = QFrame()
         box.setObjectName("changeRow")
         grid = QGridLayout(box)
@@ -341,8 +361,9 @@ class CardChangesDialog(QDialog):
         story_marks = card_marks = None
         if change.field and NONE not in (ours, theirs):
             story_marks, card_marks = marked_both(ours, theirs)
-        story_side = _Side("In this story", change, change.story, STORY, thumb, story_marks)
-        card_side = _Side("On their card", change, change.card, CARD, thumb, card_marks)
+        show = self._show_picture
+        story_side = _Side("In this story", change, change.story, STORY, show, story_marks)
+        card_side = _Side("On their card", change, change.card, CARD, show, card_marks)
         grid.addWidget(story_side, 1, 0, Qt.AlignTop)
         grid.addWidget(card_side, 1, 1, Qt.AlignTop)
         grid.setColumnStretch(0, 1)

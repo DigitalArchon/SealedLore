@@ -28,8 +28,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.gui.cast_board import Thumbs, shown_in
 from sealedlore.gui.lore_rules import LoreRulesChoice, settings_in_use
-from sealedlore.gui.ref_images import thumbnail_of
+from sealedlore.gui.picture_cache import FIT
 from sealedlore.gui.sizing import GrowingText, size_to_screen
 from sealedlore.models.tavern import CardAsset
 from sealedlore.providers.card_links import LinkError, read_link
@@ -190,6 +191,18 @@ def pictures_named(shown: GreetingPictures) -> str:
     return ", ".join(names[:-1]) + " and " + names[-1]
 
 
+class _CardPicture:
+    """A card's own picture, as a store holding it alone (for `Thumbs`)."""
+
+    FILE = "card"
+
+    def __init__(self, data: bytes) -> None:
+        self._data = data
+
+    def read(self, relative: str) -> bytes | None:
+        return self._data if relative == self.FILE else None
+
+
 class CardImportDialog(QDialog):
     def __init__(self, card: TavernCard, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -201,7 +214,10 @@ class CardImportDialog(QDialog):
         picture.setFixedSize(PICTURE_SIDE, PICTURE_SIDE)
         picture.setAlignment(Qt.AlignCenter)
         if card.picture:
-            picture.setPixmap(thumbnail_of(card.picture, PICTURE_SIDE))
+            # Read once the dialog is up (cast_board.Thumbs), from the card.
+            own = _CardPicture(card.picture)
+            self._thumbs = Thumbs(lambda: own, lambda: None, self, shape=FIT)
+            self._thumbs.fill(_CardPicture.FILE, PICTURE_SIDE, PICTURE_SIDE, shown_in(picture))
         else:
             picture.hide()
         title = QLabel(card.name)
