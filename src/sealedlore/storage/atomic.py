@@ -168,11 +168,15 @@ def outside_json(data: str | bytes | bytearray, limit: int = MAX_NESTING) -> Any
     return whole_characters(value) if _may_hold_surrogates(data) else value
 
 
-def read_json(path: Path, default: Any = None) -> Any:
+def read_json(path: Path, default: Any = None, *, remember: bool = True) -> Any:
+    """One of the app's own files, `default` when there is none. What was
+    read is remembered for a save to come (`_KNOWN`), unless not `remember`
+    (the Stories list, which saves nothing and would only pay for the hash)."""
     try:
         with open(path, "rb") as handle:
             data = handle.read()
-            _remember(path, data, os.fstat(handle.fileno()))
+            if remember:
+                _remember(path, data, os.fstat(handle.fileno()))
     except (FileNotFoundError, NotADirectoryError):
         return default
     return json.loads(data.decode("utf-8"))
@@ -193,6 +197,15 @@ def _standing(info: os.stat_result) -> tuple[int, ...]:
     changed. (Windows' st_ctime is when it was made, so it is left out there.)"""
     standing = (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
     return standing if sys.platform == "win32" else (*standing, info.st_ctime_ns)
+
+
+def standing_of(path: Path) -> tuple[int, ...] | None:
+    """How the file at `path` stands now (`_standing`), None when there is
+    none: a file replaced, written or touched since stands otherwise."""
+    try:
+        return _standing(os.stat(path))
+    except OSError:
+        return None
 
 
 def _remember(path: Path, data: bytes, info: os.stat_result) -> None:
