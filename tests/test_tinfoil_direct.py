@@ -461,8 +461,10 @@ def test_the_client_reaches_tinfoil_whatever_the_plain_clients_refuse(fake, dire
 
 def test_the_client_stays_within_the_reviewed_contract():
     """tests/data/tinfoil_direct_contract.json records what was read of
-    Tinfoil's side on Nov 14 2026 (SealedLoreDocs/tools/tinfoil_check compares
-    it with PyPI, the router's releases and the live listing)."""
+    Tinfoil's side on Nov 14 2026: the SDK's version on PyPI, the router's
+    repository and release on GitHub, the paths, and the field names of the
+    live model listing. The maintainer's own checker (outside this repo)
+    compares those with the record again before a release."""
     import importlib.metadata
 
     from tinfoil.attestation.bundle import ATTESTATION_BUNDLE_ENDPOINT

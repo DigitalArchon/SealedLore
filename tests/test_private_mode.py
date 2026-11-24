@@ -769,11 +769,12 @@ PROXY_CONTRACT = Path(__file__).resolve().parent / "data" / "nanogpt_private_mod
 
 def test_the_client_stays_within_the_reviewed_proxys_contract():
     """NanoGPT's own client, @nanogpt/private-mode on npm, is the reference for the relay's
-    contract, and tests/data/nanogpt_private_mode_proxy.json records the release last read
-    (SealedLoreDocs/tools/private_mode_check compares it with npm's latest and refreshes the
-    record). This holds our side to it: every field we may seal is one the proxy lets through,
-    every x-nanogpt header we name is one it sends or reads, the preflight's fields and the
-    relay's paths are its."""
+    contract, and tests/data/nanogpt_private_mode_proxy.json records the release last read:
+    the fields, headers and paths in its published source, taken from the npm tarball
+    (the maintainer's own checker, outside this repo, compares it with npm's latest and
+    refreshes the record). This holds our side to it: every field we may seal is one the
+    proxy lets through, every x-nanogpt header we name is one it sends or reads, the
+    preflight's fields and the relay's paths are its."""
     import inspect
     import re
 

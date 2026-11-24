@@ -1,9 +1,11 @@
 """Chutes E2EE's contract as read on Nov 14 2026 (tests/data/chutes_e2ee_contract.json):
 the API's paths, the invoke headers, the HKDF labels and sizes of chutes-api's
 api/e2e/router.py and chutes' entrypoint, and the fields read from the model
-list, discovery and the evidence. SealedLoreDocs/tools/chutes_check diffs those
-sources against the copies reviewed, and the live lists' fields against this.
-A change on Chutes' side shows here or there before it breaks play."""
+list, discovery and the evidence. The record was written by hand from those two
+public sources and Chutes' live lists; the maintainer's own checker (outside
+this repo) fetches them again before a release and diffs them against the copies
+reviewed. A change on Chutes' side is caught there, or here once the record and
+the client are brought up to date, before it breaks play."""
 
 from __future__ import annotations
 

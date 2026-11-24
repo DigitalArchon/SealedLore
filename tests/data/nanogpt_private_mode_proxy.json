@@ -1,5 +1,5 @@
 {
-  "_about": "NanoGPT's own Private Mode client (@nanogpt/private-mode, npm) is the reference for the relay's contract. This records the release last read against this app's private-mode client; SealedLoreDocs/tools/private_mode_check compares it with npm's latest and the tests hold the client to it.",
+  "_about": "NanoGPT's own Private Mode client (@nanogpt/private-mode, npm) is the reference for the relay's contract. This records the release last read against this app's private-mode client, taken from that release's published source (the npm tarball); the maintainer's own checker, outside this repo, compares it with npm's latest, and the tests hold the client to it.",
   "package": "@nanogpt/private-mode",
   "reviewed_version": "0.2.26",
   "reviewed_on": "2026-10-22",

@@ -6,7 +6,7 @@ text model carries the settings the page starts it with, among them
 OpenAI-compatible `/models` listing doesn't give: it lists the levels, not the
 default. It needs no key, so none is sent.
 
-Checked Oct 2 2026 (`~/Documents/SealedLoreDocs/design/reasoning.md`): the
+Checked live on Oct 2 2026 (SealedLoreDocs design/reasoning.md): the
 stated defaults match what every model did with nothing sent (GLM 5.3 low,
 GLM 5.3 Flash and the TEE GLMs max, Kimi K3 max, Opus 5.5 high, Sonnet 4.6 and
 DeepSeek V4 none), and nothing sent reasoned like the default on GLM 5.3 and
