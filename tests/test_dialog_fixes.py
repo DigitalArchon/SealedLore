@@ -548,11 +548,10 @@ def test_nothing_shown_names_a_cast_page_or_tab():
         if stale.search(text)
     ]
     assert found == []
+    # CHANGELOG.md says where the Cast page went, and is history: not read.
     for doc in ("README.md", "docs/manual.md", "SampleStories/PLOT_FORMAT.md"):
         lines = (root / doc).read_text(encoding="utf-8").splitlines()
-        assert not [
-            line for line in lines if stale.search(line) and "has gone into it" not in line
-        ], doc
+        assert not [line for line in lines if stale.search(line)], doc
 
 
 # --- larger text sizes still fit the screen -----------------------------------------

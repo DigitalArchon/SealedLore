@@ -37,6 +37,7 @@ GUI = ROOT / "src" / "sealedlore" / "gui"
 # The user-facing docs whose labels are checked; most of them are in the manual.
 # The guides beside the samples open from Help, so their paths are checked
 # too (PLOT_FORMAT.md named an Import scenario… and an Import plot… long gone).
+# CHANGELOG.md isn't: it says what each version had, under the labels it had.
 DOCS = (
     ROOT / "README.md",
     ROOT / "docs" / "manual.md",
