@@ -14,7 +14,7 @@ from sealedlore.engine.tokens import TokenEstimator, fallback_counter
 from sealedlore.models.summary import Summary
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.storage.repository import StoryBundle, read_api_log, save_story_bundle
-from tests.conftest import make_exchange
+from tests.conftest import make_exchange, merge_old_chapters
 from tests.test_session import make_config
 
 CHAPTER = "Serrik crossed the river, bargained with the ferryman and lost his sword. " * 6
@@ -113,7 +113,7 @@ def test_a_part_alone_between_kept_chapters_is_not_merged_again():
 
 def test_editing_a_chapter_inside_a_part_puts_its_chapters_back(session: StorySession):
     run = list(session.split().summaries)
-    part = session.merge_now()
+    part = merge_old_chapters(session)
     assert part is not None and session.split().summaries[0] is part
     # Before, the edit was saved and never reached a prompt: the part stood in.
     session.edit_summary(run[1].id, "Serrik kept his sword after all.")
@@ -126,7 +126,7 @@ def test_editing_a_chapter_inside_a_part_puts_its_chapters_back(session: StorySe
 
 def test_a_part_the_author_wrote_stays_but_is_marked(session: StorySession):
     run = list(session.split().summaries)
-    part = session.merge_now()
+    part = merge_old_chapters(session)
     session.edit_summary(part.id, "The author's own account.")
     session.edit_summary(run[0].id, "Changed.")
     assert part in session.summaries and part.stale
@@ -134,13 +134,13 @@ def test_a_part_the_author_wrote_stays_but_is_marked(session: StorySession):
 
 def test_keeping_a_chapter_takes_it_out_of_its_part(session: StorySession):
     run = list(session.split().summaries)
-    part = session.merge_now()
+    part = merge_old_chapters(session)
     session.set_keep_as_written(run[0].id, True)
     assert part not in session.summaries
     assert session.split().summaries[0].id == run[0].id
     # The next merge goes around it.
     session.provider.responses = ["Merged again."]
-    again = session.merge_now()
+    again = merge_old_chapters(session)
     assert again is not None and again.merged_from == [s.id for s in run[1:3]]
 
 
@@ -157,7 +157,7 @@ def test_a_part_is_numbered_by_the_chapters_it_stands_for():
 
 def test_merging_replaces_the_oldest_chapters_on_the_path(session: StorySession):
     run = list(session.split().summaries)
-    part = session.merge_now()
+    part = merge_old_chapters(session)
     assert part is not None and part.merged_from == [s.id for s in run[:3]]
     assert part.covered_node_ids == [i for s in run[:3] for i in s.covered_node_ids]
     split = session.split()
@@ -170,11 +170,11 @@ def test_merging_replaces_the_oldest_chapters_on_the_path(session: StorySession)
 
 
 def test_a_part_is_merged_again_with_what_follows_it(session: StorySession):
-    first = session.merge_now()
+    first = merge_old_chapters(session)
     session.config.summary_merge_keep = 1
     # Past the threshold again, as a longer story would be.
     session.story.defaults.context_token_budget = 1_000
-    second = session.merge_now()
+    second = merge_old_chapters(session)
     assert second is not None
     assert second.merged_from == [s.id for s in session.summaries if not s.merged_from][:5]
     # The first part is superseded; the chapters themselves stay on file.
@@ -212,7 +212,7 @@ def test_a_reply_about_chapters_that_changed_meanwhile_is_dropped(session: Story
 
 
 def test_editing_under_a_part_drops_it_and_its_chapters_stand_in(session: StorySession):
-    part = session.merge_now()
+    part = merge_old_chapters(session)
     assert part is not None
     first = session.summaries[0]
     stale = session.edit_node(first.covered_node_ids[0], "Changed.")

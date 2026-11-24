@@ -535,3 +535,23 @@ def make_exchange(count: int, *, speaker_id: str = "char-serrik") -> list[Node]:
         nodes.extend([user, assistant])
         previous = assistant
     return nodes
+
+
+def merge_old_chapters(session):  # noqa: ANN001, ANN201 - a StorySession; its new part or None
+    """A merge of old chapters into a part, as the turns make one: sent off on
+    its own thread (`start_background_merge`, a scripted provider standing in
+    for its own detached client for this call alone) and taken in as the next
+    archival takes it (`adopt_merge`). None when none is due or it failed
+    (`merge_problem` says why)."""
+    provider = session.provider
+    lent = not callable(getattr(provider, "detached", None))
+    if lent:
+        provider.detached = lambda: provider
+    try:
+        if not session.start_background_merge():
+            return None
+    finally:
+        if lent:
+            del provider.detached
+    assert session._merge_job.done.wait(5)
+    return session.adopt_merge()

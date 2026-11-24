@@ -35,6 +35,7 @@ from sealedlore.providers.base import ProviderError
 from sealedlore.providers.mock import MockChatProvider, MockEmbeddings
 from sealedlore.storage.repository import read_api_log, save_story_bundle
 from sealedlore.storage.scenario import bundle_from_scenario
+from tests.conftest import merge_old_chapters
 
 MARKER = "ZQX-SECRET"
 NOTES = (
@@ -173,7 +174,7 @@ def test_the_notes_reach_only_requests_that_carry_the_storytellers_system_block(
     for summary in list(session.summaries)[:2]:
         quietly(lambda summary=summary: session.rebuild_summary(summary.id, force=True))
     for call in (
-        session.merge_now,
+        lambda: merge_old_chapters(session),
         session.scan_recent,
         lambda: list(session.suggest_from_recent()),
         session.suggest_scene,

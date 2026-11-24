@@ -665,7 +665,6 @@ def test_a_refused_tee_chat_sends_nothing_by_archive_rebuild_or_merge(tmp_path):
         lambda: session.archive(session.next_chunk(allow_partial=True)),
         lambda: session.rebuild_summary(summary.id, force=True),
         lambda: session.start_rebuild([summary.id]),
-        session.merge_now,
         lambda: session.write_card_prompts([session.cast[-1]]),
     ):
         with pytest.raises(TeeRefused, match="nothing was sent"):

@@ -29,7 +29,7 @@ from sealedlore.providers.base import (
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
 from sealedlore.storage.repository import StoryBundle, save_story_bundle
-from tests.conftest import make_exchange
+from tests.conftest import make_exchange, merge_old_chapters
 from tests.test_merge import chapters
 from tests.test_session import make_config, session, turn  # noqa: F401 - fixture
 
@@ -187,7 +187,7 @@ def test_an_unfinished_merge_is_not_a_part(tmp_path: Path, story, cast):
     )
     merging.story.defaults.context_token_budget = 2_000
     assert merging.merge_run(), "the run is due"
-    assert merging.merge_now() is None
+    assert merge_old_chapters(merging) is None
     assert "wasn't whole" in (merging.merge_problem or "")
     assert not any(s.merged_from for s in merging.summaries)
 

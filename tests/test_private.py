@@ -36,6 +36,7 @@ from sealedlore.storage.repository import (
     save_story_bundle,
 )
 from sealedlore.storage.scenario import bundle_from_scenario
+from tests.conftest import merge_old_chapters
 
 MARKER = "ZQX-PRIVATE"
 PLOT = (Path(__file__).resolve().parent.parent / "SampleStories" / "Doomsville.md").read_text(
@@ -726,7 +727,7 @@ def test_a_long_story_after_the_scene_never_brings_it_back(tmp_path: Path, keep:
         except ValueError:
             pass
     for call in (
-        session.merge_now,
+        lambda: merge_old_chapters(session),
         lambda: list(session.scan_recent()),
         lambda: list(session.suggest_from_recent()),
         session.suggest_scene,
@@ -1173,7 +1174,7 @@ def test_a_questions_recall_carries_nothing_from_a_private_scene(tmp_path: Path,
     session.config.summary_merge_keep = 1
     for i in range(12):
         play(session, turn(held, f"Early step {i}: the lamplighter's ledger."))
-    session.merge_now()
+    merge_old_chapters(session)
     assert any(s.merged_from for s in session.split(session.path()).summaries)
 
     private = enter(session, keep)

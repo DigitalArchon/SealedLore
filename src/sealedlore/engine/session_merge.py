@@ -69,7 +69,7 @@ class MergeRuntime:
         """Send a merge off on its own thread, if one is due. Never blocks.
 
         Needs a provider that can make a call alongside the worker's
-        (`detached()`); a scripted one can't, and merges only when asked.
+        (`detached()`); with a scripted one, which can't, nothing is merged.
         """
         if not self.config.auto_archive or self._merge_job is not None or self.tee_block:
             # A TEE chat's model refused or being attested: nothing goes to it.
@@ -96,19 +96,6 @@ class MergeRuntime:
         self._merge_job = job
         job.thread.start()
         return True
-
-    def merge_now(self) -> Summary | None:
-        """Merge on this thread, and adopt it: for the author asking, and tests."""
-        self._refuse_in_private("Merging chapters")
-        self._tee_guard()  # a TEE chat's chapters go to its own model
-        run = self.merge_run()
-        if not run:
-            return None
-        job = self._merge_job_for(run)
-        job.reply = self.provider.complete(job.request)
-        job.done.set()
-        self._merge_job = job
-        return self.adopt_merge()
 
     def _merge_job_for(self, run: list[Summary]) -> _MergeJob:
         model = self.summarization_model
