@@ -167,22 +167,22 @@ with it.
 The plot file editor (File → Plot file editor…) lets you write your own
 plots and share them, with reference pictures for their characters, places
 and lore if you like (kept in a folder beside the file). It also opens a
-story you already have (Story → Plot → Open in the plot editor…), everything filled
-in, to write its plot or change anything else; saving makes a new story, and
-the one you opened stays as it was.
+story you already have (Story → Plot → Open in the plot editor…), everything
+filled in, to write its plot or change anything else; saving makes a new
+story, and the one you opened stays as it was.
 
-If you'd rather not write one at all, the model can (Story → Plot → Write a plot
-with the model…, or the last step of a new story): from the story alone, or
-from what you tell it you want. The plot it writes is checked the way a plot
-file is, and kept hidden from you too unless you choose to look.
+If you'd rather not write one at all, the model can (Story → Plot → Write a
+plot with the model…, or the last step of a new story): from the story alone,
+or from what you tell it you want. The plot it writes is checked the way a
+plot file is, and kept hidden from you too unless you choose to look.
 
 ### Auto-fix your story
 
 If the AI isn't responding the way you'd like, but you can't work out which
 setting needs changing, Story → Review settings with the model… has an AI
 model (I recommend Opus 5.5) look over the story's settings, the model
-settings and the prompts the storyteller receives. Based on your complaint, it recommends
-how to fix it, and you accept or reject each recommendation.
+settings and the prompts the storyteller receives. Based on your complaint, it
+recommends how to fix it, and you accept or reject each recommendation.
 
 ### Character and scene consistency
 
@@ -284,11 +284,11 @@ keep the system prompts you like to pick again.
   default (Settings → Generation, for every story). A model that NanoGPT
   lists as reasoning by default is asked for less from its first request;
   one caught thinking at length anyway is noted under the passage and asked
-  for less from then on. When a model gets slow or its writing gets worse, the two checks under
-  Help → Model trouble → The model takes too long before it writes… and
-  Help → Model trouble → The model's writing has got worse… see whether its
-  host is to blame, compare other hosts, and let you switch host or mark a
-  bad one.
+  for less from then on. When a model gets slow or its writing gets worse, the
+  two checks under Help → Model trouble → The model takes too long before it
+  writes… and Help → Model trouble → The model's writing has got worse… see
+  whether its host is to blame, compare other hosts, and let you switch host
+  or mark a bad one.
 - **Pictures and videos** of the story on its Media page, the videos played in
   place, and a line above the story that always says where it is kept and
   which model and route it is on.
@@ -401,30 +401,30 @@ Windows offers weaker privacy on the machine itself (see
    Speaks reads it from the address). Several endpoints can be set up at
    once, each with its own key, and the model picker's Provider column
    shows which endpoint each model is from. The key is kept in the system
-   keychain (GNOME Keyring or
-   KWallet on Linux, Credential Manager on Windows), or in plain text in the
-   data folder on a computer without one; Settings says which under each key
-   field. It is used for nothing else. NanoGPT is the recommended endpoint: it also serves the
-   end-to-end encrypted models that private scenes and chats use. Make an
-   account at [nano-gpt.com](https://nano-gpt.com/), or through the
-   developer's [referral link](https://nano-gpt.com/r/cDT4qL3x). It applies to
-   most NanoGPT website and API default route usage, including images and
-   video. You get a 5% discount there, and the developer gets credit worth up
-   to 10% of it. Until an endpoint, key and story model are set, the window's
-   start screen walks through these steps.
+   keychain (GNOME Keyring or KWallet on Linux, Credential Manager on
+   Windows), or in plain text in the data folder on a computer without one;
+   Settings says which under each key field. It is used for nothing else.
+   NanoGPT is the recommended endpoint: it also serves the end-to-end
+   encrypted models that private scenes and chats use. Make an account at
+   [nano-gpt.com](https://nano-gpt.com/), or through the developer's
+   [referral link](https://nano-gpt.com/r/cDT4qL3x). It applies to most
+   NanoGPT website and API default route usage, including images and video.
+   You get a 5% discount there, and the developer gets credit worth up to 10%
+   of it. Until an endpoint, key and story model are set, the window's start
+   screen walks through these steps.
 
 2. **Check the story model** on the Models page. It starts as Claude Sonnet
    4.6, which with Opus 5.5 measured best as a storyteller; GLM 5.3 is a good
-   cheap one. **Choose** beside it lists what the endpoint offers. On NanoGPT the small
-   calls made on every turn (the scene, the plot, picking lore) start on
-   cheaper models that measured well for them; **Use recommended models**
-   fills them in on a setup you already have, the **Profile** row above the
-   fields puts back a whole set (Default, Recommended, Private, or one you
-   saved), and **Test speed…** shows how
-   quickly each model you have chosen answers. A field left blank falls back
-   to the story model. For a model NanoGPT runs on several hosts, **Route…**
-   beside its field can pick the fastest or cheapest host, or one host,
-   billed pay-as-you-go (see the manual's Models section).
+   cheap one. **Choose** beside it lists what the endpoint offers. On NanoGPT
+   the small calls made on every turn (the scene, the plot, picking lore)
+   start on cheaper models that measured well for them; **Use recommended
+   models** fills them in on a setup you already have, the **Profile** row
+   above the fields puts back a whole set (Default, Recommended, Private, or
+   one you saved), and **Test speed…** shows how quickly each model you have
+   chosen answers. A field left blank falls back to the story model. For a
+   model NanoGPT runs on several hosts, **Route…** beside its field can pick
+   the fastest or cheapest host, or one host, billed pay-as-you-go (see the
+   manual's Models section).
 
 3. **Start from a sample.** The start page shows the sample stories, each
    with its picture and a line on what it is (File → New… shows them too):
@@ -506,11 +506,11 @@ encrypts the whole way.
 - **On disk**, settings and stories live in a data folder only your user
   can read. API keys go to the system keychain, or into that folder's
   `config.json` in plain text where there is no keychain or you choose it,
-  and so does a password written into an endpoint's address. Each story keeps every
-  request and reply in its `api_log.jsonl`, so a story backup carries every
-  prompt sent for it. An "in memory" private scene keeps its messages off
-  the disk (only a content-free record of each call is kept, for the cost);
-  an "in memory" chat, on any model, writes nothing at all.
+  and so does a password written into an endpoint's address. Each story keeps
+  every request and reply in its `api_log.jsonl`, so a story backup carries
+  every prompt sent for it. An "in memory" private scene keeps its messages
+  off the disk (only a content-free record of each call is kept, for the
+  cost); an "in memory" chat, on any model, writes nothing at all.
   On Linux the app tells the system to keep no core dump after a crash;
   `crash.log` records only where in the program it happened, never your
   stories. Its file dialogs leave the desktop's list of recent files

@@ -139,11 +139,12 @@ chmod +x SealedLore-*-x86_64.AppImage
 ./SealedLore-*-x86_64.AppImage cli list     # the terminal client
 ```
 
-The AppImage carries its own Python, Qt and the X11 helper libraries that systems often
-lack (so no `libxcb-cursor0` install needed). It runs on x86_64 with glibc
-2.34 or newer (Ubuntu 22.04, Mint 21, Debian 12, Fedora 35, RHEL 9 and later),
-the floor set by PySide6 6.10+. Stories and settings live where they always
-do (`$XDG_DATA_HOME/sealedlore`, usually `~/.local/share/sealedlore`), so the
+The AppImage carries its own Python, Qt and the X11 helper libraries that
+systems often lack (so no `libxcb-cursor0` install needed). It runs on x86_64
+with glibc 2.34 or newer (Ubuntu 22.04, Mint 21, Debian 12, Fedora 35, RHEL 9
+and later), the floor set by PySide6 6.10+. Stories and settings live where
+they always do (`$XDG_DATA_HOME/sealedlore`, usually
+`~/.local/share/sealedlore`), so the
 AppImage and an installed copy share them. The sample plot files and their
 guides are inside it (Help → Plot format guide and samples opens them),
 and so is the tor that phone access runs (see
@@ -267,7 +268,8 @@ every step below says exactly what to paste. It takes about ten minutes and
 needs about 1 GB of disk space.
 
 Linux is the version SealedLore is built and tested on day to day. What is
-different about privacy on Windows is under [Where your data goes → On Windows](#on-windows).
+different about privacy on Windows is under
+[Where your data goes → On Windows](#on-windows).
 
 #### Opening PowerShell
 
@@ -431,8 +433,8 @@ sealedlore-gui            # or: sealedlore-gui --mock  (no endpoint needed)
 Set the base URL and API key under File → Settings → Endpoints, and the model
 under File → Settings → Models. `--data-dir` points at an alternative data
 directory, `--story <id>` opens one on start, and `--version` prints the
-version (Help → About SealedLore shows it too, with the data folder). Until an endpoint is set, anything that would call a model says so
-and does nothing.
+version (Help → About SealedLore shows it too, with the data folder). Until an
+endpoint is set, anything that would call a model says so and does nothing.
 
 One SealedLore at a time uses a data folder, since each would save over the
 other's work: a second window on the same folder says SealedLore is already
@@ -496,10 +498,10 @@ key, a model, `--make-default`), an endpoint keeps the address it has.
 
 **The defaults assume NanoGPT.** The base URL, the lore picker's model
 (`deepseek/deepseek-v4.1-flash`), the Jev decision model, the image model
-(Seedream), and the `TEE/` and `private/` private models, are NanoGPT's. On OpenRouter or
-another endpoint the chat model works as it is; set the lore, scene, plot and
-image models to ones your endpoint lists (Choose shows them), or the calls
-that use them fail and fall back where they can.
+(Seedream), and the `TEE/` and `private/` private models, are NanoGPT's. On
+OpenRouter or another endpoint the chat model works as it is; set the lore,
+scene, plot and image models to ones your endpoint lists (Choose shows them),
+or the calls that use them fail and fall back where they can.
 
 **Anthropic's own API.** With an Anthropic key, set an endpoint's base URL
 under Settings → Endpoints to `https://api.anthropic.com` (the default one,
@@ -592,7 +594,8 @@ models: only chat is sent end-to-end encrypted.
 
 **Choosing a model.** Every model field has a **Choose** button. It lists the
 models your endpoint offers (where a job has models measured for it,
-**Choose** is a menu: **Browse all models…** first, then those), fetched from the endpoint itself, and the list is
+**Choose** is a menu: **Browse all models…** first, then those), fetched from
+the endpoint itself, and the list is
 searchable ("sonnet 4.6", "llama 70b") and sortable by context size or price.
 The model name in the status bar does the same for the open story, in one
 click. You can still type an id by hand. The image model (Settings → Images,
@@ -608,19 +611,19 @@ the models it may move to.
 each with a line on what it does: the stories you played last, to pick up
 where you left off; **Draft a story from an idea**, **Write a story from
 scratch**, **Have a simple chat**, **Import a file** and **Your characters**;
-and the sample stories, each with its picture. **File → New…** (Ctrl+N), and **New…** under
-the Stories list, show the same choices. A story saves itself as you go
-(Ctrl+S saves at once).
+and the sample stories, each with its picture. **File → New…** (Ctrl+N), and
+**New…** under the Stories list, show the same choices. A story saves itself
+as you go (Ctrl+S saves at once).
 
 ![The start page with no stories yet: the sample stories first, each with its picture and a line on what it is, then the ways to start your own and Your characters](screenshots/start-page.webp)
 
 **The Stories list.** Each row says what kind of story it is (**Story**,
-**Story with a plot** or **Simple chat**), how many messages it has, when it was started
-and when it was last played, and **own models** when it is on models other than
-those in Settings (the tooltip says which). **Sort by** puts them in order of
-when they were last played, or by title. A Visual Story from a version before
-2.5 is listed greyed, as one not played here (Visual Stories moved to a game
-of their own); it can still be deleted.
+**Story with a plot** or **Simple chat**), how many messages it has, when it
+was started and when it was last played, and **own models** when it is on
+models other than those in Settings (the tooltip says which). **Sort by** puts
+them in order of when they were last played, or by title. A Visual Story from
+a version before 2.5 is listed greyed, as one not played here (Visual Stories
+moved to a game of their own); it can still be deleted.
 
 **A story saved by a newer SealedLore.** Every story says which version of
 SealedLore's layout it is saved in. One saved by a newer version than yours is
@@ -686,9 +689,9 @@ archiving, rebuilding summaries.
   switches to another, renames or deletes it, and **Branches** shows every
   branch at once.
 - **Right dock**, beside the story (away while no story is open), its pages
-  as two rows of buttons, its title naming the page shown and what it is for: **People** (who is
-  in the story, by their faces; the page a story opens on: see
-  "The People page"), **Scene** (who is here and where the story is, to
+  as two rows of buttons, its title naming the page shown and what it is for:
+  **People** (who is in the story, by their faces; the page a story opens on:
+  see "The People page"), **Scene** (who is here and where the story is, to
   correct), **Plot** (the
   clock, facts and events; shown only for a story with a plot), **Lore**,
   **Style**, **Story so far** (the chapter summaries: edit, rebuild, archive
@@ -696,7 +699,8 @@ archiving, rebuilding summaries.
   picture and video the story has made, and its background). The
   characters' cards and pictures are on the **cast board**, which takes the
   whole window: **Cast board…** at the top of People, or View → Cast board…
-  (see "Perspective and supporting characters"). **View → Prompt page (advanced)** adds **Prompt**: exactly what the
+  (see "Perspective and supporting characters").
+  **View → Prompt page (advanced)** adds **Prompt**: exactly what the
   storyteller was sent last turn, for checking the model's work; **Copy
   prompt** copies it as readable text, **Copy request JSON** as the exact
   request body. The one thing it keeps back is the storyteller's notes, shown
@@ -742,10 +746,10 @@ archiving, rebuilding summaries.
   size (Ctrl+0) goes back. It is kept for next time.
 - **Theme and fonts**: View → Theme → Dark is the app's own look, and
   View → Theme → High contrast is white on black, every control outlined,
-  yellow for focus and what is current. View → Fonts… picks the font for the window, for the
-  story (passages, turns and the boxes you write them in) and for the
-  monospace Prompt tab; Restore Defaults goes back to the app's own. Both are
-  kept for next time.
+  yellow for focus and what is current. View → Fonts… picks the font for the
+  window, for the story (passages, turns and the boxes you write them in) and
+  for the monospace Prompt tab; Restore Defaults goes back to the app's own.
+  Both are kept for next time.
 - **The composer**: *Playing* is the character you write (the storyteller
   never writes them); *Speaking as* is who your text lands as (that
   character, Narration, Direction, or a Question to the model); *Length* is
@@ -804,10 +808,10 @@ SealedLore:
 - **Private**: end-to-end encrypted models for every job, on NanoGPT's Private
   Mode (`private/glm-5-3` writes and reads the scene, `private/deepseek-v4-1-flash`
   directs the plot and picks lore), or the same models on Tinfoil's own endpoint
-  when that is your default or you have no NanoGPT one. Filling it in says what still leaves your
-  computer unencrypted: lore sent for embeddings while semantic retrieval is on,
-  Jev if large lorebooks use it, and pictures and videos, whose endpoints are
-  their own.
+  when that is your default or you have no NanoGPT one. Filling it in says
+  what still leaves your computer unencrypted: lore sent for embeddings while
+  semantic retrieval is on, Jev if large lorebooks use it, and pictures and
+  videos, whose endpoints are their own.
 
 Default and Recommended are NanoGPT's model ids (Claude goes to Anthropic's own
 API when you have it as an endpoint); with no NanoGPT endpoint they say so. Mix
@@ -860,9 +864,9 @@ possible**, which is also the fastest:
 - On NanoGPT, which says what each model does when it isn't told, a model
   that reasons by default (Kimi K3 and Opus 5.5, for example) is asked for
   its lowest level from the first request, even when that is already its
-  default (GLM 5.3: left to itself it once reasoned far past it). The note under the story model's
-  setting says what that model does left to itself, once SealedLore has
-  read it.
+  default (GLM 5.3: left to itself it once reasoned far past it). The note
+  under the story model's setting says what that model does left to itself,
+  once SealedLore has read it.
 - A model that reasons at length anyway is caught doing it, and asked for
   its lowest level from then on. When that happens a note under the
   passage says so, since that reply may have been slow to start (Kimi K3
@@ -900,14 +904,16 @@ may not decide anything for your character; if a passage does, Regenerate,
 or untick the setting.
 
 **Recommended models.** Left blank, the scene and plot models fall back, by way
-of the summarisation model, to the story model, the most expensive place to run a small call on every turn. On
+of the summarisation model, to the story model, the most expensive place to
+run a small call on every turn. On
 NanoGPT a new setup starts with the ones that measured best, and Settings →
 Models has **Use recommended models** to fill them in on a setup you already
 have (nothing changes until you press Save). **Choose** beside the story,
-scene, plot and lore fields lists, under **Browse all models…**, the models measured for that job, the recommended one first, each with a note on roughly what it scored
-and what it costs (for the story, Claude Opus 5.5 as the premium choice: the
-better writer on every blind judge, at about 2.4 times Sonnet's price, and
-longer passages). Choosing one only fills in the field.
+scene, plot and lore fields lists, under **Browse all models…**, the models
+measured for that job, the recommended one first, each with a note on roughly
+what it scored and what it costs (for the story, Claude Opus 5.5 as the
+premium choice: the better writer on every blind judge, at about 2.4 times
+Sonnet's price, and longer passages). Choosing one only fills in the field.
 
 | For | Model | Why |
 |---|---|---|
@@ -1075,18 +1081,19 @@ recommended models for each use, and every adjustment with why.
 through what a story needs to begin, a step at a time: its title and world,
 its characters, where it begins and what
 happens first, the person, tense and length it is told in, and whether the
-model writes it a plot (see [A plot written by the model](#a-plot-written-by-the-model)).
+model writes it a plot (see
+[A plot written by the model](#a-plot-written-by-the-model)).
 
 The story is made, and listed in your Stories, once its first step is done,
 so its **Characters** step is the cast board's own list and card: every
 field a card has, pictures drawn or chosen from a file (their sheets of
-looks and expressions are on the cast board itself), and **You play** to choose your own
-character (or nobody, to direct the story). Make as many or as few as you
-like, in as much or as little detail: a name is enough to begin. The more you
-put on the cards, the more say you have in who they are; anyone you leave out,
-the storyteller makes up as the story needs them. For a story set in a world
-that already exists, **Fill with lore characters…** writes cards for its
-people (see Perspective and supporting characters).
+looks and expressions are on the cast board itself), and **You play** to
+choose your own character (or nobody, to direct the story). Make as many or as
+few as you like, in as much or as little detail: a name is enough to begin.
+The more you put on the cards, the more say you have in who they are; anyone
+you leave out, the storyteller makes up as the story needs them. For a story
+set in a world that already exists, **Fill with lore characters…** writes
+cards for its people (see Perspective and supporting characters).
 
 **Create the story** then goes to Start, which asks who you play and offers
 portraits for anyone still without one before the opening is written. With a
@@ -1195,8 +1202,9 @@ From the terminal: `sealedlore scenario export <id> <file>`,
 
 A **plot file** is a scenario written as Markdown, with a plot as well: the
 facts the story keeps and the events a director brings about
-([`SampleStories/PLOT_FORMAT.md`](../SampleStories/PLOT_FORMAT.md); `Doomsville.md` is a worked example). The Plot page shows the story clock, the facts as they
-stand, and, with spoilers on, the events still to come.
+([`SampleStories/PLOT_FORMAT.md`](../SampleStories/PLOT_FORMAT.md);
+`Doomsville.md` is a worked example). The Plot page shows the story clock, the
+facts as they stand, and, with spoilers on, the events still to come.
 
 ![The Plot page with spoilers shown: the clock, events to come, facts, and characters held back until an event brings them in](screenshots/plot-tab.png)
 
@@ -1216,9 +1224,9 @@ already has, and the problems list at the bottom is exactly what the importer
 would say, each against the item to fix. Characters, places and lore entries
 can be given reference pictures there (**Add…** under Pictures): they are
 kept in a `pictures` folder beside the plot file, so share the folder with
-the file, and are put on the cards when the file is imported. It needs no story open; the editor's
-own **Start a story from this file** (its File menu) saves and imports in one
-go.
+the file, and are put on the cards when the file is imported. It needs no
+story open; the editor's own **Start a story from this file** (its File menu)
+saves and imports in one go.
 
 A plot file can carry the story's secrets as well: a `# Storyteller's notes`
 section, the truth behind what the story has not shown yet and what its
@@ -1359,7 +1367,8 @@ only when you save it here (see "Into a story" below).
 
 On the left is every character, with a search over what their card says of
 them (names, descriptions, personality, scenario, greetings and examples, its
-prompts, its lorebook, maker, notes and tags), a tag to list them by, and an order (by name, changed last, added last);
+prompts, its lorebook, maker, notes and tags), a tag to list them by, and an
+order (by name, changed last, added last);
 **Everyone** shows all their portraits together. Choose several in the list with
 Ctrl or Shift to do the same to them all, each with their versions: add them to
 the open story, export their cards into a folder (CHARX, PNG or JSON), add or
@@ -1525,7 +1534,8 @@ Before it starts you see, and can change, everything it is made of:
   checked, it waits in the box to type in instead, to send once it is).
 
 They are one of the chat's people, with every picture of theirs (see "Simple
-chat"), so a picture of the chat draws them as they are shown there. The card's background goes behind the
+chat"), so a picture of the chat draws them as they are shown there. The
+card's background goes behind the
 chat, and the pictures their greeting shows appear under it (see "Every file
 on the card is kept too" above).
 
@@ -1547,8 +1557,9 @@ present-day Maine), the model may find entries that don't hold in this story:
 those come in disabled, kept on the Lore page for you to tick Enabled on, and
 never sent to the storyteller meanwhile. If the draft writes an entry under
 the same title as one of theirs, or copies one, theirs is kept and the notes
-after the draft say so. **Choose…** beside them builds the story around others too, and **Draft a
-story from an idea** offers the same once you keep any characters.
+after the draft say so. **Choose…** beside them builds the story around others
+too, and **Draft a story from an idea** offers the same once you keep any
+characters.
 
 **Into a story.** On the cast board, **From Your characters…** (also in the
 new story guide's characters step and Setup's Characters tab) puts any of
@@ -1575,8 +1586,8 @@ story's player (see "`{{user}}` and `{{char}}`").
 
 A character from Your characters says so on their Card tab on the cast
 board, with what has changed since they joined: in this story (a new
-picture, a changed description), on their card, or both. **Changes…** shows each change side by
-side, ticked, and offers:
+picture, a changed description), on their card, or both. **Changes…** shows
+each change side by side, ticked, and offers:
 
 - **Save the ticked to the card**: their card takes them, `{{char}}` and
   `{{user}}` where the card writes them, so every story they join from now
@@ -1655,7 +1666,8 @@ Under SealedLore's rules it also names the settings those rules don't use,
 such as second keywords (the first keywords alone decide); each entry keeps
 them, so switching the story to SillyTavern's rules later puts them to work.
 An entry kept out of recursion needs no note: SealedLore's rules never fire
-an entry from another entry's text. A story already open can take a kept lorebook's entries too: **Add to
+an entry from another entry's text. A story already open can take a kept
+lorebook's entries too: **Add to
 the open story…** here, or **From Lorebooks…** in the Lore page's
 SillyTavern lorebook menu, lists them all to untick or change for that story
 alone. **Keep in Lorebooks…** in the same menu keeps the story's lore as a
@@ -1728,25 +1740,25 @@ lorebook the story's lore (the dialog says so: a story made from a card is
 set in the card's own world), and its picture their portrait (a world's picture goes
 behind the story). Cards from card sites are often long; if the cast's cards
 no longer fit their room in the prompt, the largest are sent condensed (see
-"When the cast's cards don't fit"). The card's own background goes behind the story, and the
-pictures the opening greeting shows appear under the opening once the story
-begins. The story's character is linked to their card in Your characters, as
-**Add to the story** links one, so **Changes…** on their Card tab works for
-them; expression pictures you chose to leave out of the story count as kept
-here, not as a change. Setup opens next, to set the style before the story
-begins. What the card holds that SealedLore has no place for is listed: its
-own system prompt (SealedLore's storyteller rules stand, though a tick adds
-it to Style → Other notes), its tags, macros other than `{{char}}` and
+"When the cast's cards don't fit"). The card's own background goes behind the
+story, and the pictures the opening greeting shows appear under the opening
+once the story begins. The story's character is linked to their card in Your
+characters, as **Add to the story** links one, so **Changes…** on their Card
+tab works for them; expression pictures you chose to leave out of the story
+count as kept here, not as a change. Setup opens next, to set the style before
+the story begins. What the card holds that SealedLore has no place for is
+listed: its own system prompt (SealedLore's storyteller rules stand, though a
+tick adds it to Style → Other notes), its tags, macros other than `{{char}}` and
 `{{user}}`, the other greetings, and lorebook settings (below).
 
 **A card into a story.** On the cast board, **SillyTavern cards → Import a
 character card…** adds the card's character to the open story, on the cast
 or as a supporting character. As with From Your characters…, its lorebook
 stays out unless you tick **Bring their lorebook too**, and the question
-says why; ticked, you choose its entries for this story first, the same way. Its `{{char}}`
-means them and its `{{user}}` the story's player. A card with files of its
-own (a background, pictures its greetings show) is also kept whole in Your
-characters, and the story's character linked to it, as From Your
+says why; ticked, you choose its entries for this story first, the same way.
+Its `{{char}}` means them and its `{{user}}` the story's player. A card with
+files of its own (a background, pictures its greetings show) is also kept
+whole in Your characters, and the story's character linked to it, as From Your
 characters… would; during a private scene that waits until the scene ends.
 Once in, the lore a card brought is the story's own: removing the character
 later leaves it, and the question asking whether to remove them says how
@@ -1942,11 +1954,12 @@ listed rather than guessed at, and a name any number of people could answer to
 ("the captain") is left off a character's other names.
 
 **Story → Review settings with the model…** Say what isn't working, for
-example "too much action, not enough dialogue". The model reviews the story's settings (world,
-style, cast and supporting characters, lore, outcome mode, world activity,
-the models and the budget, with your generation settings) and the instructions the
-storyteller actually receives, all but the storyteller's notes: it is told
-only that there are some, and can't change them. On a character it can change anything their
+example "too much action, not enough dialogue". The model reviews the story's
+settings (world, style, cast and supporting characters, lore, outcome mode,
+world activity, the models and the budget, with your generation settings) and
+the instructions the storyteller actually receives, all but the storyteller's
+notes: it is told only that there are some, and can't change them. On a
+character it can change anything their
 card holds: a SillyTavern card's personality too, and **Always send the whole
 card** when a condensed card has lost what the story needs of them (see
 [When the cast's cards don't fit](#when-the-casts-cards-dont-fit)), and who
@@ -1962,10 +1975,11 @@ Settings that would help when they are off (Keep the prose fresh, Let the
 storyteller make the next move when I wait). Asking for changes before the
 story begins can change the lore's rules and settings too. When the
 cause is the plot itself, it says so, and where it is changed: Story → Plot → Open in
-the plot editor…, or Story → Plot → Write a plot with the model…. You choose how many exchanges
-from the story it sees as examples, from none to all of them: each is your turn
-and the reply to it. By default it sees the last three. The dialog shows about
-how many tokens that is, and a review too big for the model is refused before
+the plot editor…, or Story → Plot → Write a plot with the model…. You choose
+how many exchanges from the story it sees as examples, from none to all of
+them: each is your turn and the reply to it. By default it sees the last
+three. The dialog shows about how many tokens that is, and a review too big
+for the model is refused before
 anything is sent. It then proposes changes one setting at a time, each with
 what it replaces and why. You tick the ones to apply; the story so far is never
 touched. Anything settings can't fix is listed separately. That includes
@@ -2006,12 +2020,13 @@ is to ask for changes (above): they are made at once, and can be undone. A
 review proposes changes for you to tick, and is the one for a story under way.
 
 Both use the **authoring model** (Settings → Models), which defaults to your
-chat model, and so does a plot written by the model. These are occasional calls the whole story rests on, so a stronger
-model can be worth it here, such as Opus 5.5 (`anthropic/claude-opus-5.5`); you can also
-change it in each dialog. The story is still played with your chat model. Both
-calls count toward the story's cost. The Style tab's **Other notes** field is
-where plain-words style requests go ("let the narration show what other
-characters are thinking").
+chat model, and so does a plot written by the model. These are occasional
+calls the whole story rests on, so a stronger
+model can be worth it here, such as Opus 5.5 (`anthropic/claude-opus-5.5`);
+you can also change it in each dialog. The story is still played with your
+chat model. Both calls count toward the story's cost. The Style tab's
+**Other notes** field is where plain-words style requests go ("let the
+narration show what other characters are thinking").
 
 In the terminal: `sealedlore generate "<premise>" [--model M]`, and `/review
 <complaint>` in the chat, which prints the proposals; apply them in the app.
@@ -2207,13 +2222,13 @@ story as they saw it: the scenes they were in, the storyteller's passages,
 and your turns without their out-of-character notes. Not their own earlier
 answers: an answer is only what they meant to do, and the passages say what
 came of it, so nothing they meant to do and never did, or made up, stays with
-them as if it had happened. The most recent of it goes whole. What they saw before that, they
-are given as their own memory of it: a few notes in their own words for each
-older stretch, written by the summarisation model the first time it is
-needed, and again for a stretch you edit or a branch that goes another way.
-Notes of your own on how to play them go to their model too, after their card.
-They are also told to say so when something comes up that they don't
-remember, rather than make it up. A character's model never sees a
+them as if it had happened. The most recent of it goes whole. What they saw
+before that, they are given as their own memory of it: a few notes in their
+own words for each older stretch, written by the summarisation model the first
+time it is needed, and again for a stretch you edit or a branch that goes
+another way. Notes of your own on how to play them go to their model too,
+after their card. They are also told to say so when something comes up that
+they don't remember, rather than make it up. A character's model never sees a
 Direction, except the one the story opens with if they are there when it
 starts, nor another character's answer or the storyteller's notes. A
 character who isn't in the scene isn't asked. Nothing runs in a private
@@ -2255,13 +2270,14 @@ model for the answer again, sent what it would be sent there (the story as
 they saw it up to that point, your notes for their model, what they
 remember); nobody else is asked, and the others' answers stay as they are. A
 passage edited since they answered is read again first, as their round would
-read it, for who saw which part of it and for the public record. Once the new answer is in, you are
-asked whether to have the passage after it written again from it (**Write it
-again**, a new take beside the one there now) or **Keep the passage**. Stop,
-or a model that fails or gives no answer, leaves their answer as it was, and
-the failure says why. On the People page their card is marked MAIN · OWN
-MODEL. Their calls show under *Own-model characters* (and their memories under
-*Own-model characters' memories*) in Story → Usage and cost….
+read it, for who saw which part of it and for the public record. Once the new
+answer is in, you are asked whether to have the passage after it written again
+from it (**Write it again**, a new take beside the one there now) or **Keep
+the passage**. Stop, or a model that fails or gives no answer, leaves their
+answer as it was, and the failure says why. On the People page their card is
+marked MAIN · OWN MODEL. Their calls show under *Own-model characters* (and
+their memories under *Own-model characters' memories*) in Story → Usage and
+cost….
 
 **Stop** while their answers are waited for skips them. Your turn stays sent:
 the storyteller writes the passage without their answers (a second Stop stops
@@ -2355,12 +2371,13 @@ with no portrait has **Draw a portrait…** and **Choose a picture…** on it.
 
 Until the story has them, a panel at the top offers **Draw portraits…** for
 everyone who has none (you see and can change every prompt first, as in
-Story → Pictures and video → Draw pictures for the cards…) and a background behind the story
-(**Draw a background…**, or **Choose a background…** from your computer).
-Pictures need an image model: without one, **Set up pictures…** opens
-Settings → Images. **Not now** puts the panel away until you next open the
-story. Characters the plot hasn't brought in yet stay off the page, as they
-do on the cast board until you tick **Show spoilers** there.
+Story → Pictures and video → Draw pictures for the cards…) and a background
+behind the story (**Draw a background…**, or **Choose a background…** from
+your computer). Pictures need an image model: without one, **Set up pictures…**
+opens Settings → Images. **Not now** puts the panel away
+until you next open the story. Characters the plot hasn't brought in yet stay
+off the page, as they do on the cast board until you tick **Show spoilers**
+there.
 
 Who is here is the scene's (below), so the faces show at a glance who the
 storyteller thinks is in the room; **Correct the scene…** goes to the Scene
@@ -2368,7 +2385,8 @@ page to put it right.
 
 **Looks.** A character can have several pictures: in normal clothes and in
 armour, angry, laughing, in a fighting stance. Label each on their card on
-the cast board (**More** → **Labels…** under the portrait, or **Labels…** on one of the pictures below it) with its
+the cast board (**More** → **Labels…** under the portrait, or **Labels…** on
+one of the pictures below it) with its
 **Look**, which lasts until the story changes it (normal clothes, combat
 armour, injured), and its **Expression or pose**, which is the moment's
 (angry, talking, in a fighting stance). Then right-click their card here,
@@ -2468,7 +2486,8 @@ Drag a picture to another place to relabel it. Under the sheet, the pictures
 while you decide where it goes, and drag one from there to a place to label
 it. Drop pictures from your computer on a place to add them there, or on the
 pictures set aside to add them unlabelled. Enter sees a picture whole (on a
-gap, draws the ones chosen), Delete removes a picture, F2 changes its labels. A look the story asked for is marked on its place ("Asked
+gap, draws the ones chosen), Delete removes a picture, F2 changes its labels.
+A look the story asked for is marked on its place ("Asked
 for ×2"); one that fits no place is listed above the sheet, to draw as the
 story put it or to add to the sheet. Right-click a picture to see it whole,
 show them like that in the story, make it their portrait, change its labels,
@@ -2494,10 +2513,10 @@ characters").
 Pictures of other expressions can come with a character: a CHARX card's
 expression pictures (kept with them in Your characters when the card is
 imported; More → A story from their card's own scenario… asks whether the
-story keeps them, and gives their size), or a SillyTavern expression pack, a zip of pictures named by
-expression ("joy.png", "anger-2.png"), added with **SillyTavern cards → Add
-expression pictures from a zip…** on the cast board. Each is labelled by its
-name.
+story keeps them, and gives their size), or a SillyTavern expression pack, a
+zip of pictures named by expression ("joy.png", "anger-2.png"), added with
+**SillyTavern cards → Add expression pictures from a zip…** on the cast board.
+Each is labelled by its name.
 
 Someone the story has here who has no card (named in the opening or by a
 passage, never given one) is listed under **Also here, with no card yet**,
@@ -2553,10 +2572,10 @@ the status bar names it once, quoting the sentence, and the sentence stays
 with the passage as evidence for a settings review.
 
 Choose the model for this in **Settings → Models → Scene model**; it is one
-extra call per passage, on your story model if nothing smaller is set. It is one short call
-per passage, so a small fast model is right; blank uses the summarisation
-model. Untick **Keep the scene up to date after every passage** to keep the
-roster by hand instead, as before.
+extra call per passage, on your story model if nothing smaller is set. It is
+one short call per passage, so a small fast model is right; blank uses the
+summarisation model. Untick **Keep the scene up to date after every passage**
+to keep the roster by hand instead, as before.
 
 The scene is saved with each passage, so switching to another take or branch,
 taking a turn back, or deleting messages puts the roster back to what it was
@@ -2608,10 +2627,10 @@ description, more of what he says". It opens a small box to write them in.
 The note goes to the storyteller with that one take, as an instruction no
 character hears, after your turn as you sent it; the take being replaced is
 not shown to it. The note is kept with the take it made, shown under it, and
-is never sent again: a plain Regenerate afterwards goes without it, and so does every later
-turn. (An OOC note on the turn itself is different: it stays with the turn
-and is part of the story from then on.) Length and Outcome apply as for
-Regenerate. A simple chat's replies have it too, and in a
+is never sent again: a plain Regenerate afterwards goes without it, and so
+does every later turn. (An OOC note on the turn itself is different: it stays
+with the turn and is part of the story from then on.) Length and Outcome apply
+as for Regenerate. A simple chat's replies have it too, and in a
 private scene the note goes to the scene's own model and nowhere else.
 
 **⋯ → Change this passage…** is for a passage that is nearly right. Say what
@@ -2670,11 +2689,12 @@ message corrects it in place (a typo, a name); on a turn of yours the editor
 carries its OOC note under the text, to change or clear; **⋯ → New branch
 from here…**, on any message, opens the same editor with a name field beside
 **Save as a new branch**: saving starts a new branch from that message,
-rewritten or as it is, note and all. A turn of yours is answered at once on the new branch; a passage is
-your own prose and waits for your next turn. The story as it was is kept,
-under its own name: the first line is **Main**, and a new branch is called
-what you type, or "Branch 2", "Branch 3"… if you leave the name blank (a name
-another branch already has gets a number). Rename any of them later. The **Branch** button above the
+rewritten or as it is, note and all. A turn of yours is answered at once on
+the new branch; a passage is your own prose and waits for your next turn. The
+story as it was is kept, under its own name: the first line is **Main**, and a
+new branch is called what you type, or "Branch 2", "Branch 3"… if you leave
+the name blank (a name another branch already has gets a number). Rename any
+of them later. The **Branch** button above the
 transcript always says which branch you are reading, and its menu lists them
 all (where each starts and how long it is; hover one for how it begins),
 switches between them, and
@@ -2718,14 +2738,15 @@ at once.
 
 **Costs.** Each passage shows its tokens, cache use and cost; the status bar
 shows the session and whole-story spend; click it, or choose **Story → Usage
-and cost…**, for the breakdown. Where the endpoint doesn't report a call's cost (NanoGPT often
-doesn't), it's estimated from the model's listed prices and marked `~`.
+and cost…**, for the breakdown. Where the endpoint doesn't report a call's
+cost (NanoGPT often doesn't), it's estimated from the model's listed prices
+and marked `~`.
 
 ## Outcomes and dice
 
-**Story → Setup… → About → Outcomes** sets how the result of your character's actions is
-decided; **Outcome**, under **More** in the bottom bar, sets it for your turns
-from then on, until you change it again.
+**Story → Setup… → About → Outcomes** sets how the result of your character's
+actions is decided; **Outcome**, under **More** in the bottom bar, sets it for
+your turns from then on, until you change it again.
 
 | Mode | What happens |
 |---|---|
@@ -2736,10 +2757,11 @@ from then on, until you change it again.
 
 In Dice mode, **Roll** picks which of your character's skills applies and how
 hard the attempt is. Skills and tiers (none → legendary) are set in the Cast
-tab, or drafted from the character's description with **Suggest skills**. The roll shows in the passage header (🎲 38 / 45 · success);
+tab, or drafted from the character's description with **Suggest skills**. The
+roll shows in the passage header (🎲 38 / 45 · success);
 View → Show dice rolls hides it. Regenerate keeps the roll; **Reroll the dice**
-in the passage's ⋯ menu rolls again. Only your character acting is rolled, never Direction or
-Narration.
+in the passage's ⋯ menu rolls again. Only your character acting is rolled,
+never Direction or Narration.
 
 In the terminal: `/mode dice`, `/dice <skill|general> <difficulty>`, `/reroll`.
 
@@ -2788,9 +2810,10 @@ story with a plot, a Question is told the plot's events your character knows
 of, as a turn is, and never one they don't.
 
 Every message's ⋯ menu has **Delete from here…**, which removes it and
-everything after it, after confirming. Deleting a reply leaves your turn in place, so Regenerate can take
-another run at it. Deleting the first message of a branch deletes the branch,
-and the story goes to the end of the line it split from.
+everything after it, after confirming. Deleting a reply leaves your turn in
+place, so Regenerate can take another run at it. Deleting the first message of
+a branch deletes the branch, and the story goes to the end of the line it
+split from.
 
 ## Lore retrieval
 
@@ -2868,9 +2891,9 @@ each turn: **SealedLore's rules** (the default for a story you write; as
 Settings → Lore says) or **SillyTavern's rules** (the default for a story
 made from a lorebook or a card with one). Under SealedLore's rules, a line
 under it says how many entries carry SillyTavern settings those rules leave
-unused; its tooltip says what the rules chosen do. Fired SillyTavern's way, each turn's
-entries come from SillyTavern 1.19's own rules and each entry's own settings,
-as the lorebook brought them:
+unused; its tooltip says what the rules chosen do. Fired SillyTavern's way,
+each turn's entries come from SillyTavern 1.19's own rules and each entry's
+own settings, as the lorebook brought them:
 
 - keys and secondary keys (with their logic: and any, not all, not any, and
   all), keys written /like this/ as patterns, case and whole words;
@@ -2920,8 +2943,8 @@ in SillyTavern: what it says can fire other entries, and it counts toward
 minimum activations. It stands outside the budget, the one way these rules
 differ from SillyTavern's own: SillyTavern leaves out a constant its budget
 can't hold, SealedLore sends every one, so the budget is for the entries that
-fire. In a private scene the budget is a share of the private model's context. Positions, depths and outlets aren't
-used. The Lore tab
+fire. In a private scene the budget is a share of the private model's context.
+Positions, depths and outlets aren't used. The Lore tab
 shows why each entry fired and why each other didn't ("on cooldown", "its
 40% chance didn't come up", "its group “x”: y won", "over the lore budget").
 Timed effects follow the story's branches: each of your turns keeps what
@@ -3048,7 +3071,8 @@ applying as they stood; the rest are easy to turn down.
 
 ![The picture dialog: a direction, the picture's style, the prompt the story's model wrote from it, the herbwife's and the ranger's portraits as the reference pictures, numbered, and the model, size and price, with Generate](screenshots/picture-dialog.png)
 
-**Story → Pictures and video → Draw a picture…** (Ctrl+Shift+I), the **Picture…** button beside the
+**Story → Pictures and video → Draw a picture…** (Ctrl+Shift+I), the
+**Picture…** button beside the
 composer, or **Illustrate this passage…** in a passage's ⋯ menu asks the
 story's model to write an image prompt from where the story is, choosing
 among the reference pictures on cast sheets and lore entries. **Add…** under
@@ -3057,7 +3081,8 @@ belongs to no card); it is copied into the story, its hidden data removed,
 and offered from then on. **Prompt written
 by** in the dialog picks another model for that (blank is the story model;
 your choice is kept, and is the same setting as Settings → Models → Image
-prompt writer, or the story's own writer if it has one). The story model reads the story from its cache; another model
+prompt writer, or the story's own writer if it has one). The story model reads
+the story from its cache; another model
 reads it at full price. The dialog shows the
 whole request — model, size, count, listed price, the pictures in order, and
 the prompt, which you can edit — and nothing is sent until you press
@@ -3086,12 +3111,12 @@ dialog, with a direction for a picture to stand behind the story's text),
 a file instead or clear it; a background drawn or edited goes behind the
 story when it is done, and the old one stays in Media when it was drawn here.
 A story picture's menu (here, or its ⋯ in the story) has **Change this
-picture…** too: the changed copy goes after the same passage. **Save all…** copies everything
-there into a folder you choose, the cards' pictures named by card; each
-picture's ⋯ menu saves one. A file is saved under the extension of what it
-is, whatever the story calls it; one that is neither a picture nor a video
-(a story backup from someone else can put any file among a story's pictures)
-is not saved or opened, and you are told.
+picture…** too: the changed copy goes after the same passage. **Save all…**
+copies everything there into a folder you choose, the cards' pictures named by
+card; each picture's ⋯ menu saves one. A file is saved under the extension of
+what it is, whatever the story calls it; one that is neither a picture nor a
+video (a story backup from someone else can put any file among a story's
+pictures) is not saved or opened, and you are told.
 
 ![The Media page of The Silverwood: the cast's portraits, the lore's pictures and the background behind the story](screenshots/media-page.webp)
 
@@ -3162,7 +3187,8 @@ pictures (the prompt and every setting) is removed before they are kept.
 
 Every picture you bring in from disk opens **Crop the picture** first: a
 card's picture or portrait, **Add a picture from disk…** in the picture and
-video dialogs, the background, or a picture in the plot file editor. Drag the frame to move it, a corner to resize it,
+video dialogs, the background, or a picture in the plot file editor. Drag the
+frame to move it, a corner to resize it,
 or across the picture to draw a new one. **Shape** leaves it free, to take
 any part you like, or holds it to the exact shape the app uses:
 
@@ -3182,8 +3208,9 @@ SVG, say, which could draw in files from your computer) is never read as one.
 
 ### Pictures for the cards
 
-**Story → Pictures and video → Draw pictures for the cards…**, **Draw a portrait…** on a
-character's card, **Draw a picture…** on a lore entry, or the box in the Start dialog
+**Story → Pictures and video → Draw pictures for the cards…**,
+**Draw a portrait…** on a character's card, **Draw a picture…** on a lore
+entry, or the box in the Start dialog
 gives each character a portrait and each lore entry a picture, drawn from
 what their cards say. The Start dialog counts the characters and lore entries
 with no picture yet (a plot file or a premise often brings none) and offers
@@ -3238,7 +3265,8 @@ portrait** (**Show first** on a lore entry) puts the one you like first, and
 **Remove** takes off the one you don't.
 
 The portrait model is Settings → Images → **Portrait model**; **Choose**
-beside it lists, under **Browse all models…**, the models measured for portraits, with what each is good at:
+beside it lists, under **Browse all models…**, the models measured for
+portraits, with what each is good at:
 
 - **FLUX.3 Klein** (the default, about $0.009, a few seconds): ahead of FLUX.2
   klein on five of six characters for two blind judges, and its edit version
@@ -3309,12 +3337,13 @@ style or another, keeping what it shows (the same person, pose, clothes and
 framing), or show them from the waist up or as a whole figure. The new picture
 keeps the old one's labels and is labelled with its framing.
 
-**Story → Pictures and video → Restyle pictures…**, or **Restyle…** on the cast board (everyone's
-with **Everyone** chosen), redraws many pictures at once: pictures you imported
-from a character card, say, to suit the story's style. Every picture is
-listed with its prompt, ticked to begin with if it isn't in the style chosen,
-and nothing is drawn until **Draw**. Each redrawn picture takes the old one's
-place on its card, with its labels; the old one stays at the end of the card's
+**Story → Pictures and video → Restyle pictures…**, or **Restyle…** on the
+cast board (everyone's with **Everyone** chosen), redraws many pictures at
+once: pictures you imported from a character card, say, to suit the story's
+style. Every picture is listed with its prompt, ticked to begin with if it
+isn't in the style chosen, and nothing is drawn until **Draw**. Each redrawn
+picture takes the old one's place on its card, with its labels; the old one
+stays at the end of the card's
 pictures, unlabelled (set aside under the cast board's sheet), for you to keep
 or remove.
 
@@ -3369,8 +3398,9 @@ stays among the card's pictures.
 
 ## Videos
 
-**Story → Pictures and video → Generate video…**, **Video…** in the Media tab, or **Video of this
-passage…** in a passage's ⋯ menu makes a few seconds of video of the story.
+**Story → Pictures and video → Generate video…**, **Video…** in the Media tab,
+or **Video of this passage…** in a passage's ⋯ menu makes a few seconds of
+video of the story.
 
 **Video costs far more than pictures**: a picture is a few cents, a video tens
 of cents to over $10 for a few seconds, and it is charged when it is sent,
@@ -3412,12 +3442,12 @@ press **Check again** or next open the story. (In a chat kept in memory only
 it is lost with the chat, and closing the chat says so.) When it arrives,
 its hidden data is removed without re-encoding: only the parts a player needs
 are kept, and in them the encoder's name and settings, creation times,
-handler names and padding are blanked in place. It shows as its first frame: click to play it in
-place, with sound and a position bar. Its ⋯ menu opens it in your default
-player, saves it, shows its prompt, makes the next video from its last frame,
-or uses that frame as a reference picture. Videos are listed in the Media
-tab and saved by **Save all…**. A story backup of a story with videos asks
-whether to put them in (they are megabytes each) or leave them out.
+handler names and padding are blanked in place. It shows as its first frame:
+click to play it in place, with sound and a position bar. Its ⋯ menu opens it
+in your default player, saves it, shows its prompt, makes the next video from
+its last frame, or uses that frame as a reference picture. Videos are listed
+in the Media tab and saved by **Save all…**. A story backup of a story with
+videos asks whether to put them in (they are megabytes each) or leave them out.
 
 The default is Seedance 2.5 at 480p for 5 seconds with sound, on NanoGPT
 ($0.90 when this was written). **Settings → Video** also takes another
@@ -3600,7 +3630,8 @@ works before a scene or chat depends on it. The details are in its tooltip.
 
 What it doesn't prove: which software the enclave runs, or what was sent
 (the record hashes the request as NanoGPT forwarded it, which the app can't
-reproduce). And the text still passes NanoGPT's gateway in the clear; for that, use a `private/` model (below). Everything else the
+reproduce). And the text still passes NanoGPT's gateway in the clear; for
+that, use a `private/` model (below). Everything else the
 app does with the story is paused while the scene is open, including the
 scene and plot reads, so the scene card and the plot are frozen until it ends.
 Ending the scene asks the private model for a summary; you approve, edit or
@@ -3624,7 +3655,8 @@ scene without a summary, which sends nothing, or close the story, set
 Settings → Private back, and open it again. Another model named in Settings →
 Private on the same server changes nothing: the scene goes on with its own.
 A scene that outgrows the private model's context is
-condensed by the private model itself, never by the story's. Set the model under Settings → Private, where
+condensed by the private model itself, never by the story's. Set the model
+under Settings → Private, where
 **Detect** asks a local server how much context the model is running with. The
 endpoint there starts as NanoGPT's, and with its key left blank it uses the
 main endpoint's key; only the model is left to choose, and private scenes stay
@@ -3660,7 +3692,8 @@ the attestation, says where it pointed, and nothing is sent. What the
 verifier fetches asks for gzip or deflate only, and is read to 32 MB at most
 (an error's or a redirect's text to 64 KB). Should a
 version of that software not let the app hold its fetches to this, the
-attestation is refused, saying why, rather than made without it. A model written with a capital or a stray space
+attestation is refused, saying why, rather than made without it. A model
+written with a capital or a stray space
 (`Private/glm-5-3`) is still end-to-end encrypted, never sent the plain way.
 What NanoGPT's relay writes in an error is shown as its own ("NanoGPT's relay
 said (unauthenticated)"), on one line and without characters you can't see.
@@ -3757,7 +3790,8 @@ minutes:
 An instance that fails is left out and never sealed to, and with none left
 nothing is sent: one whose GPUs NVIDIA can't vouch for is left out too (it
 offered no GPU evidence, or NVIDIA's service or its signing keys couldn't be
-reached, which is tried again next time), since the model runs on them. It is **always "⚠ partial"**, for two reasons said on the
+reached, which is tried again next time), since the model runs on them. It is
+**always "⚠ partial"**, for two reasons said on the
 model button: the program inside the machine that makes and uses the key is
 admitted by Chutes' signature, not measured (a closed library), so Chutes, as
 its signer, could run one that gives the key away; and the list of images is
@@ -3804,8 +3838,8 @@ conversation with a model in
 SealedLore's window: your system prompt and your messages, sent exactly as you
 write them, with none of the storytelling around them (no rules, cast, lore,
 scene, plot, OOC notes, dice, Questions or side models). Branches, takes, Edit,
-Find, pictures and the cost all work as in a story, and a long chat is summarised in parts as a
-story is (Settings → Context), with a plain summariser.
+Find, pictures and the cost all work as in a story, and a long chat is
+summarised in parts as a story is (Settings → Context), with a plain summariser.
 - **Characters, for their pictures alone.** A chat's **People** page starts
   empty. **Bring someone in** adds a character from Your characters, or a
   new card; on the cast board, **SillyTavern cards** brings one in from a
@@ -3821,7 +3855,8 @@ story is (Settings → Context), with a plain summariser.
   **Show as** chooses which of their pictures they are shown with, from the
   chat's start. When you ask for a picture (**Picture…**), the pictures of
   those here now, as they are shown, are offered first to go with it, as a
-  story's characters' are; **Story → Pictures and video → Draw pictures for the cards…** draws
+  story's characters' are;
+  **Story → Pictures and video → Draw pictures for the cards…** draws
   portraits for those with none.
 
   ![A chat's People page: the line saying its characters are for their pictures alone, Bring someone in, John under Here now in his combat armour, and Jane under Set aside](screenshots/chat-people.webp)
@@ -3974,7 +4009,8 @@ passage as it was, and the phone says so. **Suggest…**, behind **More** (in a
 chat, beside Send), asks for a few things you might write next and lists them
 above the box, on the phone that asked and nowhere else; touching one puts it
 in the box to change and send yourself (it asks first if the box holds
-something), and nothing is ever sent or kept from them. With the desktop's View → Characters above the box you type
+something), and nothing is ever sent or kept from them. With the desktop's
+View → Characters above the box you type
 in, the phone shows who is in the scene at the top of its box, and with
 Characters on each passage, small pictures over each passage (in a private
 scene, only once you choose to see it). The ☰ menu lists the
@@ -4033,7 +4069,8 @@ data folder's `phone` folder, never the tor service your system may run.
 
 The **Context budget** (File → Settings → Context, with a story open) is how
 many tokens the storyteller's whole prompt may use each turn: the rules,
-world, cast and chapter summaries as well as the recent story word for word. When a prompt reaches it, the oldest whole chunk of
+world, cast and chapter summaries as well as the recent story word for word.
+When a prompt reaches it, the oldest whole chunk of
 the story — ten exchanges by default — is summarised into a chapter, and the
 chapter stands in for that prose from then on.
 
@@ -4147,13 +4184,13 @@ one exception the other way is phone access, which answers
 phones over plain `http://` on its onion address, where tor encrypts the
 whole way (see [Playing from your phone](#playing-from-your-phone)). An API
 key (or a password written into the address, `http://user:password@…`, which
-goes with every request) sent over plain `http://` to another machine, even one on your own
-network, can be read by anyone on that network, a café's or a hotel's Wi-Fi
-included, so Settings asks before it saves one there, or sends one there
-before Save (Choose, Test speed…, Test attestation and Detect use the keys
-as typed), and `sealedlore configure` warns; one sent to this computer itself
-(`localhost`, `127.0.0.1`) never leaves it. There is no telemetry, no update check and no
-crash reporting.
+goes with every request) sent over plain `http://` to another machine, even
+one on your own network, can be read by anyone on that network, a café's or a
+hotel's Wi-Fi included, so Settings asks before it saves one there, or sends
+one there before Save (Choose, Test speed…, Test attestation and Detect use
+the keys as typed), and `sealedlore configure` warns; one sent to this
+computer itself (`localhost`, `127.0.0.1`) never leaves it. There is no
+telemetry, no update check and no crash reporting.
 
 **Seeing every call.** **View → AI calls this session…** lists every call
 SealedLore has made to a model since it started, newest first, and keeps up
@@ -4187,15 +4224,16 @@ model and cost alone, like the rest.
 - **The image endpoint** (Settings → Images; by default the chat
   endpoint's host, or a server of your own, ComfyUI or AUTOMATIC1111 / Forge,
   where nothing leaves your computer or network) gets the approved prompt
-  and the reference pictures you chose, and the picture comes back and is saved with the story (a reply that
+  and the reference pictures you chose, and the picture comes back and is
+  saved with the story (a reply that
   names a download link is fetched from that link, which may be a content
   network, without the key). WaveSpeed takes pictures as links, so the
   reference pictures are uploaded to it first. A redirect of a request that
   carries the prompt or a picture is never followed (it would send them on
   to wherever it points): it is said, and where it pointed. A download
-  follows one, and the key never goes past the endpoint's own address. In a private scene the prompt
-  is written by the private model but still sent there, with a warning in
-  the dialog.
+  follows one, and the key never goes past the endpoint's own address. In a
+  private scene the prompt is written by the private model but still sent
+  there, with a warning in the dialog.
 - **The video endpoint** (Settings → Video, off until it has a key) gets the
   approved prompt and the start and end pictures you chose (uploaded first
   to WaveSpeed), then is asked after the video until it is done; the video is
@@ -4213,7 +4251,8 @@ model and cost alone, like the rest.
   A `private/` model's attestation is fetched through
   NanoGPT and checked against Sigstore's public records and Tinfoil's latest
   release on GitHub, over https only, its checks' redirects included; what
-  the app sends it is sealed first (see "Private scenes"). Everything else the app does with the story is paused until the
+  the app sends it is sealed first (see "Private scenes"). Everything else the
+  app does with the story is paused until the
   scene ends, and only the summary you approve goes back into it. "In
   memory" keeps the scene's messages off the disk; its calls are logged
   without content, so the cost still adds up.
@@ -4323,11 +4362,12 @@ closes, in a folder of the app's own in your session's runtime folder, which
 the next start removes if a crash left it. Swap
 and hibernation are the system's own and outside the app's reach: the system
 may write the app's memory there, a memory-only chat or scene included. An
-encrypted disk, or encrypted swap, covers them. On Linux you can also turn swap off while you
-use the app (`sudo swapoff -a`, then `sudo swapon -a` afterwards); turning it
-off moves what is already in swap back into memory, so it needs enough free
-RAM. The app can't lock its own memory against swapping instead: an ordinary
-user may lock only a few megabytes (`ulimit -l`), far less than it uses.
+encrypted disk, or encrypted swap, covers them. On Linux you can also turn
+swap off while you use the app (`sudo swapoff -a`, then `sudo swapon -a`
+afterwards); turning it off moves what is already in swap back into memory, so
+it needs enough free RAM. The app can't lock its own memory against swapping
+instead: an ordinary user may lock only a few megabytes (`ulimit -l`), far
+less than it uses.
 
 ### On Windows
 
@@ -4349,9 +4389,9 @@ what the app can promise on the machine itself.
 - **Other programs you run can read the app's memory.** On Linux the app
   blocks this; Windows has nothing equivalent.
 - **Memory can reach the disk**, as swap can on Linux. Windows writes memory
-  to `pagefile.sys` and `hiberfil.sys`, which are unencrypted without BitLocker or Device
-  Encryption. With Device Encryption on, its recovery key is usually stored
-  in your Microsoft account.
+  to `pagefile.sys` and `hiberfil.sys`, which are unencrypted without
+  BitLocker or Device Encryption. With Device Encryption on, its recovery key
+  is usually stored in your Microsoft account.
 - **Screen capture: private windows are left out.** While a private scene or
   a TEE or end-to-end encrypted chat is open, the window is kept out of
   screen capture. That covers Recall on Copilot+ PCs, screenshots, screen
