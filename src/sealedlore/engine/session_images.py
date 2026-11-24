@@ -32,6 +32,7 @@ from sealedlore.engine.portraits import edit_prompt, restyle_prompt, with_lead
 from sealedlore.engine.prompt import assemble_chat, assemble_question
 from sealedlore.engine.scene_state import log_on_path, scene_at
 from sealedlore.engine.video_prompt import (
+    VIDEO_PROMPT_MAX_TOKENS,
     build_video_question,
     parse_video_prompt,
     seconds_words,
@@ -355,12 +356,13 @@ class ImageRuntime:
             provider, model = self.private_provider, span.model
         else:
             provider, model = self.provider, model or self.image_prompt_model
+        limit = VIDEO_PROMPT_MAX_TOKENS if kind == "video_prompt" else IMAGE_PROMPT_MAX_TOKENS
         request = ChatRequest(
             model=model,
             # None in a private scene: its prompt is the private model's.
             extra_body=self.route_for("image_prompt", model),
             messages=prompt.messages,
-            params=self.side_params(model, max_tokens=IMAGE_PROMPT_MAX_TOKENS, temperature=0.7),
+            params=self.side_params(model, max_tokens=limit, temperature=0.7),
             use_cache_control=self._cache_control_for(model) and model == self.model,
             cache_ttl=self.config.cache_ttl,
         )

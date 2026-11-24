@@ -362,6 +362,24 @@ def test_the_writer_rides_the_story_and_is_logged_as_a_video_prompt(
     assert [use.ref_id for use in offered] == ["ref-1"]
 
 
+def test_the_video_prompt_writer_has_the_video_prompt_s_room_and_a_picture_s_its_own(
+    tmp_path: Path, saved: StoryBundle, monkeypatch
+):
+    """Both were sent at the picture prompt's limit; the video's own constant
+    went unused (they are the same 3000 today)."""
+    from sealedlore.engine import session_images
+
+    monkeypatch.setattr(session_images, "VIDEO_PROMPT_MAX_TOKENS", 1234)
+    monkeypatch.setattr(session_images, "IMAGE_PROMPT_MAX_TOKENS", 2345)
+    session = make_session(
+        tmp_path, saved, ['{"prompt": "He turns."}', '{"prompt": "A man at a door."}']
+    )
+    session.write_video_prompt("", duration="5", audio=False, start=start_frame())
+    assert session.provider.requests[-1].params.max_tokens == 1234
+    session.write_image_prompt("the door")
+    assert session.provider.requests[-1].params.max_tokens == 2345
+
+
 def test_video_is_off_without_a_key_of_its_own(tmp_path: Path, saved: StoryBundle):
     session = make_session(tmp_path, saved, [])
     assert session.video_client() is None
