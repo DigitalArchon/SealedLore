@@ -16,16 +16,17 @@ and the libraries it loads.
 
 PySide6-Essentials 6.11.3 and shiboken6 6.11.3, which contain Qt 6.11.3, are
 in `opt/python3.12/lib/python3.12/site-packages/PySide6` and `shiboken6`,
-unmodified. They are used under the GNU Lesser General Public License,
-version 3 (`texts/LGPL-3.0.txt`, which adds to `texts/GPL-3.0.txt`).
+unmodified, less what SealedLore never loads: the Python bindings it doesn't
+import (it keeps QtCore, QtGui, QtWidgets, QtNetwork, QtMultimedia and
+QtTest), QML's modules, Qt's translations, the type stubs, the developer tools
+and headers, and the plugins and libraries none of what is kept loads. They
+are used under the GNU Lesser General Public License, version 3
+(`texts/LGPL-3.0.txt`, which adds to `texts/GPL-3.0.txt`).
 
 - **Source:** Qt 6.11.3 at <https://download.qt.io/archive/qt/6.11/6.11.3/single/>
   and Qt for Python 6.11.3 at
   <https://download.qt.io/official_releases/QtForPython/pyside6/PySide6-6.11.3-src/>
   (also tag `v6.11.3` of <https://code.qt.io/cgit/pyside/pyside-setup.git>).
-OpenSSL is Ubuntu's 3.0.2, with the security fixes Ubuntu has backported to
-it (`3.0.2-0ubuntu1.30`); `tor --version` names it 3.0.2.
-
 - **Replacing them:** extract the AppImage, put your own build of these
   libraries in place of the bundled ones, and run `AppRun` from the extracted
   folder (or repack it with appimagetool).

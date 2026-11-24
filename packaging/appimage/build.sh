@@ -41,8 +41,9 @@
 #     run against;
 #   - SealedLore and its packages, at the versions this repo is tested with,
 #     and PySide6-Essentials rather than PySide6: the add-ons are hundreds of
-#     megabytes the app never imports. Of the packages, none only tokenizers'
-#     unused downloader needs (lock.sh's NOT_SHIPPED);
+#     megabytes the app never imports. Of Essentials, only what the app loads
+#     (trim_qt.py); of the packages, none only tokenizers' unused downloader
+#     needs (lock.sh's NOT_SHIPPED);
 #   - the X11 helper libraries Qt's xcb plugin needs and many systems lack,
 #     taken from Debian 11 (built for glibc <= 2.17) rather than from whatever
 #     machine runs this script — a host's copy can need a newer glibc than the
@@ -331,10 +332,17 @@ if not wanted <= found:
 print(f"kept {len(kept)} of the add-ons' files, removed {removed}")
 ADDONS
 find "$QT" -type d -empty -delete
-# Qt's developer tools and headers: designer, linguist, the QML tooling.
-rm -rf "$QT"/{include,typesystems,glue,scripts,examples,doc} \
-       "$QT"/{assistant,designer,linguist,lrelease,lupdate,qmlformat,qmllint,qmlls,balsam,balsamui} \
-       "$QT"/Qt/libexec "$QT"/Qt/plugins/designer "$QT"/Qt/plugins/qmltooling
+# Qt's developer tools and headers: designer, linguist, the QML tooling, and
+# the CMake files and headers bindings are built against.
+rm -rf "$QT"/{include,typesystems,glue,scripts,examples,doc,lib/cmake} \
+       "$QT"/{assistant,designer,linguist,lrelease,lupdate,qmlformat,qmllint,qmlls,balsam,balsamui,svgtoqml} \
+       "$QT"/Qt/libexec "$SITE"/shiboken6/{include,lib/cmake}
+# Of Essentials, only what the app loads (trim_qt.py says what that is): the
+# bindings it imports, the plugins of the kinds a desktop window, the network
+# and video load, and the libraries those need (3.5.0b1's 241 MB of PySide6
+# to 136). It stops the build if anything kept needs a library that isn't there.
+"$PYTHON" -s "$SRC/packaging/appimage/trim_qt.py" "$SITE"
+find "$QT" "$SITE/shiboken6" -type d -empty -delete
 # ONNX Runtime's model tools (transformer optimisers, quantisation, the
 # converters): the app only runs a model (providers/local_embeddings.py), and
 # importing onnxruntime loads none of them.
@@ -516,8 +524,9 @@ fi
 # in the Python base needs a library that went.
 "$PYTHON" -s -c "import sealedlore.gui.app, ssl, hashlib, sqlite3, lzma, bz2, ctypes, dbm"
 # Video: QtMultimedia loads, and its FFmpeg plugin resolves (from the
-# AppImage, or libraries every desktop with sound has: libpulse, X11).
-"$PYTHON" -s -c "import PySide6.QtMultimedia"
+# AppImage, or libraries every desktop with sound has: libpulse, X11). QtTest
+# is what the lab walk drives the window with.
+"$PYTHON" -s -c "import PySide6.QtMultimedia, PySide6.QtTest"
 missing="$(LD_LIBRARY_PATH="$X11LIB" ldd "$QT/Qt/plugins/multimedia/libffmpegmediaplugin.so" \
     | grep 'not found' || true)"
 if [ -n "$missing" ]; then

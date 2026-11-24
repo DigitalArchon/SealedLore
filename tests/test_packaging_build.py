@@ -1,13 +1,15 @@
 """The AppImage build's own guarantees (packaging/appimage/): the commit built as
 committed whatever git's settings, nothing of this machine's uv settings in a lock,
-every floor an .in file sets met by its lock, what of the packages ships (and that
-what ships has what it needs), the tokenizer fetched as every other
+every floor an .in file sets met by its lock, what of the packages and of Qt ships
+(and that what ships has what it needs), the tokenizer fetched as every other
 download is, and `build.sh check`. Nothing here builds anything or uses the network:
 the scripts' own blocks are run on stand-ins."""
 
 from __future__ import annotations
 
+import ast
 import hashlib
+import importlib.util
 import os
 import re
 import shlex
@@ -396,3 +398,154 @@ def test_the_appimage_names_where_its_updates_are_and_a_release_carries_them():
     assert stamp < remake < pack.index('sha256sum "$NAME"')
     release = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
     assert '"dist/$APPIMAGE.zsync"' in release
+
+
+# --- what of Qt ships ---------------------------------------------------------------------
+
+
+def _trim_qt():
+    spec = importlib.util.spec_from_file_location("trim_qt", APPIMAGE / "trim_qt.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+# A stand-in PySide6: each file and what it names as NEEDED.
+STAND_IN = {
+    "PySide6/QtCore.abi3.so": [
+        "libpyside6.abi3.so.6.11",
+        "libshiboken6.abi3.so.6.11",
+        "libQt6Core.so.6",
+    ],
+    "PySide6/QtWidgets.abi3.so": ["libQt6Widgets.so.6", "libc.so.6"],
+    "PySide6/QtMultimedia.abi3.so": ["libQt6Multimedia.so.6"],
+    "PySide6/QtQml.abi3.so": ["libpyside6qml.abi3.so.6.11", "libQt6Qml.so.6"],
+    "PySide6/libpyside6.abi3.so.6.11": ["libQt6Core.so.6"],
+    "PySide6/libpyside6qml.abi3.so.6.11": ["libQt6Qml.so.6"],
+    "PySide6/Qt/lib/libQt6Core.so.6": ["libicuuc.so.73"],
+    "PySide6/Qt/lib/libicuuc.so.73": [],
+    "PySide6/Qt/lib/libQt6Gui.so.6": ["libQt6Core.so.6", "libGL.so.1"],
+    "PySide6/Qt/lib/libQt6Widgets.so.6": ["libQt6Gui.so.6"],
+    "PySide6/Qt/lib/libQt6Multimedia.so.6": ["libQt6Gui.so.6"],
+    "PySide6/Qt/lib/libQt6Quick.so.6": ["libQt6Qml.so.6"],
+    "PySide6/Qt/lib/libQt6Qml.so.6": ["libQt6Core.so.6"],
+    "PySide6/Qt/lib/libQt6Designer.so.6": ["libQt6Widgets.so.6"],
+    "PySide6/Qt/lib/libQt6XcbQpa.so.6": ["libQt6Gui.so.6"],
+    "PySide6/Qt/lib/libQt6Sql.so.6": ["libQt6Core.so.6"],
+    "PySide6/Qt/plugins/platforms/libqxcb.so": ["libQt6XcbQpa.so.6"],
+    # dlopen()ed: nothing names it, and it is why Quick and Qml stay.
+    "PySide6/Qt/plugins/multimedia/libffmpegmediaplugin.so": ["libQt6Quick.so.6"],
+    "PySide6/Qt/plugins/sqldrivers/libqsqlite.so": ["libQt6Sql.so.6"],
+    "PySide6/Qt/plugins/imageformats/libqpdf.so": ["libQt6Pdf.so.6"],
+    "PySide6/Qt/plugins/imageformats/libqjpeg.so": ["libQt6Gui.so.6"],
+    "shiboken6/Shiboken.abi3.so": ["libshiboken6.abi3.so.6.11"],
+    "shiboken6/libshiboken6.abi3.so.6.11": [],
+}
+NOT_ELF = [
+    "PySide6/__init__.py",
+    "PySide6/QtCore.pyi",
+    "PySide6/QtQml.pyi",
+    "PySide6/Qt/qml/QtQuick/Controls/Button.qml",
+    "PySide6/Qt/translations/qtbase_de.qm",
+    "PySide6/Qt/metatypes/qt6core_metatypes.json",
+    "shiboken6/__init__.py",
+]
+
+
+def _stand_in(site: Path) -> None:
+    for name in STAND_IN:
+        (site / name).parent.mkdir(parents=True, exist_ok=True)
+        (site / name).write_bytes(b"\x7fELF" + name.encode())
+    for name in NOT_ELF:
+        (site / name).parent.mkdir(parents=True, exist_ok=True)
+        (site / name).write_text("not code", encoding="utf-8")
+    records = {
+        "pyside6_essentials-6.11.3": [n for n in [*STAND_IN, *NOT_ELF] if n.startswith("PySide6")],
+        "pyside6_addons-6.11.3": ["PySide6/Qt/lib/libQt6Pdf.so.6"],
+        "shiboken6-6.11.3": [n for n in [*STAND_IN, *NOT_ELF] if n.startswith("shiboken6")],
+    }
+    for wheel, names in records.items():
+        (site / f"{wheel}.dist-info").mkdir()
+        rows = "".join(f"{name},sha256=x,1\n" for name in names)
+        (site / f"{wheel}.dist-info" / "RECORD").write_text(rows, encoding="utf-8")
+
+
+def _needed(path: Path) -> list[str]:
+    for name, needs in STAND_IN.items():
+        if path.as_posix().endswith(name):
+            return needs
+    raise AssertionError(f"read {path}, which has no NEEDED here")
+
+
+def test_only_what_the_app_loads_of_qt_ships_and_what_that_needs(tmp_path: Path):
+    """The bindings the app imports, the plugins of the kinds a window, the network
+    and video load (dlopen()ed: roots of the closure, never found by it), and the
+    libraries those need by NEEDED, in turn; everything else goes. The FFmpeg
+    plugin needs Quick, so Quick and Qml stay without their binding; Designer,
+    which nothing kept needs, goes."""
+    trim_qt = _trim_qt()
+    _stand_in(tmp_path)
+    went, missing = trim_qt.trim(tmp_path, needed=_needed)
+    assert missing == []
+    left = sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob("*") if p.is_file())
+    assert [n for n in left if ".dist-info/" not in n] == sorted(
+        [
+            "PySide6/QtCore.abi3.so",
+            "PySide6/QtWidgets.abi3.so",
+            "PySide6/QtMultimedia.abi3.so",
+            "PySide6/__init__.py",
+            "PySide6/libpyside6.abi3.so.6.11",
+            "PySide6/Qt/lib/libQt6Core.so.6",
+            "PySide6/Qt/lib/libicuuc.so.73",
+            "PySide6/Qt/lib/libQt6Gui.so.6",
+            "PySide6/Qt/lib/libQt6Widgets.so.6",
+            "PySide6/Qt/lib/libQt6Multimedia.so.6",
+            "PySide6/Qt/lib/libQt6Quick.so.6",
+            "PySide6/Qt/lib/libQt6Qml.so.6",
+            "PySide6/Qt/lib/libQt6XcbQpa.so.6",
+            "PySide6/Qt/plugins/platforms/libqxcb.so",
+            "PySide6/Qt/plugins/multimedia/libffmpegmediaplugin.so",
+            "PySide6/Qt/plugins/imageformats/libqjpeg.so",
+            "shiboken6/Shiboken.abi3.so",
+            "shiboken6/libshiboken6.abi3.so.6.11",
+            "shiboken6/__init__.py",
+        ]
+    )
+    for folder in ("qml", "translations", "metatypes", "plugins/sqldrivers"):
+        assert not (tmp_path / "PySide6/Qt" / folder).exists()
+    assert sum(total for _, total in went) > 0
+    assert trim_qt.BINDINGS >= {"QtCore", "QtGui", "QtWidgets", "QtNetwork", "QtMultimedia"}
+    assert "QtTest" in trim_qt.BINDINGS, "the lab walk drives the AppImage's window with it"
+
+
+def test_the_build_stops_if_anything_kept_needs_a_library_that_isnt_there(tmp_path: Path):
+    """A Qt bump whose xcb plugin needs a library no longer in the wheel, or one the
+    trim took: kept, it would never load, and Qt says nothing unless asked."""
+    trim_qt = _trim_qt()
+    _stand_in(tmp_path)
+    (tmp_path / "PySide6/Qt/lib/libQt6XcbQpa.so.6").unlink()
+    _, missing = trim_qt.trim(tmp_path, needed=_needed)
+    assert missing == ["PySide6/Qt/plugins/platforms/libqxcb.so needs libQt6XcbQpa.so.6"]
+
+
+def test_the_trim_is_run_by_the_build_and_stops_it():
+    step = block(BUILD, 'log "Trimming what the app never loads"', 'log "X11 helper libraries')
+    assert '"$PYTHON" -s "$SRC/packaging/appimage/trim_qt.py" "$SITE"' in step
+    source = (APPIMAGE / "trim_qt.py").read_text(encoding="utf-8")
+    assert "sys.exit(" in source.split("def main", 1)[1]
+
+
+def test_every_qt_module_the_app_imports_ships():
+    """The suite runs on the venv's whole PySide6, so a new `from PySide6.QtSvg
+    import ...` in the app would pass every test and fail only in the AppImage,
+    whose other bindings are gone: every Qt module src/ names must be one the
+    trim keeps."""
+    named: set[str] = set()
+    for path in sorted((ROOT / "src").rglob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        named.update(re.findall(r"\bPySide6\.(Qt\w+)", text))
+        for node in ast.walk(ast.parse(text, filename=str(path))):
+            if isinstance(node, ast.ImportFrom) and node.module == "PySide6":
+                named.update(alias.name for alias in node.names if alias.name.startswith("Qt"))
+    assert {"QtCore", "QtGui", "QtWidgets", "QtMultimedia", "QtNetwork"} <= named
+    assert named <= _trim_qt().BINDINGS, sorted(named - _trim_qt().BINDINGS)
