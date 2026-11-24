@@ -41,7 +41,8 @@
 #     run against;
 #   - SealedLore and its packages, at the versions this repo is tested with,
 #     and PySide6-Essentials rather than PySide6: the add-ons are hundreds of
-#     megabytes the app never imports;
+#     megabytes the app never imports. Of the packages, none only tokenizers'
+#     unused downloader needs (lock.sh's NOT_SHIPPED);
 #   - the X11 helper libraries Qt's xcb plugin needs and many systems lack,
 #     taken from Debian 11 (built for glibc <= 2.17) rather than from whatever
 #     machine runs this script — a host's copy can need a newer glibc than the
@@ -219,6 +220,51 @@ fetch_uv
 "${PIP[@]}" "$BUILD"/wheel/sealedlore-"$VERSION"-*.whl
 "$PYTHON" -s -c "import sealedlore.gui.app, PySide6.QtWidgets, tiktoken, numpy, httpx, pydantic"
 SITE="$("$PYTHON" -s -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
+# --no-deps installs what the lock names and nothing it doesn't, so a package
+# the lock leaves out (lock.sh's NOT_SHIPPED) is one nothing shipped may need:
+# every package's requirements must be installed, at a version they accept,
+# but for the two below.
+"$PYTHON" -s - "$SITE" <<'REQUIRES'
+import importlib.metadata as md
+import re
+import sys
+
+from packaging.requirements import Requirement
+
+# What a shipped package asks for that the AppImage holds otherwise, or never calls.
+EXCUSED = {
+    # The project names PySide6, all of it: Essentials and the add-ons' Qt
+    # Multimedia are what it uses.
+    ("sealedlore", "pyside6"),
+    # Tokenizer.from_pretrained's downloader, which the app never calls:
+    # providers/local_embeddings.py reads the tokenizer.json it fetched itself.
+    ("tokenizers", "huggingface-hub"),
+}
+
+
+def normalise(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+dists = list(md.distributions(path=[sys.argv[1]]))
+have = {normalise(d.metadata["Name"]): d.version for d in dists}
+unmet = []
+for dist in sorted(dists, key=lambda d: normalise(d.metadata["Name"])):
+    name = normalise(dist.metadata["Name"])
+    for text in dist.requires or []:
+        wanted = Requirement(text)
+        if wanted.marker and not wanted.marker.evaluate({"extra": ""}):
+            continue
+        need = normalise(wanted.name)
+        if (name, need) in EXCUSED:
+            continue
+        if need not in have:
+            unmet.append(f"{name} needs {wanted}, which isn't installed")
+        elif not wanted.specifier.contains(have[need], prereleases=True):
+            unmet.append(f"{name} needs {wanted}, and {need} is {have[need]}")
+if unmet:
+    sys.exit("\n".join(unmet) + "\n(lock.sh's NOT_SHIPPED leaves out something a package needs)")
+REQUIRES
 # pip writes the build folder's path into the console scripts it adds (their
 # first line) and into direct_url.json, and each one's hash into the package's
 # RECORD. AppRun runs `python -m`, so the scripts go; direct_url.json only
@@ -289,6 +335,10 @@ find "$QT" -type d -empty -delete
 rm -rf "$QT"/{include,typesystems,glue,scripts,examples,doc} \
        "$QT"/{assistant,designer,linguist,lrelease,lupdate,qmlformat,qmllint,qmlls,balsam,balsamui} \
        "$QT"/Qt/libexec "$QT"/Qt/plugins/designer "$QT"/Qt/plugins/qmltooling
+# ONNX Runtime's model tools (transformer optimisers, quantisation, the
+# converters): the app only runs a model (providers/local_embeddings.py), and
+# importing onnxruntime loads none of them.
+rm -rf "$SITE"/onnxruntime/{transformers,quantization,tools}
 "$PYTHON" -s -m pip uninstall --quiet --yes pip setuptools wheel 2>/dev/null || true
 # Parts of the Python base the app never imports, with the libraries only they
 # use: readline and gdbm are GPL, crypt's libxcrypt is LGPL, and Tk is the
@@ -474,6 +524,37 @@ if [ -n "$missing" ]; then
     echo "the FFmpeg plugin can't resolve: $missing" >&2
     exit 1
 fi
+# The built-in embeddings load and run as the app loads them, with neither the
+# hub nor onnxruntime's tools: local_embeddings._model reads a tokenizer file
+# (a small one made here) and opens an ONNX session on the CPU (onnxruntime's
+# own sample model in the model's place), and both then run.
+EMBED="$BUILD/embeddings-check"
+rm -rf "$EMBED" && mkdir -p "$EMBED"
+"$PYTHON" -s - "$EMBED" <<'EMBEDDINGS'
+import sys
+from pathlib import Path
+
+import numpy
+import onnxruntime.datasets
+from tokenizers import Tokenizer, models, pre_tokenizers
+
+from sealedlore.providers import local_embeddings
+
+folder = Path(sys.argv[1])
+made = Tokenizer(models.WordLevel({"[UNK]": 0, "the": 1, "farmhouse": 2}, unk_token="[UNK]"))
+made.pre_tokenizer = pre_tokenizers.Whitespace()
+made.save(str(folder / "tokenizer.json"))
+sample = Path(onnxruntime.datasets.get_example("mul_1.onnx"))
+(folder / "model_int8.onnx").write_bytes(sample.read_bytes())
+tokenizer, session = local_embeddings._model(folder)
+ids = [e.ids for e in tokenizer.encode_batch(["the farmhouse", "snow"])]
+x = numpy.arange(1, 7, dtype=numpy.float32).reshape(3, 2)
+(y,) = session.run(None, {"X": x})
+if ids != [[1, 2], [0]] or not numpy.array_equal(y, x * x):
+    sys.exit(f"the built-in embeddings' runtime gave {ids} and {y.tolist()}")
+print(f"onnxruntime {onnxruntime.__version__} on {session.get_providers()}, its tokenizer read")
+EMBEDDINGS
+rm -rf "$EMBED"
 # Phone access: QtNetwork (in Essentials) and what it loads on first use; and
 # the bundled tor, run with the environment the app gives it (from one holding
 # AppRun's library path, which tor must not inherit), says it is the version

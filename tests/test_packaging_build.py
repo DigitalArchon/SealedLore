@@ -1,6 +1,7 @@
 """The AppImage build's own guarantees (packaging/appimage/): the commit built as
 committed whatever git's settings, nothing of this machine's uv settings in a lock,
-every floor an .in file sets met by its lock, the tokenizer fetched as every other
+every floor an .in file sets met by its lock, what of the packages ships (and that
+what ships has what it needs), the tokenizer fetched as every other
 download is, and `build.sh check`. Nothing here builds anything or uses the network:
 the scripts' own blocks are run on stand-ins."""
 
@@ -12,6 +13,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
@@ -194,6 +196,91 @@ def test_the_encryption_stack_moves_with_no_relock():
     wanted = (APPIMAGE / "requirements.in").read_text(encoding="utf-8")
     for name in ("tinfoil", "tinfoil-ehbp", "pyhpke"):
         assert f"{name}=={locked[name]}" in wanted
+
+
+NOT_SHIPPED = {"huggingface-hub", "hf-xet", "fsspec", "pyyaml", "tqdm", "click", "filelock"}
+
+
+def test_the_hub_and_what_only_it_brings_are_resolved_but_never_shipped():
+    """tokenizers needs huggingface-hub by its metadata, for Tokenizer.from_pretrained,
+    which the app never calls: the hub and what nothing else needs of it (hf-xet's
+    12 MB of native code among them) are left out of the lock, and the build
+    installs only what the lock names. The hub is held in requirements.in, so a
+    relock resolves the same tree and moves nothing that ships to suit a newer one."""
+    lock_sh = (APPIMAGE / "lock.sh").read_text(encoding="utf-8")
+    named = re.search(r"^NOT_SHIPPED=\(([^)]*)\)$", lock_sh, re.M)
+    assert named and set(named.group(1).split()) == NOT_SHIPPED
+    assert '--no-emit-package "$package"' in lock_sh
+    assert 'compile requirements.in requirements.lock "${left_out[@]}"' in lock_sh
+    locked = _locked()
+    assert not NOT_SHIPPED & set(locked)
+    assert {"tokenizers", "onnxruntime"} <= set(locked)
+    wanted = (APPIMAGE / "requirements.in").read_text(encoding="utf-8")
+    assert re.search(r"^huggingface-hub==[0-9.]+$", wanted, re.M)
+    assert "--no-deps" in BUILD
+    assert '--require-hashes -r "$SRC/packaging/appimage/requirements.lock"' in BUILD
+
+
+def _requires_check(tmp_path: Path, dists: dict[str, list[str]]) -> subprocess.CompletedProcess:
+    """build.sh's check that every shipped package's requirements are shipped, run
+    on a folder of stand-in packages: name-version -> its Requires-Dist lines."""
+    code = block(BUILD, "<<'REQUIRES'\n", "\nREQUIRES\n").split("\n", 1)[1].rsplit("\n", 2)[0]
+    site = tmp_path / "site"
+    for spec, requires in dists.items():
+        name, version = spec.rsplit("-", 1)
+        info = site / f"{name.replace('-', '_')}-{version}.dist-info"
+        info.mkdir(parents=True)
+        lines = ["Metadata-Version: 2.1", f"Name: {name}", f"Version: {version}"]
+        lines += [f"Requires-Dist: {line}" for line in requires]
+        (info / "METADATA").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    script = tmp_path / "requires.py"
+    script.write_text(code, encoding="utf-8")
+    return subprocess.run(
+        [sys.executable, "-I", str(script), str(site)], capture_output=True, text=True
+    )
+
+
+def test_the_build_stops_if_a_package_it_ships_needs_one_the_lock_left_out(tmp_path: Path):
+    """--no-deps never notices a requirement left out: a relock that left out
+    something a shipped package needs would ship it broken. Only the hub for
+    tokenizers, and PySide6 for SealedLore (Essentials stands in), are excused."""
+    shipped = {
+        "sealedlore-3.5.0": ["PySide6<6.12,>=6.6", "httpx>=0.27"],
+        "tokenizers-0.23.3": ["huggingface-hub<3.0,>=0.16.4", "pytest; extra == 'testing'"],
+        "httpx-0.28.1": ["anyio", "click==8.*; extra == 'cli'"],
+        "anyio-4.15.1": [],
+    }
+    passed = _requires_check(tmp_path / "met", shipped)
+    assert passed.returncode == 0, passed.stderr
+    unmet = dict(shipped, **{"rich-15.0.0": ["click>=8"], "openai-3.36.1": ["anyio>=5"]})
+    failed = _requires_check(tmp_path / "unmet", unmet)
+    assert failed.returncode == 1
+    assert "rich needs click>=8, which isn't installed" in failed.stderr
+    assert "openai needs anyio>=5, and anyio is 4.15.1" in failed.stderr
+    assert "NOT_SHIPPED" in failed.stderr
+
+
+def test_the_builds_embeddings_check_runs_the_apps_own_path(tmp_path: Path):
+    """The build proves the built-in embeddings still load and run without the hub
+    and onnxruntime's model tools, through local_embeddings._model itself: a
+    tokenizer read from its file, an ONNX session on the CPU. Run here on this
+    venv's onnxruntime and tokenizers, as the build runs it on the AppImage's."""
+    pytest.importorskip("onnxruntime")
+    pytest.importorskip("tokenizers")
+    step = block(BUILD, 'log "Trimming what the app never loads"', 'log "X11 helper libraries')
+    assert 'rm -rf "$SITE"/onnxruntime/{transformers,quantization,tools}' in step
+    code = block(BUILD, "<<'EMBEDDINGS'\n", "\nEMBEDDINGS\n").split("\n", 1)[1].rsplit("\n", 2)[0]
+    assert "local_embeddings._model(folder)" in code
+    script = tmp_path / "embeddings.py"
+    script.write_text(code, encoding="utf-8")
+    folder = tmp_path / "check"
+    folder.mkdir()
+    env = dict(os.environ, PYTHONPATH=str(ROOT / "src"), PYTHONDONTWRITEBYTECODE="1")
+    ran = subprocess.run(
+        [sys.executable, str(script), str(folder)], env=env, capture_output=True, text=True
+    )
+    assert ran.returncode == 0, ran.stderr
+    assert "['CPUExecutionProvider'], its tokenizer read" in ran.stdout
 
 
 # --- the tokenizer ------------------------------------------------------------------------

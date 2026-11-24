@@ -26,14 +26,29 @@ if [ "${UPGRADE:-0}" = 1 ]; then
     upgrade="--upgrade"
 fi
 
+# Resolved with the rest but never shipped: tokenizers needs huggingface-hub by
+# its metadata, for Tokenizer.from_pretrained, which the app never calls
+# (providers/local_embeddings.py reads the tokenizer.json it fetched and checked
+# itself), and these are the hub and what only the hub needs (the lock's "via"
+# lines said so when they were left out, Nov 24 2026: 27 MB, 12 of it hf-xet's).
+# build.sh installs only what the lock names, and stops if a package it ships
+# needs one that isn't there (but the hub, for tokenizers).
+NOT_SHIPPED=(huggingface-hub hf-xet fsspec pyyaml tqdm click filelock)
+
 cd "$HERE"
-compile() {  # compile <in> <out>
-    "$UV" pip compile --quiet "$1" -o "$2" \
+compile() {  # compile <in> <out> [uv option ...]
+    local in="$1" out="$2"
+    shift 2
+    "$UV" pip compile --quiet "$in" -o "$out" \
         --python-version 3.12 --python-platform x86_64-manylinux_2_34 \
         --only-binary :all: --generate-hashes \
-        --custom-compile-command "packaging/appimage/lock.sh" ${upgrade:+"$upgrade"}
+        --custom-compile-command "packaging/appimage/lock.sh" ${upgrade:+"$upgrade"} "$@"
 }
-compile requirements.in requirements.lock
+left_out=()
+for package in "${NOT_SHIPPED[@]}"; do
+    left_out+=(--no-emit-package "$package")
+done
+compile requirements.in requirements.lock "${left_out[@]}"
 # setuptools is only published as a wheel for every Python; the backend's own
 # build needs nothing else.
 compile build-requirements.in build-requirements.lock

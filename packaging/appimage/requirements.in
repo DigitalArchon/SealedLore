@@ -35,6 +35,10 @@ keyring==25.7.0
 # adopted (Nov 20 2026).
 onnxruntime==1.31.1
 tokenizers==0.23.3
+# Never shipped (lock.sh's NOT_SHIPPED leaves it and what only it needs out of
+# the lock), but resolved with the rest: held here, so a relock never moves a
+# package that ships to suit a newer hub.
+huggingface-hub==2.4.0
 # The CA bundle httpx, requests and sigstore trust. 2026.10.19 drops emSign
 # ECC Root CA - G3, whose eMudhra intermediates had recoverable keys (Oct
 # 2026); the floor keeps a relock from standing still on an older one. Pinned

@@ -165,7 +165,10 @@ it (`3.0.2-0ubuntu1.30`); `tor --version` names it 3.0.2.
 ## Python packages
 
 Installed unmodified in `opt/python3.12/lib/python3.12/site-packages`, and
-licence paths are relative to that folder.
+licence paths are relative to that folder. ONNX Runtime is there less its
+model tools (its `transformers`, `quantization` and `tools` folders), which
+SealedLore never loads. tokenizers names huggingface-hub as a requirement,
+for a downloader SealedLore never calls, so it isn't included.
 
 @PYTHON_PACKAGES@
 
