@@ -82,8 +82,6 @@ MATCHER = "\x01"
 JOINER = "\n" + MATCHER
 # Secondary keys' logic (`world_info_logic`).
 AND_ANY, NOT_ALL, NOT_ANY, AND_ALL = 0, 1, 2, 3
-# The kinds of turn an entry's triggers name, as SealedLore makes them.
-TRIGGERS = ("normal", "continue", "impersonate", "swipe", "regenerate", "quiet")
 
 _PATTERN = re.compile(r"^/([\s\S]+?)/([gimsuy]*)$")
 

@@ -223,8 +223,6 @@ LORE_FIELDS = (
 LORE_FIRINGS = ("sealedlore", "sillytavern")
 ROUND_ORDERS = ("together", "after")
 SILLYTAVERN_FIELDS = tuple(TavernWorldInfo.model_fields)
-# A starting scene's fields, for a follow-up (engine/followup.py).
-SCENE_FIELDS = ("location", "time_of_day", "situation", "present")
 # What a review may propose, and what a follow-up on a story not yet begun
 # may change: no generation, model or prompt, and cards, entries and the
 # starting scene besides.

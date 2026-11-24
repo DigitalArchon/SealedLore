@@ -333,11 +333,6 @@ def wording(
     return _phrase(own) or usual_wording(label, look=look, texts=texts)
 
 
-def own_wording(character: Character, label: str, *, look: bool = False) -> str:
-    """The card's own words for a row or column, "" for none."""
-    return _phrase(_words(character, look).get(label_key(label), ""))
-
-
 def set_wording(character: Character, label: str, words: str, *, look: bool = False) -> bool:
     """The words a row or column is drawn with kept on the card, or taken off
     (blank); whether anything changed."""

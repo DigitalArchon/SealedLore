@@ -66,11 +66,6 @@ def alive() -> int:
         return _alive
 
 
-def collector_paused() -> bool:
-    with _lock:
-        return _paused
-
-
 def _began() -> None:
     global _alive, _paused
     with _lock:

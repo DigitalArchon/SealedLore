@@ -65,10 +65,6 @@ PORTRAIT_CAPTION = "portrait"
 
 
 class PortraitRuntime:
-    # The characters whose portrait the last `take_card_pictures` put first
-    # (by id): the window offers a new map avatar from it.
-    portraits_taken: list[str] = []
-
     def picture_cards(self) -> tuple[list[Character], list[LoreEntry]]:
         """Every card that may have a picture now: the characters and the
         enabled lore entries the models may see. A chat's characters, kept for
@@ -431,25 +427,12 @@ class PortraitRuntime:
         self.save()
         return ref
 
-    def portraits_landed(self) -> set[str]:
-        """The cards with a portrait drawn and not yet taken onto them: it
-        comes back while the worker owns the story, and is taken once the
-        job is done (live, Oct 18 2026: the map drew those cards' avatars
-        from their words in between, and again from the portraits)."""
-        taken = set(self.story.card_pictures_taken)
-        return {
-            image.card_id
-            for image in self.generated_images()
-            if image.card_id and image.card_first and image.id not in taken
-        }
-
     def take_card_pictures(self) -> list[str]:
         """Put each picture drawn for this story's cards and not yet taken
         onto its card; the names of the cards that changed. Each is taken
         once (`Story.card_pictures_taken`): one the author later removes
         stays removed. A card gone since is skipped. A chat's characters take
         theirs as a story's do (they are kept for their pictures)."""
-        self.portraits_taken = []
         taken = set(self.story.card_pictures_taken)
         names: list[str] = []
         changed = False
@@ -491,12 +474,8 @@ class PortraitRuntime:
                     pictures.insert(at, ref)
                     old.look, old.expression = "", ""
                     pictures.append(old)
-                    if at == 0 and isinstance(card, Character):
-                        self.portraits_taken.append(card.id)
                 elif image.card_first:
                     pictures.insert(0, ref)
-                    if isinstance(card, Character):
-                        self.portraits_taken.append(card.id)
                 else:
                     pictures.append(ref)
                 names.append(card.name if isinstance(card, Character) else card.title)

@@ -2956,8 +2956,8 @@ class StorySession(
                 revises=revises,
                 change=change,
             )
-        # A TEE reply's record is fetched under these (session_private).
-        self._last_response_id = completed.response_id if completed is not None else None
+        # What `_check_tee` (session_private) reads of the reply: a TEE reply's
+        # response id, to fetch its record, or the enclave it was sealed to.
         self._last_completed = completed
         # An end-to-end encrypted reply: opened with the attested enclave's key.
         self._last_sealed = completed is not None and completed.sealed
@@ -4124,14 +4124,6 @@ class StorySession(
             if character is not None and character_id not in found | gone:
                 delta.already_here.append(Resolved(name=character.name, character_id=character_id))
 
-    def read_scene(
-        self, before: SceneState, *, node: Node, author: Node | None, earlier: str = ""
-    ) -> SceneDelta:
-        """One call on the scene model. Raises ProviderError or ValueError."""
-        request, log_ref = self._scene_request(before, node=node, author=author, earlier=earlier)
-        text, completed = self.provider.complete(request)
-        return self._scene_delta(text, completed, log_ref)
-
     def _scene_request(
         self, before: SceneState, *, node: Node, author: Node | None, earlier: str = ""
     ) -> tuple[ChatRequest, str]:
@@ -4293,10 +4285,6 @@ class StorySession(
         self.character_suggestions.remove(suggestion)
         self.save()
         return card
-
-    def has_card(self, name: str) -> bool:
-        """Whether a cast or supporting card answers to this name."""
-        return any(same_person(name, c) for c in (*self.cast, *self.supporting))
 
     def card_for(self, name: str, *, to_cast: bool = False) -> tuple[Character, bool]:
         """A card for someone the story has by name alone (the scene's "also
