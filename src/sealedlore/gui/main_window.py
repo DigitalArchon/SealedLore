@@ -245,7 +245,6 @@ TAKEN_BACK_FIRST = (
 # than any of them once laid out (gui/tab_rows.py `set_floor`).
 INSPECTOR_PAGES_FLOOR = 420
 PAGE_ABOUT = {
-    "Map": "Where the story is; click where to go, right-click to mark a spot",
     "People": "Who is in the story, by their faces",
     "Scene": "Who is here, where and when, as the story has it",
     "Plot": "The story's clock, facts and events",
@@ -602,7 +601,7 @@ class MainWindow(
         centre_layout.addLayout(self.top_row)
         centre_layout.addWidget(self.find_bar)
         # The branch map shares the transcript's place (Branches, on the branch
-        # bar), as the story's map does (Map, beside Find: window_world.py).
+        # bar).
         self.story_map = StoryMap()
         self.story_map.back_requested.connect(lambda: self.show_map(False))
         self.story_map.select_requested.connect(self._select_from_map)
@@ -717,8 +716,8 @@ class MainWindow(
         self.summaries_panel.chapter_chosen.connect(self._scroll_to_node)
         self.summaries_panel.edit_committed.connect(self._save_summary)
         self.inspector = ContextInspector()
-        # Who is in the story, by their faces: the page a story without a map
-        # opens on (gui/people_page.py).
+        # Who is in the story, by their faces: the page a story opens on
+        # (gui/people_page.py).
         self.people_page = PeoplePage(self._story_pictures)
         self._people_dirty = True
         self._wire_people()
@@ -2272,9 +2271,9 @@ class MainWindow(
         self.show_map(False)
         if self.session is not None:
             # Background chapters of the story being left are logged, not
-            # lost, and its map stops drawing. The same story opened again
-            # was left running: two sessions drew and paid for the same
-            # pieces, and the old one's map art was written over the new's.
+            # lost. The same story opened again was left running: two
+            # sessions did and paid for the same work (the map's art, when
+            # there was a map, the old one's written over the new's).
             self.session.close(wait_seconds=0)
         self.session = session
         self._after_open()

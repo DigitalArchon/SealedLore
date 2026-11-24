@@ -5,10 +5,12 @@ Decoding a picture on two Python threads at once hangs or kills the app
 6.10 offscreen, one thread in `QImage.fromData` beside the GUI thread in
 `QImageReader.read` deadlocked every time within seconds, and two worker
 threads decoding together aborted the process; under one lock, thousands of
-decodes a second and no stall. The play view paints an area on a thread
-(sprites and textures decoded there) while the GUI thread loads thumbnails,
-portraits and the background, so the app itself could freeze. Encoding
-(`QImage.save`) goes through the same plugins, so it takes the lock too.
+decodes a second and no stall. The map's play view (gone with Visual
+Stories, Oct 29 2026) painted an area on a thread while the GUI thread
+loaded thumbnails, portraits and the background, so the app itself could
+freeze; the lock stays so that a decode off the GUI thread never meets one
+on it. Encoding (`QImage.save`) goes through the same plugins, so it takes
+the lock too.
 
 Every decode and encode in the GUI goes through here: `image_from_data`,
 `read_image` (a reader made by the caller: a file or a buffer, auto-transform

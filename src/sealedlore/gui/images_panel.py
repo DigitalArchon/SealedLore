@@ -1,6 +1,5 @@
 """Every picture and video in the story, in one place (the author, Oct 15
-2026): the cast's pictures, the lore's, the story's own, and the map's, each
-a section.
+2026): the cast's pictures, the lore's and the story's own, each a section.
 
 The story's are its background first (the author: it belongs with the
 story's pictures, to be seen, saved, drawn anew or edited), then every
@@ -12,7 +11,7 @@ not twice; taken off the card, it is the story's again. The background drawn
 here shows as the background (`Story.background_drawn_as`), not twice
 either. Cards the plot hasn't brought in are left out unless spoilers are
 shown. Every picture can be drawn again or edited from its menu, as on the
-Cast and Lore pages. The map's are its paintings and postcards.
+cast board and the Lore page.
 """
 
 from __future__ import annotations

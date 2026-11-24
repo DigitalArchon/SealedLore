@@ -135,8 +135,8 @@ NOTICE_HOLD = 6
 class WaitCounter(QObject):
     """A long wait for a read after the passage (`GenerationWorker.waiting`)
     counts up in the status bar: "Reading the scene with … 45 s; Stop skips
-    it". Stop does: the read's call is cancelled, and the roster, clock or
-    map stays as it was. A notice shown meanwhile keeps the bar for
+    it". Stop does: the read's call is cancelled, and the roster or clock
+    stays as it was. A notice shown meanwhile keeps the bar for
     `NOTICE_HOLD` seconds first, so a read's result isn't replaced at once
     by the wait for the next."""
 

@@ -65,14 +65,6 @@ from sealedlore.models.scene import SceneState
 from sealedlore.models.story import STORY_MODEL_FIELDS, Story
 from sealedlore.providers.privacy import held, privacy_of
 
-# How full the map's rooms are (models/area.py `Density`).
-DENSITY_LABELS = {
-    "sparse": "Sparse: the bare essentials",
-    "normal": "Normal",
-    "full": "Full: lived in, cluttered",
-}
-
-
 GENERATE_LABEL = "The model writes the opening from these notes"
 NOTES_TAB = "Storyteller's notes"
 # The storyteller's notes a model wrote (a draft, a follow-up, a plot's

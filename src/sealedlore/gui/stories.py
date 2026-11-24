@@ -125,7 +125,7 @@ class StoryListPanel(QWidget):
         self._thread: BackgroundThread | None = None
         self._results_in = False
         # Phone access (gui/window_phone.py): the shared stories while it is
-        # on, None while it is off; and which stories keep a map (never shared).
+        # on, None while it is off.
         self._phone_shared: set[str] | None = None
         # Stories that can't be opened: never marked as on the phones.
         self._unreadable: set[str] = set()

@@ -1,9 +1,9 @@
 """The main window's side of a simple chat (engine/chat.py). A mixin for `MainWindow`.
 
 A chat uses the window with the storytelling taken out: the composer is a text
-box and the Private button, the inspector shows Story so far, Images and
-Prompt (and Map, when the chat keeps one: window_world), and Setup is the
-system prompt. A part of it can be held in private
+box and the Private button, the inspector shows People (the chat's
+characters, for their pictures alone), Story so far, Media and Prompt, and
+Setup is the system prompt. A part of it can be held in private
 as a story's scene can (window_private). A chat on a TEE model is attested
 when it opens, as a private scene is, and has a private scene's look; one
 kept in memory only is never written anywhere and asks before it is closed.

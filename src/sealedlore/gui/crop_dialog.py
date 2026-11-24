@@ -1,6 +1,7 @@
 """Cropping a picture of one's own as it comes in (the author, Oct 2026): any
-part of it, or the exact shape the app uses for a portrait, a lore picture,
-the background or an isometric view (engine/picture_shapes.py).
+part of it, or the exact shape the app uses for a portrait, a place or lore
+picture or the background; or its own shape, or a square
+(engine/picture_shapes.py).
 
 The frame is kept in the picture's own pixels. The geometry is plain
 functions on (x, y, width, height) tuples, so it is tested without a mouse;

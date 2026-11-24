@@ -6,11 +6,6 @@ created and then set up again (the author, Sept 2026).
 Every chat is also asked where it is kept: on disk, as any story, or in
 memory only, a full incognito conversation (the author, Sept 2026; at first a
 TEE chat's choice only). The choice is fixed with the chat. See engine/chat.py.
-
-A chat may keep a map as a story does (the author, Oct 2026): once the
-conversation sets a scene, the map read notes the places, and the map's
-art draws the local area and grows it as the chat goes. A chat has no cast,
-so it is asked the name the map tracks the user by ("You" when blank).
 """
 
 from __future__ import annotations
