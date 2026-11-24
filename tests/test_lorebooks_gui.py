@@ -82,6 +82,26 @@ def test_a_lorebook_is_imported_changed_and_saved(app, tmp_path: Path, monkeypat
     window.close()
 
 
+def test_a_key_typed_in_an_entry_counts_the_book_once(app, tmp_path: Path, monkeypatch):
+    """The size under the name and on the list's line, from one count of
+    the whole book: each key counted it twice."""
+    from sealedlore.storage import lorebooks
+
+    window = window_on(tmp_path)
+    import_one(window, tmp_path, monkeypatch)
+    page = window.lorebooks_page
+    page.form.list.setCurrentRow(1)
+    counted: list[int] = []
+    real = lorebooks.stats
+    monkeypatch.setattr(lorebooks, "stats", lambda book: counted.append(1) or real(book))
+    page.form.content.setPlainText("one two three")
+    assert counted == [1]
+    words = real(page.current_book().book).words
+    assert f"{words:,} words" in page.stats.text()
+    assert page.list.currentItem().text().endswith(f"6 entries · {words:,} words")
+    window.close()
+
+
 def test_exported_duplicated_and_deleted(app, tmp_path: Path, monkeypatch):
     window = window_on(tmp_path)
     stored = import_one(window, tmp_path, monkeypatch)

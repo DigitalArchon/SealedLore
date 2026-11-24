@@ -312,21 +312,13 @@ class LorebooksPage(QWidget):
         self._loaded = None
         self._show()
 
-    def refresh_stats(self) -> None:
-        book = self.current_book()
-        if book is not None:
-            self._say_stats(book)
-            item = self.list.currentItem()
-            if item is not None:
-                item.setText(self._line(book))
-
     # --- the list ---------------------------------------------------------------------------
 
     def _book(self, book_id: str | None) -> StoredLorebook | None:
         return next((book for book in self._books if book.id == book_id), None)
 
-    def _line(self, book: StoredLorebook) -> str:
-        found = lorebooks.stats(book.book)
+    def _line(self, book: StoredLorebook, found: lorebooks.BookStats | None = None) -> str:
+        found = found or lorebooks.stats(book.book)
         return f"{book.name}\n{found.entries} entries · {found.words:,} words"
 
     def _shown(self) -> list[StoredLorebook]:
@@ -381,11 +373,18 @@ class LorebooksPage(QWidget):
             self.form.load_book(_Shelved(book))
         self._say_stats(book)
 
-    def _say_stats(self, book: StoredLorebook) -> None:
-        parts = [lorebooks.stats_words(book.book)]
+    def _say_stats(self, book: StoredLorebook, *, in_list: bool = False) -> None:
+        """How big the book is, under its name and (`in_list`) on its line in
+        the list: counted once, the whole book read for it, at every key
+        typed into one of its entries."""
+        found = lorebooks.stats(book.book)
+        parts = [lorebooks.said(found)]
         if book.came_from:
             parts.append(f"from {book.came_from}")
         self.stats.setText(" · ".join(parts))
+        item = self.list.currentItem() if in_list else None
+        if item is not None:
+            item.setText(self._line(book, found))
 
     def _sync_buttons(self) -> None:
         book = self.current_book()
@@ -425,10 +424,7 @@ class LorebooksPage(QWidget):
     def _form_changed(self) -> None:
         book = self._loaded
         if book is not None:
-            self._say_stats(book)
-            item = self.list.currentItem()
-            if item is not None:
-                item.setText(self._line(book))
+            self._say_stats(book, in_list=True)
             self.changed.emit(book.id)
 
     # --- files dropped ----------------------------------------------------------------------

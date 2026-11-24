@@ -147,7 +147,11 @@ def stats(book: Mapping[str, Any]) -> BookStats:
 
 
 def stats_words(book: Mapping[str, Any]) -> str:
-    found = stats(book)
+    return said(stats(book))
+
+
+def said(found: BookStats) -> str:
+    """A book's `stats` in words: "6 entries · 1,204 words · 2 always sent"."""
     parts = [f"{found.entries} {'entry' if found.entries == 1 else 'entries'}"]
     parts.append(f"{found.words:,} words")
     if found.always:
