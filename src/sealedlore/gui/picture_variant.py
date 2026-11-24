@@ -70,7 +70,7 @@ from sealedlore.gui.picture_words import WORDS_ONLY
 from sealedlore.gui.portraits_dialog import card_name
 from sealedlore.gui.ref_images import image_of, thumbnail_of
 from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, may_discard, size_to_screen
-from sealedlore.gui.worker import GenerationWorker
+from sealedlore.gui.worker import GenerationWorker, as_job
 from sealedlore.gui.workers import WorkerThread
 from sealedlore.models.character import Character
 from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS, recommended_model
@@ -474,10 +474,9 @@ class PictureVariantDialog(QDialog):
         characters = [self.card] if isinstance(self.card, Character) else []
         lore = [] if characters else [self.card]
 
+        @as_job
         def job():
             self._prompts, _problem = self.session.write_card_prompts(characters, lore)
-            return
-            yield  # a generator, so GenerationWorker can run it
 
         self.prompt.setEnabled(False)
         self.prompt.setPlaceholderText("Writing a prompt from the card…")

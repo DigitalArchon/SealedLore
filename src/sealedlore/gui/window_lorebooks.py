@@ -45,6 +45,7 @@ from sealedlore.gui.lorebooks_page import (
     LorebooksPage,
 )
 from sealedlore.gui.modal_job import run_with_progress
+from sealedlore.gui.worker import as_job
 from sealedlore.models.character import Character
 from sealedlore.models.lore import lore_fingerprint
 from sealedlore.models.lorebook import StoredLorebook
@@ -467,14 +468,13 @@ class LorebooksWindow:
         result: dict[str, Any] = {}
         stopping = threading.Event()
 
+        @as_job
         def job():
             try:
                 session.ensure_lore_vectors(stopped=stopping.is_set, embed_parts=True)
             except StreamCancelled:
                 return  # what was embedded is kept; the rest is made in the background
             session.save()
-            return
-            yield  # a generator, so GenerationWorker can run it
 
         entry_ids = {entry.id for entry in session.bundle.lore}
         entries = sum(1 for item in pending if item.id in entry_ids)

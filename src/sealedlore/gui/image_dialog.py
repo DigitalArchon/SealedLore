@@ -76,7 +76,7 @@ from sealedlore.gui.ref_images import (
     thumbnail_of,
 )
 from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, size_to_screen
-from sealedlore.gui.worker import GenerationWorker
+from sealedlore.gui.worker import GenerationWorker, as_job
 from sealedlore.gui.workers import WorkerThread
 from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage, ImageRef, RefUse
@@ -767,6 +767,7 @@ class ImageDialog(QDialog):
         self._writing_lead = picture_words(session.story, session.texts, style)[0]
         self._draft, self._failure = None, None
 
+        @as_job
         def job():
             self._draft = session.write_image_prompt(
                 direction,
@@ -776,8 +777,6 @@ class ImageDialog(QDialog):
                 model=model,
                 style=style,
             )
-            return
-            yield
 
         writer_provider = session.private_provider if session.in_private else session.provider
         worker = GenerationWorker(job, provider=writer_provider)

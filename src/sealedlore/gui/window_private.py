@@ -19,6 +19,7 @@ from sealedlore.engine.session_private import NO_PLACE, UNRECORDED_PLACE
 from sealedlore.gui.markdown_text import forget as forget_drawn_text
 from sealedlore.gui.private_dialogs import FitDialog, PrivateSummaryDialog, chat_words
 from sealedlore.gui.winprivacy import exclude_from_capture
+from sealedlore.gui.worker import as_job
 from sealedlore.gui.workers import run_detached
 from sealedlore.models.config import ProviderConfig
 from sealedlore.providers import make_chat_provider
@@ -1051,10 +1052,9 @@ class PrivateWindow:
         self._pending_private_summary = None
         self._summarising = True
 
+        @as_job
         def job():
             self._pending_private_summary = session.summarise_private()
-            return
-            yield
 
         self._start(
             job,

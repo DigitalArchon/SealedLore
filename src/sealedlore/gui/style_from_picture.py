@@ -23,7 +23,7 @@ from PySide6.QtWidgets import QMessageBox, QProgressDialog, QWidget
 from sealedlore.gui import file_dialogs
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.ref_images import PICTURE_FILTER
-from sealedlore.gui.worker import GenerationWorker
+from sealedlore.gui.worker import GenerationWorker, as_job
 from sealedlore.gui.workers import WorkerThread
 from sealedlore.storage.image_meta import picture_kind
 
@@ -80,10 +80,9 @@ def describe_style(
     mime = _MIME.get(suffix.lower()) or _MIME.get(picture_kind(data) or "", "image/png")
     result: dict[str, str] = {}
 
+    @as_job
     def job():
         result["words"] = session.describe_picture_style(data, mime, model=model)
-        return
-        yield  # a generator, so GenerationWorker can run it
 
     worker = GenerationWorker(job, provider=session.provider)
     thread = WorkerThread(session=session)

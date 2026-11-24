@@ -25,6 +25,19 @@ from sealedlore.providers.base import (
 WorkerEvent = StreamEvent | SessionNotice | PassageDone
 
 
+def as_job(work: Callable[[], object]) -> Callable[[], Iterator[WorkerEvent]]:
+    """`work`, a job that streams nothing (a prompt written whole, an
+    embedding), as `GenerationWorker` takes one: it runs on the worker's
+    thread when the worker starts it, and yields no events. A decorator:
+    `@as_job` over the function handed to the worker."""
+
+    def job() -> Iterator[WorkerEvent]:
+        work()
+        yield from ()
+
+    return job
+
+
 class GenerationWorker(QObject):
     text_delta = Signal(str)
     reasoning_delta = Signal(str)

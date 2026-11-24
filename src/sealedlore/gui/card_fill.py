@@ -35,6 +35,7 @@ from sealedlore.engine.card_fill import (
 )
 from sealedlore.gui.modal_job import run_with_progress
 from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, may_discard, size_to_screen
+from sealedlore.gui.worker import as_job
 from sealedlore.models.character import Character
 
 EXPAND_LABEL = "Expand character profile…"
@@ -252,10 +253,9 @@ def write_profile(
         ask.deleteLater()
     result: dict[str, object] = {}
 
+    @as_job
     def job():
         result["fill"] = session.fill_card(character, mode=mode, wishes=wishes, world=world)
-        return
-        yield  # a generator, so GenerationWorker can run it
 
     _run(parent, session, f"{model} is writing {character.name or 'the'}'s profile…", job, result)
     if "error" in result:

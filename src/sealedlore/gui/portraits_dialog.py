@@ -51,7 +51,7 @@ from sealedlore.gui.picture_style import PictureStyleField
 from sealedlore.gui.picture_words import WORDS_ONLY
 from sealedlore.gui.ref_images import thumbnail_of
 from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, may_discard, size_to_screen
-from sealedlore.gui.worker import GenerationWorker
+from sealedlore.gui.worker import GenerationWorker, as_job
 from sealedlore.gui.workers import WorkerThread
 from sealedlore.models.character import Character
 from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS, recommended_model
@@ -335,12 +335,11 @@ class PortraitsDialog(QDialog):
         with_picture = self.style.picture_wanted()
         self._prompts, self._problem, self._failure = {}, None, None
 
+        @as_job
         def job():
             self._prompts, self._problem = self.session.write_card_prompts(
                 characters, lore, framing=framing, style=style, style_picture=with_picture
             )
-            return
-            yield  # a generator, so GenerationWorker can run it
 
         worker = GenerationWorker(job, provider=self.session.provider)
         thread = WorkerThread(self, session=self.session)

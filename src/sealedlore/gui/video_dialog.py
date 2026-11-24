@@ -63,7 +63,7 @@ from sealedlore.gui.picture_style import (
 from sealedlore.gui.ref_images import PICTURE_FILTER, store_reference, thumbnail_of
 from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, may_discard, size_to_screen
 from sealedlore.gui.video_jobs import VideoCatalog
-from sealedlore.gui.worker import GenerationWorker
+from sealedlore.gui.worker import GenerationWorker, as_job
 from sealedlore.gui.workers import WorkerThread
 from sealedlore.models.image import RefUse
 from sealedlore.models.video import GeneratedVideo
@@ -600,6 +600,7 @@ class VideoDialog(QDialog):
         self._writing_lead = picture_words(session.story, session.texts, style)[0]
         self._written, self._failure = None, None
 
+        @as_job
         def job():
             self._written = session.write_video_prompt(
                 direction,
@@ -611,8 +612,6 @@ class VideoDialog(QDialog):
                 model=model,
                 style=style,
             )
-            return
-            yield
 
         provider = session.private_provider if session.in_private else session.provider
         worker = GenerationWorker(job, provider=provider)

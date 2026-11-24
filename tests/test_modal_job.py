@@ -16,6 +16,7 @@ from sealedlore.engine.session import SessionNotice
 from sealedlore.gui import lore_people_dialog
 from sealedlore.gui.main_window import MainWindow
 from sealedlore.gui.modal_job import run_with_progress
+from sealedlore.gui.worker import as_job
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.story import Story
 from sealedlore.providers.mock import MockChatProvider
@@ -47,14 +48,13 @@ def test_a_job_that_finishes_is_not_taken_for_stopped(app, tmp_path: Path):
     window = window_with_lore(tmp_path)
     ran = []
 
+    @as_job  # a plain function, as GenerationWorker takes one
     def job():
-        ran.append(True)
-        return
-        yield  # a generator, as GenerationWorker takes one
+        ran.append(QThread.currentThread() is not app.thread())
 
     result: dict = {}
     run_with_progress(window, window.session, "Working…", job, result, title="A job")
-    assert ran == [True]
+    assert ran == [True], "run once, on the worker's thread"
     assert "stopped" not in result and "error" not in result
     window.close()
 
