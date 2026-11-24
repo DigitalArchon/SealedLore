@@ -12,7 +12,6 @@ from sealedlore.engine.prompt_edits import (
     missing_slots,
     reset,
     set_text,
-    source_of,
     texts_in_force,
     unknown_keys,
 )
@@ -56,9 +55,6 @@ def test_a_storys_edit_wins_over_one_for_every_story():
     assert texts[RULES] == "For this story."
     assert texts["question.rules"] == "Asked plainly."
     assert texts["turn.ooc"] == DEFAULT_TEXTS["turn.ooc"]
-    assert source_of(RULES, app, story) == "story"
-    assert source_of("question.rules", app, story) == "app"
-    assert source_of("turn.ooc", app, story) == "default"
 
 
 def test_writing_the_default_back_is_a_reset():

@@ -178,10 +178,6 @@ class RetrievalReport:
         return tuple(injection.entry for injection in self.injected)
 
     @property
-    def semantic_count(self) -> int:
-        return sum(1 for injection in self.injected if injection.reason == "semantic")
-
-    @property
     def in_full(self) -> tuple[Injection, ...]:
         """The always-on entries sent condensed whose parts the turn is about
         go with it from their whole texts (engine/lore_whole_back.py), one

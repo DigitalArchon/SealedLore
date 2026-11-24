@@ -199,7 +199,9 @@ def test_every_branch_keeps_its_own_clock(tmp_path: Path):
     list(session.regenerate())
     assert session.chronicle.minutes == clock_minutes(1, 21, 0)
 
-    session.switch_to(first.id)
+    # Back to the first take, as its ‹ arrow does.
+    session.switch_take(session.path()[-1].id, -1)
+    assert session.path()[-1].id == first.id
     assert session.chronicle.minutes == clock_minutes(1, 17, 0)
     # Deleting the passage steps back to the clock before it.
     session.delete_from(first.id)

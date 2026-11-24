@@ -34,7 +34,7 @@ from sealedlore.storage.repository import (
     read_api_log,
     save_story_bundle,
 )
-from sealedlore.tree import latest_leaf, sibling_position
+from sealedlore.tree import sibling_position
 
 
 @pytest.fixture
@@ -156,15 +156,6 @@ def test_branch_from_keeps_everything_after_it(session: StorySession):
     assert len(session.nodes) == 8
     assert [n.content for n in session.path()][:2] == ["one", "Reply to one"]
     assert sibling_position(session.nodes, session.path()[2].id) == (2, 2)
-
-
-def test_latest_leaf_follows_the_newest_child(session: StorySession):
-    play(session, "one")
-    user = session.path()[0]
-    session.provider = MockChatProvider(["Second take."])
-    list(session.regenerate())
-
-    assert latest_leaf(session.nodes, user.id).content == "Second take."
 
 
 # --- archives -------------------------------------------------------------------

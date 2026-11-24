@@ -239,24 +239,3 @@ def move_continuation(nodes: Sequence[Node], from_node: Node, to_node: Node) -> 
         if child_id not in to_node.children:
             to_node.children.append(child_id)
     from_node.children = []
-
-
-def latest_leaf(nodes: Sequence[Node], node_id: str) -> Node:
-    """Walk down from `node_id` through the newest child each time, to a leaf.
-
-    Switching to another take lands at the end of that take's own story. The
-    newest child is the best guess at "where I left off" without keeping a
-    second structure of per-branch bookmarks in sync.
-    """
-    index = index_nodes(nodes)
-    if node_id not in index:
-        raise KeyError(f"unknown node id: {node_id!r}")
-    node = index[node_id]
-    seen = {node.id}
-    while node.children:
-        child = next((index[c] for c in reversed(node.children) if c in index), None)
-        if child is None or child.id in seen:
-            break
-        seen.add(child.id)
-        node = child
-    return node

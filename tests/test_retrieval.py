@@ -231,7 +231,7 @@ def test_a_keyword_only_report_says_embeddings_were_not_used():
 
     assert report.used_embeddings is False
     assert report.fallback_reason == "no endpoint"
-    assert report.semantic_count == 0
+    assert not any(injection.reason == "semantic" for injection in report.injected)
 
 
 def test_the_rendered_entry_matches_what_the_prompt_sends():

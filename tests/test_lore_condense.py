@@ -259,8 +259,9 @@ def test_writing_condensed_versions_keeps_the_whole_and_logs_the_calls(tmp_path,
         [long_one, short_one, hidden],
         replies=["## The Keep\nAn empty fortress."],
     )
-    assert session.condense_candidates() == [long_one]  # the short one and the held-back aren't
-    list(session.condense_lore(session.condense_candidates()))
+    # The always-on entries dialog lists what a model may see: never the held-back.
+    assert session.always_on_entries() == [long_one, short_one]
+    list(session.condense_lore([long_one]))
     assert long_one.condensed_now() == "An empty fortress."
     assert long_one.content.startswith("the keep the keep")  # the whole, as it was
     assert len(session.provider.requests) == 1

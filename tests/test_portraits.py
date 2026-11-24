@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from sealedlore.engine.images import run_image_request
-from sealedlore.engine.picture_styles import story_style
+from sealedlore.engine.picture_styles import style_words
 from sealedlore.engine.plot_md import parse_plot_markdown
 from sealedlore.engine.portraits import (
     build_portrait_messages,
@@ -80,10 +80,17 @@ def reply(*pairs: tuple[str, str]) -> str:
     return json.dumps({"portraits": [{"name": n, "prompt": p} for n, p in pairs]})
 
 
+def style_of(session: StorySession) -> str:
+    """The words the portraits are written in, as `write_card_prompts` takes
+    them: the story's own style, no default added (portrait_style has one)."""
+    story = session.story
+    return style_words(story.picture_style, story.image_style, session.texts)
+
+
 def written(session: StorySession, text: str, *, lore: bool = False) -> str:
     """A writer's prompt as `write_card_prompts` leaves it: the story's style
     line first, the no-writing sentence last (Doomsville's style is gritty)."""
-    lead = portrait_style(story_style(session.story, session.texts), session.texts, lore=lore)
+    lead = portrait_style(style_of(session), session.texts, lore=lore)
     return with_lead(text, lead, session.texts["portraits.no_writing"])
 
 
@@ -175,7 +182,7 @@ def test_a_reply_is_read_by_name_and_whoever_it_left_out_gets_a_prompt_from_the_
     # By name, any case, spaces closed up.
     assert prompts[john.id] == written(session, "A tired man.")
     assert prompts[john.id].startswith("Gritty, photorealistic photograph")
-    assert prompts[jane.id] == fallback_prompt(jane, image_style=story_style(session.story))
+    assert prompts[jane.id] == fallback_prompt(jane, image_style=style_of(session))
     assert "left out Jane" in problem
     assert prompts[jane.id].endswith(DEFAULT_TEXTS["portraits.no_writing"])
     # The fallback is the card's looks: the world bible's words aren't a picture.
@@ -210,7 +217,7 @@ def test_the_writer_is_asked_a_few_cards_at_a_time_and_a_bad_reply_costs_only_it
     assert "John" in first and "Jane" not in first
     assert "Jane" in second and "John" not in second
     assert prompts[john.id] == written(session, "A tired man.")
-    assert prompts[jane.id] == fallback_prompt(jane, image_style=story_style(session.story))
+    assert prompts[jane.id] == fallback_prompt(jane, image_style=style_of(session))
     assert "couldn't be read" in problem
 
 

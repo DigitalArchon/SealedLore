@@ -321,7 +321,8 @@ def test_each_take_keeps_its_own_scene(session: StorySession):
     retake_scene = session.provider.requests[0].messages[-1].text
     assert "also here, not in the cast" not in retake_scene
 
-    session.switch_to(first.id)
+    session.switch_take(second.id, -1)  # back to the first take, as its ‹ arrow does
+    assert session.path()[-1].id == first.id
     assert session.story.scene.present_others == ["Constable Hollis"]
 
 

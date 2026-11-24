@@ -10,12 +10,9 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Iterable, Mapping
-from typing import Literal
 
 from sealedlore.engine.prompt_texts import TEXTS, PromptTexts, slots_in
 from sealedlore.models.prompt_edit import PromptEdit
-
-Source = Literal["story", "app", "default"]
 
 
 def default_sha(key: str) -> str:
@@ -28,16 +25,6 @@ def texts_in_force(
     overrides = {key: edit.text for key, edit in app.items() if key in TEXTS}
     overrides.update({key: edit.text for key, edit in (story or {}).items() if key in TEXTS})
     return PromptTexts(overrides)
-
-
-def source_of(
-    key: str, app: Mapping[str, PromptEdit], story: Mapping[str, PromptEdit] | None = None
-) -> Source:
-    if story and key in story:
-        return "story"
-    if key in app:
-        return "app"
-    return "default"
 
 
 def set_text(edits: dict[str, PromptEdit], key: str, text: str) -> None:

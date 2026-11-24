@@ -12,11 +12,11 @@ from sealedlore.engine.prompt_texts import DEFAULT_TEXTS
 from sealedlore.engine.reactions import (
     VIEW_CATCH_UP,
     apply_views,
-    character_history,
     content_sha,
     cuts_away,
     needs_view,
     passage_views,
+    seen_entries,
     seen_part,
 )
 from sealedlore.models.node import Node
@@ -117,9 +117,12 @@ def test_she_is_given_only_what_she_was_there_for(tmp_path: Path) -> None:
     [asked] = view_calls(session)
     assert "[2] Serrik climbs alone" in sent(asked) and "ASK: Maela Orr" in sent(asked)
     assert node.meta.seen_parts == {"char-maela": [1]}
-    seen, _ = character_history(
-        session.path(), session.cast[1], session.cast, start=BOTH, texts=DEFAULT_TEXTS
-    )
+    seen = [
+        text
+        for _node_id, text in seen_entries(
+            session.path(), session.cast[1], session.cast, start=BOTH, texts=DEFAULT_TEXTS
+        )
+    ]
     joined = "\n".join(seen)
     assert "argue over the map" in joined and "TOWER-SECRET" not in joined
     # Read once: the next round asks nothing more.

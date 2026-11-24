@@ -208,22 +208,6 @@ def recent_window(
     return kept, len(kept) < len(entries)
 
 
-def character_history(
-    history: Sequence[Node],
-    character: Character,
-    cast: Sequence[Character],
-    *,
-    start: SceneState,
-    texts: PromptTexts = DEFAULT_TEXTS,
-    count: Callable[[str], int] = _rough_tokens,
-    budget: int = HISTORY_TOKENS,
-) -> tuple[list[str], bool]:
-    """The newest of what this character saw that fits `budget`, oldest first,
-    and whether older messages were left out."""
-    seen = seen_entries(history, character, cast, start=start, texts=texts)
-    return recent_window(seen, count=count, budget=budget)
-
-
 def fingerprint(entries: Sequence[Entry]) -> str:
     """What a recollection was written from: an edit to any of it changes this."""
     return hashlib.sha256("\n\n".join(text for _id, text in entries).encode()).hexdigest()

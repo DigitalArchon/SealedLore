@@ -70,11 +70,6 @@ def style_words(picture_style: str, image_style: str, texts: PromptTexts = DEFAU
     return " ".join(words.split()).rstrip(".")
 
 
-def story_style(story, texts: PromptTexts = DEFAULT_TEXTS) -> str:
-    """`style_words` for a story."""
-    return style_words(story.picture_style, story.image_style, texts)
-
-
 def picture_words(
     story, texts: PromptTexts = DEFAULT_TEXTS, style: tuple[str, str] | None = None
 ) -> tuple[str, str]:

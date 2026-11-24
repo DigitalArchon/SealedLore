@@ -336,7 +336,7 @@ def test_off_it_sends_nothing_new_and_embeds_no_part(tmp_path, story, cast, top)
     assert [texts for texts, as_query in backend.calls if as_query] == [(HESK_TURN,)]
     documents = [text for texts, as_query in backend.calls if not as_query for text in texts]
     assert sorted(documents) == sorted(f"{e.title}\n{e.content}" for e in lore)
-    assert session._part_texts() == {}
+    assert session._in_full_texts() == (set(), {})
 
 
 def test_nothing_comes_back_when_nothing_is_condensed(tmp_path, story, cast, top):
@@ -344,7 +344,7 @@ def test_nothing_comes_back_when_nothing_is_condensed(tmp_path, story, cast, top
     assert session.lore_layout().condensed == ()
     list(session.send(turn(HESK_TURN)))
     assert session.last_retrieval.in_full == ()
-    assert session._part_texts() == {}
+    assert session._in_full_texts() == (set(), {})
 
 
 def test_the_preview_never_embeds(tmp_path, story, cast, top):
@@ -401,7 +401,7 @@ def test_a_chat_has_no_lore_to_bring_back(tmp_path, story, cast, top):
     session.story.mode = "chat"
     list(session.send(turn(HESK_TURN)))
     assert session.last_retrieval is None and "(from the full entry)" not in sent(session)
-    assert session._part_texts() == {}
+    assert session._in_full_texts() == (set(), {})
 
 
 def test_under_sillytaverns_rules_too_and_only_then_embedded(tmp_path, story, cast, top):

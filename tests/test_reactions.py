@@ -24,7 +24,7 @@ from sealedlore.engine.prompt import (
     SECTION_ROUND,
     TurnRequest,
 )
-from sealedlore.engine.reactions import character_history, reaction_messages
+from sealedlore.engine.reactions import reaction_messages, seen_entries
 from sealedlore.engine.session import SessionNotice, StorySession
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
 from sealedlore.engine.usage import usage_report
@@ -421,19 +421,23 @@ def test_those_present_at_the_opening_see_its_direction(tmp_path: Path) -> None:
     assert OPENING in sent(round_calls(session)[-1])
 
 
+def seen_texts(history, character, cast, *, start) -> list[str]:
+    """What a character saw, as the round's request and their memories read it
+    (`seen_entries`)."""
+    return [text for _node_id, text in seen_entries(history, character, cast, start=start)]
+
+
 def test_someone_away_at_the_opening_never_sees_it(tmp_path: Path) -> None:
     session = opened(tmp_path, cast=a_cast(idris_model="Local::idris"))
     idris = session.cast[2]
     history = session.path()
-    seen, _ = character_history(
-        history, idris, session.cast, start=session.story.setup.starting_scene
-    )
+    seen = seen_texts(history, idris, session.cast, start=session.story.setup.starting_scene)
     assert not any(OPENING in text for text in seen)
     # Arriving later, he sees what happens from then on, not how it began.
     here = SceneState(location="The undercroft", present_character_ids=[c.id for c in session.cast])
     later = history[-1].model_copy(deep=True, update={"id": "later", "parent_id": history[-1].id})
     later.meta.scene = here
-    seen, _ = character_history(
+    seen = seen_texts(
         [*history, later], idris, session.cast, start=session.story.setup.starting_scene
     )
     assert seen and not any(OPENING in text for text in seen)
@@ -449,7 +453,7 @@ def test_someone_the_opening_passage_places_sees_it(tmp_path: Path) -> None:
     history[1].meta.scene = SceneState(
         location="The undercroft", present_character_ids=[c.id for c in session.cast]
     )
-    seen, _ = character_history(history, idris, session.cast, start=start)
+    seen = seen_texts(history, idris, session.cast, start=start)
     assert any(OPENING in text for text in seen)
 
 
@@ -463,7 +467,7 @@ def test_a_character_sees_only_scenes_they_were_in(tmp_path: Path) -> None:
     later = history[-1].model_copy(deep=True, update={"id": "far", "content": "ALONE-ON-ROAD"})
     later.meta.scene = away
     maela = session.cast[1]
-    seen, _ = character_history(
+    seen = seen_texts(
         [*history, later], maela, session.cast, start=session.story.setup.starting_scene
     )
     joined = "\n".join(seen)
@@ -648,7 +652,6 @@ from sealedlore.engine.reactions import (  # noqa: E402
     due_to_recollect,
     fingerprint,
     memory_chain,
-    seen_entries,
 )
 from sealedlore.models.memory import Recollection  # noqa: E402
 from sealedlore.storage.archive import archive_data, read_archive  # noqa: E402

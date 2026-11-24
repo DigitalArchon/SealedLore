@@ -36,7 +36,6 @@ from sealedlore.engine.lore_condense import (
     parse_condensed_lore,
     reply_tokens,
     unasked_placeholders,
-    worth_condensing,
 )
 from sealedlore.engine.model_tuning import sends_lore_from_full
 from sealedlore.engine.retrieval import (
@@ -202,10 +201,6 @@ class LoreCondenseRuntime:
             for piece in lore_whole_back.pieces(entry)
         ]
 
-    def _part_texts(self) -> dict[str, str]:
-        """What is embedded of each part, by part id (`_in_full_texts`)."""
-        return self._in_full_texts()[1]
-
     def _in_full_texts(self) -> tuple[set[str], dict[str, str]]:
         """While parts go with the turn: the ids of the entries sent
         condensed, whose whole texts nothing ranks (their parts are ranked
@@ -317,17 +312,6 @@ class LoreCondenseRuntime:
         return [entry for entry in self.visible_lore() if entry.enabled and entry.always_on]
 
     # --- writing them ----------------------------------------------------------
-
-    def condense_candidates(self, entries: Sequence[LoreEntry] | None = None) -> list[LoreEntry]:
-        """Of `entries` (the always-on ones), those worth a condensed version
-        that have none for their text as it stands."""
-        pool = self.always_on_entries() if entries is None else entries
-        visible = {entry.id for entry in self.visible_lore()}
-        return [
-            entry
-            for entry in pool
-            if entry.id in visible and worth_condensing(entry.content) and not entry.condensed_now()
-        ]
 
     def condense_lore(self, entries: Sequence[LoreEntry]) -> Iterator[SessionNotice]:
         """Write a condensed version of each of `entries`, beside it. Each

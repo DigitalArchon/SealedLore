@@ -287,7 +287,6 @@ from sealedlore.threads import BackgroundThread
 from sealedlore.tree import (
     active_path,
     index_nodes,
-    latest_leaf,
     link_child,
     move_continuation,
     path_to,
@@ -2103,19 +2102,6 @@ class StorySession(
             ]
         self.save()
         return unchosen
-
-    def switch_to(self, node_id: str) -> Node:
-        """Make another take (or another branch) the active path.
-
-        Lands at the end of that branch: the newest child at each step down.
-        """
-        leaf = latest_leaf(self.nodes, node_id)
-        self.story.active_leaf_id = leaf.id
-        self.last_result = None
-        self.pending_branch = None
-        self._sync_scene()
-        self.save()
-        return leaf
 
     def takes(self, node_id: str) -> list[Node]:
         """The takes of this passage, in order (just itself if it has none)."""

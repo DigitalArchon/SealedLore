@@ -17,7 +17,6 @@ from sealedlore.engine.picture_styles import (
     STYLES,
     picture_words,
     read_style,
-    story_style,
     style_key,
     style_label,
     style_note,
@@ -247,7 +246,7 @@ def test_a_picture_of_the_story_is_written_in_the_story_s_style(tmp_path: Path):
     free = question("", note)
     assert DEFAULT_TEXTS["pictures.style.free"] in free and note not in free
     session, _provider = doomsville(tmp_path, ["x"])
-    assert story_style(session.story).startswith("Gritty, photorealistic")
+    assert picture_words(session.story)[0].startswith("Gritty, photorealistic")
     assert BY_ID["gritty"].label == "Gritty and realistic"
 
 
