@@ -14,11 +14,12 @@ works as intended. Bug reports and pull requests are welcome; see
 
 ## Beta Features Status
 
-Simple Chat is complete and should be a bug free experience. While simple by
-design, it offers features useful to basic roleplay chat. Auto summarization,
-branching, easy creation of pictures and videos, swapping mid chat to private 
-AI models with TEE and E2EE models with Tinfoil, and in memory only chat modes.
-All those are working properly and I don't expect many changes to this mode.
+Simple Chat is complete, and the most settled part of the app. While simple
+by design, it offers features useful to basic roleplay chat: auto
+summarization, branching, easy creation of pictures and videos, chats kept in
+memory only, and swapping mid chat to a private model, end-to-end encrypted
+(NanoGPT's `private/` models) or in a TEE. All those are working properly and
+I don't expect many changes to this mode.
 
 Starting a full story from scratch or from a premise is also fully functional
 and works well. Most updates to this mode will be improved prompting,
@@ -29,6 +30,11 @@ Stories with a human authored plot. This also works quite well at the moment,
 most improvements here will be related to better integrating the plots into
 the story. Making it more natural, more consistent, etc. As above, nothing
 is broken, but there are definitely improvements to be made here.
+
+A few newer features are still trials, and may change more than the rest:
+characters played by their own model, and Tinfoil's own API and Chutes as
+end-to-end encrypted services (preliminary, first run with an account in
+November 2026). Playing from your phone works on Linux only, for now.
 
 I removed the mapping and Visual Story modes in version 2.5 (see the
 [changelog](CHANGELOG.md#new-in-version-2)), to release later as a separate
@@ -90,9 +96,10 @@ Place pictures turns the background off; the pictures stay.
 ### Privacy
 
 The "Sealed" in the name refers both to the plots (see below) and to how the
-application handles your chats. It fully supports NanoGPT's end-to-end
-encrypted private models, as well as their standard TEE models and local
-servers. But that alone isn't that special.
+application handles your chats. It supports NanoGPT's end-to-end encrypted
+private models, as well as their standard TEE models (most of them attested
+only partially for now: see below) and local servers. But that alone isn't
+that special.
 
 What makes it more useful is that you can switch from your usual model to a
 private one seamlessly, mid-story, and nothing from the private scene reaches
@@ -282,7 +289,7 @@ keep the system prompts you like to pick again.
   Help → Model trouble → The model's writing has got worse… see whether its
   host is to blame, compare other hosts, and let you switch host or mark a
   bad one.
-- **Pictures and videos** of the story in its Media tab, the videos played in
+- **Pictures and videos** of the story on its Media page, the videos played in
   place, and a line above the story that always says where it is kept and
   which model and route it is on.
 - **Chats kept in memory only**, pictures and all, that leave nothing on
@@ -565,8 +572,10 @@ follow its terms. Contributions are accepted under the terms in
 
 **Third-party software.** SealedLore's dependencies keep their own licences,
 all of them compatible with the AGPL. Qt for Python (PySide6) is under the
-LGPL-3.0; httpx, pydantic, tiktoken, numpy, tinfoil, keyring and the packages they use
-are under permissive licences (MIT, BSD, Apache-2.0, and MPL-2.0 for
-certifi). The AppImage lists everything it bundles, with versions, sources
-and licence texts, in `usr/share/licenses/sealedlore/THIRD-PARTY-NOTICES.md`
+LGPL-3.0; httpx, pydantic, tiktoken, numpy, tinfoil, sigstore, tuf,
+cryptography, keyring, onnxruntime, tokenizers and the packages they use are
+under permissive licences (MIT, BSD, Apache-2.0 and the like, and MPL-2.0 for
+certifi and part of tqdm). The AppImage lists everything it bundles, with
+versions, sources and licence texts, in
+`usr/share/licenses/sealedlore/THIRD-PARTY-NOTICES.md`
 (template: [packaging/appimage/THIRD-PARTY-NOTICES.md](packaging/appimage/THIRD-PARTY-NOTICES.md)).
