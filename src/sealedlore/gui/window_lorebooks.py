@@ -92,7 +92,7 @@ class LorebooksWindow:
     def _lorebooks_menu_action(self, menu) -> None:
         from PySide6.QtGui import QAction
 
-        self.lorebooks_action = QAction(f"{PAGE_LABEL}…", self)
+        self.lorebooks_action = QAction(f"&{PAGE_LABEL}…", self)
         self.lorebooks_action.setStatusTip(LOREBOOKS_TIP)
         self.lorebooks_action.triggered.connect(lambda: self.show_lorebooks(True))
         menu.addAction(self.lorebooks_action)

@@ -208,6 +208,53 @@ def test_every_path_in_the_readme_is_in_the_window(tree):
     assert not missing, "The docs name paths the window doesn't have:\n" + "\n".join(missing)
 
 
+def _clashes(menu: QMenu, path: list[str]) -> list[str]:
+    """Every item of `menu` and its submenus without a key of its own."""
+    problems: list[str] = []
+    taken: dict[str, str] = {}
+    for action in menu.actions():
+        if action.isSeparator() or not action.text():
+            continue
+        label = _clean(action.text())
+        key = re.search(r"&(.)", action.text().replace("&&", ""))
+        if key is None:
+            problems.append(f"{' → '.join([*path, label])}: no key")
+        elif key.group(1).lower() in taken:
+            problems.append(
+                f"{' → '.join([*path, label])}: {key.group(1)!r} is also "
+                f"{taken[key.group(1).lower()]}'s"
+            )
+        else:
+            taken[key.group(1).lower()] = label
+        if action.menu():
+            problems += _clashes(action.menu(), [*path, label])
+    return problems
+
+
+@pytest.mark.parametrize("mode", ["story", "chat"])
+def test_every_item_in_file_story_and_view_has_a_key_of_its_own(tmp_path, story, cast, mode):
+    """The README says so (New in version 3.5), but Import from a link…, Your
+    characters…, Lorebooks…, the text sizes and the themes had none. Hidden
+    items count too (Close story, Start story…), and a chat's own wording
+    (What the model sees, Current part as Markdown…)."""
+    from sealedlore.gui.main_window import MainWindow
+    from sealedlore.storage.repository import StoryBundle, save_story_bundle
+
+    _app = QApplication.instance() or QApplication([])
+    story.mode = mode
+    save_story_bundle(StoryBundle(story=story, cast=cast), root=tmp_path)
+    window = MainWindow(root=tmp_path, use_mock=True)
+    try:
+        window.open_story(story.id)
+        assert window.in_chat == (mode == "chat")
+        menus = {_clean(a.text()): a.menu() for a in window.menuBar().actions() if a.menu()}
+        assert "Story" in menus, "the Story menu is built whatever is open"
+        problems = [p for name in ("File", "Story", "View") for p in _clashes(menus[name], [name])]
+        assert not problems, "Menu items without a key of their own:\n" + "\n".join(problems)
+    finally:
+        window.close()
+
+
 def gui_strings() -> set[str]:
     found: set[str] = set()
     for path in GUI.glob("*.py"):

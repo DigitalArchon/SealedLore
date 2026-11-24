@@ -53,7 +53,7 @@ def import_one(window: MainWindow, tmp_path: Path, monkeypatch):
 def test_the_start_page_and_the_file_menu_open_lorebooks(app, tmp_path: Path):
     window = window_on(tmp_path)
     assert start_page.LOREBOOKS in [kind for kind, _title, _text in start_page.OWN]
-    assert window.lorebooks_action.text() == "Lorebooks…"
+    assert window.lorebooks_action.text() == "&Lorebooks…"
     window._start_choice(start_page.LOREBOOKS, None)
     assert window.lorebooks_shown() and window._page_covers()
     page = window.lorebooks_page

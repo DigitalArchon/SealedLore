@@ -152,7 +152,7 @@ LOREBOOK_LABEL = "SillyTavern lorebook"
 LOREBOOK_IMPORT_LABEL = "Import a lorebook…"
 LOREBOOK_EXPORT_LABEL = "Export the lore as a lorebook…"
 # By link: File's (a new story from a card), the Cast and Lore pages' menus.
-LINK_IMPORT_LABEL = "Import from a link…"
+LINK_IMPORT_LABEL = "Import from a lin&k…"  # File's L is Lorebooks…
 CARD_LINK_LABEL = "Import a card from a link…"
 LOREBOOK_LINK_LABEL = "Import a lorebook from a link…"
 LINK_SITES = (

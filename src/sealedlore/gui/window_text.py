@@ -19,6 +19,17 @@ from sealedlore.gui.fonts_dialog import FontsDialog
 from sealedlore.storage.repository import save_config
 
 
+def _keyed(text: str, taken: set[str], first: int = 0) -> str:
+    """`text` with a key no other item in its menu has taken: the character at
+    `first`, else the first one free. The sizes and themes had none."""
+    for i in (first, *range(len(text))):
+        char = text[i].lower()
+        if char.isalnum() and char not in taken:
+            taken.add(char)
+            return f"{text[:i]}&{text[i:]}"
+    return text
+
+
 class TextSizeWindow:
     def _text_size_actions(self, view_menu) -> None:
         """Called from `_build_actions`: View → Text size."""
@@ -42,8 +53,12 @@ class TextSizeWindow:
         group = QActionGroup(self)
         group.setExclusive(True)
         self.text_size_choices: dict[float, QAction] = {}
+        # Digits, which Larger, Smaller and Normal size's letters can't take:
+        # the tens digit where it is free (1&15%, 1&50%), else the first free.
+        taken: set[str] = set()
         for value in text_size.SCALES:
-            action = QAction(f"{round(value * 100)}%", self)
+            digits = str(round(value * 100))
+            action = QAction(_keyed(f"{digits}%", taken, len(digits) - 2), self)
             action.setCheckable(True)
             action.triggered.connect(lambda _on=False, v=value: self.set_text_scale(v))
             group.addAction(action)
@@ -68,12 +83,13 @@ class TextSizeWindow:
         group = QActionGroup(self)
         group.setExclusive(True)
         self.theme_choices: dict[str, QAction] = {}
+        taken: set[str] = set()
         tips = {
             "dark": "The app's own look",
             "high_contrast": "Black and white, with bright borders and marks: for poor eyesight",
         }
         for key, choice in theme.THEMES.items():
-            action = QAction(choice.label, self)
+            action = QAction(_keyed(choice.label, taken), self)
             action.setCheckable(True)
             action.setStatusTip(tips.get(key, choice.label))
             action.triggered.connect(lambda _on=False, k=key: self.set_theme(k))

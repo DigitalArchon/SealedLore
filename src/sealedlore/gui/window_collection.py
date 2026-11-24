@@ -206,7 +206,7 @@ class CollectionWindow:
     def _collection_menu_action(self, menu) -> None:
         from PySide6.QtGui import QAction
 
-        self.collection_action = QAction(f"{PAGE_LABEL}…", self)
+        self.collection_action = QAction(f"&{PAGE_LABEL}…", self)
         self.collection_action.setStatusTip(COLLECTION_TIP)
         self.collection_action.triggered.connect(lambda: self.show_collection(True))
         menu.addAction(self.collection_action)
