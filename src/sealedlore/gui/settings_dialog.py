@@ -9,13 +9,13 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, NamedTuple
 from urllib.parse import urlparse
 
 from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
-    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -70,6 +70,7 @@ from sealedlore.gui.settings_pages import Fold, SettingsPages
 from sealedlore.gui.sizing import entered, size_to_screen
 from sealedlore.gui.speed_test import SpeedTestDialog
 from sealedlore.gui.video_jobs import VideoCatalog
+from sealedlore.gui.workers import run_detached
 from sealedlore.models.config import (
     CHAT_API_LABELS,
     CHUTES_ANTHROPIC_URL,
@@ -434,6 +435,11 @@ class SettingsDialog(QDialog):
         `root`: the data folder, to say where config.json is."""
         super().__init__(parent)
         self._root = root
+        # Detect, Check the server and Find a server ask on a daemon thread
+        # (`_ask_server`): the one asked last of each, and whether the dialog
+        # has closed since, when what is answered is dropped.
+        self._asking: dict[str, object] = {}
+        self._gone = False
         # One under each key field: where that key will be kept.
         self._key_notes: list[QLabel] = []
         self.image_catalog = image_catalog
@@ -2062,7 +2068,36 @@ class SettingsDialog(QDialog):
             # disconnect warns).
             self._watching_catalog = False
             self._catalog.changed.disconnect(self._show_routes)
+        # Whatever Detect, Check the server or Find a server still waits for
+        # is dropped when it comes.
+        self._gone = True
         super().done(result)
+
+    def _ask_server(
+        self,
+        what: str,
+        button: QPushButton,
+        job: Callable[[], Any],
+        answered: Callable[[Any, str | None], object],
+    ) -> None:
+        """`job()` asks a server, on a daemon thread nobody waits for
+        (gui/workers.run_detached): asked on the GUI thread, it froze the
+        dialog for as long as the server took (Check the server up to
+        `OWN_CHECK_SECONDS`). `button` is off meanwhile; `answered(result,
+        error)` runs here once it answers, unless the dialog has closed or
+        the same was asked again since."""
+        asking = object()
+        self._asking[what] = asking
+        button.setEnabled(False)
+
+        def done(result: Any, error: str | None) -> None:
+            if self._gone or self._asking.get(what) is not asking:
+                return
+            del self._asking[what]
+            button.setEnabled(True)
+            answered(result, error)
+
+        run_detached(self, job, done, name=f"settings-{what}")
 
     def _private_typed(self) -> tuple[str, str]:
         """The private endpoint's address and key as typed. A blank key is the
@@ -2338,25 +2373,33 @@ class SettingsDialog(QDialog):
         if not self._may_send(self._private_keys()):
             self.detect_note.setText("Not asked: its key would have gone unencrypted.")
             return
-        self.detect_button.setEnabled(False)
         self.detect_note.setText("Asking the server…")
-        QApplication.processEvents()
-        service = self._private_service()
-        try:
-            if service == "tinfoil":
-                found = tinfoil_context(url, model)
-            elif service == "chutes":
-                found = chutes_context(model)
-            else:
-                found = detect_context(url, key, model, api=self._private_api())
-            # A size is a whole number above zero, whoever stated it.
-            tokens = stated_count(getattr(found, "tokens", None))
-        except Exception:
-            # Nothing a server answers may leave the button off for good, or
-            # the note saying "Asking…": it didn't say, in any way we can use.
-            found, tokens = None, None
-        finally:
-            self.detect_button.setEnabled(True)
+        service, api = self._private_service(), self._private_api()
+
+        def ask() -> tuple[Any, int | None]:
+            try:
+                if service == "tinfoil":
+                    found = tinfoil_context(url, model)
+                elif service == "chutes":
+                    found = chutes_context(model)
+                else:
+                    found = detect_context(url, key, model, api=api)
+                # A size is a whole number above zero, whoever stated it.
+                return found, stated_count(getattr(found, "tokens", None))
+            except Exception:
+                # Nothing a server answers may leave the button off for good,
+                # or the note saying "Asking…": it didn't say, in any way we
+                # can use.
+                return None, None
+
+        self._ask_server(
+            "detect",
+            self.detect_button,
+            ask,
+            lambda answer, _error: self._context_detected(*(answer or (None, None))),
+        )
+
+    def _context_detected(self, found: Any, tokens: int | None) -> None:
         if found is None or not tokens:
             self.detect_note.setText(
                 "The server didn't say. Set the budget by hand, a little under the model's context."
@@ -2455,8 +2498,9 @@ class SettingsDialog(QDialog):
         self._image_fold.form.setRowVisible(self.own_server, own and self._image_fold.is_open())
 
     def _check_own_server(self) -> None:
-        """Check the server: ask it, as typed, for its models. Quick (it is
-        on this computer or network), so on the GUI thread, as Detect is."""
+        """Check the server: ask it, as typed, for its models (`_ask_server`:
+        a server that doesn't answer took the dialog with it until it timed
+        out)."""
         api = self.image_api.currentData()
         url = self.image_url.text().strip() or LOCAL_IMAGE_ADDRESSES.get(api, "")
         key = self.image_key.text().strip()
@@ -2476,23 +2520,32 @@ class SettingsDialog(QDialog):
         if (key or sent) and not self._may_send(sent):
             self.own_server.show_check("Not asked: nothing was sent.")
             return
-        self.own_server.check_button.setEnabled(False)
         self.own_server.show_check("Asking the server…")
-        QApplication.processEvents()
-        try:
-            found = list_own_models(
-                url, api=api, api_key=key, local=settings, timeout_seconds=OWN_CHECK_SECONDS
-            )
-        except ModelAsTyped as typed:
-            # Nothing wrong: it answered, and has no list for this workflow's
-            # model. The fields keep what was typed.
-            self.own_server.show_check(typed_words(api, typed))
-            return
-        except (ProviderError, ValueError) as exc:
-            self.own_server.show_check(f"⚠ {exc}")
-            return
-        finally:
-            self.own_server.check_button.setEnabled(True)
+
+        def ask() -> tuple[str, Any]:
+            try:
+                return "found", list_own_models(
+                    url, api=api, api_key=key, local=settings, timeout_seconds=OWN_CHECK_SECONDS
+                )
+            except ModelAsTyped as typed:
+                return "typed", typed
+            except (ProviderError, ValueError) as exc:
+                return "failed", str(exc)
+
+        def answered(answer: tuple[str, Any] | None, error: str | None) -> None:
+            kind, value = answer or ("failed", error)
+            if kind == "typed":
+                # Nothing wrong: it answered, and has no list for this
+                # workflow's model. The fields keep what was typed.
+                self.own_server.show_check(typed_words(api, value))
+            elif kind == "failed":
+                self.own_server.show_check(f"⚠ {value}")
+            else:
+                self._own_models_found(api, value)
+
+        self._ask_server("own server", self.own_server.check_button, ask, answered)
+
+    def _own_models_found(self, api: str, found: list) -> None:
         words = found_words(api, found)
         if found:
             self._image_models = found
@@ -2898,13 +2951,15 @@ class SettingsDialog(QDialog):
     def _find_embeddings_server(self) -> None:
         """Find a server on this computer: the known ones asked for their
         models (nothing else sent), the first that embeds filled in."""
-        self.find_server_button.setEnabled(False)
         self.find_server_note.setText("Asking…")
-        QApplication.processEvents()
-        try:
-            servers = find_local_servers()
-        finally:
-            self.find_server_button.setEnabled(True)
+        self._ask_server(
+            "servers", self.find_server_button, find_local_servers, self._servers_found
+        )
+
+    def _servers_found(self, servers: list | None, error: str | None) -> None:
+        if servers is None:
+            self.find_server_note.setText(f"⚠ {error}")
+            return
         words = local_server_words(servers)
         chosen = next((s for s in servers if s.embedding_models), None)
         if chosen is not None:

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 
 import pytest
 
@@ -43,6 +44,16 @@ def config(**endpoint) -> Config:
         active_provider_name="NanoGPT",
         image_endpoint=MediaEndpoint(**endpoint),
     )
+
+
+def answered(app: QApplication, dialog: SettingsDialog, timeout: float = 10.0) -> None:
+    """Until the server asked on its own thread has answered (`_ask_server`)."""
+    deadline = time.monotonic() + timeout
+    while dialog._asking:
+        if time.monotonic() > deadline:
+            raise AssertionError("the server asked never answered")
+        app.processEvents()
+        time.sleep(0.005)
 
 
 def choose(dialog: SettingsDialog, api: str) -> None:
@@ -139,6 +150,7 @@ def test_check_the_server_lists_its_models_and_puts_one_in_fields_that_werent_it
     dialog = SettingsDialog(config(), None)
     choose(dialog, "a1111")
     dialog.own_server.check_button.click()
+    answered(app, dialog)
     (call,) = asked
     assert call["url"] == "http://127.0.0.1:7860" and call["api"] == "a1111"
     words = dialog.own_server.check_note.text()
@@ -159,6 +171,7 @@ def test_a_server_that_doesnt_answer_is_said(app, monkeypatch):
     dialog = SettingsDialog(config(), None)
     choose(dialog, "comfyui")
     dialog.own_server.check_button.click()
+    answered(app, dialog)
     assert dialog.own_server.check_note.text().startswith("⚠ Nothing answered")
     assert dialog.own_server.check_button.isEnabled()
     dialog.deleteLater()

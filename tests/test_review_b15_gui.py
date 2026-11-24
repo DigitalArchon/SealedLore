@@ -59,6 +59,16 @@ def questions(monkeypatch, answer) -> list[str]:
     return asked
 
 
+def answered(app: QApplication, dialog: SettingsDialog, timeout: float = 10.0) -> None:
+    """Until the server asked on its own thread has answered (`_ask_server`)."""
+    deadline = time.monotonic() + timeout
+    while dialog._asking:
+        if time.monotonic() > deadline:
+            raise AssertionError("the server asked never answered")
+        app.processEvents()
+        time.sleep(0.005)
+
+
 # --- Settings: a key goes nowhere unasked ------------------------------------------
 
 
@@ -88,6 +98,7 @@ def test_a_slip_in_another_field_never_sends_a_saved_key_to_a_new_place(app, mon
     # Put right, the key's new place is asked about before anything goes.
     dialog.own_server.extra.setText("")
     dialog._detect_private_context()
+    answered(app, dialog)
     assert len(asked) == 1 and "b.example" in asked[0]
     assert sent == ["https://b.example/v1"]
     dialog.deleteLater()
@@ -104,6 +115,7 @@ def test_checking_a_server_on_this_computer_asks_nothing_about_its_key(app, monk
     endpoint = MediaEndpoint(api="a1111", api_key="user:password")
     dialog = SettingsDialog(config(image_endpoint=endpoint), None)
     dialog.own_server.check_button.click()
+    answered(app, dialog)
     assert asked == [] and listed == ["user:password"]
     dialog.deleteLater()
 

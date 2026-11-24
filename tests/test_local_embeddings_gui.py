@@ -96,6 +96,7 @@ def test_find_a_server_fills_in_the_first_that_embeds(app, tmp_path, monkeypatch
     monkeypatch.setattr(settings_module, "find_local_servers", lambda: found)
     dialog = SettingsDialog(config(EmbeddingProviderConfig(api_key="old")), None, root=tmp_path)
     dialog.find_server_button.click()
+    wait_for(app, lambda: not dialog._asking)
     assert dialog.embed_base_url.text() == "http://127.0.0.1:11434/v1"
     assert dialog.embed_model.text() == "bge-m3:latest"
     assert dialog.embed_api_key.text() == ""  # no key goes to a server here

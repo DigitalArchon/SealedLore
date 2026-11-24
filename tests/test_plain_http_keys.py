@@ -7,6 +7,7 @@ and a blank key is nothing to ask about. Offscreen, no network."""
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 import httpx
@@ -109,6 +110,16 @@ from sealedlore.gui.settings_dialog import SettingsDialog, keys_in_the_clear  # 
 @pytest.fixture
 def app() -> QApplication:
     return QApplication.instance() or QApplication([])
+
+
+def answered(app: QApplication, dialog: SettingsDialog, timeout: float = 10.0) -> None:
+    """Until the server asked on its own thread has answered (`_ask_server`)."""
+    deadline = time.monotonic() + timeout
+    while dialog._asking:
+        if time.monotonic() > deadline:
+            raise AssertionError("the server asked never answered")
+        app.processEvents()
+        time.sleep(0.005)
 
 
 def asked(monkeypatch, answer) -> list[tuple[str, str, object]]:
@@ -377,6 +388,7 @@ def test_test_attestation_and_detect_ask_before_they_send_the_private_key(app, m
     questions = asked(monkeypatch, QMessageBox.Yes)
     dialog.private_attest.run()
     dialog._detect_private_context()
+    answered(app, dialog)
     assert started == [LAN] and detected == ["private-key"] and len(questions) == 1
     dialog.deleteLater()
 
@@ -398,6 +410,7 @@ def test_detect_sends_the_key_save_would_keep(app, monkeypatch):
     dialog.private_url.setText(NANO)
     dialog.private_model.setText("llama3")
     dialog._detect_private_context()
+    answered(app, dialog)
     assert detected == ["nano-key"]
     dialog.deleteLater()
 
