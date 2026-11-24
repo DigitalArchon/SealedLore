@@ -76,6 +76,29 @@ def test_a_tee_chats_chapter_is_checked_logged_and_its_failure_said(tmp_path):
     assert session.take_tee_notices() == [], "said once"
 
 
+def test_a_stop_while_a_receipt_is_waited_for_leaves_the_reply_unchecked_at_once(tmp_path):
+    """The check runs on the reply's thread, a passage's where it is marked and
+    every other reply's in the providers' watch: a Stop of the reply's client
+    (`StreamCompleted.stop`) ends the wait for its receipt, and the reply reads
+    "unchecked", as any check that couldn't be made does."""
+    import threading
+    import time
+
+    from tests.test_tee import SENT, receipt_client
+
+    session, _provider, _tee = tee_chat(tmp_path, ["A."], ["verified"])
+    session.private_tee = receipt_client(model=MODEL, not_ready=1000)
+    stop = threading.Event()
+    reply = StreamCompleted(response_id="req_9", receipt_id="rcpt-1", sent_at=SENT, stop=stop)
+    threading.Timer(0.2, stop.set).start()
+    began = time.monotonic()
+    assert session._tee_mark(reply) == "unchecked"
+    session._watch_tee(ChatRequest(model=MODEL, messages=()), reply)
+    assert time.monotonic() - began < 1.5, "not twenty seconds of waiting"
+    assert [e["mark"] for e in tee_checks(session)] == ["unchecked"]
+    assert session.private_tee.attested_at is not None, "not a failure: not attested again"
+
+
 def test_any_call_on_the_attested_model_is_checked_and_no_other(tmp_path):
     from sealedlore.messages import ContentPart, PromptMessage
 

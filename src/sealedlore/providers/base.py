@@ -8,6 +8,7 @@ is all the concurrency this app needs.
 
 from __future__ import annotations
 
+import threading
 import unicodedata
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Sequence
@@ -66,6 +67,10 @@ class StreamCompleted:
     # reply's receipt must have been served after it, or it was another
     # request's (providers/tee.py `check`).
     sent_at: float | None = None
+    # Set by a Stop of the client the reply came through (its `cancel`): the
+    # wait for a TEE reply's receipt, on the reply's thread, ends with it
+    # (providers/tee.py `check`). None where nothing waits.
+    stop: threading.Event | None = field(default=None, compare=False, repr=False)
     # How much the reply reasoned: the reported count, or the streamed
     # reasoning text at ~4 characters a token, whichever is larger. The count
     # alone lies: Sonnet 4.6 streamed its thinking while NanoGPT reported 0.

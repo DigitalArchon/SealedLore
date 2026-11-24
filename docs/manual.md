@@ -3536,6 +3536,8 @@ Each reply is marked with what its check showed:
 - **TEE ⚠ reply not verified**: no record of the reply could be read (the
   provider keeps none for this model, as Chutes doesn't, or the check
   couldn't be reached), so nothing shows it came from the attested enclave.
+  A reply's receipt is waited for up to 20 seconds after it ends; Stop ends
+  the wait, and the reply is then marked this way.
 - **TEE ⚠ check failed**: the reply doesn't match its record.
 
 Your own messages are marked with what their replies showed: **received by

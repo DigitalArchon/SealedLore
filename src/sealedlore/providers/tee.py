@@ -76,7 +76,7 @@ import httpx
 from sealedlore.models.config import addresses_shown, split_model
 from sealedlore.models.private import Attestation, TeeUpstream
 from sealedlore.providers import dcap, nras
-from sealedlore.providers.base import ProviderError, checked_key, relay_said
+from sealedlore.providers.base import ProviderError, StreamCancelled, checked_key, relay_said
 from sealedlore.providers.ethsig import keccak256, recover_personal
 from sealedlore.providers.http import make_client, reply_json
 from sealedlore.storage.atomic import outside_json
@@ -1385,10 +1385,16 @@ class TeeClient:
         body_hash: str | None = None,
         route: str | None = None,
         sent_at: float | None = None,
+        stop: threading.Event | None = None,
     ) -> str:
         """`check`'s mark alone, nothing more looked up."""
         return self.check(
-            response_id, receipt_id=receipt_id, body_hash=body_hash, route=route, sent_at=sent_at
+            response_id,
+            receipt_id=receipt_id,
+            body_hash=body_hash,
+            route=route,
+            sent_at=sent_at,
+            stop=stop,
         ).mark
 
     def check(
@@ -1400,6 +1406,7 @@ class TeeClient:
         route: str | None = None,
         sent_at: float | None = None,
         name_upstream: bool = False,
+        stop: threading.Event | None = None,
     ) -> ReplyCheck:
         """Was this reply the attested enclave's, as received? "verified":
         signed by the attested key, for these exact bytes, its receipt (where
@@ -1424,7 +1431,10 @@ class TeeClient:
           dated, so the reply is unchecked.
 
         A stream's receipt is complete just after it ends: a lookup that
-        finds none yet is tried again for a while.
+        finds none yet is tried again for a while (RECEIPT_WAIT_SECONDS), on
+        the reply's thread. `stop`, the Stop of the client the reply came
+        through (`StreamCompleted.stop`), ends that wait at once, the reply
+        then unchecked (StreamCancelled).
 
         `name_upstream`: for a reply that checks out with its receipt read,
         who ran its model too (`served_by`: a lookup on api.redpill.ai). It
@@ -1438,7 +1448,7 @@ class TeeClient:
             # could answer was attested before sending instead. Only a reply
             # RedPill's gateway answered names a receipt (nano-gpt, Nov 10 2026).
             raise ProviderError("this model's provider signs no replies")
-        body = self._signature(lookup, route, wait=receipt_id is not None)
+        body = self._signature(lookup, route, wait=receipt_id is not None, stop=stop)
         text, signature = body.get("text"), body.get("signature")
         if not isinstance(text, str) or not isinstance(signature, str):
             raise ProviderError("the signature reply held no text or signature")
@@ -1524,10 +1534,14 @@ class TeeClient:
             model=model,
         )
 
-    def _signature(self, lookup: str, route: str | None, *, wait: bool) -> dict[str, Any]:
+    def _signature(
+        self, lookup: str, route: str | None, *, wait: bool, stop: threading.Event | None = None
+    ) -> dict[str, Any]:
         """The reply's record; for a reply that named its receipt, tried again
         while it isn't ready (404, 502, 503). One that named none is looked up
-        once: live, TEE/gemma-4-31b-it's replies have no receipt to wait for."""
+        once: live, TEE/gemma-4-31b-it's replies have no receipt to wait for.
+        A Stop (`stop` set) ends the wait between lookups at once, as it ends
+        a chat client's wait before a retry: StreamCancelled."""
         params = {"model": self.model}
         path = f"/tee/signature/{quote(lookup, safe='')}"
         deadline = time.monotonic() + (RECEIPT_WAIT_SECONDS if wait else 0)
@@ -1541,7 +1555,10 @@ class TeeClient:
                 if not ready_later or time.monotonic() >= deadline:
                     # Live: some TEE/ models' providers keep no signature for a reply.
                     raise ProviderError("the provider has no signature for this reply") from exc
-            time.sleep(RECEIPT_RETRY_SECONDS)
+            if stop is None:
+                time.sleep(RECEIPT_RETRY_SECONDS)
+            elif stop.wait(RECEIPT_RETRY_SECONDS):
+                raise StreamCancelled()
 
     def _receipt_holds(
         self,

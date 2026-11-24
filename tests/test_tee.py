@@ -1105,6 +1105,73 @@ def test_a_stream_just_ended_waits_for_its_receipt(monkeypatch):
     assert all(r.headers.get("X-TEE-Verification-Route") == "r1" for r in lookups)
 
 
+def test_a_stop_ends_the_wait_for_a_receipt_at_once(monkeypatch):
+    """The wait ran on the reply's thread, two seconds asleep between lookups
+    for up to twenty, and a Stop didn't end it: the job, or a window being
+    closed, waited it out. It waits on the Stop of the reply's client now,
+    as a chat client's retry does (providers/streaming.py `_wake`)."""
+    import threading
+    import time
+
+    from sealedlore.providers import tee
+    from sealedlore.providers.base import StreamCancelled
+
+    def lookups(seen: list) -> int:
+        return len([r for r in seen if "/tee/signature/" in str(r.url)])
+
+    record = {"sent_at": SENT, "receipt_id": "rcpt-1", "body_hash": streamed()}
+    seen: list = []
+    client = receipt_client(not_ready=1000, seen=seen)
+    stop = threading.Event()
+    threading.Timer(0.2, stop.set).start()
+    began = time.monotonic()
+    with pytest.raises(StreamCancelled):
+        client.check_reply("req_9", stop=stop, **record)
+    assert time.monotonic() - began < 1.5, "not the 2 s to the next lookup, nor 20 in all"
+    assert lookups(seen) == 1
+    # Stopped before it began: looked up once, not waited for.
+    seen.clear()
+    with pytest.raises(StreamCancelled):
+        client.check_reply("req_9", stop=stop, **record)
+    assert lookups(seen) == 1
+    assert receipt_client().check_reply("req_9", stop=stop, **record) == "verified", "ready"
+    # Never stopped, it waits as it did.
+    monkeypatch.setattr(tee, "RECEIPT_RETRY_SECONDS", 0)
+    seen = []
+    later = receipt_client(not_ready=2, seen=seen)
+    assert later.check_reply("req_9", stop=threading.Event(), **record) == "verified"
+    assert lookups(seen) == 3
+
+
+def test_a_streamed_reply_carries_the_stop_of_its_client():
+    """What the session hands the reply's check (`_reply_record`): the client's
+    own Stop, so a Stop of that job ends the wait, and one of another client
+    (a background job's) doesn't."""
+    from sealedlore.engine.session_private import _reply_record
+
+    def provider() -> OpenAICompatibleProvider:
+        transport = httpx.MockTransport(
+            lambda r: httpx.Response(200, content=STREAM, headers={"X-Receipt-Id": "rcpt-1"})
+        )
+        return OpenAICompatibleProvider(
+            ProviderConfig(name="p", base_url="https://x.test/v1", model="m"),
+            client=httpx.Client(transport=transport),
+        )
+
+    mine, other = provider(), provider()
+    events = list(mine.stream(ChatRequest(model="m", messages=[])))
+    done = next(e for e in events if isinstance(e, StreamCompleted))
+    stop = _reply_record(done)["stop"]
+    assert stop is done.stop and stop is not None and not stop.is_set()
+    other.cancel()
+    assert not stop.is_set()
+    mine.cancel()
+    assert stop.is_set()
+    mine.reset_cancel()
+    assert not stop.is_set(), "the next job's replies are waited for again"
+    assert done == StreamCompleted(**{**done.__dict__, "stop": None}), "not part of the reply"
+
+
 def test_the_stream_keeps_its_receipt_id_and_the_hash_of_every_byte():
     tail = b": a comment after the end\n\n"
     transport = httpx.MockTransport(

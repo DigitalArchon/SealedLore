@@ -1505,8 +1505,9 @@ class PrivateRuntime:
 
 def _reply_record(completed: Any) -> dict[str, Any]:
     """What a TEE reply's check needs of its stream (providers/tee.py
-    `check`): its receipt id, the hash of its bytes, nano-gpt's route, and
-    when its request was sent."""
+    `check`): its receipt id, the hash of its bytes, nano-gpt's route, when
+    its request was sent, and the Stop of its client, which ends the wait
+    for its receipt."""
     if completed is None:
         return {}
     return {
@@ -1514,4 +1515,5 @@ def _reply_record(completed: Any) -> dict[str, Any]:
         "body_hash": getattr(completed, "body_hash", None),
         "route": getattr(completed, "tee_route", None),
         "sent_at": getattr(completed, "sent_at", None),
+        "stop": getattr(completed, "stop", None),
     }
