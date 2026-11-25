@@ -491,7 +491,7 @@ def test_the_help_menu_opens_both_checks(window):
     trouble = next(
         a.menu() for a in help_menu.actions() if a.text().replace("&", "") == "Model trouble"
     )
-    texts = [a.text() for a in trouble.actions()]
+    texts = [a.text().replace("&", "") for a in trouble.actions()]
     assert texts == [
         "The model takes too long before it writes…",
         "The model's writing has got worse…",
