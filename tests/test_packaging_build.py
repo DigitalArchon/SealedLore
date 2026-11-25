@@ -28,6 +28,10 @@ BUILD = (APPIMAGE / "build.sh").read_text(encoding="utf-8")
 needs_bash_and_git = pytest.mark.skipif(
     not (shutil.which("bash") and shutil.which("git")), reason="needs bash and git"
 )
+# What the AppImage's build runs on its Linux files (ELF libraries, the bundled
+# Python's onnxruntime): on Windows a plain Python can't load onnxruntime
+# before shiboken6 has (no msvcp140.dll), and there are no ELF files to read.
+appimage_only = pytest.mark.skipif(sys.platform != "linux", reason="the AppImage's build: Linux")
 
 
 def block(text: str, start: str, end: str) -> str:
@@ -262,6 +266,7 @@ def test_the_build_stops_if_a_package_it_ships_needs_one_the_lock_left_out(tmp_p
     assert "NOT_SHIPPED" in failed.stderr
 
 
+@appimage_only
 def test_the_builds_embeddings_check_runs_the_apps_own_path(tmp_path: Path):
     """The build proves the built-in embeddings still load and run without the hub
     and onnxruntime's model tools, through local_embeddings._model itself: a
@@ -518,6 +523,7 @@ def test_only_what_the_app_loads_of_qt_ships_and_what_that_needs(tmp_path: Path)
     assert "QtTest" in trim_qt.BINDINGS, "the lab walk drives the AppImage's window with it"
 
 
+@appimage_only
 def test_the_build_stops_if_anything_kept_needs_a_library_that_isnt_there(tmp_path: Path):
     """A Qt bump whose xcb plugin needs a library no longer in the wheel, or one the
     trim took: kept, it would never load, and Qt says nothing unless asked."""
