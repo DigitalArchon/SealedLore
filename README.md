@@ -72,6 +72,14 @@ from playing with them:
   branches, and servers that answer oddly (the
   [release notes](https://github.com/DigitalArchon/SealedLore/releases/tag/v3.5.0b1)
   list them).
+- **3.5.0b2 is quicker and smaller**: typing on a long story no longer
+  stutters (what you type is saved a moment after you stop), a save writes
+  only what changed, pictures are decoded once, Duplicate and Export story
+  backup are many times quicker, and the AppImage is 174 MB instead of
+  211 MB. It also fixes `sealedlore configure` changing a saved endpoint's
+  address (the
+  [release notes](https://github.com/DigitalArchon/SealedLore/releases/tag/v3.5.0b2)
+  list everything).
 
 What versions 2 and 3 brought is in [CHANGELOG.md](CHANGELOG.md), and every
 release's notes are on the
