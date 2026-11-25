@@ -164,11 +164,14 @@ class Thumbs:
         owner: QObject,
         *,
         shape: str = COVER,
+        budget: int = BUDGET,
     ) -> None:
+        """`budget`: the bytes kept (pictures as large as the Cast page's
+        portrait want less than a screenful of the board's cells)."""
         self._pictures = pictures
         self._ready = ready
         self._shape = shape
-        self._cache = PictureCache(self.BUDGET)
+        self._cache = PictureCache(budget)
         self._queue: list[tuple[str, int, int]] = []
         # What waits for a picture being read (`fill`).
         self._puts: dict[tuple[str, int, int], list[Callable[[QPixmap], None]]] = {}

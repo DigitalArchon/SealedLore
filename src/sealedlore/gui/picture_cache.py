@@ -24,9 +24,10 @@ used again) or it is wanted at another size or shape.
   view would scale it, never by the decoder.
 
 The transcript asks at once (`picture`): a picture's height is its
-message's. Everything else that lists pictures (the cast board, the Media,
-Cast and Lore pages, the picture dialogs) reads through `cast_board.Thumbs`,
-a few a tick once it is up, so building it decodes nothing.
+message's. Everything else that shows pictures (the cast board, the Media,
+Cast, Lore and People pages, a card's portrait, the picture dialogs) reads
+through `cast_board.Thumbs`, a few a tick once it is up, so building it
+decodes nothing.
 """
 
 from __future__ import annotations

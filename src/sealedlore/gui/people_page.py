@@ -52,6 +52,7 @@ from PySide6.QtWidgets import (
 from sealedlore.engine.looks import look_words, shown_picture
 from sealedlore.engine.scene_state import same_person
 from sealedlore.gui import theme
+from sealedlore.gui.cast_board import Thumbs
 from sealedlore.gui.character_roles import (
     MAIN_ABOUT,
     MAIN_TAG,
@@ -61,6 +62,8 @@ from sealedlore.gui.character_roles import (
     SUPPORTING_TAG,
 )
 from sealedlore.gui.expression_set import SET_LABEL
+from sealedlore.gui.picture_cache import WITHIN
+from sealedlore.gui.ref_images import story_key
 from sealedlore.models.character import Character
 from sealedlore.models.scene import SceneState
 
@@ -587,8 +590,10 @@ class PeoplePage(QScrollArea):
         self._pictures = pictures
         self._view = PeopleView()
         self._columns: tuple[int, int] = (0, 0)
-        # Portraits read once each, for the story they are from.
-        self._read: dict[str, QPixmap] = {}
+        # Portraits read a few a tick once the page is built, each once while
+        # its file stands as it is, for the story they are from: read as the
+        # page was built (40 at a story's opening, each whole).
+        self._thumbs = Thumbs(pictures, lambda: None, self, shape=WITHIN)
         self._read_for: object = None
         # "Not now" on the panel at the top, by story, for this session.
         self._tips_put_away: set[str] = set()
@@ -898,31 +903,32 @@ class PeoplePage(QScrollArea):
 
     def _show_pictures(self) -> None:
         store = self._pictures()
-        key = (
-            (getattr(store, "story_id", None), getattr(store, "root", None))
-            if store is not None
-            else None
-        )
+        key = story_key(store)
         if key != self._read_for:
-            self._read.clear()
+            self._thumbs.forget()
             self._read_for = key
-        for card in self.cards.values():
+        # The cards they would go to were made again.
+        self._thumbs.cancel_fills()
+        for card_id, card in self.cards.items():
             file = card.person.picture
             if not file or store is None:
                 continue
-            pixmap = self._read.get(file)
-            if pixmap is None:
-                from sealedlore.gui.ref_images import pixmap_within
+            self._thumbs.fill(
+                file,
+                READ_AT.width(),
+                READ_AT.height(),
+                lambda pixmap, card_id=card_id, file=file: self._put(card_id, file, pixmap),
+            )
 
-                try:
-                    data = store.read(file)
-                except (OSError, ValueError):
-                    data = None
-                pixmap = pixmap_within(data, READ_AT) if data else QPixmap()
-                self._read[file] = pixmap
+    def _put(self, card_id: str, file: str, pixmap: QPixmap) -> None:
+        """A card given its picture once read, if it still shows that one
+        (looked up now: the page may have been made again meanwhile)."""
+        card = self.cards.get(card_id)
+        if card is not None and card.person.picture == file:
             card.set_pixmap(pixmap)
 
     def forget_pictures(self) -> None:
-        """A card's picture changed: read them afresh."""
-        self._read.clear()
+        """A card's picture changed: read them afresh (a file can come
+        back under a name taken off, as cast_board.Thumbs says)."""
+        self._thumbs.forget()
         self._show_pictures()

@@ -816,13 +816,12 @@ class CastPanel(QWidget):
         character = self._current
         first = character.reference_images[0] if character and character.reference_images else None
         store = self._pictures()
-        data = store.read(first.file) if first is not None and store is not None else None
         name = character.name if character is not None else ""
         caption = first.caption if first is not None and first.caption != "portrait" else ""
         if first is not None and (first.look or first.expression):
             labels = " · ".join(part for part in (first.look, first.expression) if part)
             caption = f"{caption}\n{labels}" if caption else labels
-        self.portrait.show_portrait(data, caption, name)
+        self.portrait.show_portrait(store, first.file if first else None, caption, name)
         self.portrait.set_offered(character is not None, character is not None)
         item = self.list.currentItem()
         if item is not None and character is not None:

@@ -653,9 +653,13 @@ class LorePanel(QWidget):
         entry = self._current
         first = entry.reference_images[0] if entry and entry.reference_images else None
         store = self._pictures()
-        data = store.read(first.file) if first is not None and store is not None else None
         caption = first.caption if first is not None and first.caption != "portrait" else ""
-        self.picture.show_portrait(data, caption, entry.title if entry is not None else "")
+        self.picture.show_portrait(
+            store,
+            first.file if first is not None else None,
+            caption,
+            entry.title if entry is not None else "",
+        )
         self.picture.set_offered(entry is not None)
         item = self.list.currentItem()
         if item is not None and entry is not None:

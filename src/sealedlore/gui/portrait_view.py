@@ -4,13 +4,16 @@ Lore pages: a character's portrait, a lore entry's picture (the author, Oct
 the story to be more graphical). The rest stay small in the strip under it.
 
 Held at the size it can be shown, never whole (as the transcript's pictures
-are, `ref_images.pixmap_within`); a click shows the file whole.
+are), read once the card is shown (`cast_board.Thumbs`) and kept while its
+file stands as it is: every choice of a card decoded its picture whole. Its
+place is made at once, from the picture's header; a click shows the file
+whole.
 """
 
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QAction, QImage, QPixmap
+from PySide6.QtGui import QAction, QPixmap
 from PySide6.QtWidgets import (
     QLabel,
     QMenu,
@@ -22,8 +25,10 @@ from PySide6.QtWidgets import (
     QWidgetAction,
 )
 
+from sealedlore.gui.cast_board import Thumbs
 from sealedlore.gui.expression_set import SET_LABEL, SET_TIP
 from sealedlore.gui.image_dialog import show_whole
+from sealedlore.gui.picture_cache import WITHIN
 from sealedlore.gui.picture_labels import LABELS_LABEL, LABELS_TIP
 from sealedlore.gui.picture_words import (
     AGAIN_LABEL,
@@ -33,15 +38,20 @@ from sealedlore.gui.picture_words import (
     SCENE_LABEL,
     SENDS_PICTURE,
 )
-from sealedlore.gui.ref_images import image_of
+from sealedlore.gui.ref_images import shape_of, story_key
 from sealedlore.gui.wrap_row import WrapRow
+from sealedlore.storage.picture_store import PictureStore
 
 # The button under the two that holds the rest of what can be done.
 MORE_LABEL = "More"
 
-# The tallest the portrait is drawn, and the widest it is held at.
+# The tallest the portrait is drawn, and the widest it is held at (its
+# height is not bounded: a tall one is as wide as it is shown).
 PORTRAIT_MAX_HEIGHT = 380
 PORTRAIT_HELD_WIDTH = 720
+HELD_HEIGHT = 16 * PORTRAIT_HELD_WIDTH
+# Held pictures: a few cards' portraits (one is up to 720 x 1080 x 4 bytes).
+HELD_BUDGET = 32 * 1024 * 1024
 
 
 class _Picture(QLabel):
@@ -55,22 +65,28 @@ class _Picture(QLabel):
         self.setAlignment(Qt.AlignCenter)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.setMinimumSize(1, 1)
-        self._image = QImage()
+        self._pixmap = QPixmap()
+        # Its shape while it is being read, from its header (`wait`).
+        self._shape = QSize()
 
-    def set_image(self, image: QImage) -> None:
-        if not image.isNull() and image.width() > PORTRAIT_HELD_WIDTH:
-            image = image.scaledToWidth(PORTRAIT_HELD_WIDTH, Qt.SmoothTransformation)
-        self._image = image
-        self.setCursor(Qt.PointingHandCursor if not image.isNull() else Qt.ArrowCursor)
+    def set_pixmap(self, pixmap: QPixmap) -> None:
+        """The picture, held no wider than PORTRAIT_HELD_WIDTH."""
+        self._pixmap = pixmap
+        self._shape = pixmap.size() if not pixmap.isNull() else QSize()
+        self.setCursor(Qt.PointingHandCursor if not pixmap.isNull() else Qt.ArrowCursor)
         self._rescale()
         self.updateGeometry()
 
+    def wait(self, shape: QSize) -> None:
+        """A picture of `shape` being read: its place, empty, until it is."""
+        self.set_pixmap(QPixmap())
+        self._shape = shape
+        self.updateGeometry()
+
     def _box(self, width: int) -> QSize:
-        if self._image.isNull():
+        if not self._shape.isValid() or self._shape.isEmpty():
             return QSize(0, 0)
-        return self._image.size().scaled(
-            QSize(max(1, width), PORTRAIT_MAX_HEIGHT), Qt.KeepAspectRatio
-        )
+        return self._shape.scaled(QSize(max(1, width), PORTRAIT_MAX_HEIGHT), Qt.KeepAspectRatio)
 
     def hasHeightForWidth(self) -> bool:  # noqa: N802 - Qt naming
         return True
@@ -82,20 +98,18 @@ class _Picture(QLabel):
         return QSize(PORTRAIT_MAX_HEIGHT, self.heightForWidth(PORTRAIT_MAX_HEIGHT))
 
     def _rescale(self) -> None:
-        if self._image.isNull():
+        if self._pixmap.isNull():
             self.clear()
             return
         box = self._box(self.width())
-        self.setPixmap(
-            QPixmap.fromImage(self._image.scaled(box, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        )
+        self.setPixmap(self._pixmap.scaled(box, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt naming
         super().resizeEvent(event)
         self._rescale()
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt naming
-        if event.button() == Qt.LeftButton and not self._image.isNull():
+        if event.button() == Qt.LeftButton and not self._pixmap.isNull():
             self.clicked.emit()
         super().mouseReleaseEvent(event)
 
@@ -225,10 +239,16 @@ class PortraitView(QWidget):
         layout.addWidget(self.empty)
         layout.addWidget(self.caption)
         layout.addLayout(buttons)
-        self._data: bytes | None = None
+        self._store: PictureStore | None = None
+        self._file = ""
         self._name = ""
+        self._caption = ""
         self._offered = False
-        self.show_portrait(None, "", "")
+        self._thumbs = Thumbs(
+            lambda: self._store, lambda: None, self, shape=WITHIN, budget=HELD_BUDGET
+        )
+        self._thumbs_for: object = None
+        self.show_portrait(None, "", "", "")
 
     @staticmethod
     def _button(text: str, tip: str, signal) -> QPushButton:
@@ -257,12 +277,45 @@ class PortraitView(QWidget):
         menu.addAction(row)
         return row
 
-    def show_portrait(self, data: bytes | None, caption: str, name: str) -> None:
-        """`data`: the first picture's file, or None for none."""
-        self._data, self._name = data, name
-        image = image_of(data) if data else QImage()
-        has = not image.isNull()
-        self.picture.set_image(image)
+    def show_portrait(
+        self, store: PictureStore | None, file: str | None, caption: str, name: str
+    ) -> None:
+        """`file`: the first picture's, in `store`; None or "" for none. Shown
+        at once if it has been read, else read once the event loop runs (its
+        place made now from its header, so nothing below it moves)."""
+        if story_key(store) != self._thumbs_for:
+            self._thumbs.forget()
+            self._thumbs_for = story_key(store)
+        # What waited for the picture shown before.
+        self._thumbs.cancel_fills()
+        self._store, self._file = store, file or ""
+        self._name, self._caption = name, caption
+        if store is None or not file:
+            self._show(QPixmap())
+            return
+        given: list[bool] = []
+
+        def put(pixmap: QPixmap, file: str = file) -> None:
+            given.append(True)
+            if self._file == file:
+                self._show(pixmap)
+
+        self._thumbs.fill(file, PORTRAIT_HELD_WIDTH, HELD_HEIGHT, put)
+        if not given:
+            shape = shape_of(store.read(file))
+            if shape.isValid() and not shape.isEmpty():
+                self._show(QPixmap(), waiting=shape)
+            else:
+                self._show(QPixmap())
+
+    def _show(self, pixmap: QPixmap, waiting: QSize | None = None) -> None:
+        """The picture shown (or its place while it is read), or none."""
+        has = not pixmap.isNull() or waiting is not None
+        if waiting is not None:
+            self.picture.wait(waiting)
+        else:
+            self.picture.set_pixmap(pixmap)
+        name, caption = self._name, self._caption
         self.picture.setVisible(has)
         self.empty.setVisible(not has)
         self.caption.setText(caption if has else "")
@@ -296,4 +349,6 @@ class PortraitView(QWidget):
 
     def _show_whole(self) -> None:
         # The one viewer every picture opens in.
-        show_whole(self, self._name or self._noun.capitalize(), self._data)
+        store, file = self._store, self._file
+        data = store.read(file) if store is not None and file else None
+        show_whole(self, self._name or self._noun.capitalize(), data)
