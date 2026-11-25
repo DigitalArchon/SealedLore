@@ -116,7 +116,9 @@ class CardLinkWindow:
         self._link_timer.setSingleShot(True)
         self._link_timer.setInterval(LINK_DELAY_MS)
         self._link_timer.timeout.connect(self._sync_card_link)
+        # A choice made and a key typed (`edited`, saved a moment after) alike.
         panel.changed.connect(self._link_timer.start)
+        panel.edited.connect(self._link_timer.start)
         panel.pictures.changed.connect(self._link_timer.start)
         # (store's owner, file) → the sha256 of its bytes.
         self._shas: dict[tuple[str, str], str] = {}

@@ -146,6 +146,23 @@ def test_a_kept_character_joins_the_story_with_the_names_in(app, window, monkeyp
     assert window.cast_panel.link_button.text() == window_card_link.CARD_LABEL
 
 
+def test_typing_on_the_card_says_what_changed_a_moment_later(app, window, monkeypatch):
+    """The line follows what is typed, not only a choice made: typed edits
+    say `edited` (saved a moment after the last key), and the line listened
+    for `changed` alone (found by the lab walk, Nov 25 2026)."""
+    from PySide6.QtTest import QTest
+
+    from sealedlore.gui.window_card_link import LINK_DELAY_MS
+    from sealedlore.gui.window_collection import SAVE_DELAY_MS
+
+    added_elena(window, monkeypatch)
+    field = window.cast_panel.full_description
+    field.setPlainText(field.toPlainText() + " She keeps a dog.")
+    QTest.qWait(max(LINK_DELAY_MS, SAVE_DELAY_MS) + 200)
+    app.processEvents()
+    assert "Changed in this story: description." in window.cast_panel.link_words.text()
+
+
 def test_a_storys_change_goes_to_the_card_as_the_card_writes_it(app, window, monkeypatch):
     elena = added_elena(window, monkeypatch)
     elena.full_description = elena.full_description.replace("slowly", "now")
